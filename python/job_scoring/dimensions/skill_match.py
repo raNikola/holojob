@@ -1,6 +1,6 @@
 """Skill match dimension.
 
-Two signals, blended.
+Two signals: one scored, one reported.
 
 The keyword bank says what the candidate brings. Matching is per token, with
 crude singularisation, because banks are written as polished phrases
@@ -9,10 +9,10 @@ Each keyword is weighted by how rare its tokens are across this run's jobs,
 so "Product Management" -- in nearly every listing -- earns almost nothing.
 
 The must-haves say what this particular ad demands. They come from the
-extraction pass, so they exist only after enrich_jobs.py has run; without
-them the bank score stands alone. Their coverage is the more decision-useful
-of the two, and what they leave uncovered is what a tailored resume has to
-answer.
+extraction pass, so they exist only after enrich_jobs.py has run. They do not
+move the score -- counting shared tokens cannot tell whether a sentence-long
+requirement is met -- but what they leave uncovered is reported first in
+missingSkills, because that is what a tailored resume has to answer.
 """
 
 from __future__ import annotations
@@ -26,8 +26,12 @@ SUPPORTING_WEIGHT = 1
 
 MIN_COVERAGE = 0.5
 
-# Share of the achievable keyword mass a strong match is expected to cover.
-TARGET_COVERAGE = 0.22
+# Share of the achievable keyword mass that earns the ceiling. Coverage above
+# it clamps to 100, so it must sit above what real ads reach or the top of the
+# distribution collapses into a tie: at 0.22, twelve of 23 jobs (coverage
+# 0.22-0.30) all scored exactly 100. Calibrated against the 2026-10-21 run,
+# where the best ad covers 0.30; 0.32 puts that near 95 and leaves headroom.
+TARGET_COVERAGE = 0.32
 
 # A token this common across the corpus carries no information about fit, so
 # it is dropped from requirement matching rather than diluting it.
@@ -167,11 +171,15 @@ def score_skill_match(
         must_haves, _candidate_tokens(intelligence), idf
     )
 
+    # Must-haves are reported, never scored: token overlap cannot judge a
+    # requirement like "shipped LLM-powered features". What they leave
+    # uncovered leads missingSkills, which feeds resume tailoring.
     score = bank_score
     if must_score is not None:
         reasons.append(
             f"Stated requirements, token overlap: "
             f"{len(covered)}/{len(covered) + len(uncovered)}"
         )
+        missing = uncovered + missing
 
     return int(round(score)), reasons, matched[:20], missing[:15]
