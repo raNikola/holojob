@@ -12,6 +12,8 @@ from providers.remoteok_provider import RemoteOKProvider
 from providers.wellfound_provider import WellfoundProvider
 from providers.wwr_provider import WWRProvider
 from providers.yc_provider import YCProvider
+from providers.infostud_provider import InfostudProvider
+from providers.workable_provider import WorkableProvider
 
 PROVIDER_CLASSES = {
     "jobspy": JobSpyProvider,
@@ -24,18 +26,21 @@ PROVIDER_CLASSES = {
     "yc": YCProvider,
     "wwr": WWRProvider,
     "naukri": NaukriProvider,
+    "infostud": InfostudProvider,
+    "workable": WorkableProvider,
 }
 
 PROVIDER_GROUPS = {
     "all": [
-        "jobspy", "greenhouse", "lever", "ashby", "wellfound", "instahyre",
-        "remoteok", "yc", "wwr", "naukri",
+        "jobspy", "infostud", "greenhouse", "lever", "ashby", "wellfound",
+        "instahyre", "remoteok", "yc", "wwr", "naukri",
     ],
     "india": ["instahyre", "wellfound", "jobspy", "naukri"],
     "ats": ["greenhouse", "lever", "ashby"],
     "ats-india": ["greenhouse", "lever", "ashby"],
-    "remote": ["remoteok", "wwr", "jobspy"],
+    "remote": ["remoteok", "wwr", "workable", "jobspy"],
     "startup": ["yc", "wellfound", "ashby"],
+    "serbia": ["jobspy", "infostud", "workable"],
 }
 
 

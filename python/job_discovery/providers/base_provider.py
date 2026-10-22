@@ -18,7 +18,7 @@ class JobProvider(ABC):
         search_terms: list[str],
         locations: list[str],
         remote_filters: list[str],
-        country: str = "India",
+        country: str = "Serbia",
     ) -> list[dict]:
         raise NotImplementedError
 
@@ -106,8 +106,9 @@ def matches_country(job: dict, country: str) -> bool:
     country_lower = country.strip().lower()
     job_loc = (job.get("location") or "").lower()
     aliases = {
-        "india": ["india", "in", "bangalore", "bengaluru", "hyderabad", "mumbai", "pune", "delhi", "ncr", "gurgaon", "gurugram", "chennai", "kolkata"],
+        "europe": ["europe", "european union", "eu", "emea", "cet", "cest"],
         "usa": ["usa", "us", "united states", "san francisco", "new york", "seattle", "austin"],
+        "serbia": ["serbia", "srbija", "belgrade", "beograd", "novi sad", "niš", "nis", "kragujevac", "subotica", "europe", "emea", "cet", "cest"],
     }
     tokens = aliases.get(country_lower, [country_lower])
     if any(token in job_loc for token in tokens):
@@ -122,7 +123,7 @@ def filter_jobs(
     search_terms: list[str],
     locations: list[str],
     remote_filters: list[str],
-    country: str = "India",
+    country: str = "Serbia",
 ) -> list[dict]:
     return [
         job

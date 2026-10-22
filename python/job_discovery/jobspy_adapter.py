@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 SITE_LINKEDIN = "linkedin"
 SITE_INDEED = "indeed"
 SITE_GLASSDOOR = "glassdoor"
-SITE_GOOGLE = "google"
 
-SITES = [SITE_LINKEDIN, SITE_INDEED, SITE_GLASSDOOR, SITE_GOOGLE]
+ALL_SITES  = [SITE_LINKEDIN, SITE_INDEED, SITE_GLASSDOOR]
+LINKEDIN_ONLY = [SITE_LINKEDIN]
 RESULTS_PER_SEARCH = 50
 HOURS_OLD = 72
 DEFAULT_COUNTRY = "USA"
@@ -118,23 +118,36 @@ INDIA_CITY_STATE = {
 def _empty_frame() -> pd.DataFrame:
     return pd.DataFrame()
 
+def is_country_supported(country: str) -> bool:
+    """Check if a country is supported by Indeed/Glassdoor."""
+    key = (country or "").strip().lower()
+    return key in INDEED_GLASSDOOR_COUNTRY_NAMES
 
-def normalize_country(country: str) -> str:
-    """Map input to exact Indeed/Glassdoor country name for country_indeed."""
-    key = (country or DEFAULT_COUNTRY).strip().lower()
+
+def _sites_for_country(country: str) -> list[str]:
+    """Return the list of JobSpy sites to use for a given country."""
+    if is_country_supported(country):
+        return list(ALL_SITES)
+    logger.warning(
+        "Country %r not in Indeed/Glassdoor list — using LinkedIn only.", country
+    )
+    return list(LINKEDIN_ONLY)
+
+def normalize_country(country: str) -> str | None:
+    """Map input to exact Indeed/Glassdoor country name for country_indeed.
+
+    Returns None if the country is not supported by Indeed/Glassdoor,
+    instead of silently falling back to USA.
+    """
+    key = (country or "").strip().lower()
+    if not key:
+        return DEFAULT_COUNTRY
+
     exact = INDEED_GLASSDOOR_COUNTRY_NAMES.get(key)
     if exact:
         return exact
-    # Preserve Title Case input if it looks like a valid country name
-    titled = country.strip()
-    if titled.lower() in INDEED_GLASSDOOR_COUNTRY_NAMES:
-        return INDEED_GLASSDOOR_COUNTRY_NAMES[titled.lower()]
-    logger.warning(
-        "Unknown country %r; defaulting to %s. Use an exact Indeed country name.",
-        country,
-        DEFAULT_COUNTRY,
-    )
-    return DEFAULT_COUNTRY
+
+    return None
 
 
 def _strip_country_suffix(location: str, country: str) -> str:
@@ -180,6 +193,10 @@ def _resolve_location(location: str, remote: bool, country: str) -> tuple[str, b
     if not loc:
         return "", False
 
+    # For unsupported countries, keep full location for LinkedIn global search
+    if country_norm is None:
+        return loc, False
+
     narrowed = _narrow_location_for_country(loc, country_norm)
     return narrowed, False
 
@@ -193,19 +210,26 @@ def _scrape(
 ) -> pd.DataFrame:
     from jobspy import scrape_jobs
 
-    country_indeed = normalize_country(country)
+    country_norm = normalize_country(country)
+
+    scrape_kwargs = dict(
+        site_name=site_names,
+        search_term=search_term,
+        location=location or None,
+        results_wanted=RESULTS_PER_SEARCH,
+        hours_old=HOURS_OLD,
+        is_remote=remote,
+        fetch_description=True,
+        verbose=1,
+    )
+
+    # Only pass country_indeed for supported countries
+    if country_norm is not None:
+        scrape_kwargs["country_indeed"] = country_norm
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return scrape_jobs(
-            site_name=site_names,
-            search_term=search_term,
-            location=location or None,
-            results_wanted=RESULTS_PER_SEARCH,
-            hours_old=HOURS_OLD,
-            is_remote=remote,
-            country_indeed=country_indeed,
-            verbose=1,
-        )
+        return scrape_jobs(**scrape_kwargs)
 
 
 def fetch_jobs(
@@ -215,27 +239,32 @@ def fetch_jobs(
     country: str = DEFAULT_COUNTRY,
 ) -> pd.DataFrame:
     """Fetch jobs for one search term and location. Never raises — returns empty DataFrame on total failure."""
+    loc, is_remote = _resolve_location(location, remote, country)
+    sites = _sites_for_country(country)
     country_norm = normalize_country(country)
-    loc, is_remote = _resolve_location(location, remote, country_norm)
 
-    logger.debug(
-        "JobSpy params: country_indeed=%r location=%r is_remote=%s",
-        country_norm,
-        loc,
+    logger.info(
+        "JobSpy search: term=%r location=%r is_remote=%s country=%r "
+        "country_indeed=%s sites=%s",
+        search_term,
+        loc or "(empty)",
         is_remote,
+        country,
+        country_norm or "(unsupported)",
+        sites,
     )
 
     try:
-        df = _scrape(SITES, search_term, loc, is_remote, country_norm)
+        df = _scrape(sites, search_term, loc, is_remote, country)
         if df is not None and not df.empty:
             return df
     except Exception as exc:
         logger.warning("Batch scrape failed for %r @ %r: %s", search_term, loc or "remote", exc)
 
     frames: list[pd.DataFrame] = []
-    for site in SITES:
+    for site in sites:
         try:
-            df = _scrape([site], search_term, loc, is_remote, country_norm)
+            df = _scrape([site], search_term, loc, is_remote, country)
             if df is not None and not df.empty:
                 frames.append(df)
                 label = "Indeed" if site == SITE_INDEED else "Glassdoor" if site == SITE_GLASSDOOR else site
