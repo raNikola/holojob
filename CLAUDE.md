@@ -77,6 +77,31 @@ Claude Code CLI as a keyless fallback. `HOLOJOB_LLM_PROVIDER` chooses.
     roleMatch 25, skillMatch 25, locationMatch 20,
     experienceMatch 15, industryMatch 10, cultureMatch 5
 
+**Fit judgement** (`llm_enhancer.py`, opt-in: `run_scoring.py --judge`). After
+local scoring, an LLM compares the ad with the candidate and returns a fit
+category, the requirements it checked, what is missing and any dealbreakers.
+It returns no number. The code decides what the answer costs:
+
+    strong +5, good 0, partial -8, poor -15, any dealbreaker -15
+
+Only jobs scoring 65 or more are sent: the largest raise is +5 and Apply
+starts at 70, so a job below 65 cannot change decision, and 65 is above both
+hard caps (red flag 54, off-track 50), so capped jobs are never sent. A job a
+hard rule applies to (`hardCapped` on the result) can be lowered by the judge
+but never raised. Label, recommendation and priority are recomputed through
+`labels.py`. The judge model comes from `llm_client.judge_model()` (sonnet on
+the CLI, `gpt-4o` on OpenAI, `<PROVIDER>_JUDGE_MODEL` overrides). Results
+cache in `data/cache/llm_fit.json`; a failed call leaves the local score.
+
+**Privacy exception.** Everything else in this repo keeps personal data on the
+server. The judge is the one deliberate exception, and only when `--judge` is
+passed: it sends the ad plus a digest of `candidate-intelligence.json` (seniority,
+years, target roles, career narrative, skills, domains, project / ownership /
+leadership / impact examples, strengths, known gaps) to the configured
+provider. Never sent: name, email, phone, salary, links, preferred locations,
+raw resume text, questionnaire answers. Add a field to `_candidate_digest`
+only deliberately, and update this list.
+
 ## The architectural rule
 
 The model marks facts; the code scores and applies caps. This is deliberate,
@@ -134,10 +159,9 @@ model, have it return a fact, and let `scorer.py` decide what the fact costs.
 ## Next, in order
 
 1. Fix (1) above, then recalibrate `TARGET_COVERAGE` against a real run.
-2. Phase three: an LLM comparison pass through the existing hook in
-   `llm_enhancer.py` (`enhance(job, base_result, intelligence)`), which reads
-   the ad and the profile and returns a judged fit plus what is missing. Run
-   it over the top N only. Hard rules stay in `scorer.py`.
+2. ~~Phase three: fit judgement~~ — built, see "Fit judgement" above. Still
+   to do: judge a real run and check the adjustments against your own sense
+   of the jobs.
 3. Point the existing Greenhouse / Lever / Ashby providers at a real
    `companies/` list. The owner's own application history shows 12 of ~40
    applications went through those three ATS platforms — JetBrains three

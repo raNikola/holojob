@@ -104,6 +104,14 @@ PROVIDERS: dict[str, Provider] = {
     ),
 }
 
+# Fit judgement weighs an ad against a candidate, which is harder than reading
+# facts out of an ad, so it gets a stronger model where the provider has one.
+# Override with <PROVIDER>_JUDGE_MODEL; providers not listed use their _MODEL.
+JUDGE_MODELS = {
+    "claude-code": "sonnet",
+    "openai": "gpt-4o",
+}
+
 KEYLESS = {"ollama", "claude-code"}
 
 # Order used when nothing is configured: cheapest capable first.
@@ -140,6 +148,15 @@ def active_provider() -> str:
         if os.environ.get(PROVIDERS[name].key_env):
             return name
     return "claude-code"
+
+
+def judge_model(provider: str) -> str | None:
+    """The model used for fit judgement; None means the provider default."""
+    name = provider.lower()
+    if name in ("claude", "cli"):
+        name = "claude-code"
+    prefix = "LLM" if name == "custom" else name
+    return _env(prefix, "JUDGE_MODEL") or JUDGE_MODELS.get(name)
 
 
 def describe_available() -> list[str]:
