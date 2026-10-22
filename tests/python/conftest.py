@@ -10,3 +10,9 @@ for sub in ("job_discovery", "resume_generator", "job_scoring"):
     path = ROOT / "python" / sub
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "network: hits a live third-party site; skipped when unreachable"
+    )
