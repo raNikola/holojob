@@ -2,9 +2,8 @@ import { ensureApiAvailable } from '../../utils/apiAvailability.js'
 
 export function buildDiscoveryCommand(opts = {}) {
   const providers = opts.providers || 'ats'
-  const country = opts.country || 'India'
-  const mock = opts.mock ? ' --mock' : ''
-  return `source .venv/bin/activate && python python/job_discovery/run_discovery.py --providers ${providers} --country ${country}${mock}`
+  const country = opts.country ? ` --country ${opts.country}` : ''
+  return `source .venv/bin/activate && python python/job_discovery/run_discovery.py --providers ${providers}${country}`
 }
 
 export async function probeDiscoveryApi() {
@@ -28,11 +27,11 @@ export async function fetchDiscoveryStatus() {
   return res.json()
 }
 
-export async function runDiscovery({ providers, country, locations, mock, intelligence, profile }) {
+export async function runDiscovery({ providers, country, locations, intelligence, profile }) {
   const res = await fetch('/api/discovery/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ providers, country, locations, mock, intelligence, profile }),
+    body: JSON.stringify({ providers, country, locations, intelligence, profile }),
   })
   const data = await res.json()
   if (!res.ok) {

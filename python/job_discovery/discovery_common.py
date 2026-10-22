@@ -28,17 +28,25 @@ def should_use_remote(remote_filters: list[str], location: str) -> bool:
 
 
 def resolve_search_config(intelligence: dict, *, country: str | None, locations: list[str] | None) -> dict:
+    """The search settings: the flags first, then the candidate's own intelligence.
+
+    There is no default country. One that was not given, or not in the
+    candidate's intelligence, is an error: a hard-coded market would search
+    the wrong one without saying so.
+    """
     strategy = intelligence.get("searchStrategy") or {}
     job_fit = intelligence.get("jobFitPreferences") or {}
+
+    resolved_country = country or strategy.get("country") or job_fit.get("country")
+    if not resolved_country:
+        raise ValueError(
+            "No country to search: pass --country, or set searchStrategy.country "
+            "or jobFitPreferences.country in the candidate intelligence."
+        )
 
     return {
         "search_terms": strategy.get("jobSpySearchTerms") or [],
         "locations": locations or strategy.get("locationFilters") or ["Remote"],
         "remote_filters": strategy.get("remoteFilters") or [],
-        "country": (
-            country
-            or strategy.get("country")
-            or job_fit.get("country")
-            or "Serbia"
-        ),
+        "country": resolved_country,
     }

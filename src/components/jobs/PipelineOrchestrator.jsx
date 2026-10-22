@@ -23,15 +23,16 @@ import {
   runTailor,
 } from '../../modules/jobs/pipelineRunner'
 import { useProfile } from '../../context/ProfileContext'
+import { searchCountry } from '../../utils/searchCountry'
 
-const PROVIDER_OPTIONS = ['ats', 'remote', 'startup', 'india', 'ats-india', 'all', 'jobspy']
+const PROVIDER_OPTIONS = ['ats', 'remote', 'startup', 'serbia', 'all', 'jobspy']
 const TAILOR_MODES = [
   { value: 'p1', label: 'Top 5 P1 jobs' },
   { value: 'apply', label: 'Apply recommendation = Apply' },
 ]
 
-function ManualFallback({ providers, country, mock, tailorMode }) {
-  const discoverCmd = buildDiscoveryCommand({ providers, country, mock })
+function ManualFallback({ providers, country, tailorMode }) {
+  const discoverCmd = buildDiscoveryCommand({ providers, country })
   const scoreCmd = buildScoringCommand()
   const tailorCmd = tailorMode === 'apply'
     ? buildTailorCommand({ applyOnly: true, limit: 20 })
@@ -70,8 +71,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
   const [apiAvailable, setApiAvailable] = useState(false)
   const [checking, setChecking] = useState(true)
   const [providers, setProviders] = useState('ats')
-  const [country, setCountry] = useState('India')
-  const [mock, setMock] = useState(false)
+  const [country, setCountry] = useState(() => searchCountry(profile, loadIntelligence()))
   const [tailorMode, setTailorMode] = useState('p1')
   const [running, setRunning] = useState('')
   const [stepLabel, setStepLabel] = useState('')
@@ -121,7 +121,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
     setStepLabel('Running discovery…')
     try {
       const intelligence = await syncInputs()
-      const result = await runDiscovery({ providers, country, mock, intelligence, profile })
+      const result = await runDiscovery({ providers, country, intelligence, profile })
       setLog([result.stdout, result.stderr].filter(Boolean).join('\n'))
       if (result.payload) importPayload(result.payload)
       updatePipelineState({ lastDiscoveryRun: result.payload?.meta?.generatedAt, runningStep: null })
@@ -133,7 +133,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
       setRunning('')
       setStepLabel('')
     }
-  }, [syncInputs, providers, country, mock, profile, importPayload])
+  }, [syncInputs, providers, country, profile, importPayload])
 
   const handleScore = useCallback(async () => {
     setError(null)
@@ -189,7 +189,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
       const intelligence = await syncInputs()
 
       setStepLabel('Running discovery…')
-      const disc = await runDiscovery({ providers, country, mock, intelligence, profile })
+      const disc = await runDiscovery({ providers, country, intelligence, profile })
       if (!disc.payload) throw new Error(disc.stderr || 'Discovery failed')
       importPayload(disc.payload)
 
@@ -218,7 +218,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
       setRunning('')
       setStepLabel('')
     }
-  }, [syncInputs, providers, country, mock, profile, importPayload, runTailorStep])
+  }, [syncInputs, providers, country, profile, importPayload, runTailorStep])
 
   const handleLoadScored = useCallback(async () => {
     setError(null)
@@ -282,10 +282,6 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
                     ))}
                   </select>
                 </div>
-                <label className="flex items-center gap-2 self-end pb-2 text-sm">
-                  <input type="checkbox" checked={mock} onChange={(e) => setMock(e.target.checked)} className="rounded border-stone-300 text-teal-600" />
-                  Mock mode
-                </label>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" onClick={handleDiscover} disabled={Boolean(running)}>
@@ -314,7 +310,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
             Advanced — CLI fallback
           </summary>
           <div className="border-t border-stone-200 px-4 py-4 dark:border-stone-700">
-            <ManualFallback providers={providers} country={country} mock={mock} tailorMode={tailorMode} />
+            <ManualFallback providers={providers} country={country} tailorMode={tailorMode} />
           </div>
         </details>
       )}

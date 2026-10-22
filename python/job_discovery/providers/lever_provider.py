@@ -76,7 +76,7 @@ class LeverProvider(JobProvider):
         search_terms: list[str],
         locations: list[str],
         remote_filters: list[str],
-        country: str = "India",
+        country: str,
     ) -> list[dict]:
         companies = self._load_companies()
         all_jobs: list[dict] = []

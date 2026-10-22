@@ -82,7 +82,7 @@ class GreenhouseProvider(JobProvider):
         search_terms: list[str],
         locations: list[str],
         remote_filters: list[str],
-        country: str = "India",
+        country: str,
     ) -> list[dict]:
         boards = self._load_boards()
         all_jobs: list[dict] = []

@@ -17,6 +17,7 @@ import { filterJobs, getUniqueProviders, getUniqueSites } from '../../modules/jo
 import { computeJobStats } from '../../modules/jobs/jobStats'
 import { sortJobsByScore } from '../../modules/jobs/matchScore'
 import { probePipelineApi, runTailor } from '../../modules/jobs/pipelineRunner'
+import { searchCountry } from '../../utils/searchCountry'
 import { downloadJobsCsv, downloadJobsJson } from '../../modules/jobs/jobExport'
 import { usePipelineAutoRefresh } from '../../modules/jobs/usePipelineAutoRefresh'
 import { autoLoadJobs } from '../../modules/jobs/autoLoadJobs'
@@ -107,7 +108,7 @@ export default function JobDiscoveryScreen() {
       if (!intelligence?.searchStrategy?.jobSpySearchTerms?.length) {
         throw new Error('Run candidate intelligence generation first (Module 2).')
       }
-      await runDiscovery({ providers: 'ats', country: 'USA', mock: false, intelligence, profile })
+      await runDiscovery({ providers: 'ats', country: searchCountry(profile, intelligence), intelligence, profile })
       setRerunMsg('Scoring jobs…')
       await runScoring()
       const jobs = await loadLatestScoredJobs()

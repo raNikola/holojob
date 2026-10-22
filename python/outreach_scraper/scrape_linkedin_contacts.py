@@ -51,7 +51,7 @@ USER_AGENT = (
 
 def simplify_company(company: str) -> str:
     short = re.sub(
-        r"\b(india|usa?|uk|private|pvt\.?|limited|ltd\.?|inc\.?|llc|llp|corp\.?|"
+        r"\b(usa?|uk|private|pvt\.?|limited|ltd\.?|inc\.?|llc|llp|corp\.?|"
         r"technologies|technology|solutions|services)\b",
         "",
         company,

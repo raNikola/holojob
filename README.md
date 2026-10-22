@@ -1,25 +1,5 @@
 # Holojob
 
-**Live demo:** [holojob-demo.onrender.com](https://holojob-demo.onrender.com)
-
-<p align="center">
-  <a href="https://holojob-demo.onrender.com">
-    <img src="docs/assets/demo-dashboard.png" alt="Holojob jobs dashboard with P1/P2 scoring" width="720">
-  </a>
-</p>
-
-<p align="center"><em>Free Render instance — first load may take ~50s after idle.</em></p>
-
-<!-- Record your Loom walkthrough and replace the placeholder link below with an embed iframe -->
-<p align="center">
-  <a href="https://www.loom.com/share/REPLACE_WITH_YOUR_LOOM_ID"><strong>▶ Watch 3-minute walkthrough</strong></a>
-</p>
-<!-- After recording, replace the link above with:
-<p align="center">
-  <iframe src="https://www.loom.com/embed/YOUR_LOOM_ID" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="width:720px;height:405px;max-width:100%;"></iframe>
-</p>
--->
-
 <p align="center">
   <strong>Open-source, local-first job hunt automation for tech professionals.</strong><br>
   Discover jobs · Score fit · Tailor resumes · Draft outreach · Track applications — all on your machine.
@@ -27,7 +7,6 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
-  <a href="https://github.com/raNikola/holojob"><img src="https://img.shields.io/badge/repo-GitHub-181717?logo=github" alt="GitHub"></a>
   <img src="https://img.shields.io/badge/Node-20%2B-339933?logo=node.js&logoColor=white" alt="Node 20+">
   <img src="https://img.shields.io/badge/Python-3.11--3.12-3776AB?logo=python&logoColor=white" alt="Python 3.11–3.12">
   <img src="https://img.shields.io/badge/companies-166%2B_ATS_boards-orange" alt="166+ ATS companies">
@@ -63,8 +42,7 @@ Most job tools send your resume to the cloud, lock you into one job board, or gi
 ### Option A — npm (recommended)
 
 ```bash
-git clone https://github.com/raNikola/holojob.git
-cd holojob
+cd /srv/holojob
 npm run setup          # Node deps + Python venv + Playwright browsers
 npm run dev            # http://localhost:5173
 ```
@@ -72,8 +50,7 @@ npm run dev            # http://localhost:5173
 ### Option B — setup script
 
 ```bash
-git clone https://github.com/raNikola/holojob.git
-cd holojob
+cd /srv/holojob
 bash setup.sh
 npm run dev
 ```
@@ -81,8 +58,7 @@ npm run dev
 ### Option C — Docker
 
 ```bash
-git clone https://github.com/raNikola/holojob.git
-cd holojob
+cd /srv/holojob
 docker compose up --build
 ```
 
@@ -141,7 +117,7 @@ Multi-provider scraping with configurable provider groups:
 | `ats` *(default)* | Greenhouse, Lever, Ashby | Top tech companies — works out of the box |
 | `remote` | RemoteOK, We Work Remotely, JobSpy | Remote-first roles |
 | `startup` | YC Work at a Startup, Wellfound, Ashby | Early-stage companies |
-| `india` | Instahyre, Wellfound, JobSpy, Naukri | India-focused search |
+| `serbia` | JobSpy, Infostud, Workable | Serbia, plus remote roles open to it |
 | `all` | Every provider | Maximum coverage |
 | `jobspy` | JobSpy only | Indeed, LinkedIn, Glassdoor via JobSpy |
 
@@ -152,11 +128,10 @@ Multi-provider scraping with configurable provider groups:
 | Greenhouse, Lever, Ashby | Production-ready; primary discovery path |
 | RemoteOK, YC, We Work Remotely | Implemented; good for remote/startup groups |
 | JobSpy | Requires `npm run setup:jobspy`; aggregates major boards |
-| Naukri, Wellfound, Instahyre | Skeleton providers — community contributions welcome |
+| Wellfound | Skeleton provider — community contributions welcome |
 
 Other capabilities:
 
-- Mock discovery mode for offline testing (`npm run discover:jobs:mock`)
 - Import jobs by URL (Greenhouse, Lever, Ashby, generic pages)
 - Pipeline orchestrator: discover → score → tailor in one flow
 - Job filters, bulk actions, CSV/JSON export
@@ -448,7 +423,6 @@ If you deploy a modified version as a network service, you must provide source c
 
 <p align="center">
   Built for engineers who want their job search pipeline on their own machine.<br>
-  <a href="https://github.com/raNikola/holojob">⭐ Star on GitHub</a> ·
   <a href="CONTRIBUTING.md">Contribute</a> ·
   <a href="docs/ROADMAP.md">Roadmap</a> ·
   <a href="SECURITY.md">Security</a>

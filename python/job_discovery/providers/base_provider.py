@@ -18,7 +18,7 @@ class JobProvider(ABC):
         search_terms: list[str],
         locations: list[str],
         remote_filters: list[str],
-        country: str = "Serbia",
+        country: str,
     ) -> list[dict]:
         raise NotImplementedError
 

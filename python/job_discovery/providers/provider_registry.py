@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from providers.ashby_provider import AshbyProvider
 from providers.greenhouse_provider import GreenhouseProvider
-from providers.instahyre_provider import InstahyreProvider
 from providers.jobspy_provider import JobSpyProvider
 from providers.lever_provider import LeverProvider
-from providers.naukri_provider import NaukriProvider
 from providers.remoteok_provider import RemoteOKProvider
 from providers.wellfound_provider import WellfoundProvider
 from providers.wwr_provider import WWRProvider
@@ -21,11 +19,9 @@ PROVIDER_CLASSES = {
     "lever": LeverProvider,
     "ashby": AshbyProvider,
     "wellfound": WellfoundProvider,
-    "instahyre": InstahyreProvider,
     "remoteok": RemoteOKProvider,
     "yc": YCProvider,
     "wwr": WWRProvider,
-    "naukri": NaukriProvider,
     "infostud": InfostudProvider,
     "workable": WorkableProvider,
 }
@@ -33,11 +29,9 @@ PROVIDER_CLASSES = {
 PROVIDER_GROUPS = {
     "all": [
         "jobspy", "infostud", "greenhouse", "lever", "ashby", "wellfound",
-        "instahyre", "remoteok", "yc", "wwr", "naukri",
+        "remoteok", "yc", "wwr",
     ],
-    "india": ["instahyre", "wellfound", "jobspy", "naukri"],
     "ats": ["greenhouse", "lever", "ashby"],
-    "ats-india": ["greenhouse", "lever", "ashby"],
     "remote": ["remoteok", "wwr", "workable", "jobspy"],
     "startup": ["yc", "wellfound", "ashby"],
     "serbia": ["jobspy", "infostud", "workable"],

@@ -71,14 +71,14 @@ def _select_jobs(jobs: list[dict], args: argparse.Namespace) -> list[dict]:
 
 
 def _slug(text: str) -> str:
-    """'branchX India Private Limited' -> 'BranchXIndiaPrivateLimited'."""
+    """'Acme Labs Limited' -> 'AcmeLabsLimited'."""
     words = re.findall(r"[A-Za-z0-9]+", text or "")
     parts = []
     for w in words:
         if w.isupper() and len(w) > 1:
-            parts.append(w.capitalize())   # SHANMUKH -> Shanmukh
+            parts.append(w.capitalize())   # ACME -> Acme
         else:
-            parts.append(w[:1].upper() + w[1:])  # branchX -> BranchX
+            parts.append(w[:1].upper() + w[1:])  # acmeX -> AcmeX
     return "".join(parts) or "Unknown"
 
 
@@ -208,12 +208,12 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
 
     print("  · Generating PDFs (Playwright)…", flush=True)
     pdf_ok, resume_pages = render_single_page_pdf(
-        lambda fit: render_resume_html({**ctx, "fit": fit}), pdf_path)
+        lambda fit: render_resume_html({**ctx, "fit": fit}), pdf_path, footer=True)
     if pdf_ok and resume_pages > 1 and ctx.get("projects"):
         # Trim content before type: drop the optional Projects section and retry.
         ctx = {**ctx, "projects": []}
         pdf_ok, resume_pages = render_single_page_pdf(
-            lambda fit: render_resume_html({**ctx, "fit": fit}), pdf_path)
+            lambda fit: render_resume_html({**ctx, "fit": fit}), pdf_path, footer=True)
     cover_ok, cover_pages = render_single_page_pdf(
         lambda fit: render_cover_letter_html(cl_ctx), cover_pdf_path)
 

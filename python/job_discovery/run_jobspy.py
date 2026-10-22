@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run JobSpy job discovery from candidate intelligence.")
     parser.add_argument(
         "--country",
-        help="Indeed/Glassdoor country (e.g. India, USA). Overrides searchStrategy.country.",
+        help="Indeed/Glassdoor country (e.g. USA, UK). Overrides searchStrategy.country.",
     )
     parser.add_argument(
         "--locations",
