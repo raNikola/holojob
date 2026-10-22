@@ -3,6 +3,7 @@ import Badge from '../ui/Badge'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
+import { authorizationBadge } from '../../modules/jobs/workAuthorization'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
 import { ApplyBadge, MatchScoreBadge, PriorityBadge } from './JobScoreBadge'
 import JobTailorActions from './JobTailorActions'
@@ -22,6 +23,12 @@ function StatusBadge({ status }) {
 function FollowUpBadge({ job }) {
   if (!isFollowUpDue(job.applicationTracking)) return null
   return <Badge variant="medium">Follow-Up Required</Badge>
+}
+
+function AuthorizationBadge({ job }) {
+  const badge = authorizationBadge(job)
+  if (!badge) return null
+  return <span title={badge.reason}><Badge variant={badge.variant}>{badge.label}</Badge></span>
 }
 
 const PROVIDER_VARIANT = {
@@ -86,6 +93,7 @@ function JobCard({
           </div>
           <div className="flex flex-col items-end gap-1">
             {showScores && <MatchScoreBadge job={job} />}
+            {showScores && <AuthorizationBadge job={job} />}
             <StatusBadge status={job.status} />
             <FollowUpBadge job={job} />
           </div>
@@ -172,7 +180,12 @@ export default function JobTable({
                     className="rounded border-stone-300 text-teal-600"
                   />
                 </td>
-                {showScores && <td className="px-4 py-3"><MatchScoreBadge job={job} /></td>}
+                {showScores && (
+                  <td className="px-4 py-3">
+                    <MatchScoreBadge job={job} />
+                    <div className="mt-1"><AuthorizationBadge job={job} /></div>
+                  </td>
+                )}
                 <td className="px-4 py-3 font-medium text-stone-900 dark:text-stone-100">
                   <div>{job.title}</div>
                   <div className="mt-1"><FollowUpBadge job={job} /></div>

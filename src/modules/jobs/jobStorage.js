@@ -10,6 +10,7 @@ const DEFAULT_FILTERS = {
   site: '',
   provider: '',
   remoteOnly: false,
+  hideNeedsVisa: false,
   status: '',
   matchLabel: '',
   priority: '',

@@ -8,6 +8,7 @@ import JobAIToolsPanel from '../ai/JobAIToolsPanel'
 import RelatedContactsPanel from '../outreach/RelatedContactsPanel'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
+import { isCapReason } from '../../modules/jobs/workAuthorization'
 
 const DIMENSION_LABELS = {
   roleMatch: 'Role',
@@ -76,7 +77,8 @@ export default function JobDetailDrawer({
 
   const desc = stripDescription(job.description)
   const showScores = hasMatchScores([job])
-  const positiveReasons = (job.reasons || []).filter((r) => !r.startsWith('Red flag:'))
+  const limits = (job.reasons || []).filter(isCapReason)
+  const positiveReasons = (job.reasons || []).filter((r) => !r.startsWith('Red flag:') && !isCapReason(r))
   const provider = getJobProvider(job)
 
   return (
@@ -137,6 +139,14 @@ export default function JobDetailDrawer({
                 <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">Missing skills</h4>
                 <SkillChips skills={job.missingSkills} variant="missing" />
               </div>
+              {limits.length > 0 && (
+                <div>
+                  <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Limits</h4>
+                  <ul className="list-inside list-disc text-sm text-amber-800 dark:text-amber-300">
+                    {limits.map((r) => <li key={r}>{r}</li>)}
+                  </ul>
+                </div>
+              )}
               {positiveReasons.length > 0 && (
                 <div>
                   <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">Why this scored well</h4>

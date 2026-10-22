@@ -1,3 +1,5 @@
+import { NEEDS_VISA_STATUSES } from './workAuthorization.js'
+
 export function getJobProvider(job) {
   return job.provider || job.site || ''
 }
@@ -9,6 +11,7 @@ export function filterJobs(jobs, filters = {}) {
     site = '',
     provider = '',
     remoteOnly = false,
+    hideNeedsVisa = false,
     status = '',
     matchLabel = '',
     priority = '',
@@ -26,6 +29,7 @@ export function filterJobs(jobs, filters = {}) {
       if (!Number.isNaN(floor) && (job.matchScore ?? 0) < floor) return false
     }
     if (remoteOnly && !job.isRemote) return false
+    if (hideNeedsVisa && NEEDS_VISA_STATUSES.has(job.workAuthorization?.status)) return false
     if (site && (job.site || '').toLowerCase() !== site.toLowerCase()) return false
     if (provider && getJobProvider(job).toLowerCase() !== provider.toLowerCase()) return false
     if (location && !(job.location || '').toLowerCase().includes(location.toLowerCase())) return false
