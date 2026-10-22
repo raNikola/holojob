@@ -96,11 +96,20 @@ cache in `data/cache/llm_fit.json`; a failed call leaves the local score.
 **Privacy exception.** Everything else in this repo keeps personal data on the
 server. The judge is the one deliberate exception, and only when `--judge` is
 passed: it sends the ad plus a digest of `candidate-intelligence.json` (seniority,
-years, target roles, career narrative, skills, domains, project / ownership /
-leadership / impact examples, strengths, known gaps) to the configured
-provider. Never sent: name, email, phone, salary, links, preferred locations,
-raw resume text, questionnaire answers. Add a field to `_candidate_digest`
-only deliberately, and update this list.
+years, target roles, spoken languages, career narrative, skills, domains,
+project / ownership / leadership / impact examples, strengths, known gaps) to
+the configured provider. Never sent: name, email, phone, salary, links,
+preferred locations, raw resume text, questionnaire answers. Add a field to
+`_candidate_digest` only deliberately, and update this list.
+
+A dealbreaker needs the candidate text to *contradict* a hard condition (the ad
+requires Russian, the digest lists Serbian and English). Silence is not
+failure: a condition the digest cannot settle goes under `missing`. The
+digest cannot settle languages without a `languages` list, and no part of the
+app writes one: it is hand-maintained in `candidate-intelligence.json`
+(`["Serbian (native)", "English (fluent)"]`) and is lost if the intelligence
+file is regenerated. Re-add it, or language requirements go back to being
+unsettled.
 
 ## The architectural rule
 

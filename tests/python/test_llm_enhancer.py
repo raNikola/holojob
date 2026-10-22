@@ -8,6 +8,7 @@ import pytest
 from llm_client import LlmRefused, LlmUnavailable
 from llm_enhancer import (
     DEFAULT_THRESHOLD,
+    PROMPT_VERSION,
     LlmFitEnhancer,
     build_prompt,
 )
@@ -158,6 +159,29 @@ def test_prompt_fences_the_ad_and_leaves_out_private_fields(intelligence):
     assert "=== END JOB AD ===" in prompt
     assert "Shipped things." in prompt
     assert "SECRET-SALARY" not in prompt
+
+
+def test_digest_states_the_candidates_languages(intelligence):
+    prompt = build_prompt(JOB, intelligence)
+    assert "Languages: Serbian (native), English (fluent)" in prompt
+
+
+def test_digest_says_not_stated_when_languages_are_absent(intelligence):
+    intel = {k: v for k, v in intelligence.items() if k != "languages"}
+    assert "Languages: (none stated)" in build_prompt(JOB, intel)
+
+
+def test_prompt_makes_silence_a_gap_not_a_dealbreaker(intelligence):
+    prompt = build_prompt(JOB, intelligence)
+    assert "affirmatively contradicts" in prompt
+    assert 'list it under "missing"' in prompt
+
+
+def test_prompt_version_invalidates_old_cache_entries(intelligence):
+    e = enhancer(Stub(reply()))
+    prompt = build_prompt(JOB, intelligence)
+    assert PROMPT_VERSION >= 2
+    assert e._fingerprint(prompt) != e._fingerprint(prompt + " ")
 
 
 def test_capped_jobs_in_a_run_are_never_sent(intelligence):

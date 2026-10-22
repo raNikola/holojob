@@ -7,7 +7,8 @@ job a hard rule in scorer.py applies to is never lifted.
 
 Privacy: this is the one step that sends candidate data off the server, and
 only when run_scoring.py is given --judge. What is sent is a digest of
-candidate-intelligence.json (see _candidate_digest). Name, email, phone,
+candidate-intelligence.json (see _candidate_digest), including the spoken
+languages in its hand-maintained `languages` list. Name, email, phone,
 salary, links, locations, raw resume text and questionnaire answers are never
 read here, so they cannot be sent.
 """
@@ -41,7 +42,7 @@ class NoOpEnhancer:
 
 # Bump when the prompt or digest changes: it is part of the fingerprint, so
 # every job is judged again rather than served from an older question's cache.
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 
 # The Apply/P1 line in labels.py is 70 and the largest raise is +5, so a job
 # below 65 cannot reach Apply whatever the model says. 65 is also above both
@@ -137,9 +138,14 @@ in its order.
 
 4. A dealbreaker is a hard condition that cannot be met by learning: a \
 required language, citizenship or security clearance, or a degree the ad \
-calls mandatory. A missing skill is not a dealbreaker. Do not consider \
-location, office attendance or remote policy anywhere in your answer; the \
-caller scores those separately.
+calls mandatory. It is a dealbreaker only when the candidate text \
+affirmatively contradicts it -- for example the ad requires fluent Russian \
+and the candidate lists the languages they speak, and Russian is not among \
+them. If the candidate text is silent on the condition, you cannot tell \
+whether it is met: list it under "missing" and do not call it a dealbreaker. \
+A missing skill is never a dealbreaker. Do not consider location, office \
+attendance or remote policy anywhere in your answer; the caller scores those \
+separately.
 
 5. fit:
    strong  -- every stressed requirement met or nearly; nothing essential missing
@@ -175,6 +181,7 @@ def _candidate_digest(intelligence: dict) -> str:
             f"Seniority: {summary.get('seniorityLevel') or 'unstated'}. "
             f"Years of experience: {experience.get('yearsOfExperience') or 'unstated'}.",
             f"Target roles: {_joined(roles.get('primaryTargetRoles'))}",
+            f"Languages: {_joined(intelligence.get('languages'))}",
             f"Summary: {summary.get('careerNarrative') or '(none stated)'}",
             f"Skills: {_joined(dict.fromkeys(skills))}",
             f"Domains worked in: {_joined(experience.get('domainsWorkedIn'))}",
