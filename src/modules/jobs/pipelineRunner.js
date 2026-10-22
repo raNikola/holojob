@@ -16,7 +16,7 @@ export function buildTailorCommand(opts = {}) {
 }
 
 export function buildDiscoveryCommand(opts = {}) {
-  const providers = opts.providers || 'ats'
+  const providers = opts.providers || 'serbia'
   const country = opts.country ? ` --country ${opts.country}` : ''
   return `source .venv/bin/activate && python python/job_discovery/run_discovery.py --providers ${providers}${country}`
 }

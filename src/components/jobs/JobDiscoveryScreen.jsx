@@ -108,7 +108,7 @@ export default function JobDiscoveryScreen() {
       if (!intelligence?.searchStrategy?.jobSpySearchTerms?.length) {
         throw new Error('Run candidate intelligence generation first (Module 2).')
       }
-      await runDiscovery({ providers: 'ats', country: searchCountry(profile, intelligence), intelligence, profile })
+      await runDiscovery({ providers: 'serbia', country: searchCountry(profile, intelligence), intelligence, profile })
       setRerunMsg('Scoring jobs…')
       await runScoring()
       const jobs = await loadLatestScoredJobs()

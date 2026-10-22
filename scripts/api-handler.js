@@ -219,7 +219,7 @@ export async function handleApiRequest(req, res) {
     sendJson(res, 200, {
       available: true,
       ...getDiscoveryStatus(),
-      command: buildDiscoveryCommand({ providers: 'ats' }),
+      command: buildDiscoveryCommand({ providers: 'serbia' }),
     })
     return true
   }
@@ -242,7 +242,7 @@ export async function handleApiRequest(req, res) {
     try {
       const body = await readBody(req)
       const result = await runDiscovery({
-        providers: body.providers || 'ats',
+        providers: body.providers || 'serbia',
         country: body.country,
         locations: body.locations,
         intelligence: body.intelligence,

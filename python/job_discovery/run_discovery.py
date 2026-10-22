@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run multi-provider job discovery.")
     parser.add_argument(
         "--providers",
-        default="ats",
+        default="serbia",
         help=(
             "Comma-separated provider names or group: "
             f"{', '.join(PROVIDER_GROUPS)}"

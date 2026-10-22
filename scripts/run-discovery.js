@@ -47,13 +47,13 @@ export function getDiscoveryStatus() {
 }
 
 export function buildDiscoveryCommand(opts = {}) {
-  const providers = opts.providers || 'ats'
+  const providers = opts.providers || 'serbia'
   const country = opts.country ? ` --country ${opts.country}` : ''
   return `source .venv/bin/activate && python python/job_discovery/run_discovery.py --providers ${providers}${country}`
 }
 
 export function runDiscovery(opts = {}) {
-  const providers = opts.providers || 'ats'
+  const providers = opts.providers || 'serbia'
   const country = opts.country || ''
 
   if (!venvReady()) {
@@ -137,7 +137,7 @@ export function runDiscovery(opts = {}) {
 }
 
 function parseCliArgs(argv) {
-  const opts = { providers: 'ats', country: '', locations: [] }
+  const opts = { providers: 'serbia', country: '', locations: [] }
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]
     if (a === '--providers') opts.providers = argv[++i]

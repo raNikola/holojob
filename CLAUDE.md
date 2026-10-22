@@ -61,6 +61,10 @@ its public JSON carries the full description). HelloWorld and Startuj were
 evaluated and rejected: HelloWorld shares Infostud's inventory and ID space,
 Startuj is entry-level only.
 
+The standard run is `--providers serbia` (all six providers); it is the
+default everywhere: the CLI, `npm run discover:jobs`, the API and every UI
+screen. `ats` and the other groups stay available by name.
+
 Dedup is two-pass (`dedupe_jobs.py`): by URL, then by title+company within a
 source, because LinkedIn publishes one role as several ads, one per city.
 

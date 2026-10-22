@@ -20,7 +20,7 @@
     "regenerate-intelligence": "node scripts/regenerate-intelligence.js",
     "setup:jobspy": "node scripts/setup.js --jobspy",
     "setup:jobs": "node scripts/setup.js --jobs",
-    "discover:jobs": "node scripts/run-discovery.js --providers ats",
+    "discover:jobs": "node scripts/run-discovery.js --providers serbia",
     "score:jobs": ".venv/bin/python python/job_scoring/run_scoring.py",
     "tailor:resumes": ".venv/bin/python python/resume_generator/run_tailor.py",
     "scan:projects": "node scripts/run-project-scan.js",
