@@ -51,7 +51,7 @@ Import `discovered_jobs.json` in the React Job Discovery dashboard.
 
 ## Module 3.1 — Multi-Provider Discovery
 
-Setup (JobSpy + JustHireMe reference + Playwright):
+Setup (JobSpy + Playwright):
 
 ```bash
 npm run setup:jobs
@@ -83,5 +83,4 @@ python python/job_discovery/run_jobspy.py --country <country> --locations "<city
 
 - Scraping depends on network access and job board rate limits.
 - LinkedIn may fail individually; Indeed/Glassdoor/Google continue.
-- The `external/JobSpy` clone is reference-only; runtime uses `pip install python-jobspy`.
 - **Indeed / Glassdoor:** pass an exact country name via `--country` (e.g. `USA`, `UK`). The adapter sets JobSpy `country_indeed` accordingly. Use `--locations` for city narrowing. Remote locations use `is_remote=True` with country scoping only.

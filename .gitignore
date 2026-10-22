@@ -19,9 +19,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# Cloned external dependencies (setup scripts)
-external/
-
 # Runtime data — never commit personal/job data
 data/cache/
 data/resumes/

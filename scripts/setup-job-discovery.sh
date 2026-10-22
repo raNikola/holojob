@@ -4,23 +4,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-mkdir -p external
-
-if [ ! -d "external/JobSpy" ]; then
-  echo "Cloning JobSpy..."
-  git clone https://github.com/speedyapply/JobSpy external/JobSpy
-fi
-
-if [ ! -d "external/JustHireMe" ]; then
-  echo "Cloning JustHireMe..."
-  git clone https://github.com/vasu-devs/JustHireMe external/JustHireMe
-fi
-
-if [ ! -d "external/career-ops" ]; then
-  echo "Cloning Career Ops..."
-  git clone --depth 1 https://github.com/santifer/career-ops external/career-ops
-fi
-
 if [ ! -d ".venv" ]; then
   echo "Creating virtual environment..."
   python3 -m venv .venv
