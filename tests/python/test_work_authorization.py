@@ -9,7 +9,7 @@ import pytest
 import work_authorization as wa
 from dimensions.location_match import score_location_match
 from enrich_jobs import _coerce
-from geography import country_of_name, covers, resolve_country
+from geography import country_of_name, covers, resolve_countries, resolve_country
 from scorer import WORK_AUTHORIZATION_CAPS, score_job, score_jobs
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -103,6 +103,22 @@ def test_an_allowed_location_set_gates_only_when_the_candidate_sets_one():
     assert status(job("Berlin, Germany"), allowedLocations=["EUROPE"]) == wa.NEEDS_VISA_SILENT
     # An unknown place is not known to be outside the set.
     assert status(job("Head office"), allowedLocations=["EUROPE"]) == wa.UNKNOWN
+
+
+def test_a_multi_office_ad_is_authorized_if_any_office_is_where_the_candidate_may_work():
+    offices = (
+        "Amsterdam, Netherlands; Belgrade, Serbia; Berlin, Germany; Limassol, Cyprus; "
+        "London, United Kingdom; Madrid, Spain; Munich, Germany; Prague, Czech Republic; "
+        "Warsaw, Poland; Yerevan, Armenia, Netherlands"
+    )
+    serbian = {"holds": [{"jurisdiction": "RS", "basis": "citizen"}], "openToSponsorship": True}
+    assert resolve_countries(offices)[:3] == ["NL", "RS", "DE"]
+    result = wa.authorization_status(job(offices), {**PREFS, "workAuthorization": serbian})
+    assert result["status"] == wa.AUTHORIZED and result["reason"] == "you can work in RS"
+    # No office is one the candidate holds: still a visa job, named by its first offices.
+    american = {"holds": [{"jurisdiction": "US", "basis": "citizen"}], "openToSponsorship": True}
+    result = wa.authorization_status(job(offices), {**PREFS, "workAuthorization": american})
+    assert result["status"] == wa.NEEDS_VISA_SILENT and result["place"] == "NL/RS/DE +5 more"
 
 
 # --- scorer ------------------------------------------------------------------------------------

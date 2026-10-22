@@ -65,8 +65,10 @@ The standard run is `--providers serbia` (all six providers); it is the
 default everywhere: the CLI, `npm run discover:jobs`, the API and every UI
 screen. `ats` and the other groups stay available by name.
 
-Dedup is two-pass (`dedupe_jobs.py`): by URL, then by title+company within a
-source, because LinkedIn publishes one role as several ads, one per city.
+Dedup is two-pass (`dedupe_jobs.py`): by URL, then by title+company across
+every source, keeping the fuller description. LinkedIn publishes one role as
+several ads, one per city, and the same role reaches us from LinkedIn and from
+the company's own board.
 
 **Enrichment** (`python/job_scoring/enrich_jobs.py`). An LLM reads each ad
 and reports facts: work mode, role track, seniority, years required,
@@ -171,7 +173,8 @@ model, have it return a fact, and let `scorer.py` decide what the fact costs.
   None has a default: no work rights means the visa is not checked, and an
   empty `allowedLocations` gates nothing, which is the owner's setting: the
   US and the EU are live options, and authorization affects the score only.
-  `geography.py` resolves places through `src/data/geography.json`, shared
+  An ad that lists several offices is judged on all of them: one in a country
+  the candidate may work in makes it `authorized`. `geography.py` resolves places through `src/data/geography.json`, shared
   with the UI; a place it does not know is unknown, and unknown never caps.
 - **text_utils.py** folds diacritics, so "Niš" and "Nis" compare equal.
   Serbian boards spell both ways and a failed match is silent.

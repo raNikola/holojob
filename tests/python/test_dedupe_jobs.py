@@ -38,9 +38,15 @@ def test_different_company_is_kept():
     assert len(dedupe_jobs(ads)) == 2
 
 
-def test_same_title_and_company_on_different_sources_is_kept():
-    ads = [_ad("Belgrade", 1), _ad("Belgrade", 2, source="infostud")]
-    assert len(dedupe_jobs(ads)) == 2
+def test_same_title_and_company_on_different_sources_collapses_to_the_fuller_ad():
+    ads = [
+        _ad("Serbia", 1, company="Fundraise Up", title="Product Manager, Campaign Pages",
+            source="linkedin", provider="jobspy", description="Short."),
+        _ad("Serbia - Remote, EMEA", 2, company="Fundraise Up", title="Product Manager, Campaign Pages ",
+            source="fundraiseup-serbia", provider="greenhouse", description="The full ad, with every requirement."),
+    ]
+    kept = dedupe_jobs(ads)
+    assert len(kept) == 1 and kept[0]["provider"] == "greenhouse"
 
 
 def test_ad_without_company_is_never_merged_by_title():

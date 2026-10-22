@@ -72,6 +72,17 @@ def resolve_country(location: str) -> str | None:
     return None
 
 
+def resolve_countries(location: str) -> list[str]:
+    """Every country a location names, in order: a multi-office ad lists several
+    ("Amsterdam, Netherlands; Belgrade, Serbia; Berlin, Germany" -> NL, RS, DE)."""
+    found: list[str] = []
+    for part in (p.strip() for p in re.split(r"[,;|/()]", location or "")):
+        code = country_of_name(part) or (part if part.isupper() and part in country_codes() else None)
+        if code and code not in found:
+            found.append(code)
+    return found
+
+
 def covers(right: str, place: str) -> bool:
     """Whether a work right held for `right` lets the holder work in `place`.
 
