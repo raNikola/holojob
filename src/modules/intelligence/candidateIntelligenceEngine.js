@@ -15,10 +15,10 @@ import { buildCandidateStrengths } from './strengthsBuilder.js'
 const SCORING_WEIGHTS = {
   roleMatch: 25,
   skillMatch: 25,
-  industryMatch: 15,
+  industryMatch: 10,
   experienceMatch: 15,
-  locationMatch: 10,
-  cultureMatch: 10,
+  locationMatch: 20,
+  cultureMatch: 5,
 }
 
 /** @typedef {import('../../types/holojob.d.ts').Profile} Profile */

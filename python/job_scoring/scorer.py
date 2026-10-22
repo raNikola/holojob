@@ -16,10 +16,10 @@ from corpus import build_idf
 DEFAULT_WEIGHTS = {
     "roleMatch": 25,
     "skillMatch": 25,
-    "industryMatch": 15,
+    "industryMatch": 10,
     "experienceMatch": 15,
-    "locationMatch": 10,
-    "cultureMatch": 10,
+    "locationMatch": 20,
+    "cultureMatch": 5,
 }
 
 # The ad's day-to-day work, as read from its own words. A delivery or
