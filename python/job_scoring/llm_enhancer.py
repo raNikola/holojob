@@ -6,7 +6,9 @@ produces a number: FIT_ADJUSTMENT below decides what each answer costs, and a
 job a hard rule in scorer.py applies to is never lifted.
 
 Privacy: this is the one step that sends candidate data off the server, and
-only when run_scoring.py is given --judge. What is sent is a digest of
+only when run_scoring.py is given --judge. Without it, run_scoring.py still
+re-applies judgements already in the cache (cache_only below): that reads a
+local file and makes no call. What is sent is a digest of
 candidate-intelligence.json (see _candidate_digest), including the spoken
 languages, which generateCandidateIntelligence derives from the profile's
 basicProfile.languages. Name, email, phone,
@@ -166,6 +168,23 @@ def _bullets(items) -> str:
     return "\n".join(f"- {v}" for v in values) if values else "- (none stated)"
 
 
+# The labels _candidate_digest writes, in order; the UI shows them before a
+# judged run, and a test keeps the two in step.
+DIGEST_FIELDS = [
+    "Seniority", "Years of experience", "Target roles", "Languages", "Summary",
+    "Skills", "Domains worked in", "Project highlights", "Ownership examples",
+    "Leadership examples", "Business impact", "Strengths", "Known gaps",
+]
+NEVER_SENT = [
+    "Name", "Email", "Phone", "Salary", "Links", "Preferred locations",
+    "Résumé text", "Questionnaire answers",
+]
+
+
+class NotCached(Exception):
+    """A cache-only enhancer met a job it has no stored judgement for."""
+
+
 def _candidate_digest(intelligence: dict) -> str:
     """The only candidate data the judge sees. Add fields here deliberately."""
     summary = intelligence.get("candidateSummary") or {}
@@ -266,17 +285,20 @@ class LlmFitEnhancer:
         threshold: int = DEFAULT_THRESHOLD,
         cache_path: Path | None = None,
         complete=complete_json,
+        cache_only: bool = False,
     ):
         self.provider = provider
         self.model = model
         self.threshold = threshold
         self.cache_path = cache_path
         self._complete = complete
+        # Re-apply stored judgements and never call the model.
+        self.cache_only = cache_only
         self._lock = threading.Lock()
         self._cache: dict[str, dict] = {}
         if cache_path and cache_path.exists():
             self._cache = json.loads(cache_path.read_text(encoding="utf-8"))
-        self.counts = {"judged": 0, "cached": 0, "skipped": 0, "failed": 0}
+        self.counts = {"judged": 0, "cached": 0, "skipped": 0, "failed": 0, "uncached": 0}
 
     def _count(self, key: str) -> None:
         with self._lock:
@@ -286,14 +308,17 @@ class LlmFitEnhancer:
         raw = "|".join([str(PROMPT_VERSION), self.provider, self.model or "", prompt])
         return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
-    def _judge(self, job: dict, intelligence: dict) -> tuple[dict, str]:
+    def _judge(self, job: dict, intelligence: dict) -> tuple[dict, str, bool]:
         prompt = build_prompt(job, intelligence)
         fingerprint = self._fingerprint(prompt)
         with self._lock:
             cached = self._cache.get(fingerprint)
         if cached is not None:
             self._count("cached")
-            return cached, fingerprint
+            return cached, fingerprint, True
+        if self.cache_only:
+            self._count("uncached")
+            raise NotCached(fingerprint)
 
         judged = _coerce_fit(
             self._complete(prompt, schema=FIT_SCHEMA, model=self.model, provider=self.provider)
@@ -301,10 +326,10 @@ class LlmFitEnhancer:
         with self._lock:
             self._cache[fingerprint] = judged
         self._count("judged")
-        return judged, fingerprint
+        return judged, fingerprint, False
 
     def save(self) -> None:
-        if not self.cache_path:
+        if not self.cache_path or self.cache_only:
             return
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
@@ -317,7 +342,9 @@ class LlmFitEnhancer:
             return base_result
 
         try:
-            judged, fingerprint = self._judge(job, intelligence)
+            judged, fingerprint, from_cache = self._judge(job, intelligence)
+        except NotCached:
+            return base_result
         except (LlmUnavailable, LlmRefused) as exc:
             print(f"judge failed: {(job.get('title') or '?')[:45]}: {exc}", file=sys.stderr)
             self._count("failed")
@@ -350,6 +377,7 @@ class LlmFitEnhancer:
                 "localScore": base,
                 "provider": self.provider,
                 "model": self.model,
+                "fromCache": from_cache,
                 "_fingerprint": fingerprint,
             },
         }

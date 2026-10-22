@@ -23,6 +23,7 @@ import {
   runTailor,
 } from '../../modules/jobs/pipelineRunner'
 import { useProfile } from '../../context/ProfileContext'
+import FitJudgementCard from './FitJudgementCard'
 import { searchCountry } from '../../utils/searchCountry'
 
 const PROVIDER_OPTIONS = ['ats', 'remote', 'startup', 'serbia', 'all', 'jobspy']
@@ -261,6 +262,8 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
             {running === 'full' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
             Run Full Pipeline
           </Button>
+
+          <FitJudgementCard disabled={Boolean(running)} onBeforeRun={syncInputs} onScored={importPayload} />
 
           <details className="rounded-lg border border-stone-200 dark:border-stone-700">
             <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-stone-700 dark:text-stone-300">

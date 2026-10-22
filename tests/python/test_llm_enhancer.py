@@ -211,3 +211,73 @@ def test_score_job_marks_hard_cap(intelligence):
         "llmFacts": {"roleTrack": "product_management"},
     }
     assert score_job(job, intelligence)["hardCapped"] is False
+
+
+# --- cache-only re-application (local re-score) -------------------------------------------------
+
+
+def test_cache_only_reapplies_a_stored_judgement_without_calling(intelligence, tmp_path):
+    cache = tmp_path / "fit.json"
+    first = enhancer(Stub(reply("partial")), cache_path=cache)
+    first.enhance(JOB, base(80), intelligence)
+    first.save()
+
+    never = Stub(AssertionError("called the model"))
+    local = enhancer(never, cache_path=cache, cache_only=True)
+    result = local.enhance(JOB, base(80), intelligence)
+    assert never.calls == []
+    assert result["matchScore"] == 72 and result["llmFit"]["fromCache"] is True
+    assert local.counts["cached"] == 1
+
+
+def test_cache_only_leaves_an_unjudged_job_at_its_local_score(intelligence, tmp_path):
+    never = Stub(AssertionError("called the model"))
+    local = enhancer(never, cache_path=tmp_path / "missing.json", cache_only=True)
+    result = local.enhance(JOB, base(80), intelligence)
+    assert never.calls == [] and result == base(80) and local.counts["uncached"] == 1
+
+
+def test_cache_only_never_writes_the_cache(intelligence, tmp_path):
+    cache = tmp_path / "fit.json"
+    enhancer(Stub(None), cache_path=cache, cache_only=True).save()
+    assert not cache.exists()
+
+
+def test_a_fresh_judgement_is_not_marked_from_cache(intelligence):
+    result = enhancer(Stub(reply("good"))).enhance(JOB, base(80), intelligence)
+    assert result["llmFit"]["fromCache"] is False
+
+
+# --- what the UI shows before a judged run ------------------------------------------------------
+
+
+def test_the_listed_digest_fields_are_exactly_what_the_digest_writes(intelligence):
+    from llm_enhancer import DIGEST_FIELDS, _candidate_digest
+
+    labels = []
+    for line in _candidate_digest(intelligence).splitlines():
+        if line.startswith("- "):
+            continue
+        for part in line.split(". "):
+            if ":" in part:
+                labels.append(part.split(":", 1)[0].strip())
+    assert labels == DIGEST_FIELDS
+
+
+def test_preview_reports_counts_and_writes_nothing(intelligence, tmp_path, monkeypatch, capsys):
+    import run_scoring
+
+    jobs = tmp_path / "jobs.json"
+    jobs.write_text(json.dumps({"jobs": [JOB]}), encoding="utf-8")
+    intel = tmp_path / "intel.json"
+    intel.write_text(json.dumps(intelligence), encoding="utf-8")
+    out = tmp_path / "scored.json"
+    monkeypatch.setattr(run_scoring, "FIT_CACHE_PATH", tmp_path / "fit.json")
+    monkeypatch.setattr(run_scoring, "score_jobs", lambda j, i, e, workers: [e.enhance(j[0], base(80), i)])
+    monkeypatch.setattr("sys.argv", ["run_scoring.py", "--judge-preview", "--judge-provider", "openai",
+                                     "--jobs", str(jobs), "--intelligence", str(intel), "--output", str(out)])
+    assert run_scoring.main() == 0
+    preview = json.loads(capsys.readouterr().out)
+    assert preview["provider"] == "openai" and preview["leavesServer"] is True
+    assert (preview["eligible"], preview["cached"], preview["toSend"]) == (1, 0, 1)
+    assert "Name" in preview["neverSent"] and not out.exists()

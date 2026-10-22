@@ -66,6 +66,29 @@ export async function runScoring() {
   return data
 }
 
+/** What a judged run would send, to whom, and how many jobs; sends nothing. */
+export async function previewJudge() {
+  const res = await fetch('/api/scoring/judge/preview')
+  const data = await res.json()
+  if (!res.ok || !data.ok) throw new Error(data.error || 'Judge preview failed')
+  return data.preview
+}
+
+/**
+ * The only client call that sends a candidate digest to an LLM provider.
+ * Call it from the confirm dialog, never from a general scoring action.
+ */
+export async function runJudgedScoring() {
+  const res = await fetch('/api/scoring/judge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm: true }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.stderr || data.error || 'Judged scoring failed')
+  return data
+}
+
 export async function loadLatestDiscoveredJobs() {
   const res = await fetch('/api/discovery/jobs')
   if (!res.ok) {
