@@ -27,6 +27,7 @@ export default function IntelligenceSummaryCard({ intelligence }) {
           <Field label="One-line pitch" value={s.oneLinePitch} />
           <Field label="Career narrative" value={s.careerNarrative} />
           <Field label="Positioning statement" value={s.positioningStatement} />
+          <Field label="Languages" value={(intelligence.languages || []).join(', ')} />
         </dl>
       </Card>
 
