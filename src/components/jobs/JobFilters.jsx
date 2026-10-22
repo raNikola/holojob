@@ -79,6 +79,17 @@ export default function JobFilters({ filters, sites, providers, jobs, onChange }
         />
         Remote only
       </label>
+      {showScoreFilters && (
+        <label className="mt-2 flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
+          <input
+            type="checkbox"
+            checked={filters.hideNeedsVisa}
+            onChange={(e) => onChange({ hideNeedsVisa: e.target.checked })}
+            className="rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+          />
+          Hide jobs that need a visa
+        </label>
+      )}
     </Card>
   )
 }
