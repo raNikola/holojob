@@ -13,7 +13,7 @@ capped: an assumption here would cost the candidate a job they never saw.
 from __future__ import annotations
 
 from dimensions.location_match import is_remote_job
-from geography import REMOTE, WORLDWIDE, covers, resolve_country
+from geography import REMOTE, WORLDWIDE, covers, resolve_countries
 
 AUTHORIZED = "authorized"
 SPONSORED = "sponsored"
@@ -35,14 +35,17 @@ def _holds(prefs: dict) -> list[str]:
 def job_places(job: dict) -> tuple[bool, list[str]]:
     """(remote, places): where the work is legally done.
 
-    Onsite or hybrid: the board's location, else the country the model read.
+    Onsite or hybrid: every country the board's location names (an ad can list
+    many offices), else the country the model read.
     Remote: where the ad says a hire may live, which is often nowhere at all.
     """
     facts = job.get("llmFacts") or {}
     if is_remote_job(job):
         return True, [str(p).upper() for p in facts.get("remoteEligibility") or [] if p]
-    country = resolve_country(job.get("location") or "") or facts.get("jobCountry")
-    return False, [country] if country else []
+    countries = resolve_countries(job.get("location") or "")
+    if not countries and facts.get("jobCountry"):
+        countries = [facts["jobCountry"]]
+    return False, countries
 
 
 def authorization_status(job: dict, prefs: dict) -> dict:
@@ -50,7 +53,8 @@ def authorization_status(job: dict, prefs: dict) -> dict:
     facts = job.get("llmFacts") or {}
     remote, places = job_places(job)
     restricted = [p for p in places if p != WORLDWIDE]
-    place = "remote" if remote and not restricted else "/".join(restricted) or "unknown"
+    shown = "/".join(restricted[:3]) + (f" +{len(restricted) - 3} more" if len(restricted) > 3 else "")
+    place = "remote" if remote and not restricted else shown or "unknown"
 
     def result(status: str, reason: str) -> dict:
         return {"status": status, "place": place, "reason": reason}
@@ -61,7 +65,7 @@ def authorization_status(job: dict, prefs: dict) -> dict:
         if remote:
             inside = REMOTE in allowed
         elif restricted:
-            inside = any(covers(a, restricted[0]) for a in allowed if a != REMOTE)
+            inside = any(covers(a, p) for a in allowed if a != REMOTE for p in restricted)
         else:
             inside = True  # an unknown place is not known to be outside
         if not inside:
@@ -75,7 +79,8 @@ def authorization_status(job: dict, prefs: dict) -> dict:
             return result(AUTHORIZED, "remote with no restriction on where you live")
         return result(UNKNOWN, "the job's country is not known, so the visa was not checked")
     if any(covers(right, p) for right in holds for p in restricted):
-        return result(AUTHORIZED, f"you can work in {place}")
+        where = next(p for p in restricted if any(covers(right, p) for right in holds))
+        return result(AUTHORIZED, f"you can work in {where}")
 
     sponsorship = facts.get("visaSponsorship") or "not_mentioned"
     open_to_sponsorship = bool((prefs.get("workAuthorization") or {}).get("openToSponsorship"))

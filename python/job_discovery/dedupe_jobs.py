@@ -1,4 +1,4 @@
-"""Deduplicate normalized jobs by URL or title+company+location."""
+"""Deduplicate normalized jobs: by URL, then by title+company across every source."""
 
 from __future__ import annotations
 
@@ -19,12 +19,13 @@ def _exact_key(job: dict) -> str:
 
 
 def _crosspost_key(job: dict) -> str | None:
+    """One role is often several ads: LinkedIn posts it once per city, and the
+    same role reaches us from LinkedIn and from the company's own board."""
     title = _norm(job.get("title"))
     company = _norm(job.get("company"))
     if not title or not company:
         return None
-    source = _norm(job.get("source")) or _norm(job.get("provider"))
-    return f"tc:{source}|{title}|{company}"
+    return f"tc:{title}|{company}"
 
 
 def _rank(job: dict) -> tuple:
