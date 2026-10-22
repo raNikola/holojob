@@ -40,7 +40,7 @@ and `uv pip install -r requirements.txt`), never inside the image:
     npm test                   # vitest, then the same pytest run
 
 `pytest.ini` limits collection to `tests/python`, so a bare `pytest` from the
-repo root does not walk `external/`. The suite includes two `network` tests
+repo root does not walk `node_modules` or other third-party trees. The suite includes two `network` tests
 that hit the live Infostud and Workable sites; they skip, rather than fail,
 when a site is unreachable. Use `-m "not network"` to run offline.
 

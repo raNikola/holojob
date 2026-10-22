@@ -41,7 +41,6 @@ npm run score:jobs
 
 - Personal data under `data/profile/`, `data/jobs/`, `data/resumes/`, `data/cache/`
 - API keys, `.env` files, LinkedIn session cookies
-- Cloned repos under `external/` (created by setup scripts)
 
 ## Architecture
 

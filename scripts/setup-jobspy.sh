@@ -4,12 +4,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-mkdir -p external
-
-if [ ! -d "external/JobSpy" ]; then
-  git clone https://github.com/speedyapply/JobSpy external/JobSpy
-fi
-
 python3 -m venv .venv
 
 # shellcheck disable=SC1091

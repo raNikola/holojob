@@ -19,24 +19,6 @@ function isCommandAvailable(cmd, args = ['--version']) {
   return check.status === 0;
 }
 
-// Helper to clone a git repo if not present (using execSync with quotes to handle spaces in absoluteDest)
-function cloneRepo(repoUrl, destDir, extraArgs = []) {
-  const absoluteDest = path.join(ROOT, destDir);
-  if (fs.existsSync(absoluteDest) && fs.readdirSync(absoluteDest).length > 0) {
-    console.log(`[setup] Repository already exists at: ${destDir}`);
-    return;
-  }
-  console.log(`[setup] Cloning ${repoUrl} to ${destDir}...`);
-  const extraArgsStr = extraArgs.length ? extraArgs.join(' ') + ' ' : '';
-  const cmd = `git clone ${extraArgsStr}"${repoUrl}" "${absoluteDest}"`;
-  try {
-    execSync(cmd, { stdio: 'inherit' });
-  } catch {
-    console.error(`[setup] Error: Failed to clone ${repoUrl}`);
-    process.exit(1);
-  }
-}
-
 // Main execution block
 function run() {
   const args = process.argv.slice(2);
@@ -75,21 +57,6 @@ function run() {
   if (!fs.existsSync(envPath) && fs.existsSync(envExamplePath)) {
     console.log('[setup] Copying .env.example to .env...');
     fs.copyFileSync(envExamplePath, envPath);
-  }
-
-  // 4. Create external folder
-  const externalDir = path.join(ROOT, 'external');
-  if (!fs.existsSync(externalDir)) {
-    fs.mkdirSync(externalDir, { recursive: true });
-  }
-
-  // 5. Clone submodules based on target
-  if (isAllMode || isJobsMode) {
-    cloneRepo('https://github.com/speedyapply/JobSpy', 'external/JobSpy');
-    cloneRepo('https://github.com/vasu-devs/JustHireMe', 'external/JustHireMe');
-    cloneRepo('https://github.com/santifer/career-ops', 'external/career-ops', ['--depth', '1']);
-  } else if (isJobspyMode) {
-    cloneRepo('https://github.com/speedyapply/JobSpy', 'external/JobSpy');
   }
 
   // 6. Setup Python Virtual Environment (.venv) (using quotes to handle spaces in venvDir)
