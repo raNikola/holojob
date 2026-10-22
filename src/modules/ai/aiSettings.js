@@ -24,7 +24,7 @@ export const PROVIDER_DEFAULTS = {
   'claude-code': { model: 'sonnet', baseUrl: '' },
   mock: { model: 'mock', baseUrl: '' },
   ollama: { model: 'llama3.2', baseUrl: 'http://localhost:11434' },
-  openai: { model: 'gpt-4o-mini', baseUrl: 'https://api.openai.com/v1' },
+  openai: { model: 'gpt-6-luna', baseUrl: 'https://api.openai.com/v1' },
   claude: { model: 'claude-sonnet-4-20250514', baseUrl: 'https://api.anthropic.com' },
   gemini: { model: 'gemini-2.0-flash', baseUrl: 'https://generativelanguage.googleapis.com/v1beta' },
   openrouter: { model: 'anthropic/claude-sonnet-4', baseUrl: 'https://openrouter.ai/api/v1' },
