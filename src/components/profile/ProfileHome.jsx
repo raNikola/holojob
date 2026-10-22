@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Brain, Loader2, Pencil, Upload } from 'lucide-react'
 import Card from '../ui/Card'
+import { formatLanguages } from '../../utils/languages'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
@@ -92,6 +93,7 @@ export default function ProfileHome({ onNavigate }) {
           <Field label="Current role" value={bp.currentRole} />
           <Field label="Target roles" value={bp.targetRoles} />
           <Field label="Preferred locations" value={bp.preferredLocations} />
+          <Field label="Languages" value={formatLanguages(bp.languages)} />
         </dl>
       </Card>
 

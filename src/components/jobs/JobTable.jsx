@@ -137,6 +137,7 @@ export default function JobTable({
   onJobSelect,
 }) {
   const showScores = hasMatchScores(jobs)
+  const showProvider = jobs.some((j) => getJobProvider(j))
   const allSelected = jobs.length > 0 && jobs.every((j) => selectedJobIds.includes(j.jobId))
 
   if (!jobs.length) {
@@ -160,6 +161,7 @@ export default function JobTable({
               <th className="px-4 py-3">Title</th>
               <th className="px-4 py-3">Company</th>
               <th className="px-4 py-3">Location</th>
+              {showProvider && <th className="px-4 py-3">Provider</th>}
               {showScores && <th className="px-4 py-3">Priority</th>}
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Actions</th>
@@ -192,6 +194,7 @@ export default function JobTable({
                 </td>
                 <td className="px-4 py-3 text-stone-600 dark:text-stone-400">{job.company}</td>
                 <td className="px-4 py-3 text-stone-600 dark:text-stone-400">{job.location || '—'}</td>
+                {showProvider && <td className="px-4 py-3"><ProviderBadge job={job} /></td>}
                 {showScores && <td className="px-4 py-3"><PriorityBadge priority={job.priority} /></td>}
                 <td className="px-4 py-3"><StatusBadge status={job.status} /></td>
                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
