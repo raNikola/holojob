@@ -55,10 +55,25 @@ def test_with_no_summary_anywhere_the_summary_is_empty_and_warned_about():
     assert "## Professional Summary" not in render_resume_md(ctx)
 
 
-def test_the_questionnaire_narrative_fills_in_a_missing_summary():
-    intelligence = {"candidateSummary": {"careerNarrative": "I lead product teams."}}
+def test_the_questionnaire_answer_fills_in_a_missing_summary():
+    p = profile(raw="JO DOE EXPERIENCE nothing")
+    p["questionnaire"] = {"answers": [{"id": 17, "question": "career summary", "answer": "I lead product teams."}]}
+    assert build_resume_context(p, {}, JOB)["summary"] == "I lead product teams."
+
+
+def test_the_engines_narrative_is_never_used_for_the_summary():
+    # Without the questionnaire answer the engine fills careerNarrative from a
+    # template or a placeholder; neither is the candidate's own text.
+    intelligence = {"candidateSummary": {"careerNarrative": "Career narrative pending — complete questionnaire Q17."}}
     ctx = build_resume_context(profile(raw="JO DOE EXPERIENCE nothing"), intelligence, JOB)
-    assert ctx["summary"] == "I lead product teams."
+    assert ctx["summary"] == ""
+
+
+def test_a_summary_sentence_with_a_banned_phrase_is_left_out_not_edited():
+    raw = CV.replace("a record of shipping.", "a record of shipping. I am a passionate team player.")
+    assert build_resume_context(profile(raw=raw), {}, JOB)["summary"] == (
+        "Product leader with a decade of platform work and a record of shipping."
+    )
 
 
 def test_contact_line_comes_from_the_parsed_header_and_profile():

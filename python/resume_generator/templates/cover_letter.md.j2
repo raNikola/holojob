@@ -8,7 +8,9 @@
 {% endfor %}
 {{ salutation }}
 
-{% for p in paragraphs %}{{ p }}
+{% for p in paragraphs %}{% if p.text %}{{ p.text }}
 
-{% endfor %}Sincerely,
+{% endif %}{% if p.bullets %}{% for b in p.bullets %}- {{ b }}
+{% endfor %}
+{% endif %}{% endfor %}Sincerely,
 {{ signature_name }}

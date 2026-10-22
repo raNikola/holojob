@@ -1,204 +1,115 @@
-"""Cover letter generation — 4-paragraph recipe from CAREER_OS_GENERATION_CONTEXT.md Part 4.
+"""Cover letter, composed from the candidate's own words.
 
-Hook (strongest quantified credential) → primary evidence mirroring JD keywords →
-breadth + differentiator → close. Every sentence traces to candidate data; no invented
-metrics, employers, titles, or technologies.
+A rule-based letter states only what the candidate wrote: their career summary
+from the questionnaire (else the CV summary), and their CV bullets, quoted whole
+as a list. Around them sit four fixed sentences that claim nothing about the
+candidate: the application line, the two role lead-ins built from profile
+fields, and the thank-you. The job ad decides which bullets come first; it never
+supplies words. A thin profile gives a short letter, never a padded one.
+
+An LLM-drafted letter (paragraphs_override) is used as given: run_tailor only
+accepts it after the provenance and lint checks.
 """
 
 from __future__ import annotations
 
-import html
-import re
 from datetime import date
 
-from resume_parser import parse_resume_from_profile
+from candidate_text import BANNED_PHRASES, banned_phrases_in, narrative_answer, own_sentences
 from template_engine import render_cover_letter_html, render_cover_letter_md
 
-BANNED_PHRASES = (
-    "passionate",
-    "team player",
-    "fast-paced environment",
-    "results-driven",
-    "go-getter",
-    "think outside the box",
-    "self-starter",
-    "synergy",
-)
+# How much of the candidate's material each part of the letter takes.
+OPENING_SENTENCES = 2
+CURRENT_ROLE_BULLETS = 3
+EARLIER_ROLE_BULLETS = 2
 
-# Proper nouns that must keep their capitalization when a bullet is folded mid-sentence.
-_PROPER_FIRST_WORDS = re.compile(r"^(?:[A-Z]{2,}|React|Node|Java|Python|Flutter|AWS|Docker|SQL|CI/CD)")
+THANK_YOU = "Thank you for considering my application."
 
-
-def _strip_html(text: str) -> str:
-    return re.sub(r"<[^>]+>", " ", html.unescape(text or "")).lower()
+__all__ = [
+    "BANNED_PHRASES",
+    "build_cover_letter_context",
+    "generate_cover_letter",
+    "generate_cover_letter_html",
+    "lint_cover_letter",
+]
 
 
-def _decap(bullet: str) -> str:
-    """Fold a resume bullet ('Designed scalable…') into prose ('designed scalable…')."""
-    b = (bullet or "").strip().rstrip(".")
-    if not b:
-        return b
-    if _PROPER_FIRST_WORDS.match(b):
-        return b
-    return b[0].lower() + b[1:]
+def _application_line(job: dict) -> str:
+    title = (job.get("title") or "").strip()
+    company = (job.get("company") or "").strip()
+    role = f"the {title} role" if title else "this role"
+    return f"I am applying for {role} at {company}." if company else f"I am applying for {role}."
 
 
-def _score_bullet(bullet: str, keywords: list[str], require_digit: bool = False) -> float:
-    b = bullet.lower()
-    score = sum(1.0 for kw in keywords if kw.lower() in b)
-    if re.search(r"\d", bullet):
-        score += 1.5
-    elif require_digit:
-        return -1.0
-    return score
+def _lead_in(entry: dict, first: bool) -> str:
+    """'At ACME, where I work as Lead:' from profile fields only."""
+    title = (entry.get("title") or "").strip()
+    company = (entry.get("company") or "").strip()
+    if first:
+        dates = (entry.get("dates") or "").lower()
+        verb = "work" if any(w in dates for w in ("present", "current", "now", "ongoing")) else "worked"
+        if title and company:
+            return f"At {company}, where I {verb} as {title}:"
+        return f"At {company}:" if company else (f"As {title}:" if title else "")
+    if title and company:
+        return f"Before that, as {title} at {company}:"
+    return f"Before that, at {company}:" if company else (f"Before that, as {title}:" if title else "Before that:")
 
 
-def _pick_bullets(bullets: list[str], keywords: list[str], n: int, exclude: set[str] = frozenset()) -> list[str]:
-    ranked = sorted(
-        (b for b in bullets if b not in exclude),
-        key=lambda b: _score_bullet(b, keywords),
-        reverse=True,
-    )
-    return ranked[:n]
+def _build_paragraphs(profile: dict, resume_ctx: dict, job: dict) -> tuple[list[dict], list[str]]:
+    """Letter blocks ({text, bullets}) and the gaps that kept it short."""
+    warnings: list[str] = []
 
-
-def _years(intelligence: dict) -> str:
-    years = (intelligence.get("experienceMap") or {}).get("yearsOfExperience") or "4"
-    return str(years).replace("+", "")
-
-
-def _candidate_has_ai(parsed: dict, intelligence: dict) -> bool:
-    pool = []
-    for cat in parsed.get("skill_categories") or []:
-        pool.extend(cat.get("skills") or [])
-    for items in (intelligence.get("skillsMap") or {}).values():
-        if isinstance(items, list):
-            pool.extend(str(s) for s in items)
-    joined = " ".join(pool).lower()
-    return any(t in joined for t in ("ai", "llm", "generative", "prompt"))
-
-
-def _build_paragraphs(parsed: dict, intelligence: dict, job: dict, keywords: list[str]) -> list[str]:
-    title = (job.get("title") or "this role").split("(")[0].strip()
-    company = job.get("company") or "your company"
-    jd_text = _strip_html(job.get("description", ""))
-    years = _years(intelligence)
-
-    experience = parsed.get("experience") or []
-    current = experience[0] if experience else {}
-    earlier = experience[1] if len(experience) > 1 else {}
-    cur_bullets = current.get("bullets") or []
-    earlier_bullets = earlier.get("bullets") or []
-
-    # --- P1: hook — exact role, strongest quantified credential, bridge ---
-    # Prefer the current role's strongest quantified bullet; fall back to earlier roles.
-    quantified = ""
-    for pool in (cur_bullets, earlier_bullets):
-        best = max(pool, key=lambda b: _score_bullet(b, keywords, require_digit=True), default="")
-        if best and re.search(r"\d", best):
-            quantified = best
-            break
-
-    p1 = [f"I am writing to apply for the {title} position with {company}."]
-    if quantified and quantified in cur_bullets and current.get("company"):
-        p1.append(
-            f"Over the past {years}+ years I have designed, built, and operated production "
-            f"systems where reliability was not optional — most recently at {current['company']}, "
-            f"where I {_decap(quantified)}."
+    opening = own_sentences(narrative_answer(profile), OPENING_SENTENCES)
+    if not opening:
+        opening = own_sentences(resume_ctx.get("about_me") or resume_ctx.get("summary") or "", OPENING_SENTENCES)
+    if not opening:
+        warnings.append(
+            "cover letter: no career summary in the questionnaire or the CV, so the opening is one sentence"
         )
-    elif quantified and earlier.get("company"):
-        p1.append(
-            f"Over the past {years}+ years I have designed, built, and operated production "
-            f"systems — at {earlier['company']}, I {_decap(quantified)}."
-        )
-    else:
-        p1.append(
-            f"Over the past {years}+ years I have designed, built, and operated production "
-            f"systems end to end, from backend architecture through deployment and support."
-        )
-    p1.append(
-        f"Bringing that engineering discipline to {company} as a {title} is exactly the kind "
-        f"of problem I want to take on next."
-    )
+    blocks = [{"text": " ".join([_application_line(job), *opening]), "bullets": []}]
 
-    # --- P2: primary evidence — current role deep-dive mirroring JD keywords ---
-    used = {quantified} if quantified else set()
-    evidence = _pick_bullets(cur_bullets, keywords, 3, exclude=used)
-    used.update(evidence)
-    p2 = []
-    if current.get("company"):
-        role = current.get("title") or "engineer"
-        opener = f"At {current['company']}, as {role}, I {_decap(evidence[0])}." if evidence else \
-                 f"At {current['company']} I work as {role} across the full engineering lifecycle."
-        p2.append(opener)
-        for connector, b in zip(("I also", "Alongside that, I"), evidence[1:]):
-            p2.append(f"{connector} {_decap(b)}.")
-        if any(t in jd_text for t in ("ownership", "operations", "on-call", "incident", "production support", "ci/cd", "monitoring")):
-            p2.append(
-                "Owning that platform end to end — pipelines, deployments, monitoring, and "
-                "incident resolution — has taught me to design for failure, instrument "
-                "everything, and treat production support as part of the architecture rather "
-                "than an afterthought."
-            )
+    # The CV's bullets for each role, in the CV's job-relevance order, so the
+    # letter and the CV agree. No bullet appears twice.
+    used: set[str] = set()
+    roles = [entry for entry in resume_ctx.get("experience") or [] if entry.get("bullets")]
+    for index, (entry, limit) in enumerate(zip(roles, (CURRENT_ROLE_BULLETS, EARLIER_ROLE_BULLETS))):
+        bullets = [b for b in entry["bullets"] if b not in used and not banned_phrases_in(b)][:limit]
+        if bullets:
+            used.update(bullets)
+            blocks.append({"text": _lead_in(entry, first=index == 0), "bullets": bullets})
+    if len(blocks) == 1:
+        warnings.append("cover letter: no experience bullets to quote, so the letter has no evidence paragraphs")
+
+    blocks.append({"text": THANK_YOU, "bullets": []})
+    return blocks, warnings
+
+
+def _flatten(paragraphs: list) -> list[str]:
+    """Each paragraph as plain text: a block's text followed by its bullets."""
+    flat = []
+    for p in paragraphs:
+        if isinstance(p, dict):
+            flat.append(" ".join(filter(None, [p.get("text") or "", *(p.get("bullets") or [])])))
         else:
-            p2.append(
-                "Carrying that work from design through production has taught me to treat "
-                "reliability and operability as first-class requirements, not afterthoughts."
-            )
-
-    # --- P3: breadth + differentiator ---
-    p3 = []
-    if earlier.get("company"):
-        breadth = max(
-            (b for b in earlier_bullets if b not in used),
-            key=lambda b: _score_bullet(b, keywords + ["20+", "production"]),
-            default="",
-        )
-        role = earlier.get("title") or "engineer"
-        if breadth:
-            used.add(breadth)
-            p3.append(f"Before that, at {earlier['company']} as {role}, I {_decap(breadth)}.")
-            extra = _pick_bullets(earlier_bullets, keywords, 1, exclude=used)
-            if extra:
-                p3.append(f"In that role I also {_decap(extra[0])}.")
-        else:
-            p3.append(f"Before that I worked at {earlier['company']} as {role}.")
-        p3.append("That breadth made me comfortable moving across the stack and picking up new domains quickly.")
-    if _candidate_has_ai(parsed, intelligence) and any(t in jd_text for t in ("ai", "ml", "llm", "machine learning", "copilot")):
-        p3.append(
-            "I have also increasingly built AI-assisted development workflows into how I "
-            "engineer, which I understand is central to how this team works."
-        )
-
-    # --- P4: close — map JD keywords back to candidate skills, request conversation ---
-    top_kw = keywords[:4]
-    p4 = []
-    if top_kw:
-        kw_phrase = ", ".join(top_kw[:-1]) + f", and {top_kw[-1]}" if len(top_kw) > 1 else top_kw[0]
-        p4.append(
-            f"My background in {kw_phrase} maps directly onto what this role calls for, "
-            f"and I would welcome the chance to discuss how I can contribute to {company}."
-        )
-    else:
-        p4.append(f"I would welcome the chance to discuss how I can contribute to {company}.")
-    p4.append("Thank you for your time and consideration.")
-
-    return [" ".join(p) for p in (p1, p2, p3, p4) if p]
+            flat.append(str(p))
+    return flat
 
 
-def lint_cover_letter(paragraphs: list[str]) -> list[str]:
-    """Part 4 hard rules: no clichés, 4 paragraphs, ~330–420 words (warn outside 250–500)."""
-    issues: list[str] = []
-    text = " ".join(paragraphs)
-    text_l = text.lower()
-    for phrase in BANNED_PHRASES:
-        if phrase in text_l:
-            issues.append(f"Banned cliché: '{phrase}'")
+def lint_cover_letter(paragraphs: list) -> list[str]:
+    """Part 4 checks: no clichés (in any inflection), 4 paragraphs, ~330–420 words.
+
+    For an LLM draft these decide whether it is accepted. For a rule-based letter
+    they are a report: a short letter from a thin profile is not padded to pass.
+    """
+    flat = _flatten(paragraphs)
+    text = " ".join(flat)
+    issues = [f"Banned cliché: '{phrase}'" for phrase in banned_phrases_in(text)]
     words = len(text.split())
     if not 250 <= words <= 500:
         issues.append(f"Word count {words} outside acceptable range (target 330–420)")
-    if len(paragraphs) != 4:
-        issues.append(f"Expected 4 paragraphs, got {len(paragraphs)}")
+    if len(flat) != 4:
+        issues.append(f"Expected 4 paragraphs, got {len(flat)}")
     return issues
 
 
@@ -209,9 +120,10 @@ def build_cover_letter_context(
     resume_ctx: dict,
     paragraphs_override: list[str] | None = None,
 ) -> dict:
-    parsed = parse_resume_from_profile(profile)
-    keywords = list(resume_ctx.get("keywords") or job.get("matchedSkills") or [])
-    paragraphs = paragraphs_override or _build_paragraphs(parsed, intelligence, job, keywords)
+    if paragraphs_override:
+        blocks, warnings = [{"text": p, "bullets": []} for p in paragraphs_override], []
+    else:
+        blocks, warnings = _build_paragraphs(profile, resume_ctx, job)
 
     company = job.get("company") or "the company"
     location = job.get("location") or ""
@@ -227,15 +139,20 @@ def build_cover_letter_context(
         "date_long": f"{date.today().strftime('%B')} {date.today().day}, {date.today().year}",
         "addressee_lines": addressee,
         "salutation": "Dear Hiring Team,",
-        "paragraphs": paragraphs,
+        "paragraphs": blocks,
         "signature_name": name.title() if name.isupper() else name,
-        "lint_issues": lint_cover_letter(paragraphs),
+        "lint_issues": lint_cover_letter(blocks),
+        "warnings": warnings,
     }
 
 
 def generate_cover_letter(profile: dict, intelligence: dict, job: dict, resume_ctx: dict | None = None) -> str:
     """Markdown version (kept for the dashboard preview)."""
-    ctx = build_cover_letter_context(profile, intelligence, job, resume_ctx or {})
+    if resume_ctx is None:
+        from resume_tailor import build_resume_context
+
+        resume_ctx = build_resume_context(profile, intelligence, job)
+    ctx = build_cover_letter_context(profile, intelligence, job, resume_ctx)
     return render_cover_letter_md(ctx)
 
 
