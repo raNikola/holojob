@@ -15,6 +15,9 @@ needs remote or near-remote work.
 - Changing `.env` requires `podman-compose up -d --force-recreate`; a
   restart does not re-read it.
 - The owner runs the commands. Propose them, do not assume they ran.
+- This repo is local-only and is never pushed: personal data must never leave
+  the home server. The push URL of `origin` is `no-push` and `.git/hooks/pre-push`
+  always refuses, on purpose. Do not "fix" either as if it were broken.
 
 ## Container gotchas
 
