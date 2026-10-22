@@ -90,7 +90,8 @@ hard caps (red flag 54, off-track 50), so capped jobs are never sent. A job a
 hard rule applies to (`hardCapped` on the result) can be lowered by the judge
 but never raised. Label, recommendation and priority are recomputed through
 `labels.py`. The judge model comes from `llm_client.judge_model()` (sonnet on
-the CLI, `gpt-4o` on OpenAI, `<PROVIDER>_JUDGE_MODEL` overrides). Results
+the CLI, `gpt-6.1-sol` on OpenAI, `deepseek-v4-pro` on DeepSeek,
+`<PROVIDER>_JUDGE_MODEL` overrides). Results
 cache in `data/cache/llm_fit.json`; a failed call leaves the local score.
 
 **Privacy exception.** Everything else in this repo keeps personal data on the
