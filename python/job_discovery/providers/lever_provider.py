@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 CONFIG_PATH = resolve_config("lever.json", "lever_companies.json")
 API_URL = "https://api.lever.co/v0/postings/{company}"
+# A company on Lever's EU-hosted instance 404s on the main API; its own
+# hosted board (jobs.eu.lever.co) names api.eu.lever.co as the primary and
+# api.lever.co as the fallback, so this provider tries both, in that order.
+EU_API_URL = "https://api.eu.lever.co/v0/postings/{company}"
 
 
 class LeverProvider(JobProvider):
@@ -28,15 +32,17 @@ class LeverProvider(JobProvider):
         return [c for c in data if isinstance(c, str) and c.strip()]
 
     def _fetch_company(self, company: str) -> list[dict]:
-        url = API_URL.format(company=company)
-        try:
-            resp = requests.get(url, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-            return data if isinstance(data, list) else []
-        except Exception as exc:
-            logger.warning("Lever company %s failed: %s", company, exc)
-            return []
+        for url in (API_URL.format(company=company), EU_API_URL.format(company=company)):
+            try:
+                resp = requests.get(url, timeout=30)
+                if resp.status_code == 404:
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                return data if isinstance(data, list) else []
+            except Exception as exc:
+                logger.warning("Lever company %s failed on %s: %s", company, url, exc)
+        return []
 
     def _normalize_posting(
         self,
