@@ -1,0 +1,40 @@
+{
+  "roleStrategy": {
+    "primaryTargetRoles": [
+      "Technical Product Manager",
+      "Senior Technical Product Manager",
+      "Senior Product Manager",
+      "Product Manager",
+      "Product Lead",
+      "Platform Product Manager"
+    ],
+    "secondaryTargetRoles": [
+      "Technical Product Owner",
+      "Product Owner",
+      "SaaS Product Manager"
+    ],
+    "stretchRoles": [],
+    "avoidRoles": [
+      "Project Manager",
+      "Delivery Manager",
+      "Associate Product Manager",
+      "Junior Product Manager",
+      "Software Engineer"
+    ],
+    "searchRoleVariants": [
+      "Technical Product Manager",
+      "Senior Product Manager",
+      "Product Manager"
+    ]
+  },
+  "jobFitPreferences": {
+    "country": "Serbia",
+    "preferredCompanyTypes": ["No preference"],
+    "preferredIndustries": ["Fintech", "SaaS"],
+    "avoidedIndustries": ["Gaming"],
+    "preferredLocations": ["Niš", "Remote"],
+    "remotePreference": "remote",
+    "culturePreference": ["Building products"],
+    "workToAvoid": ["Heavy on-call"]
+  }
+}
