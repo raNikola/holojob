@@ -51,3 +51,7 @@ data/outreach/linkedin_session.json
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code local state: login credentials, session history, worktrees
+claude-config/
+.claude/
