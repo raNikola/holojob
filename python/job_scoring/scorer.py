@@ -11,6 +11,7 @@ from dimensions.skill_match import score_skill_match
 from labels import apply_recommendation, match_label, priority
 from llm_enhancer import NoOpEnhancer
 from red_flags import detect_red_flags
+from corpus import build_idf
 
 DEFAULT_WEIGHTS = {
     "roleMatch": 25,
@@ -21,6 +22,12 @@ DEFAULT_WEIGHTS = {
     "cultureMatch": 10,
 }
 
+# The ad's day-to-day work, as read from its own words. A delivery or
+# programme role wearing a product title is not a weaker match -- it is the
+# wrong job, so it is capped in code rather than argued down by weights.
+ACCEPTABLE_TRACKS = {"product_management", "product_ownership"}
+OFF_TRACK_CAP = 50
+
 
 def _weighted_total(dimensions: dict[str, int], weights: dict[str, int]) -> int:
     total_w = sum(weights.values()) or 100
@@ -28,12 +35,12 @@ def _weighted_total(dimensions: dict[str, int], weights: dict[str, int]) -> int:
     return int(round(score))
 
 
-def score_job(job: dict, intelligence: dict, enhancer=None) -> dict:
+def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     weights = intelligence.get("scoringWeights") or DEFAULT_WEIGHTS
     enhancer = enhancer or NoOpEnhancer()
 
     role_score, role_reasons = score_role_match(job, intelligence)
-    skill_score, skill_reasons, matched, missing = score_skill_match(job, intelligence)
+    skill_score, skill_reasons, matched, missing = score_skill_match(job, intelligence, idf)
     industry_score, industry_reasons = score_industry_match(job, intelligence)
     exp_score, exp_reasons = score_experience_match(job, intelligence)
     loc_score, loc_reasons = score_location_match(job, intelligence)
@@ -54,6 +61,11 @@ def score_job(job: dict, intelligence: dict, enhancer=None) -> dict:
     if red_flags and match_score > 55:
         match_score = min(match_score, 54)
 
+    track = (job.get("llmFacts") or {}).get("roleTrack")
+    off_track = bool(track) and track not in ACCEPTABLE_TRACKS
+    if off_track:
+        match_score = min(match_score, OFF_TRACK_CAP)
+
     breakdown = {
         k: {
             "raw": dimensions[k],
@@ -64,6 +76,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None) -> dict:
     }
 
     reasons = role_reasons + skill_reasons + industry_reasons + exp_reasons + loc_reasons + cult_reasons
+    if off_track:
+        reasons.append(f"Capped: the ad describes {track}, not a product role")
     if red_flags:
         reasons.extend([f"Red flag: {f}" for f in red_flags])
 
@@ -90,4 +104,7 @@ def score_job(job: dict, intelligence: dict, enhancer=None) -> dict:
 
 
 def score_jobs(jobs: list[dict], intelligence: dict, enhancer=None) -> list[dict]:
-    return [score_job(j, intelligence, enhancer) for j in jobs]
+    # Term rarity is measured over this run's corpus, so it is built once and
+    # shared by every job rather than recomputed per call.
+    idf = build_idf(jobs)
+    return [score_job(j, intelligence, enhancer, idf) for j in jobs]
