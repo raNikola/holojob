@@ -57,20 +57,22 @@ class Provider:
     json_mode: str
 
 
+# Model names last checked 2026-10-22 against each provider's own docs (OpenAI
+# also against its models API). Compare against that date at the next check.
 # Defaults, not promises: model names move. Override with <PROVIDER>_MODEL.
 PROVIDERS: dict[str, Provider] = {
     "openai": Provider(
         name="openai",
         base_url="https://api.openai.com/v1",
         key_env="OPENAI_API_KEY",
-        default_model="gpt-4o-mini",
+        default_model="gpt-6-luna",
         json_mode="schema",
     ),
     "deepseek": Provider(
         name="deepseek",
         base_url="https://api.deepseek.com/v1",
         key_env="DEEPSEEK_API_KEY",
-        default_model="deepseek-chat",
+        default_model="deepseek-flash",
         json_mode="object",
     ),
     "openrouter": Provider(
@@ -84,7 +86,7 @@ PROVIDERS: dict[str, Provider] = {
         name="groq",
         base_url="https://api.groq.com/openai/v1",
         key_env="GROQ_API_KEY",
-        default_model="llama-3.3-70b-versatile",
+        default_model="openai/gpt-oss-120b",
         json_mode="object",
     ),
     "ollama": Provider(
@@ -109,7 +111,8 @@ PROVIDERS: dict[str, Provider] = {
 # Override with <PROVIDER>_JUDGE_MODEL; providers not listed use their _MODEL.
 JUDGE_MODELS = {
     "claude-code": "sonnet",
-    "openai": "gpt-4o",
+    "openai": "gpt-6.1-sol",
+    "deepseek": "deepseek-v4-pro",
 }
 
 KEYLESS = {"ollama", "claude-code"}
