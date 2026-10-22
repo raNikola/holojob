@@ -19,7 +19,7 @@ from cover_letter_generator import BANNED_PHRASES, build_cover_letter_context, l
 from llm_tailor import generate_llm_content, load_project_intelligence  # noqa: E402
 from pdf_renderer import render_single_page_pdf  # noqa: E402
 from provenance_checker import build_canonical_facts, check_provenance  # noqa: E402
-from resume_parser import parse_resume_from_profile  # noqa: E402
+from resume_parser import parse_resume_from_profile, skill_label  # noqa: E402
 from resume_tailor import build_resume_context  # noqa: E402
 from docx_renderer import render_resume_docx  # noqa: E402
 from json_resume_export import build_json_resume  # noqa: E402
@@ -112,7 +112,7 @@ def _apply_llm_content(ctx: dict, llm: dict, intelligence: dict) -> dict:
     for cat in llm.get("skills") or []:
         items = [s for s in cat.get("skills") or [] if s.lower() in pool]
         if items:
-            skills.append({"label": cat.get("label") or "Skills", "skills": items})
+            skills.append({"label": skill_label(cat.get("label") or "Skills"), "skills": items})
     if skills:
         merged["skill_categories"] = skills
 

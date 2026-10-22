@@ -106,11 +106,16 @@ preferred locations, raw resume text, questionnaire answers. Add a field to
 A dealbreaker needs the candidate text to *contradict* a hard condition (the ad
 requires Russian, the digest lists Serbian and English). Silence is not
 failure: a condition the digest cannot settle goes under `missing`. The
-digest cannot settle languages without a `languages` list, and no part of the
-app writes one: it is hand-maintained in `candidate-intelligence.json`
-(`["Serbian (native)", "English (fluent)"]`) and is lost if the intelligence
-file is regenerated. Re-add it, or language requirements go back to being
-unsettled.
+digest settles languages from `basicProfile.languages`, a list of
+`{ language, proficiency }` entries edited in the profile form
+(`src/utils/languages.js` holds the fixed proficiency set; the Python copy is
+`python/resume_generator/profile_languages.py`, and a test keeps the two in
+step). `generateCandidateIntelligence` derives the `languages` strings the
+judge reads (`["Serbian (native)", "English (fluent)"]`), so regenerating the
+intelligence file keeps them as long as the profile has them. The same field
+prints a Languages section on the CV, not the cover letter. A profile with no
+languages is not an error: the digest then says "(none stated)" and the CV has
+no such section.
 
 ## The architectural rule
 

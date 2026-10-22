@@ -8,7 +8,8 @@ job a hard rule in scorer.py applies to is never lifted.
 Privacy: this is the one step that sends candidate data off the server, and
 only when run_scoring.py is given --judge. What is sent is a digest of
 candidate-intelligence.json (see _candidate_digest), including the spoken
-languages in its hand-maintained `languages` list. Name, email, phone,
+languages, which generateCandidateIntelligence derives from the profile's
+basicProfile.languages. Name, email, phone,
 salary, links, locations, raw resume text and questionnaire answers are never
 read here, so they cannot be sent.
 """

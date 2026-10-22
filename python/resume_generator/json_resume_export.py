@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
+from profile_languages import JSON_RESUME_FLUENCY
+
 
 def _split_name(full_name: str) -> dict:
     parts = (full_name or "Candidate").strip().split()
@@ -78,6 +80,14 @@ def build_json_resume(profile: dict, intelligence: dict, ctx: dict | None = None
             "endDate": edu.get("graduated") or "",
         })
 
+    languages = []
+    for entry in ctx.get("languages") or []:
+        item = {"language": entry["language"]}
+        fluency = JSON_RESUME_FLUENCY.get(entry.get("proficiency"))
+        if fluency:
+            item["fluency"] = fluency
+        languages.append(item)
+
     return {
         "$schema": "https://raw.githubusercontent.com/jsonresume/resume-schema/v1.0.0/schema.json",
         "meta": {
@@ -89,4 +99,5 @@ def build_json_resume(profile: dict, intelligence: dict, ctx: dict | None = None
         "work": work,
         "skills": skills,
         "education": education,
+        "languages": languages,
     }

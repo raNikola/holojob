@@ -65,6 +65,10 @@ def render_resume_docx(ctx: dict, output_path: Path) -> bool:
         doc.add_heading("Education", level=1)
         doc.add_paragraph(str(education))
 
+    if ctx.get("languages_text"):
+        doc.add_heading("Languages", level=1)
+        doc.add_paragraph(ctx["languages_text"])
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(output_path))
     return True
