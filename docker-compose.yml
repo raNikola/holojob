@@ -1,10 +1,20 @@
 services:
   career-os:
+    container_name: career-os
     build: .
+
+    restart: unless-stopped
     ports:
-      - "5173:5173"
+      - "3073:5173"
+
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:Z
+      - ./claude-config:/root/.claude:Z
+
+    env_file:
+      - .env
+
     environment:
-      - PORT=5173
-      - CLAUDE_AUTO_LOGIN=0
+      PORT: 5173
+      CLAUDE_AUTO_LOGIN: 0
+      HOME: /root
