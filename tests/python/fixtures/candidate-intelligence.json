@@ -1,4 +1,5 @@
 {
+  "languages": ["Serbian (native)", "English (fluent)"],
   "roleStrategy": {
     "primaryTargetRoles": [
       "Technical Product Manager",
