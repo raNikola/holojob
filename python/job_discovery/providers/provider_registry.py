@@ -39,7 +39,7 @@ PROVIDER_GROUPS = {
 
 
 def resolve_providers(spec: str) -> list[str]:
-    key = (spec or "ats").strip().lower()
+    key = (spec or "serbia").strip().lower()
     if key in PROVIDER_GROUPS:
         return list(PROVIDER_GROUPS[key])
 
@@ -48,7 +48,7 @@ def resolve_providers(spec: str) -> list[str]:
         name = part.strip().lower()
         if name and name in PROVIDER_CLASSES:
             names.append(name)
-    return names or list(PROVIDER_GROUPS["ats"])
+    return names
 
 
 def get_provider(name: str):

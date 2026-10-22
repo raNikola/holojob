@@ -70,7 +70,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
   const { profile } = useProfile()
   const [apiAvailable, setApiAvailable] = useState(false)
   const [checking, setChecking] = useState(true)
-  const [providers, setProviders] = useState('ats')
+  const [providers, setProviders] = useState('serbia')
   const [country, setCountry] = useState(() => searchCountry(profile, loadIntelligence()))
   const [tailorMode, setTailorMode] = useState('p1')
   const [running, setRunning] = useState('')

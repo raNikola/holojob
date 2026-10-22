@@ -104,7 +104,7 @@ export default function SettingsHome() {
     setStatus('All local data cleared. Reload to start fresh.')
   }
 
-  const discoverCmd = buildDiscoveryCommand({ providers: 'ats' })
+  const discoverCmd = buildDiscoveryCommand({ providers: 'serbia' })
   const scoreCmd = buildScoringCommand()
   const tailorCmd = buildTailorCommand({ priority: 'P1', limit: 5 })
 

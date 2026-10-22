@@ -54,7 +54,7 @@ export default function JobDiscoveryRunner({ state, onImport }) {
   const { profile } = useProfile()
   const [apiAvailable, setApiAvailable] = useState(false)
   const [checking, setChecking] = useState(true)
-  const [providers, setProviders] = useState('ats')
+  const [providers, setProviders] = useState('serbia')
   const [country, setCountry] = useState(() => searchCountry(profile, loadIntelligence()))
   const [running, setRunning] = useState(false)
   const [error, setError] = useState(null)
