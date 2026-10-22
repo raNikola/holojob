@@ -1,5 +1,6 @@
 import { validateProfileForIntelligence } from '../modules/intelligence/intelligenceValidators'
 import { loadIntelligence } from '../modules/intelligence/intelligenceExport'
+import { normalizeLanguages } from './languages'
 
 export const STORAGE_KEY = 'job-dashboard-candidate-profile'
 
@@ -12,6 +13,7 @@ export function getDefaultProfile() {
       fullName: '', email: '', phone: '', location: '', currentRole: '',
       experienceYears: '', targetRoles: [], preferredLocations: [],
       remotePreference: '', salaryExpectation: '',
+      languages: [],
     },
     resume: {
       fileName: '', uploadedAt: '', rawText: '',
@@ -103,7 +105,20 @@ export function loadProfile() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return getDefaultProfile()
-    const parsed = { ...getDefaultProfile(), ...JSON.parse(raw) }
+    const defaults = getDefaultProfile()
+    const stored = JSON.parse(raw)
+    // The spread above replaces basicProfile wholesale, so a profile saved
+    // before a field existed would lack it. Fill those in, and read a missing
+    // or malformed languages value as an empty list.
+    const parsed = {
+      ...defaults,
+      ...stored,
+      basicProfile: {
+        ...defaults.basicProfile,
+        ...stored.basicProfile,
+        languages: normalizeLanguages(stored.basicProfile?.languages),
+      },
+    }
     const migrated = migrateQuestionnaireAnswers(parsed)
     const withCompletion = migrateOnboardingComplete(migrated)
     if (withCompletion.meta?.onboardingComplete && !migrated.meta?.onboardingComplete) {

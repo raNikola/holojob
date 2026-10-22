@@ -5,7 +5,8 @@ from __future__ import annotations
 import html
 import re
 
-from resume_parser import education_problem, parse_resume_from_profile
+from profile_languages import languages_text, normalize_languages
+from resume_parser import education_problem, parse_resume_from_profile, skill_label
 from text_utils import normalize_text
 
 
@@ -146,7 +147,7 @@ def _tailor_skill_categories(
             "AWS", "Docker", "CI/CD", "GitHub Actions", "Nginx", "Linux", "Git",
         )])
         return [
-            {"label": "Languages", "skills": langs or keywords[:5]},
+            {"label": "Programming languages", "skills": langs or keywords[:5]},
             {"label": "Backend Frameworks", "skills": backend or []},
             {"label": "Frontend Frameworks", "skills": frontend or []},
             {"label": "Databases", "skills": databases or []},
@@ -178,7 +179,7 @@ def _tailor_skill_categories(
             elif "devops" in label_l or "cloud" in label_l:
                 if kw in ("AWS", "Docker", "CI/CD", "GitHub Actions", "Linux"):
                     items.insert(0, kw)
-        tailored_cats.append({"label": cat["label"], "skills": items})
+        tailored_cats.append({"label": skill_label(cat["label"]), "skills": items})
 
     # Part 5: reorder rows so JD-critical categories appear higher (stable sort).
     def row_relevance(cat: dict) -> int:
@@ -210,6 +211,8 @@ def build_resume_context(profile: dict, intelligence: dict, job: dict) -> dict:
         list(canonical_skills),
     )
 
+    languages = normalize_languages(basic.get("languages"))
+
     # Whatever the profile states, and nothing else: with no readable entry the
     # templates leave the section out and the warning below tells the candidate.
     education = parsed.get("education") or {}
@@ -236,6 +239,8 @@ def build_resume_context(profile: dict, intelligence: dict, job: dict) -> dict:
         "experience": experience,
         "skill_categories": skill_categories,
         "education": education,
+        "languages": languages,
+        "languages_text": languages_text(languages),
         "warnings": warnings,
         "keywords": keywords,
         "target_title": job.get("title") or "",

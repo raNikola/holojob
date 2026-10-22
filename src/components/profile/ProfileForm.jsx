@@ -4,7 +4,9 @@ import Input from '../ui/Input'
 import TagInput from '../ui/TagInput'
 import RoleCombobox from '../ui/RoleCombobox'
 import ConfidenceTag from '../ui/ConfidenceTag'
+import SelectField from '../ui/SelectField'
 import { useProfile } from '../../context/ProfileContext'
+import { LANGUAGE_PROFICIENCIES } from '../../utils/languages'
 
 function ListEditor({ label, items = [], onChange, confidenceKey, confidence }) {
   const update = (index, value) => {
@@ -37,6 +39,45 @@ function ListEditor({ label, items = [], onChange, confidenceKey, confidence }) 
         ))}
         <button type="button" onClick={add} className="inline-flex items-center gap-1 text-sm text-teal-600 hover:text-teal-700 dark:text-teal-400">
           <Plus className="h-4 w-4" /> Add entry
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function LanguageEditor({ languages = [], onChange }) {
+  const update = (index, patch) =>
+    onChange(languages.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
+  const add = () => onChange([...languages, { language: '', proficiency: '' }])
+  const remove = (index) => onChange(languages.filter((_, i) => i !== index))
+
+  return (
+    <div>
+      <span className="mb-2 block text-sm font-medium text-stone-700 dark:text-stone-300">Languages</span>
+      <div className="space-y-2">
+        {languages.map((entry, i) => (
+          <div key={i} className="flex gap-2">
+            <input
+              value={entry.language}
+              onChange={(e) => update(i, { language: e.target.value })}
+              className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-950 dark:text-stone-50"
+              placeholder="Language, e.g. Serbian"
+            />
+            <div className="w-44">
+              <SelectField
+                value={entry.proficiency}
+                onChange={(value) => update(i, { proficiency: value })}
+                options={LANGUAGE_PROFICIENCIES}
+                placeholder="Proficiency"
+              />
+            </div>
+            <button type="button" onClick={() => remove(i)} className="rounded-lg p-2 text-stone-400 hover:bg-stone-100 hover:text-red-500 dark:hover:bg-stone-800">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+        <button type="button" onClick={add} className="inline-flex items-center gap-1 text-sm text-teal-600 hover:text-teal-700 dark:text-teal-400">
+          <Plus className="h-4 w-4" /> Add language
         </button>
       </div>
     </div>
@@ -104,6 +145,7 @@ export default function ProfileForm() {
             hint="Search and select from 600+ tech roles, or add custom titles."
           />
           <TagInput label="Preferred locations" tags={bp.preferredLocations} onChange={(v) => setBasic('preferredLocations', v)} placeholder="Add a location" />
+          <LanguageEditor languages={bp.languages || []} onChange={(v) => setBasic('languages', v)} />
         </div>
       </Card>
 

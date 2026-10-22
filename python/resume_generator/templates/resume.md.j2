@@ -40,3 +40,9 @@
 
 {% endif %}{% if education.degree %}{{ education.degree }}{% if education.cgpa %} | CGPA: {{ education.cgpa }}{% endif %}{% if not education.school and education.graduated %} | Graduated {{ education.graduated }}{% endif %}
 {% endif %}{% endif %}
+
+{% if languages_text %}
+## Languages
+
+{{ languages_text }}
+{% endif %}

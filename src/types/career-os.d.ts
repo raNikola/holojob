@@ -29,6 +29,13 @@
  * @property {string} [remotePreference]
  * @property {string} [salaryExpectation]
  * @property {string} [linkedin]
+ * @property {LanguageEntry[]} [languages]
+ */
+
+/**
+ * @typedef {Object} LanguageEntry
+ * @property {string} language
+ * @property {'native' | 'fluent' | 'advanced' | 'intermediate' | 'basic' | ''} proficiency
  */
 
 /**
@@ -52,6 +59,7 @@
  * @property {string[]} resumeKeywords
  * @property {Object} atsKeywordBank
  * @property {Object} searchStrategy
+ * @property {string[]} languages Derived from basicProfile.languages, e.g. "Serbian (native)".
  * @property {ScoringWeights} scoringWeights
  * @property {Object} [meta]
  */

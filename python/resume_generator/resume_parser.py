@@ -21,6 +21,16 @@ SKILL_LINE_RE = re.compile(
 )
 
 
+def skill_label(label: str) -> str:
+    """A skills row label as the CV prints it.
+
+    A bare "Languages" row lists programming languages, and the CV also has a
+    section for the languages the candidate speaks, so the row is renamed.
+    """
+    label = (label or "").strip().rstrip(":").strip()
+    return "Programming languages" if label.lower() in ("language", "languages") else label
+
+
 def _clean(text: str) -> str:
     text = re.sub(r"\s*Page \d+ of \d+\s*", "", text)
     text = re.sub(r"•\s*", "", text)
@@ -157,13 +167,13 @@ def _parse_skills(block: str) -> list[dict]:
         m = SKILL_LINE_RE.match(line)
         if m:
             categories.append({
-                "label": m.group(1).strip().rstrip(":"),
+                "label": skill_label(m.group(1)),
                 "skills": [s.strip() for s in m.group(2).split(",") if s.strip()],
             })
         elif ":" in line:
             label, items = line.split(":", 1)
             categories.append({
-                "label": label.strip(),
+                "label": skill_label(label),
                 "skills": [s.strip() for s in items.split(",") if s.strip()],
             })
 
@@ -174,7 +184,7 @@ def _parse_skills(block: str) -> list[dict]:
             m = re.search(pat, block, re.I)
             if m:
                 categories.append({
-                    "label": label,
+                    "label": skill_label(label),
                     "skills": [s.strip() for s in m.group(1).split(",") if s.strip()],
                 })
     return categories
