@@ -27,7 +27,6 @@ from export_jobs import (  # noqa: E402
     export_normalized_json,
     export_raw_csv,
 )
-from mock_jobs import generate_mock_jobs  # noqa: E402
 from providers.jobspy_provider import JobSpyProvider  # noqa: E402
 from providers.provider_registry import PROVIDER_GROUPS, get_provider, resolve_providers  # noqa: E402
 
@@ -45,7 +44,10 @@ def parse_args() -> argparse.Namespace:
             f"{', '.join(PROVIDER_GROUPS)}"
         ),
     )
-    parser.add_argument("--country", help="Country filter (default: India).")
+    parser.add_argument(
+        "--country",
+        help="Country filter. Overrides the country in the candidate intelligence.",
+    )
     parser.add_argument(
         "--locations",
         nargs="+",
@@ -57,11 +59,6 @@ def parse_args() -> argparse.Namespace:
         default=INTELLIGENCE_PATH,
         help="Path to candidate-intelligence.json",
     )
-    parser.add_argument(
-        "--mock",
-        action="store_true",
-        help="Generate mock jobs without network calls.",
-    )
     return parser.parse_args()
 
 
@@ -69,55 +66,46 @@ def main() -> int:
     args = parse_args()
     source_run_id = uuid.uuid4().hex[:12]
 
-    if args.mock:
-        all_jobs = generate_mock_jobs()
-        provider_names = sorted({j["provider"] for j in all_jobs})
-        provider_counts = {}
-        for name in provider_names:
-            provider_counts[name] = sum(1 for j in all_jobs if j["provider"] == name)
-        search_terms = ["software engineer"]
-        locations = ["Bangalore, India", "Remote"]
-        remote_filters = ["remote"]
-        country = args.country or "India"
-        raw_count = len(all_jobs)
-        raw_df = pd.DataFrame()
-    else:
-        intelligence = load_intelligence(args.intelligence)
+    intelligence = load_intelligence(args.intelligence)
+    try:
         config = resolve_search_config(
             intelligence,
             country=args.country,
             locations=args.locations,
         )
-        search_terms = config["search_terms"]
-        locations = config["locations"]
-        remote_filters = config["remote_filters"]
-        country = config["country"]
+    except ValueError as exc:
+        logger.error("%s", exc)
+        return 1
+    search_terms = config["search_terms"]
+    locations = config["locations"]
+    remote_filters = config["remote_filters"]
+    country = config["country"]
 
-        if not search_terms:
-            logger.error("No jobSpySearchTerms found in intelligence file.")
-            return 1
+    if not search_terms:
+        logger.error("No jobSpySearchTerms found in intelligence file.")
+        return 1
 
-        provider_names = resolve_providers(args.providers)
-        if not provider_names:
-            logger.error("No valid providers resolved from: %s", args.providers)
-            return 1
+    provider_names = resolve_providers(args.providers)
+    if not provider_names:
+        logger.error("No valid providers resolved from: %s", args.providers)
+        return 1
 
-        all_jobs: list[dict] = []
-        provider_counts: dict[str, int] = {}
-        raw_df = pd.DataFrame()
+    all_jobs: list[dict] = []
+    provider_counts: dict[str, int] = {}
+    raw_df = pd.DataFrame()
 
-        for name in provider_names:
-            logger.info("Running provider: %s", name)
-            provider = get_provider(name)
-            jobs = provider.fetch_jobs(search_terms, locations, remote_filters, country)
-            provider_counts[name] = len(jobs)
-            all_jobs.extend(jobs)
-            logger.info("Provider %s returned %d jobs", name, len(jobs))
+    for name in provider_names:
+        logger.info("Running provider: %s", name)
+        provider = get_provider(name)
+        jobs = provider.fetch_jobs(search_terms, locations, remote_filters, country)
+        provider_counts[name] = len(jobs)
+        all_jobs.extend(jobs)
+        logger.info("Provider %s returned %d jobs", name, len(jobs))
 
-            if name == "jobspy" and isinstance(provider, JobSpyProvider):
-                raw_df = provider.last_raw_df
+        if name == "jobspy" and isinstance(provider, JobSpyProvider):
+            raw_df = provider.last_raw_df
 
-        raw_count = len(all_jobs)
+    raw_count = len(all_jobs)
 
     deduped = dedupe_jobs(all_jobs)
 

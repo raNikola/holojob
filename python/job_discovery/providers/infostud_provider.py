@@ -35,7 +35,7 @@ class InfostudProvider(JobProvider):
         search_terms: list[str],
         locations: list[str],
         remote_filters: list[str],
-        country: str = "Serbia",
+        country: str,
     ) -> list[dict]:
         if (country or "").strip().lower() not in SUPPORTED_COUNTRIES:
             logger.info(

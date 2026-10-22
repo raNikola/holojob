@@ -48,15 +48,13 @@ export function getDiscoveryStatus() {
 
 export function buildDiscoveryCommand(opts = {}) {
   const providers = opts.providers || 'ats'
-  const country = opts.country || 'USA'
-  const mock = opts.mock ? ' --mock' : ''
-  return `source .venv/bin/activate && python python/job_discovery/run_discovery.py --providers ${providers} --country ${country}${mock}`
+  const country = opts.country ? ` --country ${opts.country}` : ''
+  return `source .venv/bin/activate && python python/job_discovery/run_discovery.py --providers ${providers}${country}`
 }
 
 export function runDiscovery(opts = {}) {
   const providers = opts.providers || 'ats'
-  const country = opts.country || 'USA'
-  const mock = Boolean(opts.mock)
+  const country = opts.country || ''
 
   if (!venvReady()) {
     return Promise.resolve({
@@ -88,12 +86,12 @@ export function runDiscovery(opts = {}) {
     writeJson(PROFILE_PATH, opts.profile)
   }
 
-  const args = [RUN_DISCOVERY, '--providers', providers, '--country', country]
+  const args = [RUN_DISCOVERY, '--providers', providers]
+  if (country) {
+    args.push('--country', country)
+  }
   if (opts.locations?.length) {
     args.push('--locations', ...opts.locations)
-  }
-  if (mock) {
-    args.push('--mock')
   }
 
   return new Promise((resolve) => {
@@ -139,12 +137,11 @@ export function runDiscovery(opts = {}) {
 }
 
 function parseCliArgs(argv) {
-  const opts = { providers: 'ats', country: 'USA', mock: false, locations: [] }
+  const opts = { providers: 'ats', country: '', locations: [] }
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]
     if (a === '--providers') opts.providers = argv[++i]
     else if (a === '--country') opts.country = argv[++i]
-    else if (a === '--mock') opts.mock = true
     else if (a === '--locations') {
       while (argv[i + 1] && !argv[i + 1].startsWith('--')) {
         opts.locations.push(argv[++i])

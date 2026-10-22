@@ -17,7 +17,7 @@ COMPANY_RE = re.compile(
     r"(?:at|@)\s+([A-Z][A-Za-z0-9&.\-\s]{2,40})(?:\s*[,–-]|\s*\n)",
 )
 DEGREE_RE = re.compile(
-    r"\b(B\.?S\.?|B\.?Tech|M\.?S\.?|M\.?Tech|MBA|Ph\.?D|Bachelor|Master|Doctorate)"
+    r"\b(B\.?S\.?|M\.?S\.?|MBA|Ph\.?D|Bachelor|Master|Doctorate)"
     r"[^.\n]{0,80}",
     re.I,
 )
@@ -26,7 +26,7 @@ CERT_RE = re.compile(
     re.I,
 )
 METRIC_RE = re.compile(
-    r"\b\d+(?:\.\d+)?%|\b₹\s*[\d,]+|\b\d+\+?\s*(?:years?|users|customers|cr|lakh|crore)\b",
+    r"\b\d+(?:\.\d+)?%|\b\d+\+?\s*(?:years?|users|customers)\b",
     re.I,
 )
 

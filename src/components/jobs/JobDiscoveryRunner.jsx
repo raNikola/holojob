@@ -15,11 +15,12 @@ import {
 import { importJobsFromFile } from '../../modules/jobs/jobStorage'
 import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { useProfile } from '../../context/ProfileContext'
+import { searchCountry } from '../../utils/searchCountry'
 
-const PROVIDER_OPTIONS = ['ats', 'remote', 'startup', 'india', 'ats-india', 'all', 'jobspy']
+const PROVIDER_OPTIONS = ['ats', 'remote', 'startup', 'serbia', 'all', 'jobspy']
 
-function ManualFallback({ providers, country, mock }) {
-  const command = buildDiscoveryCommand({ providers, country, mock })
+function ManualFallback({ providers, country }) {
+  const command = buildDiscoveryCommand({ providers, country })
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -54,8 +55,7 @@ export default function JobDiscoveryRunner({ state, onImport }) {
   const [apiAvailable, setApiAvailable] = useState(false)
   const [checking, setChecking] = useState(true)
   const [providers, setProviders] = useState('ats')
-  const [country, setCountry] = useState('India')
-  const [mock, setMock] = useState(false)
+  const [country, setCountry] = useState(() => searchCountry(profile, loadIntelligence()))
   const [running, setRunning] = useState(false)
   const [error, setError] = useState(null)
   const [log, setLog] = useState('')
@@ -87,7 +87,6 @@ export default function JobDiscoveryRunner({ state, onImport }) {
       const result = await runDiscovery({
         providers,
         country,
-        mock,
         intelligence,
         profile,
       })
@@ -107,7 +106,7 @@ export default function JobDiscoveryRunner({ state, onImport }) {
     } finally {
       setRunning(false)
     }
-  }, [providers, country, mock, profile, state, onImport])
+  }, [providers, country, profile, state, onImport])
 
   const handleLoadLatest = useCallback(async () => {
     setError(null)
@@ -154,15 +153,6 @@ export default function JobDiscoveryRunner({ state, onImport }) {
               value={country}
               onChange={(e) => setCountry(e.target.value)}
             />
-            <label className="flex items-center gap-2 self-end pb-2 text-sm text-stone-700 dark:text-stone-300">
-              <input
-                type="checkbox"
-                checked={mock}
-                onChange={(e) => setMock(e.target.checked)}
-                className="rounded border-stone-300 text-teal-600"
-              />
-              Mock mode
-            </label>
           </div>
           {status?.lastRunAt && (
             <p className="text-xs text-stone-500">
@@ -189,7 +179,7 @@ export default function JobDiscoveryRunner({ state, onImport }) {
           )}
         </div>
       ) : (
-        <ManualFallback providers={providers} country={country} mock={mock} />
+        <ManualFallback providers={providers} country={country} />
       )}
     </Card>
   )

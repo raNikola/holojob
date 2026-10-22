@@ -18,7 +18,8 @@
       --fit-job-gap: {{ fit.job_gap | default(8) }}pt;
       --fit-skills-leading: {{ fit.skills_leading | default(12.4) }}pt;
     }
-    @page { size: A4; margin: 0; }
+    /* Vertical margins live here, not on body, so every page has them, not only the first. */
+    @page { size: A4; margin: 30pt 0 40pt; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       font-family: Helvetica, Arial, "Nimbus Sans", sans-serif;
@@ -26,7 +27,7 @@
       color: var(--body);
       background: #fff;
     }
-    body { padding: 30pt 42.52pt 40pt; }
+    body { padding: 0 42.52pt; }
 
     .name {
       font-size: 20pt; font-weight: bold; color: var(--navy);
@@ -45,6 +46,7 @@
     .section { margin-top: var(--fit-sec-before); }
     .section:first-of-type { margin-top: 8pt; }
     .section h2 {
+      break-after: avoid;
       font-size: 11pt; font-weight: bold; color: var(--navy);
       text-transform: uppercase; line-height: 13pt;
       border-bottom: 0.75pt solid var(--navy); padding-bottom: 2.5pt;
@@ -55,17 +57,20 @@
       font-size: 9.5pt; color: var(--body); text-align: justify;
       line-height: var(--fit-body-leading);
     }
-    .bullet { position: relative; padding-left: 11.3pt; margin-bottom: 1.4pt; }
+    .bullet { position: relative; padding-left: 11.3pt; margin-bottom: 1.4pt; break-inside: avoid; }
     .bullet::before { content: "•"; position: absolute; left: 5.3pt; }
 
     .job + .job { margin-top: var(--fit-job-gap); }
+    /* A page never ends on an entry's header: it stays with its title and first bullet. */
     .company-row {
+      break-after: avoid;
       display: grid; grid-template-columns: 62% 38%; align-items: end;
     }
     .company { font-size: 10.5pt; font-weight: bold; line-height: 13pt; }
     .company .loc { font-size: 9pt; font-weight: normal; color: var(--gray); }
     .dates { font-size: 9pt; color: var(--slate); text-align: right; line-height: 12pt; }
     .job-title {
+      break-after: avoid;
       font-size: 9.5pt; font-weight: bold; font-style: italic;
       color: var(--slate); line-height: 11.5pt; margin: 1.5pt 0 3pt;
     }
@@ -83,12 +88,7 @@
     .institution { font-size: 10.5pt; font-weight: bold; line-height: 13pt; }
     .grad { font-size: 9pt; color: var(--slate); line-height: 12pt; }
     .degree { font-size: 9.5pt; line-height: var(--fit-body-leading); }
-    .cgpa { font-size: 9.5pt; font-weight: bold; line-height: 12pt; }
 
-    .footer {
-      position: fixed; bottom: 20pt; right: 42.52pt;
-      font-size: 8pt; color: var(--gray);
-    }
   </style>
 </head>
 <body>
@@ -100,10 +100,12 @@
     {%- endfor -%}
   </div>
 
+  {% if summary %}
   <div class="section">
     <h2>Professional Summary</h2>
     <p class="body">{{ summary }}</p>
   </div>
+  {% endif %}
 
   {% if experience %}
   <div class="section">
@@ -154,7 +156,7 @@
     {% if education.degree %}
     <div class="edu-row">
       <div class="degree">{{ education.degree }}</div>
-      <div class="right cgpa">{% if education.cgpa %}CGPA: {{ education.cgpa }}{% endif %}{% if not education.school and education.graduated %}Graduated {{ education.graduated }}{% endif %}</div>
+      <div class="right grad">{% if not education.school and education.graduated %}Graduated {{ education.graduated }}{% endif %}</div>
     </div>
     {% endif %}
   </div>
@@ -167,6 +169,5 @@
   </div>
   {% endif %}
 
-  <div class="footer">Page 1 of 1</div>
 </body>
 </html>

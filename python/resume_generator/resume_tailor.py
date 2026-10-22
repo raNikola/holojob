@@ -30,67 +30,32 @@ def _jd_keywords(job: dict, intelligence: dict, limit: int = 15) -> list[str]:
     return keywords[:limit] or matched[:10] or high[:10]
 
 
-# JD theme detection for the subtitle tail (Part 5: echo the JD title family).
-_THEMES = [
-    ("Backend", ("backend", "api", "node", "java", "python", "microservice", "rest")),
-    ("Frontend", ("frontend", "react", "vue", "angular", "ui ", "next.js")),
-    ("Full-Stack", ("full stack", "full-stack", "fullstack")),
-    ("Cloud", ("aws", "cloud", "azure", "gcp", "kubernetes", "docker", "devops")),
-    ("Distributed Systems", ("distributed", "scalab", "high availability", "microservice")),
-    ("Mobile", ("flutter", "android", "ios", "mobile")),
-]
+def _candidate_summary(about: str, intelligence: dict) -> str:
+    """The candidate's own summary, as written.
+
+    Rule-based tailoring does not write a summary for them: any sentence it
+    composed would state things the candidate never said. It is the summary
+    section of their CV, else the narrative they gave the questionnaire, else
+    empty, and the context then warns.
+    """
+    if about.strip():
+        return about.strip()
+    summary = intelligence.get("candidateSummary") or {}
+    return (summary.get("careerNarrative") or "").strip()
 
 
-def _tailor_subtitle(job: dict, keywords: list[str]) -> str:
-    """'Senior Software Engineer | Backend, Cloud & Distributed Systems' style tagline."""
-    title = (job.get("title") or "Software Engineer").split("(")[0].strip()
-    haystack = (title + " " + " ".join(keywords)).lower()
-    themes = [name for name, terms in _THEMES if any(t in haystack for t in terms)]
-    norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
-    themes = [t for t in themes if norm(t) not in norm(title)][:3]
-    if not themes:
-        return title
-    if len(themes) > 1:
-        tail = ", ".join(themes[:-1]) + " & " + themes[-1]
-    else:
-        tail = themes[0]
-    return f"{title} | {tail}"
+# Part 5: "4-6 bullets for recent roles". The most recent roles get the most room.
+BULLET_CAPS = (6, 5, 4)
 
 
-def _tailor_about_me(about: str, job: dict, intelligence: dict, keywords: list[str]) -> str:
-    """Part 5 summary recipe: experience framing → candidate ∩ JD stack → specialization."""
-    title = (job.get("title") or "").split("(")[0].strip()
-    years = (intelligence.get("experienceMap") or {}).get("yearsOfExperience") or "4"
-    years = str(years).replace("+", "")
+def _tailor_bullets(
+    bullets: list[str], keywords: list[str], canonical_skills: set[str], limit: int | None = None
+) -> list[str]:
+    """Part 5: the JD-relevant bullets first, as many as the role has room for.
 
-    if not title:
-        if about:
-            return about.strip()
-        summary = intelligence.get("candidateSummary") or {}
-        return (summary.get("careerNarrative") or summary.get("oneLinePitch") or "").strip()
-
-    framing = (
-        f"{title} with {years}+ years of experience designing, building, and operating "
-        f"scalable cloud-native applications, distributed backend systems, workflow-driven "
-        f"platforms, and production-grade web applications."
-    )
-    stack = f" Strong expertise in {', '.join(keywords[:9])}." if keywords else ""
-    haystack = " ".join(keywords).lower()
-    specializations = [
-        label for label, terms in (
-            ("cloud architecture", ("aws", "cloud", "azure", "gcp")),
-            ("distributed systems", ("microservice", "distributed", "scalab")),
-            ("production operations", ("ci/cd", "docker", "monitoring", "devops", "linux")),
-            ("engineering automation", ("ci/cd", "github actions", "automation")),
-            ("AI-assisted development workflows", ("ai", "llm", "generative")),
-        ) if any(t in haystack for t in terms)
-    ]
-    closing = f" Skilled in {', '.join(specializations)}." if specializations else ""
-    return (framing + stack + closing).strip()
-
-
-def _tailor_bullets(bullets: list[str], keywords: list[str], canonical_skills: set[str]) -> list[str]:
-    """Part 5: reorder so JD-relevant bullets come first; never rewrite metrics or facts."""
+    Bullets are picked and ordered, never rewritten: metrics and facts stay as the
+    candidate wrote them.
+    """
     if not bullets:
         return bullets
     kw_lower = [k.lower() for k in keywords]
@@ -99,7 +64,8 @@ def _tailor_bullets(bullets: list[str], keywords: list[str], canonical_skills: s
         b = bullet.lower()
         return sum(1 for kw in kw_lower if kw in b)
 
-    return sorted(bullets, key=relevance, reverse=True)
+    ordered = sorted(bullets, key=relevance, reverse=True)
+    return ordered[:limit] if limit else ordered
 
 
 def _tailor_skill_categories(
@@ -196,20 +162,25 @@ def build_resume_context(profile: dict, intelligence: dict, job: dict) -> dict:
     canonical_skills = set(resume_parsed.get("skills") or [])
     keywords = _jd_keywords(job, intelligence)
 
-    about = _tailor_about_me(parsed.get("about_me") or "", job, intelligence, keywords)
+    about = _candidate_summary(parsed.get("about_me") or "", intelligence)
 
     experience = []
-    for exp in parsed.get("experience") or []:
+    for index, exp in enumerate(parsed.get("experience") or []):
+        cap = BULLET_CAPS[min(index, len(BULLET_CAPS) - 1)]
         experience.append({
             **exp,
-            "bullets": _tailor_bullets(exp.get("bullets") or [], keywords, canonical_skills),
+            "bullets": _tailor_bullets(exp.get("bullets") or [], keywords, canonical_skills, cap),
         })
 
-    skill_categories = _tailor_skill_categories(
-        parsed.get("skill_categories") or [],
-        keywords,
-        list(canonical_skills),
-    )
+    rows = list(parsed.get("skill_categories") or [])
+    if rows:
+        # The CV's own rows come first; whatever else the profile lists goes in one
+        # more row, so nothing the candidate listed is dropped and nothing is added.
+        shown = {s.lower() for row in rows for s in row["skills"]}
+        rest = [s for s in resume_parsed.get("skills") or [] if s.lower() not in shown]
+        if rest:
+            rows.append({"label": "Skills", "skills": rest})
+    skill_categories = _tailor_skill_categories(rows, keywords, list(canonical_skills))
 
     languages = normalize_languages(basic.get("languages"))
 
@@ -221,14 +192,18 @@ def build_resume_context(profile: dict, intelligence: dict, job: dict) -> dict:
     if problem:
         warnings.append(f"education: {problem}")
 
+    if not about:
+        warnings.append("summary: no summary could be read from the CV or the profile; the CV leaves it out")
+    if not experience:
+        warnings.append("experience: no work experience could be read from the CV or the profile")
+
     contact = parsed.get("contact") or ""
-    contact_items = [p.strip() for p in contact.split("|") if p.strip()] or list(filter(None, [
-        basic.get("location"), basic.get("email"), basic.get("phone"),
-    ]))
+    contact_items = parsed.get("contact_items") or []
 
     return {
         "name": parsed.get("name") or (basic.get("fullName") or "Candidate").strip(),
-        "subtitle": _tailor_subtitle(job, keywords),
+        # The candidate's own headline: a tagline echoing the job's title would claim it.
+        "subtitle": parsed.get("headline") or (basic.get("currentRole") or "").strip(),
         "contact": contact,
         "contact_items": contact_items,
         "email": basic.get("email") or "",

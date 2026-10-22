@@ -151,7 +151,7 @@ def test_default_skill_rows_do_not_collide_with_the_spoken_languages_section():
 
 def test_a_languages_row_in_the_candidates_own_cv_is_renamed():
     profile = profile_with(LANGS)
-    profile["resume"]["rawText"] = "SKILLS AND OTHERS Languages: Go, Java Databases: PostgreSQL EDUCATION x"
+    profile["resume"]["rawText"] = "SKILLS AND OTHERS Languages: Go, Java. Databases: PostgreSQL EDUCATION x"
     rows = parse_resume_from_profile(profile)["skill_categories"]
     assert [r["label"] for r in rows] == ["Programming languages", "Databases"]
     assert rows[0]["skills"] == ["Go", "Java"]

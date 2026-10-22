@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Brain, ExternalLink, MessageSquare, MessagesSquare, Settings, ShieldCheck, Target, Users, X } from 'lucide-react'
+import { Brain, MessageSquare, MessagesSquare, Settings, ShieldCheck, Target, Users, X } from 'lucide-react'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { VIEWS, VIEW_TITLES } from '../../modules/appNavigation'
@@ -27,17 +27,6 @@ export default function AppShell({ activeView, onNavigate, children }) {
         {demoMode && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
             Demo instance — data resets on redeploy.
-            {' '}
-            <a
-              href="https://github.com/Shanupower/career-os"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-medium underline underline-offset-2"
-            >
-              Clone locally
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-            {' '}for the full pipeline.
           </div>
         )}
         <TopBar title={title} />

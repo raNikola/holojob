@@ -35,7 +35,7 @@ class YCProvider(JobProvider):
         search_terms: list[str],
         locations: list[str],
         remote_filters: list[str],
-        country: str = "India",
+        country: str,
     ) -> list[dict]:
         primary_term = search_terms[0] if search_terms else ""
         primary_loc = locations[0] if locations else ""

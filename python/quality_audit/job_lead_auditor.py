@@ -46,9 +46,6 @@ def _location_aligned(location: str, preferred: list[str]) -> tuple[bool, str | 
     if not location:
         return False, "missing_location"
     loc_l = normalize_text(location)
-    if any("india" in normalize_text(p) or "in" in normalize_text(p) for p in preferred):
-        if "in" in loc_l or "india" in loc_l or "mumbai" in loc_l or "hyderabad" in loc_l:
-            return True, None
     for pref in preferred:
         pref_l = normalize_text(pref)
         if pref_l and pref_l in loc_l:

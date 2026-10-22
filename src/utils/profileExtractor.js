@@ -1,10 +1,5 @@
 import { SKILLS_DICTIONARY } from '../data/skillsDictionary'
 
-const INDIAN_CITIES = [
-  'Bangalore', 'Bengaluru', 'Mumbai', 'Delhi', 'Hyderabad', 'Chennai', 'Pune', 'Kolkata',
-  'Ahmedabad', 'Noida', 'Gurgaon', 'Gurugram', 'Jaipur', 'Kochi', 'Trivandrum',
-]
-
 const SECTION_HEADERS = [
   { key: 'projects', patterns: [/^projects?\b/i, /^personal projects?\b/i] },
   { key: 'workExperience', patterns: [/^work experience\b/i, /^professional experience\b/i, /^experience\b/i, /^employment\b/i] },
@@ -58,11 +53,21 @@ function extractFullName(lines) {
   return withConfidence('', 'low')
 }
 
+// "City, Region" or "City, Country": two Title Case names around a comma. Letters
+// are matched as Unicode, so "Niš" and "São Paulo" read as well as "Berlin". All-caps
+// words never start a match, which keeps a heading like "DETAILS" out of the city.
+const PLACE_WORD = String.raw`\p{Lu}\p{Ll}[\p{L}'.-]*`
+const PLACE_RE = new RegExp(
+  `(${PLACE_WORD}(?:\\s+${PLACE_WORD})?),\\s*(${PLACE_WORD}(?:\\s+${PLACE_WORD})?|\\p{Lu}{2})(?!\\p{L})`,
+  'u',
+)
+
+// Contact details sit in the header, so only the opening of the text is searched:
+// further down, "Product Lead, Acme" would read as a place.
+const HEADER_CHARS = 600
+
 function extractLocation(text) {
-  for (const city of INDIAN_CITIES) {
-    if (new RegExp('\\b' + city + '\\b', 'i').test(text)) return withConfidence(city, 'medium')
-  }
-  const match = text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?),\s*([A-Z]{2}|[A-Z][a-z]+)\b/)
+  const match = text.slice(0, HEADER_CHARS).match(PLACE_RE)
   if (match) return withConfidence(match[0], 'medium')
   return withConfidence('', 'low')
 }

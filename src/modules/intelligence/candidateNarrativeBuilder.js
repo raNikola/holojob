@@ -1,3 +1,5 @@
+import { countryOfLocation } from '../../utils/searchCountry.js'
+
 function dedupe(arr) {
   return [...new Set(arr.filter(Boolean))]
 }
@@ -180,6 +182,9 @@ export function buildJobFitPreferences(ctx) {
     preferredCompanyTypes: dedupe(ctx.questionnaire.preferredCompanyTypes || []),
     preferredIndustries: ctx.questionnaire.preferredIndustries,
     avoidedIndustries: ctx.questionnaire.avoidedIndustries,
+    // The country job discovery searches in, from where the candidate lives; empty
+    // when the location does not name one, and discovery then asks for it.
+    country: countryOfLocation(ctx.location),
     preferredLocations: ctx.preferredLocations.length ? ctx.preferredLocations : (ctx.location ? [ctx.location] : []),
     remotePreference: ctx.remotePreference,
     salaryExpectation: ctx.salaryExpectation,

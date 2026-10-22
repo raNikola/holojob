@@ -17,7 +17,7 @@ class WellfoundProvider(JobProvider):
         search_terms: list[str],
         locations: list[str],
         remote_filters: list[str],
-        country: str = "India",
+        country: str,
     ) -> list[dict]:
         logger.info("Wellfound provider is skeleton mode.")
         _ = (search_terms, locations, remote_filters, country)

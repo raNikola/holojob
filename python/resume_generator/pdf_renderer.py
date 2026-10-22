@@ -24,7 +24,15 @@ FIT_LADDER: list[dict] = [
 ]
 
 
-def render_pdf(html: str, output_path: Path, *, paper_format: str = "A4") -> bool:
+# Chromium's own page counter: "Page 1 of 1" printed on every page was wrong on a longer CV.
+FOOTER_TEMPLATE = (
+    '<div style="width:100%;font-size:8pt;color:#718096;text-align:right;'
+    'padding-right:42.52pt;font-family:Helvetica,Arial,sans-serif;">'
+    'Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>'
+)
+
+
+def render_pdf(html: str, output_path: Path, *, paper_format: str = "A4", footer: bool = False) -> bool:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -37,13 +45,23 @@ def render_pdf(html: str, output_path: Path, *, paper_format: str = "A4") -> boo
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
             page.set_content(html, wait_until="networkidle")
-            page.pdf(
-                path=str(output_path),
-                format=paper_format,
-                print_background=True,
-                prefer_css_page_size=True,
-                margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
-            )
+            options: dict = {
+                "path": str(output_path),
+                "format": paper_format,
+                "print_background": True,
+                "prefer_css_page_size": True,
+                "margin": {"top": "0", "bottom": "0", "left": "0", "right": "0"},
+            }
+            if footer:
+                # Room for the footer is the template's bottom page margin (30pt top,
+                # 40pt bottom). Playwright takes px, in, mm or cm, not pt.
+                options.update(
+                    display_header_footer=True,
+                    header_template="<span></span>",
+                    footer_template=FOOTER_TEMPLATE,
+                    margin={"top": "10.58mm", "bottom": "14.11mm", "left": "0", "right": "0"},
+                )
+            page.pdf(**options)
             browser.close()
         return True
     except Exception as exc:
@@ -61,14 +79,16 @@ def count_pdf_pages(pdf_path: Path) -> int:
         return -1
 
 
-def render_single_page_pdf(render_html: Callable[[dict], str], output_path: Path) -> tuple[bool, int]:
+def render_single_page_pdf(
+    render_html: Callable[[dict], str], output_path: Path, *, footer: bool = False
+) -> tuple[bool, int]:
     """Render, then walk the fit ladder until the document is one page.
 
     render_html receives a `fit` dict of CSS overrides. Returns (rendered, final_page_count).
     """
     pages = -1
     for fit in FIT_LADDER:
-        if not render_pdf(render_html(fit), output_path):
+        if not render_pdf(render_html(fit), output_path, footer=footer):
             return False, -1
         pages = count_pdf_pages(output_path)
         if pages <= 1:

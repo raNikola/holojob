@@ -29,7 +29,7 @@ You receive a job description and verified candidate data. Produce tailored CONT
 ## HARD RULES (violations make the output unusable)
 - Every claim must trace to the CANDIDATE DATA below. NEVER invent metrics, numbers, \
 employers, titles, dates, or technologies. Copy numbers and proper nouns verbatim \
-(e.g. "₹1,000 Cr AUM", "20+ production applications").
+(e.g. "40% faster releases", "3 production launches").
 - Mirror the JD's exact phrasing only where the candidate genuinely has the skill; \
 skip JD keywords the candidate cannot support.
 - Banned phrases: passionate, team player, fast-paced environment, results-driven, \

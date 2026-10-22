@@ -31,11 +31,11 @@ class WorkableProvider(JobProvider):
         search_terms: list[str],
         locations: list[str],
         remote_filters: list[str],
-        country: str = "Serbia",
+        country: str,
     ) -> list[dict]:
         terms = tuple(search_terms or ("Product Manager",))
         try:
-            raw_jobs = workable_client.fetch_jobs(terms, location=country or "Serbia")
+            raw_jobs = workable_client.fetch_jobs(terms, location=country)
         except Exception:
             logger.exception("Workable fetch failed; continuing without it")
             return []

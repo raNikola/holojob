@@ -89,9 +89,11 @@ export function getDemoBootstrap() {
     return { profile, intelligence, jobs }
   }
 
-  const profile = readJsonFile(PROFILE_PATH, exampleProfile)
-  const intelligence = readJsonFile(INTELLIGENCE_PATH, exampleIntelligence)
-  const jobs = readJsonFile(SCORED_PATH, exampleJobs)
+  // Outside demo mode these are the user's own files and nothing else: a missing
+  // one is an empty state, never filled in from the bundled example.
+  const profile = readJsonFile(PROFILE_PATH)
+  const intelligence = readJsonFile(INTELLIGENCE_PATH)
+  const jobs = readJsonFile(SCORED_PATH)
   if (!profile || !intelligence || !jobs) {
     return null
   }
@@ -217,7 +219,7 @@ export async function handleApiRequest(req, res) {
     sendJson(res, 200, {
       available: true,
       ...getDiscoveryStatus(),
-      command: buildDiscoveryCommand({ providers: 'ats', country: 'USA' }),
+      command: buildDiscoveryCommand({ providers: 'ats' }),
     })
     return true
   }
@@ -241,9 +243,8 @@ export async function handleApiRequest(req, res) {
       const body = await readBody(req)
       const result = await runDiscovery({
         providers: body.providers || 'ats',
-        country: body.country || 'USA',
+        country: body.country,
         locations: body.locations,
-        mock: Boolean(body.mock),
         intelligence: body.intelligence,
         profile: body.profile,
       })

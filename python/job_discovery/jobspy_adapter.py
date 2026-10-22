@@ -45,7 +45,6 @@ INDEED_GLASSDOOR_COUNTRY_NAMES = {
     "greece": "Greece",
     "hong kong": "Hong Kong",
     "hungary": "Hungary",
-    "india": "India",
     "indonesia": "Indonesia",
     "ireland": "Ireland",
     "israel": "Israel",
@@ -94,27 +93,6 @@ INDEED_GLASSDOOR_COUNTRY_NAMES = {
     "vietnam": "Vietnam",
 }
 
-# City → "City, State" for India (Indeed/Glassdoor location narrowing)
-INDIA_CITY_STATE = {
-    "bangalore": "Bangalore, Karnataka",
-    "bengaluru": "Bangalore, Karnataka",
-    "hyderabad": "Hyderabad, Telangana",
-    "mumbai": "Mumbai, Maharashtra",
-    "pune": "Pune, Maharashtra",
-    "chennai": "Chennai, Tamil Nadu",
-    "delhi": "Delhi, Delhi",
-    "new delhi": "New Delhi, Delhi",
-    "gurgaon": "Gurgaon, Haryana",
-    "gurugram": "Gurugram, Haryana",
-    "noida": "Noida, Uttar Pradesh",
-    "kolkata": "Kolkata, West Bengal",
-    "ahmedabad": "Ahmedabad, Gujarat",
-    "jaipur": "Jaipur, Rajasthan",
-    "kochi": "Kochi, Kerala",
-    "chandigarh": "Chandigarh, Chandigarh",
-}
-
-
 def _empty_frame() -> pd.DataFrame:
     return pd.DataFrame()
 
@@ -162,17 +140,9 @@ def _strip_country_suffix(location: str, country: str) -> str:
 
 
 def _narrow_location_for_country(location: str, country: str) -> str:
-    """Narrow location to city & state for Indeed/Glassdoor APIs."""
-    loc = _strip_country_suffix(location, country)
-
-    if country == "India":
-        if "," not in loc:
-            city_key = loc.strip().lower()
-            loc = INDIA_CITY_STATE.get(city_key, loc)
-        return loc
-
+    """Narrow location to the city part for Indeed/Glassdoor APIs."""
     # US-style "City, ST" and other "City, Region" strings pass through
-    return loc
+    return _strip_country_suffix(location, country)
 
 
 def _resolve_location(location: str, remote: bool, country: str) -> tuple[str, bool]:

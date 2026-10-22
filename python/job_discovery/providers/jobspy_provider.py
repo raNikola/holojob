@@ -33,7 +33,7 @@ class JobSpyProvider(JobProvider):
         search_terms: list[str],
         locations: list[str],
         remote_filters: list[str],
-        country: str = "Serbia",
+        country: str,
     ) -> list[dict]:
         all_normalized: list[dict] = []
         frames: list[pd.DataFrame] = []

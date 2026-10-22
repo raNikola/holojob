@@ -135,7 +135,7 @@ export default function ProfileForm() {
               <option value="flexible">Flexible</option>
             </select>
           </div>
-          <Input label="Salary expectation" value={bp.salaryExpectation} onChange={(e) => setBasic('salaryExpectation', e.target.value)} placeholder="e.g. 15-20 LPA" />
+          <Input label="Salary expectation" value={bp.salaryExpectation} onChange={(e) => setBasic('salaryExpectation', e.target.value)} placeholder="Amount and currency, per month or year" />
         </div>
         <div className="mt-4 space-y-4">
           <RoleCombobox

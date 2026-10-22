@@ -30,7 +30,6 @@ const PROVIDER_VARIANT = {
   lever: 'high',
   ashby: 'medium',
   wellfound: 'low',
-  instahyre: 'low',
 }
 
 function ProviderBadge({ job }) {

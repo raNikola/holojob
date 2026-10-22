@@ -176,6 +176,12 @@ def fetch_jobs(
 
 
 if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) < 2:
+        raise SystemExit("usage: python workable_client.py <country or location>")
+    LOCATION = sys.argv[1]
+
     TERMS = (
         "Technical Product Manager",
         "Senior Product Manager",
@@ -184,14 +190,14 @@ if __name__ == "__main__":
         "Product Owner",
     )
 
-    raw_first = search("Product Manager", "Serbia")
+    raw_first = search("Product Manager", LOCATION)
     if raw_first:
         print("raw location field:", json.dumps(raw_first[0].get("location"))[:200])
         print("raw company field :", json.dumps(raw_first[0].get("company"))[:200])
         print("raw workplace     :", json.dumps(raw_first[0].get("workplace"))[:200])
         print()
 
-    matches = fetch_jobs(TERMS, "Serbia")
+    matches = fetch_jobs(TERMS, LOCATION)
     print(f"relevant: {len(matches)}")
     for job in matches:
         print(f"  {job['title']}")
