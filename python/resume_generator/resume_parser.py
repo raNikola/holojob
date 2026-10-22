@@ -180,28 +180,61 @@ def _parse_skills(block: str) -> list[dict]:
     return categories
 
 
-def _parse_education(block: str) -> dict:
-    if not block:
+EDUCATION_SEPARATOR = " — "
+EDUCATION_YEAR_RE = re.compile(r"\|\s*((?:19|20)\d{2})\s*$")
+EDUCATION_CGPA_RE = re.compile(r"[,;|]?\s*CGPA:?\s*([\d.]+(?:\s*/\s*\d+)?)", re.I)
+
+
+def parse_education_entry(entry: str) -> dict:
+    """Read one "Degree — School | Year" entry from the profile's education list.
+
+    That list is what the profile form shows and edits, so the CV prints what
+    the candidate can see. Only what the entry states is returned: a part it
+    does not state stays empty, because a CV must never show an education the
+    candidate did not give.
+    """
+    text = _clean(entry or "")
+    if not text:
         return {}
-    block = _clean(block)
-    grad_m = re.search(r"Graduated\s+(\d{4})", block, re.I)
-    cgpa_m = re.search(r"CGPA:\s*([\d.]+/10)", block, re.I)
-    degree_m = re.search(
-        r"(Bachelor of Technology in Computer Science Engineering|Bachelor of Technology[^G]+|B\.?Tech[^G]+)",
-        block,
-        re.I,
-    )
-    school_m = re.search(
-        r"(Jawaharlal Nehru Technological University(?:\s+Hyderabad)?)",
-        block,
-        re.I,
-    )
+
+    cgpa = ""
+    cgpa_m = EDUCATION_CGPA_RE.search(text)
+    if cgpa_m:
+        cgpa = re.sub(r"\s+", "", cgpa_m.group(1))
+        text = (text[: cgpa_m.start()] + text[cgpa_m.end() :]).strip()
+
+    year_m = EDUCATION_YEAR_RE.search(text)
+    graduated = year_m.group(1) if year_m else ""
+    body = text[: year_m.start()].strip() if year_m else text
+
+    degree, _, school = body.partition(EDUCATION_SEPARATOR)
     return {
-        "school": school_m.group(1).strip() if school_m else "Jawaharlal Nehru Technological University Hyderabad",
-        "degree": degree_m.group(1).strip() if degree_m else "Bachelor of Technology in Computer Science Engineering",
-        "graduated": grad_m.group(1) if grad_m else "2022",
-        "cgpa": cgpa_m.group(1) if cgpa_m else "7.0/10",
+        "degree": degree.strip(),
+        "school": school.strip(),
+        "graduated": graduated,
+        "cgpa": cgpa,
     }
+
+
+def education_problem(education: dict) -> str | None:
+    """Why this education cannot be trusted on a CV, or None when it can."""
+    if not education:
+        return (
+            "the profile has no education entry, so the CV leaves the section out; "
+            "add one as 'Degree — School | Year'"
+        )
+    degree = education.get("degree") or ""
+    if not degree[:1].isalnum():
+        return (
+            f"the education entry looks malformed (it starts with {degree[:12]!r}); "
+            "fix it in the profile"
+        )
+    if not education.get("school"):
+        return (
+            "the education entry has no school; write it as 'Degree — School | Year' "
+            "so the CV can show it"
+        )
+    return None
 
 
 def parse_resume_from_profile(profile: dict) -> dict:
@@ -224,11 +257,12 @@ def parse_resume_from_profile(profile: dict) -> dict:
     skills_block = _extract_section(raw, "SKILLS AND OTHERS", ["EDUCATION"])
     if not skills_block:
         skills_block = _extract_section(raw, "TECHNICAL SKILLS", ["EDUCATION"])
-    edu_block = _extract_section(raw, "EDUCATION", [])
 
     experience = _split_experience_block(exp_block)
     skill_categories = _parse_skills(skills_block)
-    education = _parse_education(edu_block)
+    entries = ((profile.get("resume") or {}).get("parsedData") or {}).get("education") or []
+    # One education block fits the templates; the first entry that reads is used.
+    education = next((e for e in map(parse_education_entry, entries) if e), {})
 
     return {
         "name": name.upper() if len(name) < 40 else name,

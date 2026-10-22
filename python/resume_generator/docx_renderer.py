@@ -52,12 +52,18 @@ def render_resume_docx(ctx: dict, output_path: Path) -> bool:
                 doc.add_paragraph(f"{label}: {items}")
 
     education = ctx.get("education")
-    if education:
+    if isinstance(education, dict):
+        # Same parts and order as the HTML: degree, school, year. A part the
+        # profile does not state is left out, never filled in.
+        line = ", ".join(p for p in (education.get("degree"), education.get("school")) if p)
+        if education.get("graduated"):
+            line = f"{line} ({education['graduated']})" if line else ""
+        if line:
+            doc.add_heading("Education", level=1)
+            doc.add_paragraph(line)
+    elif education:
         doc.add_heading("Education", level=1)
-        if isinstance(education, dict):
-            doc.add_paragraph(education.get("degree") or education.get("school") or str(education))
-        else:
-            doc.add_paragraph(str(education))
+        doc.add_paragraph(str(education))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(output_path))

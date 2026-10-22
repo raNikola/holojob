@@ -33,10 +33,10 @@
 {% endif %}{% endfor %}
 {% endif %}
 
-{% if education and education.school %}
+{% if education and (education.school or education.degree) %}
 ## Education
 
-{{ education.school }} | Graduated {{ education.graduated }}
+{% if education.school %}{{ education.school }}{% if education.graduated %} | Graduated {{ education.graduated }}{% endif %}
 
-{{ education.degree }} | CGPA: {{ education.cgpa }}
-{% endif %}
+{% endif %}{% if education.degree %}{{ education.degree }}{% if education.cgpa %} | CGPA: {{ education.cgpa }}{% endif %}{% if not education.school and education.graduated %} | Graduated {{ education.graduated }}{% endif %}
+{% endif %}{% endif %}
