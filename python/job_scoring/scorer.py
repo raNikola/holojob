@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 from dimensions.culture_match import score_culture_match
 from dimensions.experience_match import score_experience_match
 from dimensions.industry_match import score_industry_match
@@ -99,12 +101,24 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         "redFlags": red_flags,
         "reasons": reasons,
         "scoreBreakdown": breakdown,
+        # True when a hard rule applies to the job, whether or not it lowered
+        # this particular score. The enhancer never lifts such a job, so caps
+        # stay decided here.
+        "hardCapped": bool(red_flags) or off_track,
     }
     return enhancer.enhance(job, result, intelligence)
 
 
-def score_jobs(jobs: list[dict], intelligence: dict, enhancer=None) -> list[dict]:
+def score_jobs(
+    jobs: list[dict], intelligence: dict, enhancer=None, workers: int = 8
+) -> list[dict]:
     # Term rarity is measured over this run's corpus, so it is built once and
     # shared by every job rather than recomputed per call.
     idf = build_idf(jobs)
-    return [score_job(j, intelligence, enhancer, idf) for j in jobs]
+    if enhancer is None or isinstance(enhancer, NoOpEnhancer):
+        return [score_job(j, intelligence, enhancer, idf) for j in jobs]
+
+    # An enhancer that calls a model waits on the network per job, so jobs are
+    # scored in parallel. map() keeps the input order.
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        return list(pool.map(lambda j: score_job(j, intelligence, enhancer, idf), jobs))
