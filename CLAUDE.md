@@ -101,6 +101,18 @@ but never raised. Label, recommendation and priority are recomputed through
 the CLI, `gpt-6.1-sol` on OpenAI, `deepseek-v4-pro` on DeepSeek,
 `<PROVIDER>_JUDGE_MODEL` overrides). Results
 cache in `data/cache/llm_fit.json`; a failed call leaves the local score.
+A local run (no `--judge`) re-applies judgements already in that cache and
+makes no call: the model function is replaced with one that raises. A cached
+judgement matches only while the ad, the digest, the prompt version and the
+provider/model are unchanged; the drawer marks it "from cache".
+
+From the UI, a judged run is its own action: the amber "Fit judgement" card in
+the Jobs > Pipeline tab opens a confirmation filled by `run_scoring.py
+--judge-preview` (provider, model, how many jobs would be sent, the digest
+field list `DIGEST_FIELDS` and `NEVER_SENT`), and only its confirm button
+calls `POST /api/scoring/judge`, which refuses a body without
+`"confirm": true`. `/api/scoring/run`, Re-score and Run Full Pipeline never
+judge; `tests/js/judgeBoundary.test.js` pins both routes.
 
 **Privacy exception.** Everything else in this repo keeps personal data on the
 server. The judge is the one deliberate exception, and only when `--judge` is

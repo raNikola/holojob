@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildDiscoveryCommand, getDiscoveryStatus, runDiscovery } from './run-discovery.js'
-import { buildScoringCommand, getScoringStatus, runScoring } from './run-scoring.js'
+import { buildScoringCommand, getScoringStatus, previewJudge, runJudgedScoring, runScoring } from './run-scoring.js'
 import { buildTailorCommand, getTailorStatus, runTailor, runTailorStream } from './run-tailor.js'
 import { getProjectScanStatus, runProjectScan } from './run-project-scan.js'
 import { runJobImport } from './run-job-import.js'
@@ -285,10 +285,35 @@ export async function handleApiRequest(req, res) {
     return true
   }
 
+  // Local scoring only. A judge field in the body is ignored on purpose: the
+  // judged run has its own route below.
   if (url === '/api/scoring/run' && req.method === 'POST') {
     try {
       const body = await readBody(req)
       const result = await runScoring({ minScore: body.minScore })
+      sendJson(res, result.ok ? 200 : 500, result)
+    } catch (e) {
+      sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (url === '/api/scoring/judge/preview' && req.method === 'GET') {
+    const result = await previewJudge()
+    sendJson(res, result.ok ? 200 : 500, result)
+    return true
+  }
+
+  // Sends a candidate digest to the configured LLM provider. Requires an
+  // explicit confirmation in the body, which only the confirm dialog sends.
+  if (url === '/api/scoring/judge' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      if (body.confirm !== true) {
+        sendJson(res, 400, { error: 'A judged run needs { "confirm": true }.' })
+        return true
+      }
+      const result = await runJudgedScoring()
       sendJson(res, result.ok ? 200 : 500, result)
     } catch (e) {
       sendJson(res, 500, { error: e.message })

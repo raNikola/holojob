@@ -42,9 +42,9 @@ export function buildScoringCommand() {
   return 'source .venv/bin/activate && python python/job_scoring/run_scoring.py'
 }
 
-export function runScoring(opts = {}) {
+function checkInputs() {
   if (!venvReady()) {
-    return Promise.resolve({
+    return {
       ok: false,
       exitCode: 1,
       stdout: '',
@@ -52,11 +52,11 @@ export function runScoring(opts = {}) {
       scoredPath: SCORED_PATH,
       payload: null,
       jobCount: 0,
-    })
+    }
   }
 
   if (!fs.existsSync(INTELLIGENCE_PATH)) {
-    return Promise.resolve({
+    return {
       ok: false,
       exitCode: 1,
       stdout: '',
@@ -64,11 +64,11 @@ export function runScoring(opts = {}) {
       scoredPath: SCORED_PATH,
       payload: null,
       jobCount: 0,
-    })
+    }
   }
 
   if (!fs.existsSync(JOBS_PATH)) {
-    return Promise.resolve({
+    return {
       ok: false,
       exitCode: 1,
       stdout: '',
@@ -76,12 +76,43 @@ export function runScoring(opts = {}) {
       scoredPath: SCORED_PATH,
       payload: null,
       jobCount: 0,
-    })
+    }
   }
 
+  return null
+}
+
+/** Local scoring. Re-applies cached fit judgements; never calls a model. */
+export function runScoring(opts = {}) {
   const args = [RUN_SCORING]
   if (opts.minScore) args.push('--min-score', String(opts.minScore))
+  const blocked = checkInputs()
+  return blocked ? Promise.resolve(blocked) : spawnScoring(args)
+}
 
+/**
+ * What a judged run would send and to whom, without sending it. The counts and
+ * the field lists come from run_scoring.py itself.
+ */
+export async function previewJudge() {
+  const blocked = checkInputs()
+  if (blocked) return { ok: false, error: blocked.stderr }
+  const result = await spawnScoring([RUN_SCORING, '--judge-preview'], { readPayload: false })
+  if (!result.ok) return { ok: false, error: result.stderr || 'Preview failed' }
+  try {
+    return { ok: true, preview: JSON.parse(result.stdout.trim().split('\n').pop()) }
+  } catch {
+    return { ok: false, error: `Unreadable preview: ${result.stdout.slice(0, 200)}` }
+  }
+}
+
+/** The one path that sends a candidate digest to an LLM provider (--judge). */
+export function runJudgedScoring() {
+  const blocked = checkInputs()
+  return blocked ? Promise.resolve(blocked) : spawnScoring([RUN_SCORING, '--judge'])
+}
+
+function spawnScoring(args, { readPayload = true } = {}) {
   return new Promise((resolve) => {
     const chunks = { out: [], err: [] }
     const child = spawn(VENV_PYTHON, args, { cwd: ROOT, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
@@ -93,7 +124,7 @@ export function runScoring(opts = {}) {
       let payload = null
       let jobCount = 0
       try {
-        if (fs.existsSync(SCORED_PATH)) {
+        if (readPayload && fs.existsSync(SCORED_PATH)) {
           payload = JSON.parse(fs.readFileSync(SCORED_PATH, 'utf-8'))
           jobCount = payload.jobs?.length ?? 0
         }
@@ -101,7 +132,7 @@ export function runScoring(opts = {}) {
         // ignore
       }
       resolve({
-        ok: code === 0 && payload !== null,
+        ok: code === 0 && (payload !== null || !readPayload),
         exitCode: code ?? 1,
         stdout,
         stderr,

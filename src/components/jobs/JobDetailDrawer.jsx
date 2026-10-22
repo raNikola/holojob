@@ -9,6 +9,7 @@ import RelatedContactsPanel from '../outreach/RelatedContactsPanel'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { isCapReason } from '../../modules/jobs/workAuthorization'
+import FitJudgementSection, { isFitReason } from './FitJudgementSection'
 
 const DIMENSION_LABELS = {
   roleMatch: 'Role',
@@ -78,7 +79,7 @@ export default function JobDetailDrawer({
   const desc = stripDescription(job.description)
   const showScores = hasMatchScores([job])
   const limits = (job.reasons || []).filter(isCapReason)
-  const positiveReasons = (job.reasons || []).filter((r) => !r.startsWith('Red flag:') && !isCapReason(r))
+  const positiveReasons = (job.reasons || []).filter((r) => !r.startsWith('Red flag:') && !isCapReason(r) && !isFitReason(r))
   const provider = getJobProvider(job)
 
   return (
@@ -147,6 +148,7 @@ export default function JobDetailDrawer({
                   </ul>
                 </div>
               )}
+              <FitJudgementSection fit={job.llmFit} />
               {positiveReasons.length > 0 && (
                 <div>
                   <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">Why this scored well</h4>
