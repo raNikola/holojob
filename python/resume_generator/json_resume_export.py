@@ -71,7 +71,7 @@ def build_json_resume(profile: dict, intelligence: dict, ctx: dict | None = None
 
     education = []
     edu = ctx.get("education")
-    if isinstance(edu, dict):
+    if isinstance(edu, dict) and (edu.get("school") or edu.get("degree")):
         education.append({
             "institution": edu.get("school") or edu.get("institution") or "",
             "studyType": edu.get("degree") or "",

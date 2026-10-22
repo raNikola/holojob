@@ -165,6 +165,30 @@ model, have it return a fact, and let `scorer.py` decide what the fact costs.
 4. **No regression tests.** The Infostud and Workable clients parse other
    people's page structures and will break silently when those change. A
    test asserting a non-empty result would catch it.
+5. **The résumé parser is tuned to the CV this was forked from.**
+   `resume_parser.py` looks for the headings "ABOUT ME", "PROFESSIONAL
+   EXPERIENCE" and "SKILLS AND OTHERS", and anchors the header on the literal
+   text "Mumbai, India" before falling back to the first email. This CV says
+   "PROFESSIONAL SUMMARY" and "EDUCATION & CERTIFICATIONS", so the generated
+   header prints the name with the title, city and phone number run into it,
+   and the experience and skills sections are suspect. Education no longer
+   depends on it (below); the header, experience and skills still do.
+
+## Résumé content rule
+
+A CV states only what the profile states. Education comes from
+`resume.parsedData.education`, the list the profile form edits, written as
+`Degree — School | Year`, and the first readable entry is used. There is no
+fallback: an earlier one printed a university in Hyderabad, a 2022 graduation
+and a CGPA of 7.0/10 on every generated CV. With no readable entry the section
+is left out and `run_tailor.py` warns, and it records the warning under the
+job's `tailoredAssets.warnings`. `tests/python/test_resume_education.py` pins
+this. Do not add a default for a missing field; leave it blank and flag it.
+
+The browser copy of the profile is the master (`localStorage`, mirrored to
+`data/profile/candidate-profile.json` on sync), so a correction made only in
+the disk file is overwritten at the next sync. Fix profile data in the
+profile form.
 
 ## Next, in order
 

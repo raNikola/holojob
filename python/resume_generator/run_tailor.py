@@ -131,6 +131,8 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     out_dir.mkdir(parents=True, exist_ok=True)
 
     ctx = build_resume_context(profile, intelligence, job)
+    # Gaps in the profile that the CV cannot cover without inventing something.
+    warnings = list(ctx.get("warnings") or [])
     facts = build_canonical_facts(profile, intelligence)
     content_engine = "rule-based"
     llm_paragraphs = None
@@ -139,6 +141,8 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     title = job.get("title") or "role"
     company = job.get("company") or "company"
     print(f"-> Tailoring: {title} @ {company}", flush=True)
+    for warning in warnings:
+        print(f"  ! {warning}", flush=True)
 
     if use_llm:
         print("  · Claude Code: drafting summary, bullets, cover letter…", flush=True)
@@ -237,6 +241,7 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "contentEngine": content_engine,
         "llmIssues": llm_issues,
+        "warnings": warnings,
         "provenancePassed": passed,
         "provenanceIssues": issues,
         "validation": validation,

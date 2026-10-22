@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 import re
 
-from resume_parser import parse_resume_from_profile
+from resume_parser import education_problem, parse_resume_from_profile
 from text_utils import normalize_text
 
 
@@ -210,14 +210,13 @@ def build_resume_context(profile: dict, intelligence: dict, job: dict) -> dict:
         list(canonical_skills),
     )
 
+    # Whatever the profile states, and nothing else: with no readable entry the
+    # templates leave the section out and the warning below tells the candidate.
     education = parsed.get("education") or {}
-    if not education.get("school"):
-        education = {
-            "school": "Jawaharlal Nehru Technological University Hyderabad",
-            "degree": "Bachelor of Technology in Computer Science Engineering",
-            "graduated": "2022",
-            "cgpa": "7.0/10",
-        }
+    warnings = []
+    problem = education_problem(education)
+    if problem:
+        warnings.append(f"education: {problem}")
 
     contact = parsed.get("contact") or ""
     contact_items = [p.strip() for p in contact.split("|") if p.strip()] or list(filter(None, [
@@ -237,6 +236,7 @@ def build_resume_context(profile: dict, intelligence: dict, job: dict) -> dict:
         "experience": experience,
         "skill_categories": skill_categories,
         "education": education,
+        "warnings": warnings,
         "keywords": keywords,
         "target_title": job.get("title") or "",
         "target_company": job.get("company") or "",

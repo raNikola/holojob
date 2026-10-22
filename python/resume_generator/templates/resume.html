@@ -142,17 +142,21 @@
   </div>
   {% endif %}
 
-  {% if education and education.school %}
+  {% if education and (education.school or education.degree) %}
   <div class="section">
     <h2>Education</h2>
+    {% if education.school %}
     <div class="edu-row">
       <div class="institution">{{ education.school }}</div>
       <div class="right grad">{% if education.graduated %}Graduated {{ education.graduated }}{% endif %}</div>
     </div>
+    {% endif %}
+    {% if education.degree %}
     <div class="edu-row">
       <div class="degree">{{ education.degree }}</div>
-      <div class="right cgpa">{% if education.cgpa %}CGPA: {{ education.cgpa }}{% endif %}</div>
+      <div class="right cgpa">{% if education.cgpa %}CGPA: {{ education.cgpa }}{% endif %}{% if not education.school and education.graduated %}Graduated {{ education.graduated }}{% endif %}</div>
     </div>
+    {% endif %}
   </div>
   {% endif %}
 
