@@ -39,6 +39,6 @@ def resolve_search_config(intelligence: dict, *, country: str | None, locations:
             country
             or strategy.get("country")
             or job_fit.get("country")
-            or "India"
+            or "Serbia"
         ),
     }
