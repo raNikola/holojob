@@ -1,4 +1,5 @@
 import { countryOfLocation } from '../../utils/searchCountry.js'
+import { normalizeAllowedLocations, normalizeRelocation, normalizeWorkAuthorization } from '../../utils/workAuthorization.js'
 
 function dedupe(arr) {
   return [...new Set(arr.filter(Boolean))]
@@ -185,6 +186,12 @@ export function buildJobFitPreferences(ctx) {
     // The country job discovery searches in, from where the candidate lives; empty
     // when the location does not name one, and discovery then asks for it.
     country: countryOfLocation(ctx.location),
+    // Where the candidate may work without sponsorship, where they will take a
+    // job, and whether they would move. Scoring reads these; the engine only
+    // copies what the candidate entered.
+    workAuthorization: normalizeWorkAuthorization(ctx.basicProfile?.workAuthorization),
+    allowedLocations: normalizeAllowedLocations(ctx.basicProfile?.allowedLocations),
+    relocation: normalizeRelocation(ctx.basicProfile?.relocation),
     preferredLocations: ctx.preferredLocations.length ? ctx.preferredLocations : (ctx.location ? [ctx.location] : []),
     remotePreference: ctx.remotePreference,
     salaryExpectation: ctx.salaryExpectation,

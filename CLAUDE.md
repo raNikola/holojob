@@ -66,7 +66,9 @@ source, because LinkedIn publishes one role as several ads, one per city.
 
 **Enrichment** (`python/job_scoring/enrich_jobs.py`). An LLM reads each ad
 and reports facts: work mode, role track, seniority, years required,
-must-haves, listing-quality flags. It never scores and never sees the
+must-haves, listing-quality flags, and the job's country, where a remote hire
+may live, and what the ad says about visa sponsorship. It never scores and
+never sees the
 candidate. Results cache on the job under `llmFacts`, keyed by a fingerprint
 of the ad, so reruns are free. `llm_client.py` holds a provider table —
 OpenAI, DeepSeek, OpenRouter, Groq, Ollama, a `custom` endpoint, and the
@@ -134,8 +136,12 @@ model, have it return a fact, and let `scorer.py` decide what the fact costs.
   `llmFacts.workMode`. JobSpy exposes only `isRemote` and LinkedIn leaves it
   unset, so seven genuinely remote ads were scoring as "not remote". Onsite
   outside Niš scores 15: for this candidate that is not a weaker match, it
-  is an unusable job. `preferredLocations` must NOT contain "Serbia" —
-  matching is substring, so it would hand every Belgrade office 90 points.
+  is an unusable job. `preferredLocations` means commute cities only. A
+  country there would match every office in it by substring (one did: 12 of
+  27 jobs, Belgrade onsite included, scored 90), so countries are now ignored
+  as commute places. Onsite or hybrid somewhere the candidate would relocate
+  to (`relocation`: none, abroad, anywhere) scores 60; the owner's is
+  `abroad`, so Belgrade stays 15 and Berlin is 60.
 - **role_match** matches contiguous substrings, not token subsets. Token
   subsets scored "Product Compliance Manager" as a perfect Product Manager
   match, and a single shared word like "lead" passed a 50% overlap test.
@@ -150,6 +156,19 @@ model, have it return a fact, and let `scorer.py` decide what the fact costs.
 - **scorer.py** caps a job at 50 when `llmFacts.roleTrack` is neither
   `product_management` nor `product_ownership` — delivery or programme work
   wearing a product title.
+- **work_authorization.py** gives each job one status, and scorer.py caps it
+  the same way: `needs_visa_refused` 25 (the ad will not sponsor),
+  `outside_allowed` 40 (a location the candidate excluded), `needs_visa_silent`
+  45 (the ad does not mention sponsorship; Weak, still reviewable).
+  `authorized`, `sponsored` and `unknown` are not capped, and nothing is ever
+  hidden. The candidate's side is `jobFitPreferences.workAuthorization`
+  (where they may work without sponsorship, and whether they are open to a
+  sponsored role) and `allowedLocations`, all edited in the profile form.
+  None has a default: no work rights means the visa is not checked, and an
+  empty `allowedLocations` gates nothing, which is the owner's setting: the
+  US and the EU are live options, and authorization affects the score only.
+  `geography.py` resolves places through `src/data/geography.json`, shared
+  with the UI; a place it does not know is unknown, and unknown never caps.
 - **text_utils.py** folds diacritics, so "Niš" and "Nis" compare equal.
   Serbian boards spell both ways and a failed match is silent.
 

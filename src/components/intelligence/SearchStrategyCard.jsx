@@ -1,4 +1,43 @@
 import Card from '../ui/Card'
+import geography from '../../data/geography.json'
+
+const NAMES = Object.fromEntries([
+  ['REMOTE', 'Remote'],
+  ...Object.entries(geography.regions).map(([code, region]) => [code, region.name]),
+  ...geography.countries.map(({ code, name }) => [code, name]),
+])
+const name = (code) => NAMES[code] || code
+const RELOCATION = { none: 'Not open to relocating', abroad: 'Open to relocating abroad', anywhere: 'Open to relocating anywhere' }
+
+function WorkAuthorizationSummary({ prefs }) {
+  const auth = prefs?.workAuthorization || {}
+  const holds = auth.holds || []
+  const allowed = prefs?.allowedLocations || []
+  return (
+    <Card title="Where you can work (used for scoring)" className="!p-4">
+      <dl className="space-y-2 text-sm">
+        <div>
+          <dt className="text-xs text-stone-500">Work without a visa in</dt>
+          <dd className="text-stone-800 dark:text-stone-200">
+            {holds.length ? holds.map((h) => `${name(h.jurisdiction)}${h.basis ? ` (${h.basis.replace('_', ' ')})` : ''}`).join(', ') : 'Not set: visas are not checked'}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-stone-500">Sponsored roles</dt>
+          <dd className="text-stone-800 dark:text-stone-200">{auth.openToSponsorship ? 'Open to them' : 'Not open to them'}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-stone-500">Relocation</dt>
+          <dd className="text-stone-800 dark:text-stone-200">{RELOCATION[prefs?.relocation] || RELOCATION.none}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-stone-500">Takes jobs in</dt>
+          <dd className="text-stone-800 dark:text-stone-200">{allowed.length ? allowed.map(name).join(', ') : 'Any location'}</dd>
+        </div>
+      </dl>
+    </Card>
+  )
+}
 
 function QueryList({ title, items }) {
   if (!items?.length) return null
@@ -38,6 +77,7 @@ export default function SearchStrategyCard({ intelligence }) {
           </div>
         </Card>
       </div>
+      <WorkAuthorizationSummary prefs={intelligence.jobFitPreferences} />
       <Card title="Scoring weights (for Module 3 matching)" className="!p-4">
         <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
           {Object.entries(intelligence.scoringWeights || {}).map(([k, v]) => (

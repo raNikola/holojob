@@ -30,6 +30,16 @@
  * @property {string} [salaryExpectation]
  * @property {string} [linkedin]
  * @property {LanguageEntry[]} [languages]
+ * @property {WorkAuthorization} [workAuthorization]
+ * @property {string[]} [allowedLocations] Country, region or REMOTE codes; empty gates nothing.
+ * @property {'none' | 'abroad' | 'anywhere'} [relocation]
+ */
+
+/**
+ * @typedef {Object} WorkAuthorization
+ * @property {{ jurisdiction: string, basis: 'citizen' | 'permanent_resident' | 'work_permit' | 'other' | '' }[]} holds
+ *   Where the candidate may work without sponsorship: ISO country codes, or EU.
+ * @property {boolean} openToSponsorship
  */
 
 /**

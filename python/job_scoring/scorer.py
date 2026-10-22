@@ -14,6 +14,7 @@ from labels import apply_recommendation, match_label, priority
 from llm_enhancer import NoOpEnhancer
 from red_flags import detect_red_flags
 from corpus import build_idf
+import work_authorization as wa
 
 DEFAULT_WEIGHTS = {
     "roleMatch": 25,
@@ -29,6 +30,19 @@ DEFAULT_WEIGHTS = {
 # wrong job, so it is capped in code rather than argued down by weights.
 ACCEPTABLE_TRACKS = {"product_management", "product_ownership"}
 OFF_TRACK_CAP = 50
+
+# A job the candidate may not legally take, or that sits outside the locations
+# they chose, is capped the same way: never hidden, never argued down by
+# weights. Statuses come from work_authorization.py; these numbers are what
+# each costs. 25 is Reject (the ad refuses sponsorship); 45 is Weak and stays
+# reviewable (the ad is silent, and many employers sponsor when asked); 40 is
+# a location the candidate excluded themselves. Sponsored, authorized and
+# unknown are not capped.
+WORK_AUTHORIZATION_CAPS = {
+    wa.NEEDS_VISA_REFUSED: 25,
+    wa.OUTSIDE_ALLOWED: 40,
+    wa.NEEDS_VISA_SILENT: 45,
+}
 
 
 def _weighted_total(dimensions: dict[str, int], weights: dict[str, int]) -> int:
@@ -68,6 +82,11 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     if off_track:
         match_score = min(match_score, OFF_TRACK_CAP)
 
+    authorization = wa.authorization_status(job, intelligence.get("jobFitPreferences") or {})
+    authorization_cap = WORK_AUTHORIZATION_CAPS.get(authorization["status"])
+    if authorization_cap is not None:
+        match_score = min(match_score, authorization_cap)
+
     breakdown = {
         k: {
             "raw": dimensions[k],
@@ -82,6 +101,10 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         reasons.append(f"Capped: the ad describes {track}, not a product role")
     if red_flags:
         reasons.extend([f"Red flag: {f}" for f in red_flags])
+    if authorization_cap is not None:
+        reasons.append(f"Capped: {authorization['reason']}")
+    elif authorization["status"] in (wa.SPONSORED, wa.UNKNOWN):
+        reasons.append(f"Work authorization: {authorization['reason']}")
 
     apply_rec = apply_recommendation(match_score, red_flags)
     result = {
@@ -101,10 +124,11 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         "redFlags": red_flags,
         "reasons": reasons,
         "scoreBreakdown": breakdown,
+        "workAuthorization": authorization,
         # True when a hard rule applies to the job, whether or not it lowered
         # this particular score. The enhancer never lifts such a job, so caps
         # stay decided here.
-        "hardCapped": bool(red_flags) or off_track,
+        "hardCapped": bool(red_flags) or off_track or authorization_cap is not None,
     }
     return enhancer.enhance(job, result, intelligence)
 

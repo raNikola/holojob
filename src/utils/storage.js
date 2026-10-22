@@ -1,6 +1,7 @@
 import { validateProfileForIntelligence } from '../modules/intelligence/intelligenceValidators'
 import { loadIntelligence } from '../modules/intelligence/intelligenceExport'
 import { normalizeLanguages } from './languages'
+import { normalizeAllowedLocations, normalizeRelocation, normalizeWorkAuthorization } from './workAuthorization'
 
 export const STORAGE_KEY = 'job-dashboard-candidate-profile'
 
@@ -14,6 +15,9 @@ export function getDefaultProfile() {
       experienceYears: '', targetRoles: [], preferredLocations: [],
       remotePreference: '', salaryExpectation: '',
       languages: [],
+      workAuthorization: { holds: [], openToSponsorship: false },
+      allowedLocations: [],
+      relocation: 'none',
     },
     resume: {
       fileName: '', uploadedAt: '', rawText: '',
@@ -117,6 +121,9 @@ export function loadProfile() {
         ...defaults.basicProfile,
         ...stored.basicProfile,
         languages: normalizeLanguages(stored.basicProfile?.languages),
+        workAuthorization: normalizeWorkAuthorization(stored.basicProfile?.workAuthorization),
+        allowedLocations: normalizeAllowedLocations(stored.basicProfile?.allowedLocations),
+        relocation: normalizeRelocation(stored.basicProfile?.relocation),
       },
     }
     const migrated = migrateQuestionnaireAnswers(parsed)

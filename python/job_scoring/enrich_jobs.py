@@ -32,6 +32,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+from geography import WORLDWIDE, is_known  # noqa: E402
 from llm_client import (  # noqa: E402
     LlmRefused,
     LlmUnavailable,
@@ -43,7 +44,7 @@ JOBS_PATH = ROOT / "data" / "jobs" / "discovered_jobs.json"
 
 # Bump when the prompt changes: it is part of the fingerprint, so every ad
 # is read again rather than served from a cache built by an older question.
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 
 # Everything extracted here is stated in the opening half of an ad. The rest
 # is benefits copy and equal-opportunity boilerplate.
@@ -62,6 +63,7 @@ ROLE_TRACKS = {
     "other",
 }
 SENIORITIES = {"junior", "mid", "senior", "lead", "head", "unclear"}
+VISA_SPONSORSHIP = {"offered", "not_offered", "not_mentioned"}
 
 # Enforced by providers that support JSON schema; the rest get json_object
 # and _coerce catches the difference.
@@ -82,6 +84,10 @@ FACT_SCHEMA = {
             "nice_to_haves",
             "domain",
             "listing_quality_flags",
+            "job_country",
+            "remote_eligibility",
+            "visa_sponsorship",
+            "visa_evidence",
         ],
         "properties": {
             "work_mode": {"type": "string", "enum": sorted(WORK_MODES)},
@@ -94,6 +100,10 @@ FACT_SCHEMA = {
             "nice_to_haves": {"type": "array", "items": {"type": "string"}},
             "domain": {"type": ["string", "null"]},
             "listing_quality_flags": {"type": "array", "items": {"type": "string"}},
+            "job_country": {"type": ["string", "null"]},
+            "remote_eligibility": {"type": "array", "items": {"type": "string"}},
+            "visa_sponsorship": {"type": "string", "enum": sorted(VISA_SPONSORSHIP)},
+            "visa_evidence": {"type": ["string", "null"]},
         },
     },
 }
@@ -126,7 +136,11 @@ Return ONLY a JSON object of this exact shape, with no prose around it:
   "must_haves": ["<up to 8 stated requirements>"],
   "nice_to_haves": ["<up to 6>"],
   "domain": "<one or two words for the industry, or null>",
-  "listing_quality_flags": ["<up to 4 problems with the ad itself>"]
+  "listing_quality_flags": ["<up to 4 problems with the ad itself>"],
+  "job_country": "<ISO 3166 two-letter code of the country the role is based in, or null>",
+  "remote_eligibility": ["<for a remote role: ISO codes, \"EU\" or \"WORLDWIDE\">"],
+  "visa_sponsorship": "offered" | "not_offered" | "not_mentioned",
+  "visa_evidence": "<the ad's own sentence about visas or the right to work, or null>"
 }}
 
 Rules:
@@ -148,6 +162,20 @@ one. "unclear" is the correct answer far more often than "onsite".
 4. listing_quality_flags are faults in the advertisement: demanding more \
 years of a technology than it has existed, no named responsibilities, a \
 title that contradicts the body.
+
+5. job_country is where the role is based, from the location line or the ad's \
+own words, as a two-letter ISO code (Germany is "DE"). null for a remote role \
+with no base, or when the ad does not say.
+
+6. remote_eligibility is, for a remote role, where the ad says a hire must \
+live or be allowed to work: ISO codes, "EU" for the EU or EEA, or \
+["WORLDWIDE"] when it says anywhere. [] when the ad does not say, and for a \
+role that is not remote.
+
+7. visa_sponsorship is "offered" only where the ad says it sponsors or helps \
+with a visa or work permit. "not_offered" where it says it does not, or that \
+applicants must already have the right to work there. Otherwise \
+"not_mentioned".
 """
 
 
@@ -179,6 +207,10 @@ def _coerce(raw: dict) -> dict:
     if not isinstance(years, int) or years < 0 or years > 40:
         years = None
 
+    def code(value) -> str | None:
+        value = str(value or "").strip().upper()
+        return value if is_known(value) else None
+
     def strings(key: str, limit: int) -> list[str]:
         items = raw.get(key)
         if not isinstance(items, list):
@@ -196,6 +228,15 @@ def _coerce(raw: dict) -> dict:
         "niceToHaves": strings("nice_to_haves", 6),
         "domain": raw.get("domain") or None,
         "listingFlags": strings("listing_quality_flags", 4),
+        # Codes the geography table does not know are dropped, not guessed at:
+        # an unknown country never caps a score.
+        "jobCountry": code(raw.get("job_country")),
+        "remoteEligibility": [
+            c for c in (str(v).strip().upper() for v in raw.get("remote_eligibility") or [])
+            if c == WORLDWIDE or is_known(c)
+        ][:6],
+        "visaSponsorship": one_of("visa_sponsorship", VISA_SPONSORSHIP, "not_mentioned"),
+        "visaEvidence": raw.get("visa_evidence") or None,
     }
 
 
