@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import re
 
+from candidate_text import narrative_answer, own_sentences
 from profile_languages import languages_text, normalize_languages
 from resume_parser import education_problem, parse_resume_from_profile, skill_label
 from text_utils import normalize_text
@@ -30,18 +31,22 @@ def _jd_keywords(job: dict, intelligence: dict, limit: int = 15) -> list[str]:
     return keywords[:limit] or matched[:10] or high[:10]
 
 
-def _candidate_summary(about: str, intelligence: dict) -> str:
+def _candidate_summary(about: str, profile: dict) -> str:
     """The candidate's own summary, as written.
 
     Rule-based tailoring does not write a summary for them: any sentence it
     composed would state things the candidate never said. It is the summary
-    section of their CV, else the narrative they gave the questionnaire, else
-    empty, and the context then warns.
+    section of their CV, else their questionnaire career summary read from the
+    profile, else empty, and the context then warns. The intelligence file's
+    careerNarrative is not used: without that answer the engine fills it from a
+    template or a "pending" placeholder. Sentences with a banned phrase are left
+    out, never edited.
     """
-    if about.strip():
-        return about.strip()
-    summary = intelligence.get("candidateSummary") or {}
-    return (summary.get("careerNarrative") or "").strip()
+    for source in (about, narrative_answer(profile)):
+        sentences = own_sentences(source)
+        if sentences:
+            return " ".join(sentences)
+    return ""
 
 
 # Part 5: "4-6 bullets for recent roles". The most recent roles get the most room.
@@ -162,7 +167,7 @@ def build_resume_context(profile: dict, intelligence: dict, job: dict) -> dict:
     canonical_skills = set(resume_parsed.get("skills") or [])
     keywords = _jd_keywords(job, intelligence)
 
-    about = _candidate_summary(parsed.get("about_me") or "", intelligence)
+    about = _candidate_summary(parsed.get("about_me") or "", profile)
 
     experience = []
     for index, exp in enumerate(parsed.get("experience") or []):

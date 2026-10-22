@@ -47,6 +47,9 @@
       font-size: 10pt; line-height: 14.5pt; text-align: justify;
       margin-top: 9pt;
     }
+    /* The candidate's CV bullets, quoted whole under a role's lead-in. */
+    ul.para-bullets { margin-top: 4pt; padding-left: 14pt; }
+    ul.para-bullets li { font-size: 10pt; line-height: 14.5pt; text-align: justify; margin-top: 2pt; }
     .signoff { font-size: 10pt; line-height: 14.5pt; margin-top: 15pt; }
     .signature { font-size: 10pt; font-weight: bold; line-height: 14.5pt; margin-top: 4pt; }
   </style>
@@ -70,7 +73,8 @@
   <div class="salutation">{{ salutation }}</div>
 
   {% for p in paragraphs %}
-  <p class="para">{{ p }}</p>
+  {% if p.text %}<p class="para">{{ p.text }}</p>{% endif %}
+  {% if p.bullets %}<ul class="para-bullets">{% for b in p.bullets %}<li>{{ b }}</li>{% endfor %}</ul>{% endif %}
   {% endfor %}
 
   <div class="signoff">Sincerely,</div>

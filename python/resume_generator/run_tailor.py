@@ -174,6 +174,9 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     md = render_resume_md(ctx)
     html = render_resume_html({**ctx, "fit": {}})
     cl_ctx = build_cover_letter_context(profile, intelligence, job, ctx, paragraphs_override=llm_paragraphs)
+    for warning in cl_ctx.get("warnings") or []:
+        warnings.append(warning)
+        print(f"  ! {warning}", flush=True)
     cover_md = render_cover_letter_md(cl_ctx)
 
     print("  · Validating provenance (no invented facts)…", flush=True)
