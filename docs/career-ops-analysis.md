@@ -89,4 +89,4 @@ Prompt rules: never invent experience/metrics/skills; cite CV lines; human revie
 | `cv.md` | `data/profile/candidate-profile.json` |
 | `modes/_profile.md` | `candidate-intelligence.json` |
 | JD | `discovered_jobs.json` → title, description |
-| Weights | `scoringWeights` (25/25/15/15/10/10) |
+| Weights | `scoringWeights` (25/25/20/15/10/5) |
