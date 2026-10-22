@@ -34,7 +34,7 @@ PROVIDER_GROUPS = {
     "ats": ["greenhouse", "lever", "ashby"],
     "remote": ["remoteok", "wwr", "workable", "jobspy"],
     "startup": ["yc", "wellfound", "ashby"],
-    "serbia": ["jobspy", "infostud", "workable"],
+    "serbia": ["jobspy", "infostud", "workable", "greenhouse", "lever", "ashby"],
 }
 
 

@@ -237,8 +237,14 @@ profile form.
 2. ~~Phase three: fit judgement~~ — built, see "Fit judgement" above. Still
    to do: judge a real run and check the adjustments against your own sense
    of the jobs.
-3. Point the existing Greenhouse / Lever / Ashby providers at a real
-   `companies/` list. The owner's own application history shows 12 of ~40
-   applications went through those three ATS platforms — JetBrains three
-   times — and the providers are already written and unused.
+3. ~~Greenhouse / Lever / Ashby~~ — built: `companies/` holds only companies
+   from the owner's application history whose board slug resolved against the
+   live API, and the three providers are in the `serbia` group. Not covered:
+   Revolut (Workable, already reached by the `workable` search), Nutanix
+   (Jobvite), Openprovider (Recruitee), Proxify, Cleverbridge, DataWalk (no
+   supported ATS found). Lever's EU instance (`api.eu.lever.co`, Everseen) is
+   tried as a fallback; Fundraise Up's board is `fundraiseup-serbia`, not
+   `fundraiseup`. These providers match search terms against the whole ad, not
+   the title, so engineering ads that mention "product manager" come through
+   (scoring caps them at off-track); `role_filter.py` would tighten that.
 4. A nightly cron for `--providers serbia`, then enrich, then score.
