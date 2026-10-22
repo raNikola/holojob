@@ -1,109 +1,185 @@
-"""Skill match dimension."""
+"""Skill match dimension.
+
+Two signals: one scored, one reported.
+
+The keyword bank says what the candidate brings. Matching is per token, with
+crude singularisation, because banks are written as polished phrases
+("Cross-functional Leadership") while ads say "cross-functional teams".
+Each keyword is weighted by how rare its tokens are across this run's jobs,
+so "Product Management" -- in nearly every listing -- earns almost nothing.
+
+The must-haves say what this particular ad demands. They come from the
+extraction pass, so they exist only after enrich_jobs.py has run. They do not
+move the score -- counting shared tokens cannot tell whether a sentence-long
+requirement is met -- but what they leave uncovered is reported first in
+missingSkills, because that is what a tailored resume has to answer.
+"""
 
 from __future__ import annotations
 
-from text_utils import normalize_text, tokenize
+from corpus import flat_idf
+from text_utils import term_tokens
+
+HIGH_WEIGHT = 3
+MEDIUM_WEIGHT = 2
+SUPPORTING_WEIGHT = 1
+
+MIN_COVERAGE = 0.5
+
+# Share of the achievable keyword mass that earns the ceiling. Coverage above
+# it clamps to 100, so it must sit above what real ads reach or the top of the
+# distribution collapses into a tie: at 0.22, twelve of 23 jobs (coverage
+# 0.22-0.30) all scored exactly 100. Calibrated against the 2026-10-21 run,
+# where the best ad covers 0.30; 0.32 puts that near 95 and leaves headroom.
+TARGET_COVERAGE = 0.32
+
+# A token this common across the corpus carries no information about fit, so
+# it is dropped from requirement matching rather than diluting it.
+GENERIC_IDF_FLOOR = 0.25
+
+# How much of the final score the ad's own requirements carry, when it has any.
+MUST_HAVE_SHARE = 0.5
+
+FLOOR = 20
+CEILING = 100
 
 
-def _all_skills(intelligence: dict) -> list[str]:
-    skills_map = intelligence.get("skillsMap") or {}
+def _bank(intelligence: dict) -> tuple[list[str], list[str], list[str]]:
     bank = intelligence.get("atsKeywordBank") or {}
-    skills: list[str] = []
-    for key in skills_map:
-        if isinstance(skills_map[key], list):
-            skills.extend(skills_map[key])
-    skills.extend(bank.get("highPriority") or [])
-    skills.extend(bank.get("mediumPriority") or [])
-    seen = set()
-    out = []
-    for s in skills:
-        sl = (s or "").strip()
-        if sl and sl.lower() not in seen:
-            seen.add(sl.lower())
-            out.append(sl)
-    return out
+    high = [k for k in (bank.get("highPriority") or []) if k]
+    medium = [k for k in (bank.get("mediumPriority") or []) if k]
+    supporting = [k for k in (bank.get("supportingKeywords") or []) if k]
+
+    if not (high or medium or supporting):
+        skills_map = intelligence.get("skillsMap") or {}
+        flat: list[str] = []
+        for value in skills_map.values():
+            if isinstance(value, list):
+                flat.extend(v for v in value if v)
+        medium = flat
+
+    return high, medium, supporting
 
 
-def _extract_jd_skill_tokens(jd_text: str, candidate_skills: list[str]) -> list[str]:
-    """Return the subset of candidate skills that appear in the JD text."""
-    matched = []
-    seen = set()
-    for skill in candidate_skills:
-        sk = skill.lower().strip()
-        sk_nodot = sk.replace(".", "")
-        if not sk:
+def _candidate_tokens(intelligence: dict) -> set[str]:
+    """Every term the candidate can evidence, flattened into tokens."""
+    parts: list[str] = []
+
+    for section in ("skillsMap", "atsKeywordBank"):
+        container = intelligence.get(section) or {}
+        for value in container.values():
+            if isinstance(value, list):
+                parts.extend(str(v) for v in value if v)
+
+    for key in ("resumeKeywords", "candidateStrengths"):
+        parts.extend(str(v) for v in (intelligence.get(key) or []) if v)
+
+    experience = intelligence.get("experienceMap") or {}
+    for key in ("domainsWorkedIn", "projectHighlights", "ownershipExamples"):
+        parts.extend(str(v) for v in (experience.get(key) or []) if v)
+
+    return term_tokens(" ".join(parts))
+
+
+def _credit(keywords, weight, jd_tokens, idf):
+    """Return (earned credit, keywords that cleared MIN_COVERAGE, achievable)."""
+    earned = 0.0
+    achievable = 0.0
+    hits: list[str] = []
+
+    for keyword in keywords:
+        kw_tokens = term_tokens(keyword)
+        if not kw_tokens:
             continue
-        if (sk in jd_text or sk_nodot in jd_text) and sk not in seen:
-            seen.add(sk)
-            matched.append(skill)
-    return matched
+        rarity = sum(idf(token) for token in kw_tokens) / len(kw_tokens)
+        achievable += weight * rarity
+
+        coverage = len(kw_tokens & jd_tokens) / len(kw_tokens)
+        if coverage >= MIN_COVERAGE:
+            earned += weight * rarity * coverage
+            hits.append(keyword)
+
+    return earned, hits, achievable
 
 
-def _extract_jd_required_skills(jd_text: str) -> list[str]:
-    """Heuristically pull skill tokens from the JD itself.
+def _must_have_score(must_haves, candidate_tokens, idf):
+    """Score the candidate against this ad's own stated requirements.
 
-    We look for lines/phrases after common requirement markers.  This gives us
-    the set of skills the *job* actually asks for, so we can measure what
-    fraction the candidate covers.
+    Returns (score, covered, uncovered) or (None, [], []) when the ad listed
+    nothing usable -- a requirement made only of corpus-generic words says
+    nothing either way.
     """
-    import re
-    # Collect short technical tokens: words of 2-20 chars, possibly with +/./#
-    pattern = re.compile(
-        r"\b(?:java(?:script)?|typescript|python|golang?|rust|ruby|php|swift|kotlin"
-        r"|react(?:\.js)?|vue(?:\.js)?|angular|next\.js|node(?:\.js)?|express"
-        r"|django|flask|fastapi|spring|rails|laravel"
-        r"|postgres(?:ql)?|mysql|mongodb|redis|elasticsearch|dynamo\s*db|sqlite"
-        r"|aws|gcp|azure|docker|kubernetes|k8s|terraform|ci[/\-]?cd|jenkins"
-        r"|git(?:hub)?|linux|nginx|graphql|rest\s*api|grpc|kafka|rabbitmq"
-        r"|machine\s*learning|deep\s*learning|tensorflow|pytorch|nlp|llm"
-        r"|html|css|sass|tailwind|typescript|sql|nosql|microservices"
-        r"|react\s*native|flutter|android|ios|solidity|web3)\b",
-        re.I,
+    earned = 0.0
+    achievable = 0.0
+    covered: list[str] = []
+    uncovered: list[str] = []
+
+    for requirement in must_haves:
+        tokens = {t for t in term_tokens(requirement) if idf(t) >= GENERIC_IDF_FLOOR}
+        if not tokens:
+            continue
+        weight = sum(idf(token) for token in tokens) / len(tokens)
+        achievable += weight
+
+        coverage = len(tokens & candidate_tokens) / len(tokens)
+        earned += weight * coverage
+        if coverage >= MIN_COVERAGE:
+            covered.append(requirement)
+        else:
+            uncovered.append(requirement)
+
+    if achievable <= 0:
+        return None, [], []
+
+    ratio = min(1.0, earned / achievable)
+    return FLOOR + (CEILING - FLOOR) * ratio, covered, uncovered
+
+
+def score_skill_match(
+    job: dict, intelligence: dict, idf=None
+) -> tuple[int, list[str], list[str], list[str]]:
+    idf = idf or flat_idf
+    high, medium, supporting = _bank(intelligence)
+    if not (high or medium or supporting):
+        return 50, ["No keyword bank in intelligence"], [], []
+
+    jd_tokens = term_tokens(f"{job.get('title', '')} {job.get('description', '')}")
+    if not jd_tokens:
+        return FLOOR, ["Empty job description"], [], []
+
+    high_earned, high_hits, high_max = _credit(high, HIGH_WEIGHT, jd_tokens, idf)
+    med_earned, med_hits, med_max = _credit(medium, MEDIUM_WEIGHT, jd_tokens, idf)
+    sup_earned, sup_hits, sup_max = _credit(
+        supporting, SUPPORTING_WEIGHT, jd_tokens, idf
     )
-    found = []
-    seen = set()
-    for m in pattern.finditer(jd_text):
-        tok = m.group(0).lower().replace(" ", "")
-        if tok not in seen:
-            seen.add(tok)
-            found.append(m.group(0))
-    return found
 
+    earned = high_earned + med_earned + sup_earned
+    target = (high_max + med_max + sup_max) * TARGET_COVERAGE
+    bank_ratio = min(1.0, earned / target) if target > 0 else 0.0
+    bank_score = FLOOR + (CEILING - FLOOR) * bank_ratio
 
-def score_skill_match(job: dict, intelligence: dict) -> tuple[int, list[str], list[str], list[str]]:
-    candidate_skills = _all_skills(intelligence)
-    jd = normalize_text(f"{job.get('title', '')} {job.get('description', '')}")
+    reasons = [
+        f"Keyword coverage: {len(high_hits)}/{len(high)} high, "
+        f"{len(med_hits)}/{len(medium)} medium, "
+        f"{len(sup_hits)}/{len(supporting)} supporting"
+    ]
+    matched = high_hits + med_hits + sup_hits
+    missing = [k for k in high if k not in high_hits]
 
-    if not candidate_skills:
-        return 50, ["No skills in intelligence"], [], []
+    must_haves = (job.get("llmFacts") or {}).get("mustHaves") or []
+    must_score, covered, uncovered = _must_have_score(
+        must_haves, _candidate_tokens(intelligence), idf
+    )
 
-    # Strategy: measure coverage from the JD's perspective.
-    # 1. Find skills the JD explicitly mentions.
-    jd_required = _extract_jd_required_skills(jd)
+    # Must-haves are reported, never scored: token overlap cannot judge a
+    # requirement like "shipped LLM-powered features". What they leave
+    # uncovered leads missingSkills, which feeds resume tailoring.
+    score = bank_score
+    if must_score is not None:
+        reasons.append(
+            f"Stated requirements, token overlap: "
+            f"{len(covered)}/{len(covered) + len(uncovered)}"
+        )
+        missing = uncovered + missing
 
-    if jd_required:
-        # How many of the JD's required skills does the candidate have?
-        candidate_lower = {s.lower().strip().replace(".", ""): s for s in candidate_skills}
-        covered = []
-        uncovered = []
-        for sk in jd_required:
-            key = sk.lower().strip().replace(".", "")
-            if key in candidate_lower:
-                covered.append(candidate_lower[key])
-            else:
-                uncovered.append(sk)
-        coverage_ratio = len(covered) / len(jd_required)
-        bonus = 10 if len(covered) >= 4 else 0
-        score = int(min(100, max(20, coverage_ratio * 100 + bonus)))
-        reasons = [f"Covers {len(covered)}/{len(jd_required)} JD-required skills"]
-        matched = covered[:20]
-        missing = uncovered[:15]
-    else:
-        # Fallback: check which candidate skills appear anywhere in the JD
-        matched = _extract_jd_skill_tokens(jd, candidate_skills)
-        missing = [s for s in candidate_skills if s not in matched][:15]
-        # Weight by matched count; cap generously since JD may not list skills explicitly
-        score = int(min(100, max(30, len(matched) * 6 + (10 if len(matched) >= 5 else 0))))
-        reasons = [f"Found {len(matched)} candidate skills mentioned in JD"]
-
-    return score, reasons, matched, missing
+    return int(round(score)), reasons, matched[:20], missing[:15]

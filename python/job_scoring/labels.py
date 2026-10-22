@@ -30,8 +30,10 @@ def priority(score: int, apply_rec: str, red_flags: list[str]) -> str:
         return "Reject"
     if any("Avoid role" in f for f in red_flags):
         return "Reject"
-    if score >= 85:
-        return "P1"
+    # P1 is the action bucket "apply now": it starts where apply_recommendation
+    # turns to Apply. The 85 line is already drawn by match_label ("Excellent"),
+    # and the tailor step ranks P1 jobs by score, so a second tier here would
+    # only renumber P2/P3 across the UI without changing what gets worked on.
     if score >= 70:
         return "P1"
     if score >= 55:
