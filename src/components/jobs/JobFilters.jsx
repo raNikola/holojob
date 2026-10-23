@@ -75,6 +75,11 @@ export default function JobFilters({ filters, sites, providers, jobs, onChange }
               value={filters.desiredSalaryMax ?? ''}
               onChange={(e) => onChange({ desiredSalaryMax: e.target.value })}
             />
+            {filters.salaryFromProfile && (
+              <p className="self-end pb-2 text-xs text-stone-500 sm:col-span-2 xl:col-span-3">
+                Salary filters are pre-filled from your profile, so jobs paying less than your minimum are hidden. Clear Min salary to see them with the “Below min salary” badge. Jobs with no readable pay are never hidden.
+              </p>
+            )}
             <SelectField
               label="Match label"
               value={filters.matchLabel}
