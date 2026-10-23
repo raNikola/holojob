@@ -33,6 +33,11 @@ describe('sortRows', () => {
     expect(ids(sortRows(r, { key: 'name', dir: 'asc' }, columns))).toEqual(['y', 'x'])
   })
 
+  it('ignores surrounding whitespace in text', () => {
+    const r = [{ id: 'x', name: 'Beta' }, { id: 'y', name: ' Gamma' }, { id: 'z', name: 'Alpha ' }]
+    expect(ids(sortRows(r, { key: 'name', dir: 'asc' }, columns))).toEqual(['z', 'x', 'y'])
+  })
+
   it('orders ranks by their list, unknown values after the known ones', () => {
     const r = ['P3', 'Reject', 'P1', 'other', 'P2'].map((priority) => ({ id: priority, priority }))
     expect(ids(sortRows(r, { key: 'priority', dir: 'asc' }, columns))).toEqual(['P1', 'P2', 'P3', 'Reject', 'other'])

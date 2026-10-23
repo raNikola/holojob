@@ -30,7 +30,7 @@ function compare(column, a, b) {
     }
     return rank(a) - rank(b)
   }
-  return collator.compare(String(a), String(b))
+  return collator.compare(String(a).trim(), String(b).trim())
 }
 
 export function sortRows(rows, sort, columns) {
