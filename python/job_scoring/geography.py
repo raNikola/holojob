@@ -83,6 +83,23 @@ def resolve_countries(location: str) -> list[str]:
     return found
 
 
+@lru_cache(maxsize=1)
+def _region_names() -> dict[str, str]:
+    data = json.loads(GEOGRAPHY_PATH.read_text(encoding="utf-8"))
+    return {_fold(region["name"]): code for code, region in data["regions"].items()}
+
+
+def place_codes(location: str) -> list[str]:
+    """The country or region codes a search location names.
+
+    "Niš, Serbia" -> ["RS"], "United States" -> ["US"], "Europe" -> ["EUROPE"].
+    A place it does not know gives nothing: unknown places match nothing.
+    """
+    return resolve_countries(location) or [
+        code for code in [_region_names().get(_fold(location))] if code
+    ]
+
+
 def covers(right: str, place: str) -> bool:
     """Whether a work right held for `right` lets the holder work in `place`.
 

@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import importlib.util
 import re
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+from pathlib import Path
 
 from normalize_jobs import _make_job_id
+
+# The scorer's geography table, loaded by path so its sibling modules do not
+# shadow this package's. It is reference data about the world, shared with the
+# UI, and it is how "Europe" or "United States" is told from a job's location.
+_GEOGRAPHY_FILE = Path(__file__).resolve().parents[2] / "job_scoring" / "geography.py"
+_spec = importlib.util.spec_from_file_location("_discovery_geography", _GEOGRAPHY_FILE)
+_geography = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_geography)
 
 
 class JobProvider(ABC):
@@ -80,6 +90,29 @@ def matches_search_terms(job: dict, search_terms: list[str]) -> bool:
     return any(term in haystack for term in terms)
 
 
+def in_searched_place(job: dict, locations: list[str]) -> bool:
+    """Whether the job is in a country or region the search locations name.
+
+    The locations are the candidate's own search places: a region such as
+    "Europe" or "United States" is among them only when the profile says they
+    would relocate there. A job in such a place is wanted, so it is never
+    dropped for being outside the run's home country.
+    """
+    wanted = {
+        code
+        for loc in locations or []
+        if (loc or "").strip().lower() != "remote"
+        for code in _geography.place_codes(loc)
+    }
+    if not wanted:
+        return False
+    return any(
+        _geography.covers(code, country)
+        for code in wanted
+        for country in _geography.resolve_countries(job.get("location") or "")
+    )
+
+
 def matches_location_filters(job: dict, locations: list[str], remote_filters: list[str]) -> bool:
     locs = _normalize_locations(locations)
     if not locs:
@@ -97,7 +130,7 @@ def matches_location_filters(job: dict, locations: list[str], remote_filters: li
     if not non_remote_locs:
         return wants_remote and is_remote
 
-    return any(loc in job_loc or job_loc in loc for loc in non_remote_locs)
+    return any(loc in job_loc or job_loc in loc for loc in non_remote_locs) or in_searched_place(job, locations)
 
 
 def matches_country(job: dict, country: str) -> bool:
@@ -130,5 +163,5 @@ def filter_jobs(
         for job in jobs
         if matches_search_terms(job, search_terms)
         and matches_location_filters(job, locations, remote_filters)
-        and matches_country(job, country)
+        and (matches_country(job, country) or in_searched_place(job, locations))
     ]
