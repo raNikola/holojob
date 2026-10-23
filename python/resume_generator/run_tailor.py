@@ -54,6 +54,11 @@ def parse_args() -> argparse.Namespace:
 
 def _select_jobs(jobs: list[dict], args: argparse.Namespace) -> list[dict]:
     selected = jobs
+    if not (args.job_ids or args.job_id):
+        # A bulk run is a "do something now" action: a closed ad is no longer a
+        # candidate, so tailoring documents for it would waste a model call. A
+        # job the user picks by id is still tailored.
+        selected = [j for j in selected if not j.get("isClosed")]
     if args.job_ids:
         ids = {s.strip() for s in args.job_ids.split(",") if s.strip()}
         selected = [j for j in jobs if j.get("jobId") in ids]

@@ -1,5 +1,6 @@
 import { isFollowUpDue } from './followUps'
 import { TERMINAL_STAGES } from './applicationTracking'
+import { isActionable } from './jobHistory'
 
 export function computeJobStats(jobs) {
   const list = jobs || []
@@ -36,11 +37,13 @@ export function computeJobStats(jobs) {
       scoreSum += job.matchScore
       scoreCount += 1
     }
-    if (job.applyRecommendation === 'Apply') stats.apply += 1
-    if (job.applyRecommendation === 'Maybe') stats.maybe += 1
+    // The action buckets count jobs worth acting on, so a closed ad is left out.
+    const open = isActionable(job)
+    if (open && job.applyRecommendation === 'Apply') stats.apply += 1
+    if (open && job.applyRecommendation === 'Maybe') stats.maybe += 1
     if (job.applyRecommendation === 'Skip') stats.skip += 1
-    if (job.priority === 'P1') stats.p1 += 1
-    if (job.priority === 'P2') stats.p2 += 1
+    if (open && job.priority === 'P1') stats.p1 += 1
+    if (open && job.priority === 'P2') stats.p2 += 1
     if (job.priority === 'P3') stats.p3 += 1
 
     const tracking = job.applicationTracking
