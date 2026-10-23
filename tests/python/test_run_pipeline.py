@@ -143,3 +143,18 @@ def test_the_pipeline_never_judges(env, monkeypatch):
     assert rp.main(["--tailor"]) == 0
     assert commands and not any("--judge" in part for cmd in commands for part in cmd)
     assert inner == ["discovery", "enrichment", "scoring", "tailoring"]
+
+
+def test_unwritable_data_dir_is_a_setup_error_before_anything_runs(env, monkeypatch, capsys):
+    calls = fake_steps(monkeypatch)
+    real_write = rp.Path.write_text
+
+    def deny(self, *a, **k):
+        if self.name == ".write-probe":
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_write(self, *a, **k)
+
+    monkeypatch.setattr(rp.Path, "write_text", deny)
+    assert rp.main([]) == rp.EXIT_SETUP
+    assert calls == []
+    assert "Nothing started" in capsys.readouterr().err
