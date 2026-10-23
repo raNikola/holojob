@@ -28,6 +28,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PY = ROOT / "python"
+sys.path.insert(0, str(PY / "job_scoring"))
+from work_authorization import outside_allowed_before_enrichment  # noqa: E402
 DATA = ROOT / "data"
 INTELLIGENCE = DATA / "intelligence" / "candidate-intelligence.json"
 DISCOVERED = DATA / "jobs" / "discovered_jobs.json"
@@ -101,14 +103,22 @@ def check_discovery(started_at: datetime) -> dict:
     return payload
 
 
-def enriched_share(jobs: list[dict]) -> float:
+def enriched_share(jobs: list[dict], prefs: dict | None = None) -> float:
+    """Share of the jobs that should have facts. Ads enrichment deliberately did
+    not read (outside the candidate's places) are not expected to have them."""
     open_jobs = [j for j in jobs if not j.get("isClosed")] or jobs
+    if prefs:
+        open_jobs = [
+            j for j in open_jobs
+            if (j.get("llmFacts") or {}).get("_fingerprint") or not outside_allowed_before_enrichment(j, prefs)
+        ] or open_jobs
     return sum(1 for j in open_jobs if (j.get("llmFacts") or {}).get("_fingerprint")) / max(1, len(open_jobs))
 
 
 def check_enrichment(minimum: float) -> float:
     jobs = read_json(DISCOVERED).get("jobs") or []
-    share = enriched_share(jobs)
+    prefs = (read_json(INTELLIGENCE).get("jobFitPreferences") or {}) if INTELLIGENCE.exists() else {}
+    share = enriched_share(jobs, prefs)
     if share < minimum:
         raise StepFailed(
             "enrichment",
@@ -128,10 +138,10 @@ def summarize(args, steps: list[dict], enrich_line: str | None, share: float | N
             "history": meta.get("history") or {},
         }
     if enrich_line is not None:
-        m = re.search(r"extracted (\d+), cached (\d+) \((\d+) from the ledger\), failed (\d+)", enrich_line)
+        m = re.search(r"extracted (\d+), cached (\d+) \((\d+) from the ledger\), failed (\d+)(?:, not read (\d+))?", enrich_line)
         summary["enrichment"] = {
             "enrichedShare": None if share is None else round(share, 3),
-            **({"extracted": int(m[1]), "cached": int(m[2]), "failed": int(m[4])} if m else {}),
+            **({"extracted": int(m[1]), "cached": int(m[2]), "failed": int(m[4]), "notRead": int(m[5] or 0)} if m else {}),
         }
     if SCORED.exists():
         scored = read_json(SCORED)
@@ -165,7 +175,7 @@ def print_summary(s: dict) -> None:
     e = s.get("enrichment")
     if e:
         print(f"Enrichment: {e.get('enrichedShare', 0):.0%} of jobs have facts"
-              + (f" ({e['extracted']} read, {e['cached']} cached, {e['failed']} failed)" if "extracted" in e else ""))
+              + (f" ({e['extracted']} read, {e['cached']} cached, {e['failed']} failed, {e.get('notRead', 0)} outside allowed places not read)" if "extracted" in e else ""))
     sc = s.get("scoring")
     if sc:
         print(f"Scoring   : {sc['jobs']} jobs, {sc['hardCapped']} capped by a hard rule, {sc['applyNow']} open P1")

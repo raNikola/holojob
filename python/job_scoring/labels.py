@@ -3,6 +3,16 @@
 from __future__ import annotations
 
 
+# Apply starts at 70: a job below it is not worth an application. P1 is the
+# smaller "apply first" list inside Apply. On the 2026-10-24 run (430 jobs) a P1
+# line of 70 took 175 jobs (41%): role, culture and location are near-constant
+# across the jobs that survive the hard caps, so about 70 points are everyone's
+# and the median uncapped job scores 70. 76 keeps 37 jobs (9%). Recalibrate this
+# one number against a real run; the tailor step and the P1 view follow it.
+APPLY_MIN_SCORE = 70
+P1_MIN_SCORE = 76
+
+
 def match_label(score: int) -> str:
     if score >= 85:
         return "Excellent"
@@ -18,7 +28,7 @@ def match_label(score: int) -> str:
 def apply_recommendation(score: int, red_flags: list[str]) -> str:
     if any("Avoid role" in f or "Avoided industry" in f for f in red_flags):
         return "Skip"
-    if score >= 70:
+    if score >= APPLY_MIN_SCORE:
         return "Apply"
     if score >= 40:
         return "Maybe"
@@ -30,11 +40,7 @@ def priority(score: int, apply_rec: str, red_flags: list[str]) -> str:
         return "Reject"
     if any("Avoid role" in f for f in red_flags):
         return "Reject"
-    # P1 is the action bucket "apply now": it starts where apply_recommendation
-    # turns to Apply. The 85 line is already drawn by match_label ("Excellent"),
-    # and the tailor step ranks P1 jobs by score, so a second tier here would
-    # only renumber P2/P3 across the UI without changing what gets worked on.
-    if score >= 70:
+    if score >= P1_MIN_SCORE:
         return "P1"
     if score >= 55:
         return "P2"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import logging
 import re
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -17,6 +18,8 @@ _GEOGRAPHY_FILE = Path(__file__).resolve().parents[2] / "job_scoring" / "geograp
 _spec = importlib.util.spec_from_file_location("_discovery_geography", _GEOGRAPHY_FILE)
 _geography = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_geography)
+
+logger = logging.getLogger(__name__)
 
 
 class JobProvider(ABC):
@@ -158,10 +161,14 @@ def filter_jobs(
     remote_filters: list[str],
     country: str = "Serbia",
 ) -> list[dict]:
-    return [
+    kept = [
         job
         for job in jobs
         if matches_search_terms(job, search_terms)
         and matches_location_filters(job, locations, remote_filters)
         and (matches_country(job, country) or in_searched_place(job, locations))
     ]
+    # "0 jobs" is two different results: nothing was fetched (a broken or empty
+    # board), or everything fetched was filtered out. The log says which.
+    logger.info("%d postings fetched, %d kept after search, location and country filters", len(jobs), len(kept))
+    return kept

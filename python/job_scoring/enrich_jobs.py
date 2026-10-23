@@ -32,6 +32,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from geography import WORLDWIDE, is_known  # noqa: E402
+from work_authorization import outside_allowed_before_enrichment  # noqa: E402
 import job_history  # noqa: E402
 from job_fingerprint import (  # noqa: E402,F401
     MAX_DESCRIPTION_CHARS,
@@ -46,6 +47,7 @@ from llm_client import (  # noqa: E402
 )
 
 JOBS_PATH = ROOT / "data" / "jobs" / "discovered_jobs.json"
+INTELLIGENCE_PATH = ROOT / "data" / "intelligence" / "candidate-intelligence.json"
 
 # PROMPT_VERSION, MAX_DESCRIPTION_CHARS and the fingerprint live in
 # job_fingerprint.py: the job history ledger uses the same fingerprint.
@@ -257,6 +259,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--force", action="store_true", help="re-read cached jobs")
     p.add_argument("--workers", type=int, default=8, help="parallel calls")
     p.add_argument(
+        "--intelligence",
+        type=Path,
+        default=INTELLIGENCE_PATH,
+        help="where allowedLocations is read; a job outside them is not read",
+    )
+    p.add_argument(
+        "--read-outside-allowed",
+        action="store_true",
+        help="also read ads located outside allowedLocations (they are capped by scoring either way)",
+    )
+    p.add_argument(
         "--ledger",
         type=Path,
         default=None,
@@ -282,8 +295,12 @@ def main() -> int:
     ledger_file = args.ledger or job_history.ledger_path(args.jobs)
     ledger = job_history.load(ledger_file)
 
+    prefs = {}
+    if not args.read_outside_allowed and args.intelligence.exists():
+        prefs = (json.loads(args.intelligence.read_text(encoding="utf-8")).get("jobFitPreferences")) or {}
+
     pending: list[tuple[int, dict]] = []
-    skipped = from_ledger = 0
+    skipped = from_ledger = outside = 0
     for index, job in enumerate(jobs, start=1):
         cached = job.get("llmFacts") or {}
         if not args.force and cached.get("_fingerprint") == _fingerprint(job):
@@ -295,6 +312,9 @@ def main() -> int:
             job["llmFacts"] = stored
             skipped += 1
             from_ledger += 1
+            continue
+        if outside_allowed_before_enrichment(job, prefs):
+            outside += 1
             continue
         pending.append((index, job))
         if args.limit and len(pending) >= args.limit:
@@ -335,7 +355,8 @@ def main() -> int:
     stored = [job_history.store_facts(ledger, job) for job in jobs]  # all of them, not the first
     if any(stored):
         job_history.save(ledger_file, ledger)
-    print(f"\nextracted {done}, cached {skipped} ({from_ledger} from the ledger), failed {failed}")
+    print(f"\nextracted {done}, cached {skipped} ({from_ledger} from the ledger), failed {failed}"
+          f", not read {outside} (outside your allowed locations)")
     # Every call failing means the provider is down: say so rather than let a
     # pipeline carry on with jobs nobody read.
     if pending and done == 0:
