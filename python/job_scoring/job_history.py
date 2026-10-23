@@ -33,6 +33,11 @@ LEDGER_FILE = "job_history.json"
 # no longer listed has really been taken down.
 CLOSURE_PROVIDERS = {"greenhouse", "lever", "ashby"}
 
+# A description shorter than this is not a real ad; LinkedIn returns one when
+# it rate-limits the detail fetch. It never replaces a fuller description the
+# ledger already holds, or a throttled run would swap good facts for worse.
+THIN_DESCRIPTION_CHARS = 200
+
 NEW_WINDOW_DAYS = 3  # how long after first being seen a job is flagged new
 CLOSED_KEEP_DAYS = 14  # how long a closed job stays in discovered_jobs.json
 PRUNE_AFTER_DAYS = 90  # how long a closed job stays in the ledger
@@ -102,7 +107,14 @@ def _annotate(job: dict, entry: dict, *, now: datetime, closed: bool) -> dict:
         "firstSeen": entry["firstSeen"],
         "lastSeen": entry["lastSeen"],
         "closedAt": entry.get("closedAt"),
-        "isNew": bool(not closed and first and now - first <= timedelta(days=NEW_WINDOW_DAYS)),
+        # A job the ledger inherited from the file it replaced was seen before the
+        # ledger existed, so it is not new, whatever date it is first recorded under.
+        "isNew": bool(
+            not closed
+            and not entry.get("seeded")
+            and first
+            and now - first <= timedelta(days=NEW_WINDOW_DAYS)
+        ),
         "isClosed": closed,
     }
 
@@ -116,6 +128,7 @@ def apply_run(
     key: str,
     role_key,
     previous_facts: dict[str, dict] | None = None,
+    seen_before: dict[str, str] | None = None,
 ) -> tuple[list[dict], dict]:
     """Record one discovery run; return the jobs to write and what changed.
 
@@ -125,11 +138,18 @@ def apply_run(
     uses to merge copies of one role. `previous_facts` are llmFacts from the
     discovered file this run replaces: they seed a ledger that has not seen the
     job yet, so the first run on an existing install does not read every ad again.
+    `seen_before` maps the jobIds in that same file to when it was written: a job
+    the ledger meets for the first time but that is in it was seen earlier, so it
+    takes that date as firstSeen and is never flagged new.
     """
     moment = _parse(now) or datetime.now(timezone.utc)
     entries = ledger["jobs"]
     previous_facts = previous_facts or {}
-    stats = {"new": 0, "known": 0, "reopened": 0, "changed": 0, "carriedFacts": 0, "closed": 0}
+    seen_before = seen_before or {}
+    stats = {
+        "new": 0, "known": 0, "reopened": 0, "changed": 0, "carriedFacts": 0, "closed": 0,
+        "keptFullerDescription": 0,
+    }
     found_ids = set()
     found_roles = set()
     out = []
@@ -137,14 +157,24 @@ def apply_run(
     for job in jobs:
         job_id = job["jobId"]
         found_ids.add(job_id)
+        entry = entries.get(job_id)
+        stored_description = ((entry or {}).get("job") or {}).get("description") or ""
+        if (
+            len((job.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS
+            and len(stored_description.strip()) >= THIN_DESCRIPTION_CHARS
+        ):
+            job = {**job, "description": stored_description}
+            stats["keptFullerDescription"] += 1
         found_roles.add(role_key(job))
         fingerprint = job_fingerprint(job)
-        entry = entries.get(job_id)
 
         if entry is None:
             entry = entries[job_id] = {
-                "firstSeen": now, "lastSeen": now, "closedAt": None, "llmFacts": None,
+                "firstSeen": seen_before.get(job_id, now), "lastSeen": now,
+                "closedAt": None, "llmFacts": None,
             }
+            if job_id in seen_before:
+                entry["seeded"] = True
             stats["new"] += 1
             candidate = previous_facts.get(job_id)
         else:

@@ -232,3 +232,55 @@ def test_the_quality_audit_sample_skips_closed_jobs():
     spec.loader.exec_module(module)
     picked = module.pick_sample_jobs([{**scored("gone", closed=True), "matchScore": 99}, {**scored("open1"), "matchScore": 70}])
     assert [j["jobId"] for j in picked] == ["open1"]
+
+
+# --- a throttled fetch must not degrade what is known --------------------------------------------
+
+FULL = "Own the product roadmap and discovery for our platform. " * 8
+
+
+def test_a_thin_description_does_not_replace_a_fuller_one_so_the_facts_survive():
+    ledger = jh.empty_ledger()
+    full = job(description=FULL)
+    run(ledger, [full])
+    ledger["jobs"]["g1"]["llmFacts"] = facts_for(full)
+    out, stats = run(ledger, [job(description="")], day=1)  # LinkedIn throttled the detail fetch
+    assert out[0]["description"] == FULL and out[0]["llmFacts"] == facts_for(full)
+    assert stats["keptFullerDescription"] == 1 and stats["changed"] == 0
+
+
+def test_a_fuller_description_replaces_a_thin_one_and_the_ad_is_read_again():
+    ledger = jh.empty_ledger()
+    thin = job(description="")
+    run(ledger, [thin])
+    ledger["jobs"]["g1"]["llmFacts"] = facts_for(thin)
+    out, stats = run(ledger, [job(description=FULL)], day=1)
+    assert out[0]["description"] == FULL and "llmFacts" not in out[0] and stats["changed"] == 1
+
+
+def test_a_really_changed_full_description_is_still_read_again():
+    ledger = jh.empty_ledger()
+    first = job(description=FULL)
+    run(ledger, [first])
+    ledger["jobs"]["g1"]["llmFacts"] = facts_for(first)
+    out, stats = run(ledger, [job(description=FULL + "New responsibility: own pricing.")], day=1)
+    assert "llmFacts" not in out[0] and stats["changed"] == 1 and stats["keptFullerDescription"] == 0
+
+
+# --- an install that already had jobs: the first ledger run ---------------------------------------
+
+
+def test_jobs_inherited_from_the_replaced_file_are_not_new_but_truly_new_ones_are():
+    ledger = jh.empty_ledger()
+    earlier = iso(-1)
+    out, stats = run_seeded(ledger, [job("old"), job("fresh", title="Lead Product Manager")], {"old": earlier})
+    by_id = {o["jobId"]: o for o in out}
+    assert by_id["old"]["firstSeen"] == earlier and by_id["old"]["isNew"] is False
+    assert by_id["fresh"]["firstSeen"] == iso() and by_id["fresh"]["isNew"] is True
+    # On the next run it is still not new: it stays seeded.
+    assert run_seeded(ledger, [job("old")], {}, day=1)[0][0]["isNew"] is False
+
+
+def run_seeded(ledger, jobs, seen_before, day=0):
+    return jh.apply_run(ledger, jobs, now=iso(day), providers_returned={"greenhouse": 1}, key=KEY,
+                        role_key=_crosspost_key, seen_before=seen_before)

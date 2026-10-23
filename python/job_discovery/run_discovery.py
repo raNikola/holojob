@@ -124,6 +124,7 @@ def main() -> int:
     # jobs yet, so a first run on an existing install keeps what enrichment read.
     jobs_file = ROOT / "data" / "jobs" / "discovered_jobs.json"
     previous_facts: dict[str, dict] = {}
+    seen_before: dict[str, str] = {}
     if jobs_file.exists():
         try:
             previous = json.loads(jobs_file.read_text(encoding="utf-8"))
@@ -131,6 +132,8 @@ def main() -> int:
             previous_facts = {
                 j["jobId"]: j["llmFacts"] for j in previous_jobs or [] if j.get("jobId") and j.get("llmFacts")
             }
+            written = (previous.get("meta") or {}).get("generatedAt") if isinstance(previous, dict) else None
+            seen_before = {j["jobId"]: written for j in previous_jobs or [] if j.get("jobId") and written}
         except (OSError, ValueError):
             previous_facts = {}
 
@@ -144,6 +147,7 @@ def main() -> int:
         key=job_history.search_key(search_terms, locations, country, remote_filters),
         role_key=_crosspost_key,
         previous_facts=previous_facts,
+        seen_before=seen_before,
     )
     job_history.save(ledger_file, ledger)
 
@@ -186,7 +190,8 @@ def main() -> int:
     print(f"  new {history_stats['new']}, already known {history_stats['known']}, "
           f"reopened {history_stats['reopened']}, closed this run {history_stats['closed']}")
     print(f"  facts carried over {history_stats['carriedFacts']}, "
-          f"ads changed since last run {history_stats['changed']}")
+          f"ads changed since last run {history_stats['changed']}, "
+          f"fuller description kept over a throttled one {history_stats['keptFullerDescription']}")
     print(f"  jobs written: {len(to_write)} ({len(to_write) - found_count} closed, kept {job_history.CLOSED_KEEP_DAYS} days)")
     print("")
     print(f"Output: {discovered_path.relative_to(ROOT)}")

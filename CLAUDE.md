@@ -86,7 +86,11 @@ survives: per `jobId`, `firstSeen`, `lastSeen`, `closedAt`, a snapshot of the
 job, and the enrichment facts (`llmFacts`), the only thing enrichment adds to
 a job. Facts are reused while the ad's content fingerprint (`job_fingerprint.py`,
 the one definition, shared by enrichment and the ledger) is unchanged; a changed
-ad is read again. The first run seeds the ledger from the file it replaces.
+ad is read again. The first run seeds the ledger from the file it replaces, and
+the jobs in that file are treated as seen before (not New). A description under
+200 characters, which is what LinkedIn returns when it rate-limits the detail
+fetch, never replaces a fuller one the ledger holds, so a throttled run cannot
+swap good facts for worse.
 Records carry `firstSeen`, `lastSeen`, `closedAt`, `isNew` (first seen within 3
 days) and `isClosed`; the job list shows New and Closed badges. Closed means
 discovery no longer finds the job, and is decided only for Greenhouse, Lever
