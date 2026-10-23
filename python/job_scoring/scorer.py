@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from dimensions.culture_match import score_culture_match
 from dimensions.experience_match import score_experience_match
@@ -16,14 +18,21 @@ from red_flags import detect_red_flags
 from corpus import build_idf
 import work_authorization as wa
 
-DEFAULT_WEIGHTS = {
-    "roleMatch": 25,
-    "skillMatch": 25,
-    "industryMatch": 10,
-    "experienceMatch": 15,
-    "locationMatch": 20,
-    "cultureMatch": 5,
-}
+# The one set of default weights, shared with the UI's settings panel and the
+# intelligence generator (src/modules/intelligence/candidateIntelligenceEngine.js).
+WEIGHTS_FILE = Path(__file__).resolve().parents[2] / "src" / "data" / "scoringWeights.json"
+DEFAULT_WEIGHTS = json.loads(WEIGHTS_FILE.read_text(encoding="utf-8"))
+
+
+def resolve_weights(saved: dict | None) -> dict:
+    """The saved weights, each missing or malformed key filled from the defaults."""
+    saved = saved if isinstance(saved, dict) else {}
+    return {
+        key: saved[key]
+        if isinstance(saved.get(key), (int, float)) and not isinstance(saved.get(key), bool) and saved[key] >= 0
+        else fallback
+        for key, fallback in DEFAULT_WEIGHTS.items()
+    }
 
 # The ad's day-to-day work, as read from its own words. A delivery or
 # programme role wearing a product title is not a weaker match -- it is the
@@ -52,7 +61,7 @@ def _weighted_total(dimensions: dict[str, int], weights: dict[str, int]) -> int:
 
 
 def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
-    weights = intelligence.get("scoringWeights") or DEFAULT_WEIGHTS
+    weights = resolve_weights(intelligence.get("scoringWeights"))
     enhancer = enhancer or NoOpEnhancer()
 
     role_score, role_reasons = score_role_match(job, intelligence)

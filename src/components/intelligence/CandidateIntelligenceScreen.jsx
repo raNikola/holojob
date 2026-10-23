@@ -10,11 +10,11 @@ import SkillsMapCard from './SkillsMapCard'
 import AtsKeywordsCard from './AtsKeywordsCard'
 import SearchStrategyCard from './SearchStrategyCard'
 import { useProfile } from '../../context/ProfileContext'
-import { generateCandidateIntelligence } from '../../modules/intelligence/candidateIntelligenceEngine'
 import { validateProfileForIntelligence } from '../../modules/intelligence/intelligenceValidators'
 import {
   downloadCandidateIntelligence,
   loadIntelligence,
+  regenerateIntelligence,
   saveIntelligence,
 } from '../../modules/intelligence/intelligenceExport'
 import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
@@ -43,7 +43,7 @@ export default function CandidateIntelligenceScreen({ onNavigate }) {
     if (!v.valid) return null
     setLoading(true)
     try {
-      const generated = generateCandidateIntelligence(profile)
+      const generated = regenerateIntelligence(profile)
       saveIntelligence(generated)
       setIntelligence(generated)
       await syncToDisk(generated)

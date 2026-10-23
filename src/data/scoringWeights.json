@@ -1,0 +1,8 @@
+{
+  "roleMatch": 25,
+  "skillMatch": 25,
+  "locationMatch": 20,
+  "experienceMatch": 15,
+  "industryMatch": 10,
+  "cultureMatch": 5
+}
