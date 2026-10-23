@@ -52,6 +52,11 @@ PROMPT_VERSION = 2
 # hard caps (red flag 54, off-track 50), so capped jobs are never sent.
 DEFAULT_THRESHOLD = 65
 
+# At most this many jobs are sent to the model per run: the highest by local
+# score among those at or above the threshold. A run that clears the threshold
+# with hundreds of jobs would cost too much and leave too many to act on.
+DEFAULT_JUDGE_LIMIT = 50
+
 FITS = {"strong", "good", "partial", "poor"}
 STATUSES = {"met", "partly_met", "not_met", "unclear"}
 
@@ -286,6 +291,7 @@ class LlmFitEnhancer:
         cache_path: Path | None = None,
         complete=complete_json,
         cache_only: bool = False,
+        limit: int | None = None,
     ):
         self.provider = provider
         self.model = model
@@ -294,11 +300,16 @@ class LlmFitEnhancer:
         self._complete = complete
         # Re-apply stored judgements and never call the model.
         self.cache_only = cache_only
+        # None means no cap; otherwise select() picks the jobs that may be sent.
+        self.limit = limit
+        self._selected: set | None = None
         self._lock = threading.Lock()
         self._cache: dict[str, dict] = {}
         if cache_path and cache_path.exists():
             self._cache = json.loads(cache_path.read_text(encoding="utf-8"))
-        self.counts = {"judged": 0, "cached": 0, "skipped": 0, "failed": 0, "uncached": 0}
+        self.counts = {
+            "judged": 0, "cached": 0, "skipped": 0, "failed": 0, "uncached": 0, "beyond_limit": 0,
+        }
 
     def _count(self, key: str) -> None:
         with self._lock:
@@ -308,6 +319,28 @@ class LlmFitEnhancer:
         raw = "|".join([str(PROMPT_VERSION), self.provider, self.model or "", prompt])
         return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
+    @staticmethod
+    def _key(job: dict):
+        return job.get("jobId") or id(job)
+
+    def select(self, results: list[dict]) -> None:
+        """Choose, from the locally scored jobs, the ones the model may be sent.
+
+        The highest local scores at or above the threshold, up to the limit;
+        equal scores keep their input order. A job outside the selection can
+        still get a judgement that is already cached, which costs nothing.
+        """
+        if self.limit is None:
+            self._selected = None
+            return
+        eligible = [
+            (-r["matchScore"], index, self._key(r))
+            for index, r in enumerate(results)
+            if r["matchScore"] >= self.threshold
+        ]
+        eligible.sort()
+        self._selected = {key for _, _, key in eligible[: max(0, self.limit)]}
+
     def _judge(self, job: dict, intelligence: dict) -> tuple[dict, str, bool]:
         prompt = build_prompt(job, intelligence)
         fingerprint = self._fingerprint(prompt)
@@ -316,6 +349,9 @@ class LlmFitEnhancer:
         if cached is not None:
             self._count("cached")
             return cached, fingerprint, True
+        if self._selected is not None and self._key(job) not in self._selected:
+            self._count("beyond_limit")
+            raise NotCached(fingerprint)
         if self.cache_only:
             self._count("uncached")
             raise NotCached(fingerprint)

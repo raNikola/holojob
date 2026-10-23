@@ -34,7 +34,9 @@ function ConfirmDialog({ preview, sending, onCancel, onConfirm }) {
             <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
             {nothingToJudge
               ? 'No job scores high enough to judge'
-              : `Send ${preview.eligible} job ${preview.eligible === 1 ? 'ad' : 'ads'} to ${recipient(preview)}?`}
+              : preview.toSend > 0
+                ? `Send ${preview.toSend} job ${preview.toSend === 1 ? 'ad' : 'ads'} to ${recipient(preview)}?`
+                : `Apply ${preview.cached} cached ${preview.cached === 1 ? 'judgement' : 'judgements'}? Nothing is sent`}
           </h3>
           <button type="button" onClick={onCancel} disabled={sending} className="rounded-lg p-1 hover:bg-stone-100 dark:hover:bg-stone-800">
             <X className="h-5 w-5" />
@@ -48,7 +50,8 @@ function ConfirmDialog({ preview, sending, onCancel, onConfirm }) {
         ) : (
           <>
             <p className="text-sm text-stone-600 dark:text-stone-400">
-              {preview.cached} already judged (cached, not re-sent) · {preview.toSend} new {preview.toSend === 1 ? 'call' : 'calls'}.
+              {preview.cached} already judged (cached, not re-sent) · {preview.toSend} new {preview.toSend === 1 ? 'call' : 'calls'}
+              {preview.beyondLimit > 0 && <> · {preview.beyondLimit} more scoring {preview.threshold}+ are left out: only the top {preview.limit} are judged per run</>}.
               {' '}Each call sends one job ad and a digest of your profile
               {leaves ? <> to <strong>{preview.provider}</strong>, outside this server.</> : <> to <strong>{preview.provider}</strong>, a model on this machine.</>}
             </p>
@@ -136,8 +139,8 @@ export default function FitJudgementCard({ disabled, onBeforeRun, onScored }) {
           </h3>
           <p className="text-sm text-stone-600 dark:text-stone-400">
             Asks {recipient(preview)} to compare each ad with a digest of your profile. Local scoring runs
-            first; only jobs scoring {preview?.threshold ?? 65}+ are sent. Re-scoring locally later keeps
-            these judgements from the cache without sending anything.
+            first; only the top {preview?.limit ?? 50} jobs scoring {preview?.threshold ?? 65}+ are sent. Re-scoring
+            locally later keeps these judgements from the cache without sending anything.
           </p>
           {lastRun && <p className="text-xs text-stone-500">{lastRun}</p>}
         </div>
