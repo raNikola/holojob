@@ -70,7 +70,7 @@ async function fetchJson(url) {
   }
 }
 
-export default function QuestionnaireForm({ questionIndex = 0 }) {
+export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion }) {
   const { profile, updateProfile } = useProfile()
   const [projectIntel, setProjectIntel] = useState(null)
   const [candidateIntel, setCandidateIntel] = useState(null)
@@ -233,6 +233,34 @@ export default function QuestionnaireForm({ questionIndex = 0 }) {
           </div>
         </div>
       </div>
+
+      {onJumpToQuestion && (
+        <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-9" role="group" aria-label="Jump to question">
+          {QUESTIONS.map((q, i) => {
+            const answered = isNonEmpty(getAnswer(q.id))
+            const current = i === questionIndex
+            return (
+              <button
+                key={q.id}
+                type="button"
+                onClick={() => onJumpToQuestion(i)}
+                title={`Question ${i + 1}`}
+                aria-label={`Question ${i + 1}, ${answered ? 'answered' : 'not answered'}`}
+                aria-current={current ? 'step' : undefined}
+                className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
+                  current
+                    ? 'border-teal-600 bg-teal-600 text-white'
+                    : answered
+                      ? 'border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-900/30 dark:text-teal-200'
+                      : 'border-stone-200 bg-white text-stone-500 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400'
+                }`}
+              >
+                {i + 1}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {currentQuestion && (
         <Card className="!p-4">

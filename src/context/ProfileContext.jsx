@@ -97,9 +97,9 @@ export function ProfileProvider({ children }) {
     }))
   }, [])
 
-  const startProfileEdit = useCallback(() => {
-    setCurrentStep(1)
-    setProfile((prev) => saveProfile({ ...prev, meta: { ...prev.meta, lastStep: 1 } }))
+  const startProfileEdit = useCallback((step = 1) => {
+    setCurrentStep(step)
+    setProfile((prev) => saveProfile({ ...prev, meta: { ...prev.meta, lastStep: step } }))
   }, [])
 
   return (
