@@ -4,7 +4,6 @@
 
 import { ensureClaudeLogin } from './claude-auth.js'
 import { handleApiRequest } from './api-handler.js'
-import { initChatServer } from './chat-server.js'
 
 export { getPipelineHealth } from './api-handler.js'
 
@@ -21,16 +20,6 @@ export function discoveryApiPlugin() {
           )
         } else {
           server.config.logger.info('  ✓ Claude Code logged in — AI generation active')
-        }
-      })
-
-      // Attach Socket.IO chat server to Vite's HTTP server
-      server.httpServer?.on('listening', () => {
-        try {
-          initChatServer(server.httpServer)
-          server.config.logger.info('  ✓ Peer Chat WebSocket server active')
-        } catch (e) {
-          server.config.logger.warn(`\n  ⚠ Peer Chat: ${e.message}\n`)
         }
       })
 

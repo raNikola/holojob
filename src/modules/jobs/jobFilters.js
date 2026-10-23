@@ -5,6 +5,12 @@ export function getJobProvider(job) {
   return job.provider || job.site || ''
 }
 
+/** The priority filter as a list. A string saved by the old single-select reads as a list of one. */
+export function normalizePriorityFilter(value) {
+  if (Array.isArray(value)) return value.filter(Boolean)
+  return value ? [value] : []
+}
+
 export function filterJobs(jobs, filters = {}) {
   const {
     searchText = '',
@@ -15,19 +21,20 @@ export function filterJobs(jobs, filters = {}) {
     hideNeedsVisa = false,
     status = '',
     matchLabel = '',
-    priority = '',
+    priority = [],
     minScore = '',
     minSalary = '',
     desiredSalaryMin = '',
     desiredSalaryMax = '',
   } = filters
 
+  const priorities = normalizePriorityFilter(priority)
   const q = searchText.trim().toLowerCase()
 
   return (jobs || []).filter((job) => {
     if (status && job.status !== status) return false
     if (matchLabel && job.matchLabel !== matchLabel) return false
-    if (priority && job.priority !== priority) return false
+    if (priorities.length && !priorities.includes(job.priority)) return false
     if (minScore !== '' && minScore != null) {
       const floor = Number(minScore)
       if (!Number.isNaN(floor) && (job.matchScore ?? 0) < floor) return false
