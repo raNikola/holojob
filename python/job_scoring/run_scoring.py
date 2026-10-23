@@ -18,7 +18,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from llm_client import active_provider, judge_model  # noqa: E402
 from llm_enhancer import DEFAULT_THRESHOLD, DIGEST_FIELDS, NEVER_SENT, LlmFitEnhancer  # noqa: E402
-from scorer import score_jobs  # noqa: E402
+from scorer import resolve_weights, score_jobs  # noqa: E402
 
 INTELLIGENCE_PATH = ROOT / "data" / "intelligence" / "candidate-intelligence.json"
 JOBS_PATH = ROOT / "data" / "jobs" / "discovered_jobs.json"
@@ -123,7 +123,7 @@ def main() -> int:
         scored = [j for j in scored if j.get("matchScore", 0) >= args.min_score]
 
     labels = Counter(j.get("matchLabel") for j in scored)
-    weights = intelligence.get("scoringWeights") or {}
+    weights = resolve_weights(intelligence.get("scoringWeights"))
 
     payload = {
         "meta": {

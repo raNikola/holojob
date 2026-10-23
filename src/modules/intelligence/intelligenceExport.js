@@ -1,4 +1,5 @@
 import { saveIntelligenceToDataDir } from '../jobs/intelligenceSync'
+import { generateCandidateIntelligence } from './candidateIntelligenceEngine'
 
 /** @typedef {import('../../types/career-os.d.ts').CandidateIntelligence} CandidateIntelligence */
 
@@ -19,6 +20,18 @@ export function loadIntelligence() {
   } catch {
     return null
   }
+}
+
+/**
+ * Generate intelligence from the profile, keeping the scoring weights saved on
+ * the intelligence already in the browser. Every Regenerate action goes through
+ * here, so a regeneration never discards weights set in Settings.
+ *
+ * @param {import('../../types/career-os.d.ts').Profile} profile
+ * @param {object} [options] passed to generateCandidateIntelligence
+ */
+export function regenerateIntelligence(profile, options = {}) {
+  return generateCandidateIntelligence(profile, { ...options, previousIntelligence: loadIntelligence() })
 }
 
 export function clearIntelligence() {

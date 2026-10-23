@@ -5,9 +5,8 @@ import { formatLanguages } from '../../utils/languages'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
-import { generateCandidateIntelligence } from '../../modules/intelligence/candidateIntelligenceEngine'
 import { validateProfileForIntelligence } from '../../modules/intelligence/intelligenceValidators'
-import { saveIntelligence } from '../../modules/intelligence/intelligenceExport'
+import { regenerateIntelligence, saveIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
 import { VIEWS } from '../../modules/appNavigation'
 import { QUESTIONS } from '../../data/questions'
@@ -54,7 +53,7 @@ export default function ProfileHome({ onNavigate }) {
     }
     setRegenerating(true)
     try {
-      const generated = generateCandidateIntelligence(profile)
+      const generated = regenerateIntelligence(profile)
       saveIntelligence(generated)
       void saveIntelligenceToDataDir(generated)
       setStatus('Intelligence regenerated successfully.')

@@ -7,9 +7,8 @@ import { useProfile } from '../../context/ProfileContext'
 import { downloadCandidateProfile } from '../../utils/exportJson'
 import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
 import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
-import { generateCandidateIntelligence } from '../../modules/intelligence/candidateIntelligenceEngine'
 import { validateProfileForIntelligence } from '../../modules/intelligence/intelligenceValidators'
-import { saveIntelligence } from '../../modules/intelligence/intelligenceExport'
+import { regenerateIntelligence, saveIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { isApiAvailable } from '../../utils/apiAvailability'
 
 function Section({ title, onEdit, children }) {
@@ -97,7 +96,7 @@ export default function ReviewScreen({ mode = 'onboarding', onEditStep, onComple
     }
     setGenerating(true)
     try {
-      const generated = generateCandidateIntelligence(profile)
+      const generated = regenerateIntelligence(profile)
       saveIntelligence(generated)
       markOnboardingComplete()
       onComplete?.({ intelligenceGenerated: true })

@@ -6,6 +6,7 @@ import Alert from '../ui/Alert'
 import { loadIntelligence, saveIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
 import { runScoring } from '../../modules/jobs/pipelineRunner'
+import { DEFAULT_SCORING_WEIGHTS } from '../../modules/intelligence/candidateIntelligenceEngine'
 
 const WEIGHT_KEYS = [
   { key: 'roleMatch', label: 'Role match' },
@@ -16,14 +17,7 @@ const WEIGHT_KEYS = [
   { key: 'cultureMatch', label: 'Culture match' },
 ]
 
-const DEFAULT_WEIGHTS = {
-  roleMatch: 25,
-  skillMatch: 25,
-  industryMatch: 10,
-  experienceMatch: 15,
-  locationMatch: 20,
-  cultureMatch: 5,
-}
+const DEFAULT_WEIGHTS = DEFAULT_SCORING_WEIGHTS
 
 function normalizeWeights(weights) {
   const total = WEIGHT_KEYS.reduce((sum, { key }) => sum + (weights[key] || 0), 0) || 100

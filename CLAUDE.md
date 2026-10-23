@@ -85,6 +85,14 @@ Claude Code CLI as a keyless fallback. `CAREER_OS_LLM_PROVIDER` chooses.
     roleMatch 25, skillMatch 25, locationMatch 20,
     experienceMatch 15, industryMatch 10, cultureMatch 5
 
+These defaults live in one file, `src/data/scoringWeights.json`, read by the
+intelligence generator, the Settings weights panel and `scorer.py`. Weights saved
+in Settings are stored on the intelligence (`scoringWeights`) and win over the
+defaults; every Regenerate Intelligence action goes through
+`regenerateIntelligence()`, which carries the saved weights over, so only a
+first-ever generation uses the defaults. A saved set with a missing or malformed
+key gets that key from the defaults, in the UI and in the scorer.
+
 **Fit judgement** (`llm_enhancer.py`, opt-in: `run_scoring.py --judge`). After
 local scoring, an LLM compares the ad with the candidate and returns a fit
 category, the requirements it checked, what is missing and any dealbreakers.

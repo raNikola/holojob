@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from scorer import DEFAULT_WEIGHTS, _weighted_total, score_job
+from scorer import DEFAULT_WEIGHTS, WEIGHTS_FILE, _weighted_total, resolve_weights, score_job
 
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES = ROOT / "data" / "examples"
@@ -88,3 +88,24 @@ def test_red_flag_caps_score(intelligence):
     result = score_job(job, intel)
     if result["redFlags"]:
         assert result["matchScore"] <= 54
+
+
+# --- the shared default weights -----------------------------------------------------------------
+
+
+def test_the_defaults_are_the_documented_set_from_the_shared_file():
+    assert DEFAULT_WEIGHTS == {
+        "roleMatch": 25, "skillMatch": 25, "locationMatch": 20,
+        "experienceMatch": 15, "industryMatch": 10, "cultureMatch": 5,
+    }
+    assert WEIGHTS_FILE.name == "scoringWeights.json" and WEIGHTS_FILE.parent.name == "data"
+
+
+def test_saved_weights_win_and_gaps_fall_back_to_the_defaults():
+    assert resolve_weights(None) == DEFAULT_WEIGHTS
+    assert resolve_weights({}) == DEFAULT_WEIGHTS
+    custom = {**DEFAULT_WEIGHTS, "roleMatch": 40, "locationMatch": 5}
+    assert resolve_weights(custom) == custom
+    assert resolve_weights({"roleMatch": 40, "skillMatch": "lots", "locationMatch": -1, "bogus": 9}) == {
+        **DEFAULT_WEIGHTS, "roleMatch": 40,
+    }

@@ -12,14 +12,25 @@ import { validateIntelligenceMapping } from './intelligenceValidators.js'
 import { runIntelligenceQualityChecks } from './intelligenceQualityChecks.js'
 import { buildCandidateStrengths } from './strengthsBuilder.js'
 import { formatLanguages } from '../../utils/languages.js'
+import defaultWeights from '../../data/scoringWeights.json'
 
-const SCORING_WEIGHTS = {
-  roleMatch: 25,
-  skillMatch: 25,
-  industryMatch: 10,
-  experienceMatch: 15,
-  locationMatch: 20,
-  cultureMatch: 5,
+// The one set of default weights, shared with the settings panel and the Python
+// scorer (python/job_scoring/scorer.py reads the same file).
+export const DEFAULT_SCORING_WEIGHTS = defaultWeights
+
+/**
+ * The weights a generated intelligence carries: the ones already saved on the
+ * previous intelligence (the Settings panel stores them there), with any
+ * missing or malformed key filled from the defaults. With nothing saved yet,
+ * the defaults. Saved values are kept as they are, not rescaled.
+ */
+export function resolveScoringWeights(saved) {
+  const resolved = {}
+  for (const [key, fallback] of Object.entries(DEFAULT_SCORING_WEIGHTS)) {
+    const value = saved?.[key]
+    resolved[key] = typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback
+  }
+  return resolved
 }
 
 /** @typedef {import('../../types/career-os.d.ts').Profile} Profile */
@@ -58,7 +69,7 @@ export function generateCandidateIntelligence(rawProfile, options = {}) {
     // Derived from basicProfile.languages ("Serbian (native)"); the fit judge's
     // digest reads this list, so it is never typed in by hand here.
     languages: formatLanguages(ctx.basicProfile?.languages),
-    scoringWeights: { ...SCORING_WEIGHTS },
+    scoringWeights: resolveScoringWeights(options.previousIntelligence?.scoringWeights),
     meta: {
       generatedAt: new Date().toISOString(),
       sourceProfileVersion: ctx.profile.meta?.profileVersion || '1.0',
