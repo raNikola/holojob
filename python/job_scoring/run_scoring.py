@@ -17,7 +17,13 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from llm_client import active_provider, judge_model  # noqa: E402
-from llm_enhancer import DEFAULT_THRESHOLD, DIGEST_FIELDS, NEVER_SENT, LlmFitEnhancer  # noqa: E402
+from llm_enhancer import (  # noqa: E402
+    DEFAULT_JUDGE_LIMIT,
+    DEFAULT_THRESHOLD,
+    DIGEST_FIELDS,
+    NEVER_SENT,
+    LlmFitEnhancer,
+)
 from scorer import resolve_weights, score_jobs  # noqa: E402
 
 INTELLIGENCE_PATH = ROOT / "data" / "intelligence" / "candidate-intelligence.json"
@@ -50,6 +56,12 @@ def parse_args() -> argparse.Namespace:
         help="print, as JSON, what --judge would send and to whom; calls nothing, writes nothing",
     )
     p.add_argument("--judge-threshold", type=int, default=DEFAULT_THRESHOLD)
+    p.add_argument(
+        "--judge-limit",
+        type=int,
+        default=DEFAULT_JUDGE_LIMIT,
+        help="send at most this many jobs to the judge, the highest by local score (0 = no limit)",
+    )
     p.add_argument("--judge-provider", default=None, help="CAREER_OS_LLM_PROVIDER when unset")
     p.add_argument("--judge-model", default=None, help="<PROVIDER>_JUDGE_MODEL when unset")
     p.add_argument("--workers", type=int, default=8, help="parallel judge calls")
@@ -77,15 +89,21 @@ def main() -> int:
 
     provider = args.judge_provider or active_provider()
     model = args.judge_model or judge_model(provider)
-    if args.judge:
+    limit = args.judge_limit if args.judge_limit > 0 else None
+    if args.judge or args.judge_preview:
+        # A preview reads the cache and counts what a judged run would send,
+        # under the same cap, without calling anything.
         enhancer = LlmFitEnhancer(
-            provider, model, threshold=args.judge_threshold, cache_path=FIT_CACHE_PATH
+            provider, model, threshold=args.judge_threshold, cache_path=FIT_CACHE_PATH,
+            limit=limit,
+            **({"complete": _no_network, "cache_only": True} if args.judge_preview else {}),
         )
-        print(
-            f"judge: provider={provider} model={model or '(provider default)'} "
-            f"threshold={args.judge_threshold}",
-            flush=True,
-        )
+        if args.judge:
+            print(
+                f"judge: provider={provider} model={model or '(provider default)'} "
+                f"threshold={args.judge_threshold} limit={limit or 'none'}",
+                flush=True,
+            )
     else:
         # Local scoring: judgements already in the cache are re-applied, so a
         # re-score does not throw them away. Nothing is sent: the model call is
@@ -98,24 +116,38 @@ def main() -> int:
     scored = score_jobs(jobs, intelligence, enhancer, workers=args.workers)
     c = enhancer.counts
     if args.judge_preview:
-        eligible = c["cached"] + c["uncached"]
+        eligible = c["cached"] + c["uncached"] + c["beyond_limit"]
         print(json.dumps({
             "provider": provider,
             "model": model,
             "leavesServer": provider not in LOCAL_PROVIDERS,
             "threshold": args.judge_threshold,
+            "limit": limit,
             "eligible": eligible,
             "cached": c["cached"],
             "toSend": c["uncached"],
+            "beyondLimit": c["beyond_limit"],
             "sent": DIGEST_FIELDS,
             "neverSent": NEVER_SENT,
         }))
         return 0
+    judge_summary = {
+        "scored": len(scored),
+        "judged": c["judged"],
+        "fromCache": c["cached"],
+        "beyondLimit": c["beyond_limit"],
+        "belowThreshold": c["skipped"],
+        "failed": c["failed"],
+        "limit": limit if args.judge else None,
+        "threshold": args.judge_threshold,
+    }
     if args.judge:
         enhancer.save()
         print(
-            f"judge: {c['judged']} judged, {c['cached']} cached, "
-            f"{c['skipped']} below threshold, {c['failed']} failed"
+            f"judge: scored {len(scored)} jobs, judged {c['judged'] + c['cached']} "
+            f"({c['judged']} new calls, {c['cached']} from cache); "
+            f"{c['beyond_limit']} more at or above {args.judge_threshold} left at their local score "
+            f"beyond the top {limit or 'all'}; {c['skipped']} below the threshold; {c['failed']} failed"
         )
     elif c["cached"]:
         print(f"judge: re-applied {c['cached']} cached judgements (no calls made)")
@@ -133,6 +165,7 @@ def main() -> int:
             "intelligenceGeneratedAt": (intelligence.get("meta") or {}).get("generatedAt"),
             "discoveryGeneratedAt": (discovered.get("meta") or {}).get("generatedAt") if isinstance(discovered, dict) else None,
             "weights": weights,
+            "judge": judge_summary,
             "jobCount": len(scored),
             "summary": {
                 "excellent": labels.get("Excellent", 0),

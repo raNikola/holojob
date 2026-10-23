@@ -151,7 +151,13 @@ def score_jobs(
     if enhancer is None or isinstance(enhancer, NoOpEnhancer):
         return [score_job(j, intelligence, enhancer, idf) for j in jobs]
 
-    # An enhancer that calls a model waits on the network per job, so jobs are
-    # scored in parallel. map() keeps the input order.
+    # Every job is scored locally first, so an enhancer that ranks (select) sees
+    # the whole run before it decides which jobs to spend a model call on.
+    local = [score_job(j, intelligence, None, idf) for j in jobs]
+    if hasattr(enhancer, "select"):
+        enhancer.select(local)
+
+    # An enhancer that calls a model waits on the network per job, so the jobs
+    # are enhanced in parallel. map() keeps the input order.
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        return list(pool.map(lambda j: score_job(j, intelligence, enhancer, idf), jobs))
+        return list(pool.map(lambda pair: enhancer.enhance(pair[0], pair[1], intelligence), zip(jobs, local)))

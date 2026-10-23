@@ -104,7 +104,13 @@ Only jobs scoring 65 or more are sent: the largest raise is +5 and Apply
 starts at 70, so a job below 65 cannot change decision, and 65 is above both
 hard caps (red flag 54, off-track 50), so capped jobs are never sent. A job a
 hard rule applies to (`hardCapped` on the result) can be lowered by the judge
-but never raised. Label, recommendation and priority are recomputed through
+but never raised. At most 50 jobs are sent per run (`--judge-limit`, 0 for no
+limit): the highest local scores at or above the threshold, equal scores in input
+order, chosen after every job has been scored locally. A job beyond the cap
+still gets a judgement already in the cache, which costs nothing. The run
+summary and `meta.judge` in `scored_jobs.json` report jobs scored against jobs
+judged, new calls, cache hits and jobs left beyond the cap. Label, recommendation
+and priority are recomputed through
 `labels.py`. The judge model comes from `llm_client.judge_model()` (sonnet on
 the CLI, `gpt-6.1-sol` on OpenAI, `deepseek-v4-pro` on DeepSeek,
 `<PROVIDER>_JUDGE_MODEL` overrides). Results

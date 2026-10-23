@@ -281,3 +281,119 @@ def test_preview_reports_counts_and_writes_nothing(intelligence, tmp_path, monke
     assert preview["provider"] == "openai" and preview["leavesServer"] is True
     assert (preview["eligible"], preview["cached"], preview["toSend"]) == (1, 0, 1)
     assert "Name" in preview["neverSent"] and not out.exists()
+
+
+# --- the per-run judge cap -----------------------------------------------------------------------
+
+
+def scored(scores):
+    return [base(s, jobId=f"j{i}") for i, s in enumerate(scores)]
+
+
+def job_of(result):
+    return {**JOB, "jobId": result["jobId"], "title": f"Role {result['jobId']}"}
+
+
+def run_all(enh, results, intelligence):
+    enh.select(results)
+    return [enh.enhance(job_of(r), r, intelligence) for r in results]
+
+
+def test_only_the_top_scoring_jobs_up_to_the_limit_are_sent(intelligence):
+    stub = Stub(reply("good"))
+    results = scored([70, 90, 66, 80, 75, 60])  # 60 is below the threshold
+    out = run_all(enhancer(stub, limit=3), results, intelligence)
+    judged = [r["jobId"] for r in out if "llmFit" in r]
+    assert sorted(judged) == ["j1", "j3", "j4"]  # 90, 80, 75
+    assert len(stub.calls) == 3
+    # The rest keep their local score and are counted as beyond the limit.
+    assert [r["matchScore"] for r in out if "llmFit" not in r] == [70, 66, 60]
+
+
+def test_equal_scores_at_the_cutoff_keep_input_order(intelligence):
+    stub = Stub(reply("good"))
+    results = scored([80, 80, 80, 80])
+    out = run_all(enhancer(stub, limit=2), results, intelligence)
+    assert [r["jobId"] for r in out if "llmFit" in r] == ["j0", "j1"]
+
+
+def test_no_limit_judges_everything_at_or_above_the_threshold(intelligence):
+    stub = Stub(reply("good"))
+    out = run_all(enhancer(stub), scored([70, 90, 66, 60]), intelligence)
+    assert sum("llmFit" in r for r in out) == 3 and len(stub.calls) == 3
+
+
+def test_a_cached_judgement_outside_the_top_is_still_applied_for_free(intelligence, tmp_path):
+    cache = tmp_path / "fit.json"
+    results = scored([90, 70])
+    first = enhancer(Stub(reply("partial")), cache_path=cache)  # judges both, saves both
+    run_all(first, results, intelligence)
+    first.save()
+
+    stub = Stub(AssertionError("called the model"))
+    again = enhancer(stub, cache_path=cache, limit=1)  # only j0 may be sent
+    out = run_all(again, results, intelligence)
+    assert stub.calls == []
+    assert all("llmFit" in r and r["llmFit"]["fromCache"] for r in out)
+    assert again.counts["cached"] == 2 and again.counts["beyond_limit"] == 0
+
+
+def test_counts_separate_new_calls_cache_and_beyond_the_limit(intelligence):
+    enh = enhancer(Stub(reply("good")), limit=2)
+    run_all(enh, scored([95, 90, 85, 70, 50]), intelligence)
+    assert enh.counts["judged"] == 2 and enh.counts["beyond_limit"] == 2 and enh.counts["skipped"] == 1
+
+
+def test_the_cap_never_stops_a_job_from_being_scored(intelligence, monkeypatch):
+    import scorer
+
+    jobs = [{"jobId": f"j{i}", "title": "PM", "description": f"Own roadmap {i}. " * 5, "s": s}
+            for i, s in enumerate([95, 90, 85, 80, 75, 70])]
+    monkeypatch.setattr(scorer, "score_job", lambda j, i, e=None, idf=None: base(j["s"], jobId=j["jobId"]))
+    stub = Stub(reply("good"))
+    out = scorer.score_jobs(jobs, intelligence, enhancer(stub, limit=2))
+    assert len(out) == 6 and len(stub.calls) == 2
+    assert [r["jobId"] for r in out] == [j["jobId"] for j in jobs]
+
+
+def test_run_summary_reports_scored_versus_judged(intelligence, tmp_path, monkeypatch, capsys):
+    import run_scoring
+
+    jobs = tmp_path / "jobs.json"
+    jobs.write_text(json.dumps({"jobs": [JOB]}), encoding="utf-8")
+    intel = tmp_path / "intel.json"
+    intel.write_text(json.dumps(intelligence), encoding="utf-8")
+    out = tmp_path / "scored.json"
+    stub = Stub(reply("good"))
+    monkeypatch.setattr(run_scoring, "FIT_CACHE_PATH", tmp_path / "fit.json")
+    monkeypatch.setattr(run_scoring, "ROOT", tmp_path)
+    monkeypatch.setattr(
+        run_scoring, "LlmFitEnhancer",
+        lambda *a, **kw: LlmFitEnhancer(*a, **{**kw, "complete": stub}),
+    )
+    only = {**JOB, "jobId": "a"}
+    monkeypatch.setattr(run_scoring, "score_jobs", lambda j, i, e, workers: (e.select([base(80, jobId="a")]), [e.enhance(only, base(80, jobId="a"), i)])[1])
+    monkeypatch.setattr("sys.argv", ["run_scoring.py", "--judge", "--judge-provider", "openai", "--judge-limit", "7",
+                                     "--jobs", str(jobs), "--intelligence", str(intel), "--output", str(out)])
+    assert run_scoring.main() == 0
+    line = [l for l in capsys.readouterr().out.splitlines() if l.startswith("judge: scored")][0]
+    assert "scored 1 jobs, judged 1 (1 new calls, 0 from cache)" in line and "top 7" in line
+    meta = json.loads(out.read_text())["meta"]["judge"]
+    assert (meta["scored"], meta["judged"], meta["limit"]) == (1, 1, 7)
+
+
+def test_preview_counts_only_what_the_cap_would_send(intelligence, tmp_path, monkeypatch, capsys):
+    import run_scoring
+
+    jobs = tmp_path / "jobs.json"
+    jobs.write_text(json.dumps({"jobs": [JOB]}), encoding="utf-8")
+    intel = tmp_path / "intel.json"
+    intel.write_text(json.dumps(intelligence), encoding="utf-8")
+    monkeypatch.setattr(run_scoring, "FIT_CACHE_PATH", tmp_path / "fit.json")
+    results = [base(s, jobId=f"p{i}") for i, s in enumerate([90, 85, 80, 70, 30])]
+    monkeypatch.setattr(run_scoring, "score_jobs", lambda j, i, e, workers: (e.select(results), [e.enhance(job_of(r), r, i) for r in results])[1])
+    monkeypatch.setattr("sys.argv", ["run_scoring.py", "--judge-preview", "--judge-provider", "openai", "--judge-limit", "2",
+                                     "--jobs", str(jobs), "--intelligence", str(intel), "--output", str(tmp_path / "o.json")])
+    assert run_scoring.main() == 0
+    preview = json.loads(capsys.readouterr().out)
+    assert (preview["limit"], preview["eligible"], preview["toSend"], preview["beyondLimit"], preview["cached"]) == (2, 4, 2, 2, 0)
