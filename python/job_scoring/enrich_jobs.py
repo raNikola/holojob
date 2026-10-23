@@ -21,7 +21,6 @@ chosen in llm_client; this file does not care which one answers.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -33,6 +32,12 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from geography import WORLDWIDE, is_known  # noqa: E402
+import job_history  # noqa: E402
+from job_fingerprint import (  # noqa: E402,F401
+    MAX_DESCRIPTION_CHARS,
+    PROMPT_VERSION,
+    job_fingerprint,
+)
 from llm_client import (  # noqa: E402
     LlmRefused,
     LlmUnavailable,
@@ -42,13 +47,9 @@ from llm_client import (  # noqa: E402
 
 JOBS_PATH = ROOT / "data" / "jobs" / "discovered_jobs.json"
 
-# Bump when the prompt changes: it is part of the fingerprint, so every ad
-# is read again rather than served from a cache built by an older question.
-PROMPT_VERSION = 2
-
-# Everything extracted here is stated in the opening half of an ad. The rest
-# is benefits copy and equal-opportunity boilerplate.
-MAX_DESCRIPTION_CHARS = 9000
+# PROMPT_VERSION, MAX_DESCRIPTION_CHARS and the fingerprint live in
+# job_fingerprint.py: the job history ledger uses the same fingerprint.
+_fingerprint = job_fingerprint
 
 WORK_MODES = {"remote", "hybrid", "onsite", "unclear"}
 ROLE_TRACKS = {
@@ -179,18 +180,6 @@ applicants must already have the right to work there. Otherwise \
 """
 
 
-def _fingerprint(job: dict) -> str:
-    raw = "|".join(
-        [
-            str(PROMPT_VERSION),
-            job.get("title") or "",
-            job.get("company") or "",
-            (job.get("description") or "")[:MAX_DESCRIPTION_CHARS],
-        ]
-    )
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
-
-
 def _coerce(raw: dict) -> dict:
     """Keep only values the schema allows; anything else becomes unclear.
 
@@ -267,6 +256,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=0, help="stop after N jobs")
     p.add_argument("--force", action="store_true", help="re-read cached jobs")
     p.add_argument("--workers", type=int, default=8, help="parallel calls")
+    p.add_argument(
+        "--ledger",
+        type=Path,
+        default=None,
+        help="job history ledger (default: job_history.json beside --jobs)",
+    )
     return p.parse_args()
 
 
@@ -284,12 +279,22 @@ def main() -> int:
         print("Invalid jobs format", file=sys.stderr)
         return 1
 
+    ledger_file = args.ledger or job_history.ledger_path(args.jobs)
+    ledger = job_history.load(ledger_file)
+
     pending: list[tuple[int, dict]] = []
-    skipped = 0
+    skipped = from_ledger = 0
     for index, job in enumerate(jobs, start=1):
         cached = job.get("llmFacts") or {}
         if not args.force and cached.get("_fingerprint") == _fingerprint(job):
             skipped += 1
+            continue
+        # Facts the ledger holds for this exact ad are reused instead of asking again.
+        stored = None if args.force else job_history.facts_for(ledger, job)
+        if stored:
+            job["llmFacts"] = stored
+            skipped += 1
+            from_ledger += 1
             continue
         pending.append((index, job))
         if args.limit and len(pending) >= args.limit:
@@ -326,7 +331,11 @@ def main() -> int:
             done += 1
 
     args.jobs.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    print(f"\nextracted {done}, cached {skipped}, failed {failed}")
+    # Everything now known goes back into the ledger, so the next run can reuse it.
+    stored = [job_history.store_facts(ledger, job) for job in jobs]  # all of them, not the first
+    if any(stored):
+        job_history.save(ledger_file, ledger)
+    print(f"\nextracted {done}, cached {skipped} ({from_ledger} from the ledger), failed {failed}")
     return 0
 
 

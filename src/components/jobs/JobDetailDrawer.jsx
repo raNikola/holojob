@@ -9,6 +9,7 @@ import RelatedContactsPanel from '../outreach/RelatedContactsPanel'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { isCapReason } from '../../modules/jobs/workAuthorization'
+import { formatSeen, historyBadges } from '../../modules/jobs/jobHistory'
 import FitJudgementSection, { isFitReason } from './FitJudgementSection'
 
 const DIMENSION_LABELS = {
@@ -102,6 +103,15 @@ export default function JobDetailDrawer({
             <div><dt className="text-xs text-stone-500">Provider</dt><dd>{provider || '—'}</dd></div>
             <div><dt className="text-xs text-stone-500">Remote</dt><dd>{job.isRemote ? 'Yes' : 'No'}</dd></div>
             <div><dt className="text-xs text-stone-500">Status</dt><dd><Badge>{job.status}</Badge></dd></div>
+            {job.firstSeen && (
+              <div>
+                <dt className="text-xs text-stone-500">Seen</dt>
+                <dd className="flex flex-wrap items-center gap-1">
+                  {formatSeen(job.firstSeen)} – {formatSeen(job.lastSeen)}
+                  {historyBadges(job).map((b) => <Badge key={b.label} variant={b.variant}>{b.label}</Badge>)}
+                </dd>
+              </div>
+            )}
           </dl>
 
           {job.jobUrl && (

@@ -42,8 +42,11 @@ def export_discovered_json(
     source_run_id: str = "",
     providers: list[str] | None = None,
     provider_counts: dict[str, int] | None = None,
+    deduped_count: int | None = None,
+    history: dict | None = None,
 ) -> Path:
-    deduped_count = len(jobs)
+    # The jobs written can include recently closed ones; the count is what was found.
+    deduped_count = len(jobs) if deduped_count is None else deduped_count
     duplicate_count = max(0, raw_count - deduped_count)
     payload = {
         "meta": {
@@ -58,6 +61,7 @@ def export_discovered_json(
             "rawCount": raw_count,
             "dedupedCount": deduped_count,
             "duplicateCount": duplicate_count,
+            "history": history or {},
         },
         "jobs": jobs,
     }

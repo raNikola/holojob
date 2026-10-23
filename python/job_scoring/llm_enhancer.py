@@ -309,6 +309,7 @@ class LlmFitEnhancer:
             self._cache = json.loads(cache_path.read_text(encoding="utf-8"))
         self.counts = {
             "judged": 0, "cached": 0, "skipped": 0, "failed": 0, "uncached": 0, "beyond_limit": 0,
+            "closed": 0,
         }
 
     def _count(self, key: str) -> None:
@@ -336,7 +337,7 @@ class LlmFitEnhancer:
         eligible = [
             (-r["matchScore"], index, self._key(r))
             for index, r in enumerate(results)
-            if r["matchScore"] >= self.threshold
+            if r["matchScore"] >= self.threshold and not r.get("isClosed")
         ]
         eligible.sort()
         self._selected = {key for _, _, key in eligible[: max(0, self.limit)]}
@@ -375,6 +376,10 @@ class LlmFitEnhancer:
         base = base_result["matchScore"]
         if base < self.threshold:
             self._count("skipped")
+            return base_result
+        if base_result.get("isClosed"):
+            # An ad that is no longer listed is not worth a model call.
+            self._count("closed")
             return base_result
 
         try:

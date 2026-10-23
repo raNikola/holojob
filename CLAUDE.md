@@ -80,6 +80,23 @@ of the ad, so reruns are free. `llm_client.py` holds a provider table —
 OpenAI, DeepSeek, OpenRouter, Groq, Ollama, a `custom` endpoint, and the
 Claude Code CLI as a keyless fallback. `CAREER_OS_LLM_PROVIDER` chooses.
 
+**Job history** (`job_scoring/job_history.py`, `data/jobs/job_history.json`).
+Discovery rewrites `discovered_jobs.json` every run, so the ledger is what
+survives: per `jobId`, `firstSeen`, `lastSeen`, `closedAt`, a snapshot of the
+job, and the enrichment facts (`llmFacts`), the only thing enrichment adds to
+a job. Facts are reused while the ad's content fingerprint (`job_fingerprint.py`,
+the one definition, shared by enrichment and the ledger) is unchanged; a changed
+ad is read again. The first run seeds the ledger from the file it replaces.
+Records carry `firstSeen`, `lastSeen`, `closedAt`, `isNew` (first seen within 3
+days) and `isClosed`; the job list shows New and Closed badges. Closed means
+discovery no longer finds the job, and is decided only for Greenhouse, Lever
+and Ashby (they list every open posting), only when that provider returned jobs
+and the search was the same as when the job was last seen, and never while the
+same title and company is still listed under another copy. LinkedIn returns a
+rolling 72-hour window, so a LinkedIn job missing from a run is not closed.
+Closed jobs stay in `discovered_jobs.json` for 14 days and are never judged;
+the ledger drops them after 90.
+
 **Scoring** (`python/job_scoring/`). Six weighted dimensions, no AI:
 
     roleMatch 25, skillMatch 25, locationMatch 20,
