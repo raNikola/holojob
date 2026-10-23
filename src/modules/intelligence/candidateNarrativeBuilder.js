@@ -34,7 +34,7 @@ function extractWorkDomains(workExperience) {
 const CANDIDATE_TYPES = [
   { label: 'Technical Product Builder', score: (ctx, skills) => {
     let s = 0
-    if (ctx.targetRoles.some((r) => /product/i.test(r))) s += 3
+    if (/product/i.test(ctx.currentRole)) s += 3
     if (skills.productBusiness.length > 0) s += 2
     if (skills.frontend.length > 0 && skills.backend.length > 0) s += 2
     return s
@@ -42,7 +42,7 @@ const CANDIDATE_TYPES = [
   { label: 'Full Stack Product Engineer', score: (ctx, skills) => {
     let s = 0
     if (skills.frontend.length > 0 && skills.backend.length > 0) s += 3
-    if (ctx.targetRoles.some((r) => /full stack|fullstack/i.test(r))) s += 3
+    if (/full stack|fullstack/i.test(ctx.currentRole)) s += 3
     return s
   }},
   { label: 'Frontend Developer', score: (ctx, skills) => {
@@ -66,20 +66,24 @@ const CANDIDATE_TYPES = [
   }},
   { label: 'Early CTO / Product-Tech Operator', score: (ctx) => {
     let s = 0
-    if (ctx.targetRoles.some((r) => /cto|head|founder/i.test(r))) s += 4
+    if (/cto|head|founder/i.test(ctx.currentRole)) s += 4
     if (ctx.questionnaire.ownershipExamples.length > 1) s += 2
     return s
   }},
   { label: 'Data Analyst', score: (ctx, skills) => {
     let s = 0
     if (skills.database.length > 0 && skills.aiAutomation.length === 0) s += 1
-    if (ctx.targetRoles.some((r) => /data|analyst|bi/i.test(r))) s += 4
+    if (/data|analyst|bi/i.test(ctx.currentRole)) s += 4
     return s
   }},
 ]
 
+// Seniority and candidate type describe who the candidate is today, so they
+// read the current role only. Target roles are what they are looking for and
+// drive the search terms, never an identity label: a candidate targeting "Head
+// of Product" is not thereby an executive.
 export function inferSeniorityLevel(ctx) {
-  const roleText = [ctx.currentRole, ...ctx.targetRoles].join(' ').toLowerCase()
+  const roleText = (ctx.currentRole || '').toLowerCase()
   if (/\b(cto|founder|chief|vp|vice president)\b/.test(roleText)) return 'Executive / Founder-Level'
   if (/\b(director|head of)\b/.test(roleText)) return 'Executive / Founder-Level'
   if (/\b(manager|engineering manager|product manager)\b/.test(roleText) && ctx.experienceYears >= 5) {

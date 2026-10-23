@@ -241,6 +241,12 @@ records the warning under the job's `tailoredAssets.warnings`.
 
 The country to search comes from `--country`, else the candidate intelligence;
 with neither, discovery stops. No provider, script or UI has a default country.
+Target roles drive search terms only. Seniority and candidate type are read
+from the current role (`candidateNarrativeBuilder.js`), so listing "Head of
+Product" as a target does not relabel the candidate. Europe and the United
+States are added as search locations only when the profile's relocation is
+`abroad` or `anywhere`; a role there that needs a visa the candidate lacks is
+capped by scoring, not removed from the search.
 A missing profile, intelligence or scored-jobs file is an empty state: the app
 never fills it from `data/examples/` outside an explicit demo mode. Keep it
 that way: a default is a decision made for the candidate without asking.

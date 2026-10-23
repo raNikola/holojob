@@ -1,4 +1,5 @@
 import { buildExportProfile } from '../../utils/exportJson.js'
+import { normalizeRelocation } from '../../utils/workAuthorization.js'
 import {
   COMPANY_TYPES,
   BUSINESS_SKILLS,
@@ -138,6 +139,7 @@ export function normalizeProfile(rawProfile) {
     remotePreference: bp.remotePreference || '',
     salaryExpectation: bp.salaryExpectation || '',
     location: bp.location || '',
+    relocation: normalizeRelocation(bp.relocation),
     fullName: bp.fullName || '',
   }
 }
