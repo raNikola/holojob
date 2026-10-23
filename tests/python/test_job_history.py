@@ -194,3 +194,41 @@ def test_a_second_enrichment_run_makes_no_calls(tmp_path, monkeypatch, capsys):
     enrich_jobs.main()
     assert len(calls) == 1
     assert "cached 1 (1 from the ledger)" in capsys.readouterr().out
+
+
+# --- closed jobs are not candidates for bulk actions ---------------------------------------------
+
+
+def tailor_args(**kw):
+    import argparse
+
+    base = dict(job_id=None, job_ids=None, apply_only=False, priority=None, apply_recommendation=None, limit=10)
+    return argparse.Namespace(**{**base, **kw})
+
+
+def scored(job_id, closed=False, priority="P1", apply="Apply"):
+    return {"jobId": job_id, "priority": priority, "applyRecommendation": apply, "isClosed": closed}
+
+
+def test_a_bulk_tailor_run_skips_closed_jobs_but_a_job_picked_by_id_is_still_tailored():
+    import run_tailor
+
+    jobs = [scored("open1"), scored("gone", closed=True), scored("open2")]
+    for args in (tailor_args(priority="P1"), tailor_args(apply_only=True), tailor_args()):
+        assert [j["jobId"] for j in run_tailor._select_jobs(jobs, args)] == ["open1", "open2"]
+    # Closed jobs do not use up the limit either.
+    assert [j["jobId"] for j in run_tailor._select_jobs([scored("gone", closed=True), scored("open1")], tailor_args(limit=1))] == ["open1"]
+    assert [j["jobId"] for j in run_tailor._select_jobs(jobs, tailor_args(job_id="gone"))] == ["gone"]
+    assert [j["jobId"] for j in run_tailor._select_jobs(jobs, tailor_args(job_ids="gone,open1"))] == ["open1", "gone"]
+
+
+def test_the_quality_audit_sample_skips_closed_jobs():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "python" / "quality_audit" / "audit_utils.py"
+    spec = importlib.util.spec_from_file_location("_audit_utils", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    picked = module.pick_sample_jobs([{**scored("gone", closed=True), "matchScore": 99}, {**scored("open1"), "matchScore": 70}])
+    assert [j["jobId"] for j in picked] == ["open1"]

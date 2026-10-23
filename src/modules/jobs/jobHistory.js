@@ -6,6 +6,11 @@ export function historyBadges(job) {
   return badges
 }
 
+/** A job that is still listed. Closed jobs stay visible, but are not candidates for "do something now" actions. */
+export function isActionable(job) {
+  return !job?.isClosed
+}
+
 export function formatSeen(value) {
   return value ? String(value).slice(0, 10) : ''
 }

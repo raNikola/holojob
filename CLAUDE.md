@@ -95,7 +95,10 @@ and the search was the same as when the job was last seen, and never while the
 same title and company is still listed under another copy. LinkedIn returns a
 rolling 72-hour window, so a LinkedIn job missing from a run is not closed.
 Closed jobs stay in `discovered_jobs.json` for 14 days and are never judged;
-the ledger drops them after 90.
+the ledger drops them after 90. They stay in the main job list with their
+badge, but are not candidates for "do something now": bulk tailoring, the
+quality-audit sample, the P1/P2 view, the Apply/P1/P2 counts and the AI
+Copilot's top jobs all skip them. A job picked by id is still tailored.
 
 **Scoring** (`python/job_scoring/`). Six weighted dimensions, no AI:
 

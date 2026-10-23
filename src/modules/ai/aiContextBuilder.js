@@ -2,6 +2,7 @@ import { loadProfile } from '../../utils/storage.js'
 import { loadIntelligence } from '../intelligence/intelligenceExport.js'
 import { loadJobs } from '../jobs/jobStorage.js'
 import { computeJobStats } from '../jobs/jobStats.js'
+import { isActionable } from '../jobs/jobHistory.js'
 import { loadAiMemory } from './aiMemory.js'
 
 function truncate(str, max = 4000) {
@@ -116,7 +117,7 @@ export function buildAiContext({ featureId, job, message, extra } = {}) {
   if (featureId === 'applicationStrategy') base.applications = buildApplicationContext()
   if (featureId === 'careerStrategy') {
     base.topJobs = jobState.jobs
-      .filter((j) => typeof j.matchScore === 'number')
+      .filter((j) => typeof j.matchScore === 'number' && isActionable(j))
       .sort((a, b) => b.matchScore - a.matchScore)
       .slice(0, 10)
       .map(summarizeJob)

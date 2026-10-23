@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { formatSeen, historyBadges } from '../../src/modules/jobs/jobHistory.js'
+import { formatSeen, historyBadges, isActionable } from '../../src/modules/jobs/jobHistory.js'
+import { computeJobStats } from '../../src/modules/jobs/jobStats.js'
 
 describe('history badges', () => {
   it('flag a job first seen recently as New', () => {
@@ -25,3 +26,21 @@ describe('history badges', () => {
     expect(formatSeen(undefined)).toBe('')
   })
 })
+
+describe('closed jobs are not candidates for action', () => {
+  const job = (extra) => ({ status: 'new', matchScore: 80, applyRecommendation: 'Apply', priority: 'P1', ...extra })
+
+  it('are told apart from open ones', () => {
+    expect(isActionable(job({ isClosed: true }))).toBe(false)
+    expect(isActionable(job({ isClosed: false }))).toBe(true)
+    expect(isActionable(job({}))).toBe(true)
+  })
+
+  it('stay in the totals but leave the action buckets', () => {
+    const stats = computeJobStats([job({}), job({ isClosed: true }), job({ priority: 'P2', applyRecommendation: 'Maybe', isClosed: true })])
+    expect(stats.total).toBe(3)
+    expect(stats.scored).toBe(3)
+    expect([stats.p1, stats.p2, stats.apply, stats.maybe]).toEqual([1, 0, 1, 0])
+  })
+})
+

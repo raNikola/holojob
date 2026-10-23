@@ -111,9 +111,9 @@ def resume_pdf_path(job_id: str) -> Path:
 
 
 def pick_sample_jobs(jobs: list[dict], limit: int = 5) -> list[dict]:
-    """Pick top P1/Apply jobs for sample audit."""
+    """Pick top P1/Apply jobs for sample audit; closed ads are not candidates."""
     ranked = sorted(
-        jobs,
+        (j for j in jobs if not j.get("isClosed")),
         key=lambda j: (
             0 if j.get("priority") == "P1" else 1,
             0 if j.get("applyRecommendation") == "Apply" else 1,

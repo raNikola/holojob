@@ -35,6 +35,7 @@ import {
 import { runDiscovery, runScoring, loadLatestScoredJobs } from '../../modules/jobs/pipelineRunner'
 import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { useProfile } from '../../context/ProfileContext'
+import { isActionable } from '../../modules/jobs/jobHistory'
 
 const JOB_TABS = [
   { id: 'jobs', label: 'Jobs' },
@@ -93,12 +94,12 @@ export default function JobDiscoveryScreen() {
   const providers = useMemo(() => getUniqueProviders(state.jobs), [state.jobs])
   const filteredJobs = useMemo(() => {
     let filtered = filterJobs(state.jobs, state.filters)
-    if (showP1Only) filtered = filtered.filter((j) => j.priority === 'P1' || j.priority === 'P2')
+    if (showP1Only) filtered = filtered.filter((j) => isActionable(j) && (j.priority === 'P1' || j.priority === 'P2'))
     return sortJobsByScore(filtered)
   }, [state.jobs, state.filters, showP1Only])
 
-  const p1Count = useMemo(() => state.jobs.filter((j) => j.priority === 'P1').length, [state.jobs])
-  const p2Count = useMemo(() => state.jobs.filter((j) => j.priority === 'P2').length, [state.jobs])
+  const p1Count = useMemo(() => state.jobs.filter((j) => isActionable(j) && j.priority === 'P1').length, [state.jobs])
+  const p2Count = useMemo(() => state.jobs.filter((j) => isActionable(j) && j.priority === 'P2').length, [state.jobs])
 
   const handleRerunDiscovery = useCallback(async () => {
     setRerunning(true)
