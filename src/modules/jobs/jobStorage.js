@@ -15,6 +15,10 @@ const DEFAULT_FILTERS = {
   matchLabel: '',
   priority: '',
   minScore: '',
+  // null until the user touches them: then the profile's figures apply.
+  minSalary: null,
+  desiredSalaryMin: null,
+  desiredSalaryMax: null,
 }
 
 export function getDefaultJobsState() {

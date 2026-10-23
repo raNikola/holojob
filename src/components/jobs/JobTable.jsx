@@ -5,6 +5,7 @@ import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
 import { authorizationBadge } from '../../modules/jobs/workAuthorization'
 import { historyBadges } from '../../modules/jobs/jobHistory'
+import { salaryBadges } from '../../modules/jobs/jobSalary'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
 import { ApplyBadge, MatchScoreBadge, PriorityBadge } from './JobScoreBadge'
 import JobTailorActions from './JobTailorActions'
@@ -27,7 +28,7 @@ function FollowUpBadge({ job }) {
 }
 
 function HistoryBadges({ job }) {
-  const badges = historyBadges(job)
+  const badges = [...historyBadges(job), ...salaryBadges(job)]
   if (!badges.length) return null
   return (
     <>

@@ -225,6 +225,11 @@ export default function ProfileForm() {
           </div>
           <Input label="Salary expectation" value={bp.salaryExpectation} onChange={(e) => setBasic('salaryExpectation', e.target.value)} placeholder="Amount and currency, per month or year" />
         </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <Input label="Minimum salary (EUR/month)" type="number" min={0} value={bp.minSalaryEur ?? ''} onChange={(e) => setBasic('minSalaryEur', e.target.value === '' ? null : Number(e.target.value))} placeholder="Flags jobs paying less" />
+          <Input label="Desired salary from (EUR/month)" type="number" min={0} value={bp.desiredSalaryMinEur ?? ''} onChange={(e) => setBasic('desiredSalaryMinEur', e.target.value === '' ? null : Number(e.target.value))} />
+          <Input label="Desired salary to (EUR/month)" type="number" min={0} value={bp.desiredSalaryMaxEur ?? ''} onChange={(e) => setBasic('desiredSalaryMaxEur', e.target.value === '' ? null : Number(e.target.value))} />
+        </div>
         <div className="mt-4 space-y-4">
           <RoleCombobox
             label="Target roles"

@@ -17,6 +17,7 @@ from llm_enhancer import NoOpEnhancer
 from red_flags import detect_red_flags
 from corpus import build_idf
 import work_authorization as wa
+from salary import salary_metadata
 
 # The one set of default weights, shared with the UI's settings panel and the
 # intelligence generator (src/modules/intelligence/candidateIntelligenceEngine.js).
@@ -134,6 +135,9 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         "reasons": reasons,
         "scoreBreakdown": breakdown,
         "workAuthorization": authorization,
+        # Display metadata only (salary.py): computed from the ad and the
+        # profile's minimum, and read by nothing above.
+        **salary_metadata(job, intelligence),
         # True when a hard rule applies to the job, whether or not it lowered
         # this particular score. The enhancer never lifts such a job, so caps
         # stay decided here.

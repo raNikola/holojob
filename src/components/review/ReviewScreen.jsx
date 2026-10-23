@@ -135,6 +135,8 @@ export default function ReviewScreen({ mode = 'onboarding', onEditStep, onComple
           <Field label="Preferred locations" value={bp.preferredLocations} />
           <Field label="Remote preference" value={bp.remotePreference} />
           <Field label="Salary expectation" value={bp.salaryExpectation} />
+          <Field label="Minimum salary" value={bp.minSalaryEur ? `€${bp.minSalaryEur}/month` : ''} />
+          <Field label="Desired salary" value={[bp.desiredSalaryMinEur, bp.desiredSalaryMaxEur].some(Boolean) ? `€${bp.desiredSalaryMinEur || '?'}–${bp.desiredSalaryMaxEur || '?'}/month` : ''} />
         </dl>
       </Section>
 

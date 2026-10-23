@@ -152,6 +152,22 @@ calls `POST /api/scoring/judge`, which refuses a body without
 `"confirm": true`. `/api/scoring/run`, Re-score and Run Full Pipeline never
 judge; `tests/js/judgeBoundary.test.js` pins both routes.
 
+**Salary flag** (`job_scoring/salary.py`). Display metadata only: it never reaches
+`matchScore`, `matchLabel`, `priority`, `applyRecommendation` or the red flags
+(`tests/python/test_salary.py` pins that). The profile holds `minSalaryEur` and a
+desired range `desiredSalaryMinEur`/`desiredSalaryMaxEur`, all EUR per month,
+carried into `jobFitPreferences` by the intelligence generator and never sent to the
+judge. Scoring parses the job's free-text `salary` into `salaryMonthlyEur`
+(`{min, max}`) only when the text names EUR, a yearly or monthly interval and one
+amount or range; any other currency, a missing one (LinkedIn's formatter drops USD),
+an hourly rate or an open-ended "up to / from" is unknown. `belowMinSalary` is true
+when the top of the range is under the minimum, false when it reaches it, null when
+the pay or the minimum is unknown. The job list shows a "Below min salary" badge, and
+the Filters panel has Min salary and Desired salary from/to, pre-filled from the
+profile until touched; a job with unreadable pay always passes them. The minimum is
+read from the intelligence file on every scoring run, so a re-score picks up a changed
+minimum without discovery once the intelligence is regenerated and synced.
+
 **Privacy exception.** Everything else in this repo keeps personal data on the
 server. The judge is the one deliberate exception, and only when `--judge` is
 passed: it sends the ad plus a digest of `candidate-intelligence.json` (seniority,
