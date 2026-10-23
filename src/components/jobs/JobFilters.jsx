@@ -53,6 +53,28 @@ export default function JobFilters({ filters, sites, providers, jobs, onChange }
               onChange={(e) => onChange({ minScore: e.target.value })}
               placeholder="e.g. 55"
             />
+            <Input
+              label="Min salary (EUR/month)"
+              type="number"
+              min={0}
+              value={filters.minSalary ?? ''}
+              onChange={(e) => onChange({ minSalary: e.target.value })}
+              placeholder="e.g. 2500"
+            />
+            <Input
+              label="Desired salary from (EUR/month)"
+              type="number"
+              min={0}
+              value={filters.desiredSalaryMin ?? ''}
+              onChange={(e) => onChange({ desiredSalaryMin: e.target.value })}
+            />
+            <Input
+              label="Desired salary to (EUR/month)"
+              type="number"
+              min={0}
+              value={filters.desiredSalaryMax ?? ''}
+              onChange={(e) => onChange({ desiredSalaryMax: e.target.value })}
+            />
             <SelectField
               label="Match label"
               value={filters.matchLabel}

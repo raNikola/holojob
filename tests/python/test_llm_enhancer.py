@@ -152,6 +152,7 @@ def test_prompt_fences_the_ad_and_leaves_out_private_fields(intelligence):
     intel = {
         **intelligence,
         "salaryExpectation": "SECRET-SALARY",
+        "jobFitPreferences": {**intelligence.get("jobFitPreferences", {}), "minSalaryEur": 7777, "desiredSalaryEur": {"min": 8888, "max": 9999}},
         "candidateSummary": {"careerNarrative": "Shipped things."},
     }
     prompt = build_prompt(JOB, intel)
@@ -159,6 +160,7 @@ def test_prompt_fences_the_ad_and_leaves_out_private_fields(intelligence):
     assert "=== END JOB AD ===" in prompt
     assert "Shipped things." in prompt
     assert "SECRET-SALARY" not in prompt
+    assert not any(n in prompt for n in ("7777", "8888", "9999"))
 
 
 def test_digest_states_the_candidates_languages(intelligence):

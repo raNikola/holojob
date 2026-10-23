@@ -1,5 +1,6 @@
 import { countryOfLocation } from '../../utils/searchCountry.js'
 import { normalizeAllowedLocations, normalizeRelocation, normalizeWorkAuthorization } from '../../utils/workAuthorization.js'
+import { salaryPreferences } from '../../utils/salary.js'
 
 function dedupe(arr) {
   return [...new Set(arr.filter(Boolean))]
@@ -199,6 +200,7 @@ export function buildJobFitPreferences(ctx) {
     preferredLocations: ctx.preferredLocations.length ? ctx.preferredLocations : (ctx.location ? [ctx.location] : []),
     remotePreference: ctx.remotePreference,
     salaryExpectation: ctx.salaryExpectation,
+    ...salaryPreferences(ctx.basicProfile),
     culturePreference: ctx.questionnaire.culturePreference,
     workToAvoid: ctx.questionnaire.workToAvoid,
   }

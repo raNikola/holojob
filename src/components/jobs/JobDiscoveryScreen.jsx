@@ -33,6 +33,7 @@ import {
   updateJobStatus,
 } from '../../modules/jobs/jobStorage'
 import { runDiscovery, runScoring, loadLatestScoredJobs } from '../../modules/jobs/pipelineRunner'
+import { withProfileSalaryDefaults } from '../../modules/jobs/jobSalary'
 import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { useProfile } from '../../context/ProfileContext'
 import { isActionable } from '../../modules/jobs/jobHistory'
@@ -92,11 +93,12 @@ export default function JobDiscoveryScreen() {
   const stats = useMemo(() => computeJobStats(state.jobs), [state.jobs])
   const sites = useMemo(() => getUniqueSites(state.jobs), [state.jobs])
   const providers = useMemo(() => getUniqueProviders(state.jobs), [state.jobs])
+  const effectiveFilters = useMemo(() => withProfileSalaryDefaults(state.filters, profile?.basicProfile), [state.filters, profile?.basicProfile])
   const filteredJobs = useMemo(() => {
-    let filtered = filterJobs(state.jobs, state.filters)
+    let filtered = filterJobs(state.jobs, effectiveFilters)
     if (showP1Only) filtered = filtered.filter((j) => isActionable(j) && (j.priority === 'P1' || j.priority === 'P2'))
     return sortJobsByScore(filtered)
-  }, [state.jobs, state.filters, showP1Only])
+  }, [state.jobs, effectiveFilters, showP1Only])
 
   const p1Count = useMemo(() => state.jobs.filter((j) => isActionable(j) && j.priority === 'P1').length, [state.jobs])
   const p2Count = useMemo(() => state.jobs.filter((j) => isActionable(j) && j.priority === 'P2').length, [state.jobs])
@@ -307,7 +309,7 @@ export default function JobDiscoveryScreen() {
                   </div>
               </div>
 
-              <JobFilters filters={state.filters} sites={sites} providers={providers} jobs={state.jobs} onChange={handleFilterChange} />
+              <JobFilters filters={effectiveFilters} sites={sites} providers={providers} jobs={state.jobs} onChange={handleFilterChange} />
               <BulkActionsBar
                 selectedCount={selectedJobIds.length}
                 running={bulkRunning}

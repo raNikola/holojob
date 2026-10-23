@@ -1,4 +1,5 @@
 import { NEEDS_VISA_STATUSES } from './workAuthorization.js'
+import { passesSalaryFilters } from './jobSalary.js'
 
 export function getJobProvider(job) {
   return job.provider || job.site || ''
@@ -16,6 +17,9 @@ export function filterJobs(jobs, filters = {}) {
     matchLabel = '',
     priority = '',
     minScore = '',
+    minSalary = '',
+    desiredSalaryMin = '',
+    desiredSalaryMax = '',
   } = filters
 
   const q = searchText.trim().toLowerCase()
@@ -28,6 +32,7 @@ export function filterJobs(jobs, filters = {}) {
       const floor = Number(minScore)
       if (!Number.isNaN(floor) && (job.matchScore ?? 0) < floor) return false
     }
+    if (!passesSalaryFilters(job, { minSalary, desiredMin: desiredSalaryMin, desiredMax: desiredSalaryMax })) return false
     if (remoteOnly && !job.isRemote) return false
     if (hideNeedsVisa && NEEDS_VISA_STATUSES.has(job.workAuthorization?.status)) return false
     if (site && (job.site || '').toLowerCase() !== site.toLowerCase()) return false

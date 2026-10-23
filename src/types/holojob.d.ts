@@ -28,6 +28,9 @@
  * @property {string[]} [preferredLocations]
  * @property {string} [remotePreference]
  * @property {string} [salaryExpectation]
+ * @property {number|null} [minSalaryEur] EUR per month; display only
+ * @property {number|null} [desiredSalaryMinEur]
+ * @property {number|null} [desiredSalaryMaxEur]
  * @property {string} [linkedin]
  * @property {LanguageEntry[]} [languages]
  * @property {WorkAuthorization} [workAuthorization]
