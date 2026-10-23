@@ -40,6 +40,24 @@ export async function probePipelineApi() {
   }
 }
 
+/**
+ * Discovery, enrichment and scoring as one run on the server. It stops at the
+ * first failed step and the error names it.
+ */
+export async function runFullPipeline({ providers, country, intelligence, profile }) {
+  const res = await fetch('/api/pipeline/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ providers, country, intelligence, profile }),
+  })
+  const data = await res.json()
+  if (!res.ok) {
+    const stopped = data.failedStep ? `Pipeline stopped at ${data.failedStep}: ${data.reason || data.stderr}` : null
+    throw new Error(stopped || data.stderr || data.error || 'Pipeline run failed')
+  }
+  return data
+}
+
 export async function runDiscovery({ providers, country, locations, intelligence, profile }) {
   const res = await fetch('/api/discovery/run', {
     method: 'POST',

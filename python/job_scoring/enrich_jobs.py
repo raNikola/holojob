@@ -336,6 +336,11 @@ def main() -> int:
     if any(stored):
         job_history.save(ledger_file, ledger)
     print(f"\nextracted {done}, cached {skipped} ({from_ledger} from the ledger), failed {failed}")
+    # Every call failing means the provider is down: say so rather than let a
+    # pipeline carry on with jobs nobody read.
+    if pending and done == 0:
+        print("every enrichment call failed; is the LLM provider reachable?", file=sys.stderr)
+        return 1
     return 0
 
 

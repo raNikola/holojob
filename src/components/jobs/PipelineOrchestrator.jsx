@@ -19,9 +19,11 @@ import {
   loadLatestScoredJobs,
   probePipelineApi,
   runDiscovery,
+  runFullPipeline,
   runScoring,
   runTailor,
 } from '../../modules/jobs/pipelineRunner'
+import { describeRun } from '../../modules/jobs/pipelineSummary'
 import { useProfile } from '../../context/ProfileContext'
 import FitJudgementCard from './FitJudgementCard'
 import { searchCountry } from '../../utils/searchCountry'
@@ -189,15 +191,10 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
       setStepLabel('Syncing profile & intelligence…')
       const intelligence = await syncInputs()
 
-      setStepLabel('Running discovery…')
-      const disc = await runDiscovery({ providers, country, intelligence, profile })
-      if (!disc.payload) throw new Error(disc.stderr || 'Discovery failed')
-      importPayload(disc.payload)
-
-      setStepLabel('Running scoring…')
-      const scored = await runScoring()
-      if (!scored.payload) throw new Error(scored.stderr || 'Scoring failed')
-      importPayload(scored.payload)
+      setStepLabel('Running discovery, enrichment and scoring…')
+      const run = await runFullPipeline({ providers, country, intelligence, profile })
+      if (!run.payload) throw new Error(run.stderr || 'Pipeline produced no scored jobs')
+      importPayload(run.payload)
 
       setStepLabel('Generating resumes…')
       const tailored = await runTailorStep()
@@ -205,13 +202,13 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
       importPayload(tailored.payload)
 
       updatePipelineState({
-        lastDiscoveryRun: disc.payload?.meta?.generatedAt,
-        lastScoringRun: scored.payload?.meta?.generatedAt,
+        lastDiscoveryRun: run.discoveredPayload?.meta?.generatedAt,
+        lastScoringRun: run.payload?.meta?.generatedAt,
         lastTailoringRun: new Date().toISOString(),
         runningStep: null,
       })
-      setSummary(`Pipeline complete: ${disc.jobCount} discovered, ${scored.jobCount} scored, resumes generated`)
-      setLog([disc.stdout, scored.stdout, tailored.stdout].filter(Boolean).join('\n'))
+      setSummary(describeRun(run.summary, run.jobCount))
+      setLog([run.stdout, tailored.stdout].filter(Boolean).join('\n'))
     } catch (e) {
       setError(e.message)
       updatePipelineState({ runningStep: null })

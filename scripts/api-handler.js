@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildDiscoveryCommand, getDiscoveryStatus, runDiscovery } from './run-discovery.js'
+import { runPipeline } from './run-pipeline.js'
 import { buildScoringCommand, getScoringStatus, previewJudge, runJudgedScoring, runScoring } from './run-scoring.js'
 import { buildTailorCommand, getTailorStatus, runTailor, runTailorStream } from './run-tailor.js'
 import { getProjectScanStatus, runProjectScan } from './run-project-scan.js'
@@ -244,6 +245,24 @@ export async function handleApiRequest(req, res) {
         providers: body.providers || 'serbia',
         country: body.country,
         locations: body.locations,
+        intelligence: body.intelligence,
+        profile: body.profile,
+      })
+      sendJson(res, result.ok ? 200 : 500, result)
+    } catch (e) {
+      sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // Discovery, enrichment and scoring as one fail-fast run (python/run_pipeline.py).
+  // Never judges; the judged run keeps its own confirmed route.
+  if (url === '/api/pipeline/run' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const result = await runPipeline({
+        providers: body.providers || 'serbia',
+        country: body.country,
         intelligence: body.intelligence,
         profile: body.profile,
       })
