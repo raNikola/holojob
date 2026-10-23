@@ -137,6 +137,7 @@ def main() -> int:
         "fromCache": c["cached"],
         "beyondLimit": c["beyond_limit"],
         "belowThreshold": c["skipped"],
+        "closed": c["closed"],
         "failed": c["failed"],
         "limit": limit if args.judge else None,
         "threshold": args.judge_threshold,

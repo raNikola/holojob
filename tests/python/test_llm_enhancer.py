@@ -397,3 +397,13 @@ def test_preview_counts_only_what_the_cap_would_send(intelligence, tmp_path, mon
     assert run_scoring.main() == 0
     preview = json.loads(capsys.readouterr().out)
     assert (preview["limit"], preview["eligible"], preview["toSend"], preview["beyondLimit"], preview["cached"]) == (2, 4, 2, 2, 0)
+
+
+def test_a_closed_job_is_never_sent_to_the_judge(intelligence):
+    stub = Stub(reply("strong"))
+    results = [base(90, jobId="open"), base(95, jobId="gone", isClosed=True)]
+    out = run_all(enhancer(stub, limit=1), results, intelligence)
+    assert [r["jobId"] for r in out if "llmFit" in r] == ["open"] and len(stub.calls) == 1
+    unlimited = enhancer(Stub(reply("strong")))
+    run_all(unlimited, results, intelligence)
+    assert unlimited.counts["closed"] == 1 and unlimited.counts["judged"] == 1

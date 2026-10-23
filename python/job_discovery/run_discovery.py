@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import json
 import logging
 import sys
 import uuid
@@ -16,7 +18,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from dedupe_jobs import dedupe_jobs  # noqa: E402
+from dedupe_jobs import _crosspost_key, dedupe_jobs  # noqa: E402
 from discovery_common import (  # noqa: E402
     INTELLIGENCE_PATH,
     load_intelligence,
@@ -29,6 +31,14 @@ from export_jobs import (  # noqa: E402
 )
 from providers.jobspy_provider import JobSpyProvider  # noqa: E402
 from providers.provider_registry import PROVIDER_GROUPS, get_provider, resolve_providers  # noqa: E402
+
+# The ledger lives beside the scorer's shared modules; it is loaded by path so
+# that module's siblings do not shadow this package's.
+_history_spec = importlib.util.spec_from_file_location(
+    "job_history", SCRIPT_DIR.parent / "job_scoring" / "job_history.py"
+)
+job_history = importlib.util.module_from_spec(_history_spec)
+_history_spec.loader.exec_module(job_history)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -108,11 +118,39 @@ def main() -> int:
     raw_count = len(all_jobs)
 
     deduped = dedupe_jobs(all_jobs)
+    found_count = len(deduped)
+
+    # Facts from the file this run replaces seed a ledger that has not seen the
+    # jobs yet, so a first run on an existing install keeps what enrichment read.
+    jobs_file = ROOT / "data" / "jobs" / "discovered_jobs.json"
+    previous_facts: dict[str, dict] = {}
+    if jobs_file.exists():
+        try:
+            previous = json.loads(jobs_file.read_text(encoding="utf-8"))
+            previous_jobs = previous.get("jobs") if isinstance(previous, dict) else previous
+            previous_facts = {
+                j["jobId"]: j["llmFacts"] for j in previous_jobs or [] if j.get("jobId") and j.get("llmFacts")
+            }
+        except (OSError, ValueError):
+            previous_facts = {}
+
+    ledger_file = job_history.ledger_path(jobs_file)
+    ledger = job_history.load(ledger_file)
+    to_write, history_stats = job_history.apply_run(
+        ledger,
+        deduped,
+        now=job_history.now_iso(),
+        providers_returned=provider_counts,
+        key=job_history.search_key(search_terms, locations, country, remote_filters),
+        role_key=_crosspost_key,
+        previous_facts=previous_facts,
+    )
+    job_history.save(ledger_file, ledger)
 
     export_raw_csv(raw_df, ROOT)
     export_normalized_json(all_jobs, ROOT)
     discovered_path = export_discovered_json(
-        deduped,
+        to_write,
         ROOT,
         search_terms=search_terms,
         locations=locations,
@@ -122,6 +160,8 @@ def main() -> int:
         source_run_id=source_run_id,
         providers=provider_names,
         provider_counts=provider_counts,
+        deduped_count=found_count,
+        history=history_stats,
     )
 
     print("")
@@ -139,8 +179,15 @@ def main() -> int:
         print(f"  {name}: {provider_counts.get(name, 0)} jobs")
     print("")
     print(f"Raw Jobs: {raw_count}")
-    print(f"Deduped Jobs: {len(deduped)}")
-    print(f"Duplicates Removed: {max(0, raw_count - len(deduped))}")
+    print(f"Deduped Jobs: {found_count}")
+    print(f"Duplicates Removed: {max(0, raw_count - found_count)}")
+    print("")
+    print("Job history:")
+    print(f"  new {history_stats['new']}, already known {history_stats['known']}, "
+          f"reopened {history_stats['reopened']}, closed this run {history_stats['closed']}")
+    print(f"  facts carried over {history_stats['carriedFacts']}, "
+          f"ads changed since last run {history_stats['changed']}")
+    print(f"  jobs written: {len(to_write)} ({len(to_write) - found_count} closed, kept {job_history.CLOSED_KEEP_DAYS} days)")
     print("")
     print(f"Output: {discovered_path.relative_to(ROOT)}")
     print("===================================")

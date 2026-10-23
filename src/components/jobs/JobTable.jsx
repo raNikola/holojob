@@ -4,6 +4,7 @@ import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
 import { authorizationBadge } from '../../modules/jobs/workAuthorization'
+import { historyBadges } from '../../modules/jobs/jobHistory'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
 import { ApplyBadge, MatchScoreBadge, PriorityBadge } from './JobScoreBadge'
 import JobTailorActions from './JobTailorActions'
@@ -23,6 +24,18 @@ function StatusBadge({ status }) {
 function FollowUpBadge({ job }) {
   if (!isFollowUpDue(job.applicationTracking)) return null
   return <Badge variant="medium">Follow-Up Required</Badge>
+}
+
+function HistoryBadges({ job }) {
+  const badges = historyBadges(job)
+  if (!badges.length) return null
+  return (
+    <>
+      {badges.map((b) => (
+        <span key={b.label} title={b.reason}><Badge variant={b.variant}>{b.label}</Badge></span>
+      ))}
+    </>
+  )
 }
 
 function AuthorizationBadge({ job }) {
@@ -95,6 +108,7 @@ function JobCard({
             {showScores && <MatchScoreBadge job={job} />}
             {showScores && <AuthorizationBadge job={job} />}
             <StatusBadge status={job.status} />
+            <HistoryBadges job={job} />
             <FollowUpBadge job={job} />
           </div>
         </div>
@@ -190,7 +204,7 @@ export default function JobTable({
                 )}
                 <td className="px-4 py-3 font-medium text-stone-900 dark:text-stone-100">
                   <div>{job.title}</div>
-                  <div className="mt-1"><FollowUpBadge job={job} /></div>
+                  <div className="mt-1 flex flex-wrap gap-1"><HistoryBadges job={job} /><FollowUpBadge job={job} /></div>
                 </td>
                 <td className="px-4 py-3 text-stone-600 dark:text-stone-400">{job.company}</td>
                 <td className="px-4 py-3 text-stone-600 dark:text-stone-400">{job.location || '—'}</td>
