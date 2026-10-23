@@ -46,8 +46,11 @@ export function passesSalaryFilters(job, { minSalary = '', desiredMin = '', desi
  */
 export function withProfileSalaryDefaults(filters, basicProfile = {}) {
   const pick = (own, fromProfile) => (own === null || own === undefined ? (fromProfile ?? '') : own)
+  const fromProfile = [filters.minSalary, filters.desiredSalaryMin, filters.desiredSalaryMax]
+    .some((own, i) => (own === null || own === undefined) && [basicProfile.minSalaryEur, basicProfile.desiredSalaryMinEur, basicProfile.desiredSalaryMaxEur][i])
   return {
     ...filters,
+    salaryFromProfile: Boolean(fromProfile),
     minSalary: pick(filters.minSalary, basicProfile.minSalaryEur),
     desiredSalaryMin: pick(filters.desiredSalaryMin, basicProfile.desiredSalaryMinEur),
     desiredSalaryMax: pick(filters.desiredSalaryMax, basicProfile.desiredSalaryMaxEur),

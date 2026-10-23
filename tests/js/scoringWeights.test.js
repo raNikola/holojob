@@ -77,3 +77,11 @@ describe('regenerating intelligence keeps the saved weights', () => {
     expect({ ...again, scoringWeights: undefined, meta: undefined }).toEqual({ ...plain, scoringWeights: undefined, meta: undefined })
   })
 })
+
+describe('the Settings panel', () => {
+  it('lists the weights in the documented order, so 25/25/20/15/10/5 reads top to bottom', () => {
+    const src = fs.readFileSync('src/components/settings/ScoringWeightsPanel.jsx', 'utf8')
+    const listed = [...src.matchAll(/\{ key: '(\w+)', label/g)].map((m) => m[1])
+    expect(listed).toEqual(Object.keys(defaults))
+  })
+})

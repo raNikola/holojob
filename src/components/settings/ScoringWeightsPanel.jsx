@@ -11,9 +11,9 @@ import { DEFAULT_SCORING_WEIGHTS } from '../../modules/intelligence/candidateInt
 const WEIGHT_KEYS = [
   { key: 'roleMatch', label: 'Role match' },
   { key: 'skillMatch', label: 'Skill match' },
-  { key: 'industryMatch', label: 'Industry match' },
-  { key: 'experienceMatch', label: 'Experience match' },
   { key: 'locationMatch', label: 'Location match' },
+  { key: 'experienceMatch', label: 'Experience match' },
+  { key: 'industryMatch', label: 'Industry match' },
   { key: 'cultureMatch', label: 'Culture match' },
 ]
 
