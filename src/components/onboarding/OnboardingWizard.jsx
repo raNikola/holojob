@@ -94,13 +94,28 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
     }
   }
 
+  const jumpToStep = (step) => {
+    setErrors([])
+    setStep(step)
+    scrollToTop()
+  }
+
+  const jumpToQuestion = (index) => {
+    setErrors([])
+    setQuestionnaireIndex(index)
+    scrollToTop()
+  }
+
   const renderStep = () => {
     switch (currentStep) {
       case 0: return <WelcomeStep onNext={goNext} onDemoComplete={onComplete} />
       case 1: return <ResumeUpload />
       case 2: return <ProfileForm />
       case 3: return <RepositoryForm />
-      case 4: return <QuestionnaireForm questionIndex={questionnaireIndex} />
+      case 4: return <QuestionnaireForm
+        questionIndex={questionnaireIndex}
+        onJumpToQuestion={isEdit ? jumpToQuestion : undefined}
+      />
       case 5: return (
         <ReviewScreen
           mode={mode}
@@ -137,7 +152,7 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
       )}
 
       <main className={isEdit ? '' : 'mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12'}>
-        {currentStep > minStep && <ProgressBar currentStep={currentStep} editMode={isEdit} />}
+        {(isEdit || currentStep > minStep) && <ProgressBar currentStep={currentStep} editMode={isEdit} onStepClick={isEdit ? jumpToStep : undefined} />}
 
         {currentStep > minStep || (isEdit && currentStep >= EDIT_START_STEP) ? (
           <StepLayout title={config.title} description={questionnaireDescription}>
@@ -159,9 +174,16 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
             <Button variant="secondary" onClick={goBack} disabled={currentStep <= minStep}>
               <ChevronLeft className="h-4 w-4" /> Back
             </Button>
-            <Button onClick={goNext}>
-              Continue <ChevronRight className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {isEdit && (
+                <Button variant="secondary" onClick={() => onComplete?.()}>
+                  Done
+                </Button>
+              )}
+              <Button onClick={goNext}>
+                Continue <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         )}
       </main>
