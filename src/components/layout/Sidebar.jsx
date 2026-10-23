@@ -5,7 +5,6 @@ import {
   FileText,
   LayoutDashboard,
   MessageSquare,
-  MessagesSquare,
   MoreHorizontal,
   Settings,
   ShieldCheck,
@@ -25,18 +24,13 @@ const ICONS = {
   Settings,
   Target,
   MessageSquare,
-  MessagesSquare,
   Users,
   ShieldCheck,
 }
 
-import { useChat } from '../../context/ChatContext'
-
 function NavButton({ item, active, onNavigate, compact = false }) {
-  const { unreadCount } = useChat()
   const Icon = ICONS[item.icon] || LayoutDashboard
   const isActive = active === item.id || (item.id === 'profile' && active === 'profile-edit')
-  const isPeerChat = item.id === 'peer-chat'
 
   return (
     <button
@@ -50,16 +44,8 @@ function NavButton({ item, active, onNavigate, compact = false }) {
     >
       <div className="relative flex items-center justify-center">
         <Icon className={compact ? 'h-5 w-5' : 'h-4 w-4 shrink-0'} />
-        {isPeerChat && unreadCount > 0 && compact && (
-          <span className="absolute -top-1 -right-1.5 flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-stone-950 animate-pulse" />
-        )}
       </div>
       <span className={compact ? 'truncate' : ''}>{item.label}</span>
-      {isPeerChat && unreadCount > 0 && !compact && (
-        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white shadow-sm animate-pulse">
-          {unreadCount > 99 ? '99+' : unreadCount}
-        </span>
-      )}
     </button>
   )
 }

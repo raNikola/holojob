@@ -1,4 +1,5 @@
 /** @typedef {import('../../types/holojob.d.ts').Job} Job */
+import { normalizePriorityFilter } from './jobFilters.js'
 
 export const JOBS_STORAGE_KEY = 'job-dashboard-discovered-jobs'
 
@@ -13,7 +14,7 @@ const DEFAULT_FILTERS = {
   hideNeedsVisa: false,
   status: '',
   matchLabel: '',
-  priority: '',
+  priority: [],
   minScore: '',
   // null until the user touches them: then the profile's figures apply.
   minSalary: null,
@@ -39,7 +40,7 @@ export function loadJobs() {
     return {
       ...getDefaultJobsState(),
       ...parsed,
-      filters: { ...DEFAULT_FILTERS, ...parsed.filters },
+      filters: { ...DEFAULT_FILTERS, ...parsed.filters, priority: normalizePriorityFilter(parsed.filters?.priority) },
       jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
     }
   } catch {

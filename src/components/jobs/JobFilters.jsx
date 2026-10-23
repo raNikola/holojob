@@ -1,6 +1,8 @@
 import Card from '../ui/Card'
 import Input from '../ui/Input'
 import SelectField from '../ui/SelectField'
+import MultiSelectDropdown from '../ui/MultiSelectDropdown'
+import { normalizePriorityFilter } from '../../modules/jobs/jobFilters'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { MATCH_LABELS, PRIORITIES, hasMatchScores } from '../../modules/jobs/matchScore'
 
@@ -87,9 +89,9 @@ export default function JobFilters({ filters, sites, providers, jobs, onChange }
               options={MATCH_LABELS}
               placeholder="All labels"
             />
-            <SelectField
+            <MultiSelectDropdown
               label="Priority"
-              value={filters.priority}
+              selected={normalizePriorityFilter(filters.priority)}
               onChange={(v) => onChange({ priority: v })}
               options={PRIORITIES.filter((p) => p !== 'Reject')}
               placeholder="All priorities"
