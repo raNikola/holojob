@@ -27,11 +27,6 @@ export function hasMatchScores(jobs) {
   return (jobs || []).some((j) => typeof j.matchScore === 'number')
 }
 
-export function sortJobsByScore(jobs) {
-  if (!hasMatchScores(jobs)) return jobs
-  return [...jobs].sort((a, b) => (b.matchScore ?? 0) - (a.matchScore ?? 0))
-}
-
 export function formatMatchScore(job) {
   if (typeof job?.matchScore !== 'number') return null
   return job.matchScore

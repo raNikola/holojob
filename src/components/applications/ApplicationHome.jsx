@@ -15,6 +15,23 @@ import { probePipelineApi } from '../../modules/jobs/pipelineRunner'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
 import { isOutreachFollowUpDue } from '../../modules/outreach/followUpEngine'
 import { computeOutreachMetrics } from '../../modules/outreach/outreachMetrics'
+import SortableTh, { useTableSort } from '../ui/SortableTh'
+import { sortRows } from '../../modules/tableSort'
+
+const stageOf = (job) => {
+  const t = normalizeApplicationTracking(job)
+  return t.interviewStage || (t.applied ? 'Applied' : '')
+}
+const TRACKER_COLUMNS = {
+  company: { type: 'text', value: (j) => j.company },
+  role: { type: 'text', value: (j) => j.title },
+  stage: { type: 'text', value: stageOf },
+  applied: { type: 'date', value: (j) => j.applicationTracking?.appliedDate },
+  followUp: { type: 'date', value: (j) => normalizeApplicationTracking(j).followUpDate },
+  recruiter: { type: 'text', value: (j) => normalizeApplicationTracking(j).recruiterName },
+  notes: { type: 'text', value: (j) => normalizeApplicationTracking(j).notes },
+}
+const TRACKER_DEFAULT_SORT = { key: 'applied', dir: 'desc' }
 
 function hasTrackingData(job) {
   const t = normalizeApplicationTracking(job)
@@ -47,13 +64,10 @@ export default function ApplicationHome() {
   const stats = useMemo(() => computeJobStats(state.jobs), [state.jobs])
   const outreachMetrics = useMemo(() => computeOutreachMetrics(state.jobs), [state.jobs])
 
+  const [trackerSort, onTrackerSort] = useTableSort(TRACKER_DEFAULT_SORT, TRACKER_COLUMNS)
   const trackedJobs = useMemo(
-    () => state.jobs.filter(hasTrackingData).sort((a, b) => {
-      const da = a.applicationTracking?.appliedDate || ''
-      const db = b.applicationTracking?.appliedDate || ''
-      return db.localeCompare(da)
-    }),
-    [state.jobs],
+    () => sortRows(state.jobs.filter(hasTrackingData), trackerSort, TRACKER_COLUMNS),
+    [state.jobs, trackerSort],
   )
 
   const handleStatusChange = useCallback((jobId, status) => {
@@ -108,13 +122,13 @@ export default function ApplicationHome() {
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead>
                 <tr className="border-b border-stone-200 text-xs uppercase tracking-wide text-stone-500 dark:border-stone-700">
-                  <th className="pb-3 pr-4 font-medium">Company</th>
-                  <th className="pb-3 pr-4 font-medium">Role</th>
-                  <th className="pb-3 pr-4 font-medium">Stage</th>
-                  <th className="pb-3 pr-4 font-medium">Applied</th>
-                  <th className="pb-3 pr-4 font-medium">Follow-up</th>
-                  <th className="pb-3 pr-4 font-medium">Recruiter</th>
-                  <th className="pb-3 font-medium">Notes</th>
+                  <SortableTh label="Company" sortKey="company" sort={trackerSort} onSort={onTrackerSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Role" sortKey="role" sort={trackerSort} onSort={onTrackerSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Stage" sortKey="stage" sort={trackerSort} onSort={onTrackerSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Applied" sortKey="applied" sort={trackerSort} onSort={onTrackerSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Follow-up" sortKey="followUp" sort={trackerSort} onSort={onTrackerSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Recruiter" sortKey="recruiter" sort={trackerSort} onSort={onTrackerSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Notes" sortKey="notes" sort={trackerSort} onSort={onTrackerSort} className="pb-3 font-medium" />
                 </tr>
               </thead>
               <tbody>

@@ -15,7 +15,6 @@ import JobDetailDrawer from './JobDetailDrawer'
 import JobEmptyState from './JobEmptyState'
 import { filterJobs, getUniqueProviders, getUniqueSites } from '../../modules/jobs/jobFilters'
 import { computeJobStats } from '../../modules/jobs/jobStats'
-import { sortJobsByScore } from '../../modules/jobs/matchScore'
 import { probePipelineApi, runTailor } from '../../modules/jobs/pipelineRunner'
 import { searchCountry } from '../../utils/searchCountry'
 import { downloadJobsCsv, downloadJobsJson } from '../../modules/jobs/jobExport'
@@ -97,7 +96,7 @@ export default function JobDiscoveryScreen() {
   const filteredJobs = useMemo(() => {
     let filtered = filterJobs(state.jobs, effectiveFilters)
     if (showP1Only) filtered = filtered.filter((j) => isActionable(j) && (j.priority === 'P1' || j.priority === 'P2'))
-    return sortJobsByScore(filtered)
+    return filtered
   }, [state.jobs, effectiveFilters, showP1Only])
 
   const p1Count = useMemo(() => state.jobs.filter((j) => isActionable(j) && j.priority === 'P1').length, [state.jobs])

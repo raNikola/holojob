@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { ExternalLink } from 'lucide-react'
 import Badge from '../ui/Badge'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
@@ -9,6 +10,20 @@ import { salaryBadges } from '../../modules/jobs/jobSalary'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
 import { ApplyBadge, MatchScoreBadge, PriorityBadge } from './JobScoreBadge'
 import JobTailorActions from './JobTailorActions'
+import SortableTh, { useTableSort } from '../ui/SortableTh'
+import { sortRows } from '../../modules/tableSort'
+import { PRIORITIES } from '../../modules/jobs/matchScore'
+
+const COLUMNS = {
+  score: { type: 'number', value: (j) => j.matchScore },
+  title: { type: 'text', value: (j) => j.title },
+  company: { type: 'text', value: (j) => j.company },
+  location: { type: 'text', value: (j) => j.location },
+  provider: { type: 'text', value: (j) => getJobProvider(j) },
+  priority: { type: 'rank', order: PRIORITIES, value: (j) => j.priority },
+  status: { type: 'text', value: (j) => j.status || 'new' },
+}
+const DEFAULT_SORT = { key: 'score', dir: 'desc' }
 
 const STATUS_VARIANT = {
   new: 'default',
@@ -142,7 +157,7 @@ function JobCard({
 }
 
 export default function JobTable({
-  jobs,
+  jobs: unsortedJobs,
   onStatusChange,
   apiAvailable,
   onJobUpdated,
@@ -151,6 +166,8 @@ export default function JobTable({
   onToggleSelectAll,
   onJobSelect,
 }) {
+  const [sort, onSort] = useTableSort(DEFAULT_SORT, COLUMNS)
+  const jobs = useMemo(() => sortRows(unsortedJobs, sort, COLUMNS), [unsortedJobs, sort])
   const showScores = hasMatchScores(jobs)
   const showProvider = jobs.some((j) => getJobProvider(j))
   const allSelected = jobs.length > 0 && jobs.every((j) => selectedJobIds.includes(j.jobId))
@@ -172,13 +189,13 @@ export default function JobTable({
               <th className="px-4 py-3">
                 <input type="checkbox" checked={allSelected} onChange={onToggleSelectAll} className="rounded border-stone-300 text-teal-600" />
               </th>
-              {showScores && <th className="px-4 py-3">Score</th>}
-              <th className="px-4 py-3">Title</th>
-              <th className="px-4 py-3">Company</th>
-              <th className="px-4 py-3">Location</th>
-              {showProvider && <th className="px-4 py-3">Provider</th>}
-              {showScores && <th className="px-4 py-3">Priority</th>}
-              <th className="px-4 py-3">Status</th>
+              {showScores && <SortableTh label="Score" sortKey="score" sort={sort} onSort={onSort} className="px-4 py-3" />}
+              <SortableTh label="Title" sortKey="title" sort={sort} onSort={onSort} className="px-4 py-3" />
+              <SortableTh label="Company" sortKey="company" sort={sort} onSort={onSort} className="px-4 py-3" />
+              <SortableTh label="Location" sortKey="location" sort={sort} onSort={onSort} className="px-4 py-3" />
+              {showProvider && <SortableTh label="Provider" sortKey="provider" sort={sort} onSort={onSort} className="px-4 py-3" />}
+              {showScores && <SortableTh label="Priority" sortKey="priority" sort={sort} onSort={onSort} className="px-4 py-3" />}
+              <SortableTh label="Status" sortKey="status" sort={sort} onSort={onSort} className="px-4 py-3" />
               <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>

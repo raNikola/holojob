@@ -6,13 +6,17 @@ import {
   LayoutDashboard,
   MessageSquare,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   ShieldCheck,
   Target,
   User,
   Users,
 } from 'lucide-react'
+import { useState } from 'react'
 import { MOBILE_NAV_ITEMS, NAV_ITEMS } from '../../modules/appNavigation'
+import { loadSidebarCollapsed, saveSidebarCollapsed } from '../../modules/sidebarState'
 
 const ICONS = {
   LayoutDashboard,
@@ -28,7 +32,7 @@ const ICONS = {
   ShieldCheck,
 }
 
-function NavButton({ item, active, onNavigate, compact = false }) {
+function NavButton({ item, active, onNavigate, compact = false, collapsed = false }) {
   const Icon = ICONS[item.icon] || LayoutDashboard
   const isActive = active === item.id || (item.id === 'profile' && active === 'profile-edit')
 
@@ -36,7 +40,11 @@ function NavButton({ item, active, onNavigate, compact = false }) {
     <button
       type="button"
       onClick={() => onNavigate(item.id)}
-      className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+      title={collapsed ? item.label : undefined}
+      aria-label={collapsed ? item.label : undefined}
+      className={`relative flex w-full items-center rounded-lg py-2.5 text-sm font-medium transition-colors ${
+        collapsed ? 'justify-center px-0' : 'gap-3 px-3'
+      } ${
         isActive
           ? 'bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
           : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200'
@@ -45,22 +53,50 @@ function NavButton({ item, active, onNavigate, compact = false }) {
       <div className="relative flex items-center justify-center">
         <Icon className={compact ? 'h-5 w-5' : 'h-4 w-4 shrink-0'} />
       </div>
-      <span className={compact ? 'truncate' : ''}>{item.label}</span>
+      {!collapsed && <span className={compact ? 'truncate' : 'whitespace-nowrap'}>{item.label}</span>}
     </button>
   )
 }
 
 export default function Sidebar({ activeView, onNavigate, onOpenMore }) {
+  const [collapsed, setCollapsed] = useState(() => loadSidebarCollapsed())
+  const toggle = () => {
+    const next = !collapsed
+    setCollapsed(next)
+    saveSidebarCollapsed(next)
+  }
+  const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose
+
   return (
     <>
-      <aside className="hidden w-56 shrink-0 border-r border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-950 md:flex md:flex-col">
-        <div className="border-b border-stone-200 px-4 py-5 dark:border-stone-800">
-          <p className="font-display text-sm font-semibold text-stone-900 dark:text-stone-50">Career OS</p>
-          <p className="text-xs text-stone-500">Personal dashboard</p>
+      {/* Pinned to the viewport: the page scrolls, the sidebar does not. */}
+      <aside
+        data-collapsed={collapsed}
+        className={`hidden shrink-0 overflow-x-hidden overflow-y-auto border-r border-stone-200 bg-white transition-[width] duration-200 ease-in-out dark:border-stone-800 dark:bg-stone-950 md:sticky md:top-0 md:flex md:h-screen md:flex-col md:self-start ${
+          collapsed ? 'w-16' : 'w-56'
+        }`}
+      >
+        <div className={`flex items-center border-b border-stone-200 py-5 dark:border-stone-800 ${collapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
+          {!collapsed && (
+            <div className="min-w-0">
+              <p className="truncate font-display text-sm font-semibold text-stone-900 dark:text-stone-50">Career OS</p>
+              <p className="truncate text-xs text-stone-500">Personal dashboard</p>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="rounded-lg p-2 text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:hover:bg-stone-800 dark:hover:text-stone-200"
+          >
+            <ToggleIcon className="h-4 w-4" />
+          </button>
         </div>
-        <nav className="flex flex-1 flex-col gap-1 p-3">
+        <nav className={`flex flex-1 flex-col gap-1 ${collapsed ? 'p-2' : 'p-3'}`}>
           {NAV_ITEMS.map((item) => (
-            <NavButton key={item.id} item={item} active={activeView} onNavigate={onNavigate} />
+            <NavButton key={item.id} item={item} active={activeView} onNavigate={onNavigate} collapsed={collapsed} />
           ))}
         </nav>
       </aside>

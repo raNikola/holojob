@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ClipboardCheck, Download, Loader2, Play, ShieldCheck } from 'lucide-react'
 import Button from '../ui/Button'
 import Card from '../ui/Card'
@@ -12,6 +12,22 @@ import {
   runQualityAudit,
 } from '../../modules/quality/qualityClient'
 import { ensureApiAvailable } from '../../utils/apiAvailability'
+import SortableTh, { useTableSort } from '../ui/SortableTh'
+import { sortRows } from '../../modules/tableSort'
+
+const AUDIT_COLUMNS = {
+  company: { type: 'text', value: (j) => j.company },
+  role: { type: 'text', value: (j) => j.title },
+  overall: { type: 'number', value: (j) => j.overallQualityScore },
+  lead: { type: 'number', value: (j) => j.leadQualityScore },
+  resume: { type: 'number', value: (j) => j.resumeQualityScore },
+  ats: { type: 'number', value: (j) => j.atsScore },
+  cover: { type: 'number', value: (j) => j.coverLetterScore },
+  provenance: { type: 'text', value: (j) => j.provenanceStatus },
+  status: { type: 'text', value: (j) => j.qualityStatus },
+}
+// Weakest first: the audit exists to find what needs fixing.
+const AUDIT_DEFAULT_SORT = { key: 'overall', dir: 'asc' }
 
 function formatDate(iso) {
   if (!iso) return 'Never'
@@ -63,7 +79,8 @@ export default function QualityDashboard() {
   }
 
   const summary = report?.summary || {}
-  const jobs = report?.jobAudits || []
+  const [auditSort, onAuditSort] = useTableSort(AUDIT_DEFAULT_SORT, AUDIT_COLUMNS)
+  const jobs = useMemo(() => sortRows(report?.jobAudits || [], auditSort, AUDIT_COLUMNS), [report, auditSort])
 
   return (
     <div className="space-y-6">
@@ -164,15 +181,15 @@ export default function QualityDashboard() {
             <table className="w-full min-w-[800px] text-left text-sm">
               <thead>
                 <tr className="border-b border-stone-200 text-xs uppercase tracking-wide text-stone-500 dark:border-stone-700">
-                  <th className="pb-3 pr-4 font-medium">Company</th>
-                  <th className="pb-3 pr-4 font-medium">Role</th>
-                  <th className="pb-3 pr-4 font-medium">Overall</th>
-                  <th className="pb-3 pr-4 font-medium">Lead</th>
-                  <th className="pb-3 pr-4 font-medium">Resume</th>
-                  <th className="pb-3 pr-4 font-medium">ATS</th>
-                  <th className="pb-3 pr-4 font-medium">Cover</th>
-                  <th className="pb-3 pr-4 font-medium">Provenance</th>
-                  <th className="pb-3 font-medium">Status</th>
+                  <SortableTh label="Company" sortKey="company" sort={auditSort} onSort={onAuditSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Role" sortKey="role" sort={auditSort} onSort={onAuditSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Overall" sortKey="overall" sort={auditSort} onSort={onAuditSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Lead" sortKey="lead" sort={auditSort} onSort={onAuditSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Resume" sortKey="resume" sort={auditSort} onSort={onAuditSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="ATS" sortKey="ats" sort={auditSort} onSort={onAuditSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Cover" sortKey="cover" sort={auditSort} onSort={onAuditSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Provenance" sortKey="provenance" sort={auditSort} onSort={onAuditSort} className="pb-3 pr-4 font-medium" />
+                  <SortableTh label="Status" sortKey="status" sort={auditSort} onSort={onAuditSort} className="pb-3 font-medium" />
                 </tr>
               </thead>
               <tbody>
