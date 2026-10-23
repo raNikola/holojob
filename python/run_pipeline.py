@@ -211,7 +211,19 @@ def main(argv=None) -> int:
         print("--min-enriched must be between 0 and 1", file=sys.stderr)
         return EXIT_SETUP
 
-    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        LOCK.parent.mkdir(parents=True, exist_ok=True)
+        probe = LOCK.parent / ".write-probe"
+        probe.write_text("ok")
+        probe.unlink()
+        for path in (INTELLIGENCE, DISCOVERED):
+            if path.exists():
+                path.read_bytes()[:1]
+    except OSError as exc:
+        # A 25-minute run that cannot save its result is worse than no run. On
+        # SELinux hosts another container mounting ./data with :Z causes this.
+        print(f"Cannot read and write {LOCK.parent}: {exc}. Nothing started.", file=sys.stderr)
+        return EXIT_SETUP
     lock = LOCK.open("w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
