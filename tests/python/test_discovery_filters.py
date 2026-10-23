@@ -114,3 +114,14 @@ def test_an_onsite_job_abroad_reaches_scoring_and_is_capped_there(make, location
     assert any(r.startswith("Capped: needs a work permit") for r in scored["reasons"])
 
     assert make(location).fetch_jobs(TERMS, HOME, REMOTE, "Serbia") == []
+
+
+def test_filter_jobs_logs_fetched_against_kept(caplog):
+    """"0 jobs" must say whether nothing was fetched or everything was filtered out."""
+    import logging
+    from providers.base_provider import filter_jobs
+
+    jobs = [{"title": "Software Engineer", "description": "", "location": "Berlin, Germany"}]
+    with caplog.at_level(logging.INFO):
+        assert filter_jobs(jobs, ["Product Manager"], ["Berlin"], [], "Germany") == []
+    assert "1 postings fetched, 0 kept" in caplog.text

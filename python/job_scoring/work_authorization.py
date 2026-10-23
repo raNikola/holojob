@@ -48,6 +48,27 @@ def job_places(job: dict) -> tuple[bool, list[str]]:
     return False, countries
 
 
+def outside_allowed_before_enrichment(job: dict, prefs: dict) -> bool:
+    """True when the board's own data already puts the job outside the candidate's places.
+
+    Decidable without reading the ad: the job is not remote by the board, and
+    its location names countries, none of them inside allowedLocations. Scoring
+    reaches the same OUTSIDE_ALLOWED status from the same fields, so reading
+    such an ad only to cap it afterwards is a wasted model call. An empty
+    allowedLocations gates nothing, and an ad whose country is unknown is not
+    known to be outside.
+    """
+    allowed = [str(a).upper() for a in prefs.get("allowedLocations") or [] if a]
+    if not allowed:
+        return False
+    bare = {k: v for k, v in job.items() if k != "llmFacts"}
+    remote, places = job_places(bare)
+    restricted = [p for p in places if p != WORLDWIDE]
+    if remote or not restricted:
+        return False
+    return not any(covers(a, p) for a in allowed if a != REMOTE for p in restricted)
+
+
 def authorization_status(job: dict, prefs: dict) -> dict:
     """{"status", "place", "reason"} for one job against the candidate's rights."""
     facts = job.get("llmFacts") or {}

@@ -4,10 +4,13 @@
  * (job.belowMinSalary). Labels and filters only; none of it is a score.
  */
 
+/** A figure converted from USD or GBP carries "≈" and its source currency: it is not what the ad states. */
 export function formatMonthlyEur(range) {
   if (!range) return ''
   const fmt = (n) => n.toLocaleString('en-US')
-  return range.min === range.max ? `€${fmt(range.min)}/month` : `€${fmt(range.min)}–${fmt(range.max)}/month`
+  const approx = range.converted ? '≈' : ''
+  const amount = range.min === range.max ? `${fmt(range.min)}` : `${fmt(range.min)}–${fmt(range.max)}`
+  return `${approx}€${amount}/month${range.converted && range.currency ? ` (from ${range.currency})` : ''}`
 }
 
 export function salaryBadges(job) {

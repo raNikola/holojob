@@ -67,6 +67,7 @@ describe('badge and profile fields', () => {
     expect(formatMonthlyEur({ min: 1500, max: 2500 })).toBe('€1,500–2,500/month')
     expect(formatMonthlyEur({ min: 4500, max: 4500 })).toBe('€4,500/month')
     expect(formatMonthlyEur(null)).toBe('')
+    expect(formatMonthlyEur({ min: 7122, max: 16062, currency: 'USD', converted: true })).toBe('≈€7,122–16,062/month (from USD)')
   })
 
   it('normalises profile numbers and flows them into the intelligence shape', () => {

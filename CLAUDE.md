@@ -75,7 +75,11 @@ and reports facts: work mode, role track, seniority, years required,
 must-haves, listing-quality flags, and the job's country, where a remote hire
 may live, and what the ad says about visa sponsorship. It never scores and
 never sees the
-candidate. Results cache on the job under `llmFacts`, keyed by a fingerprint
+candidate. It does not read an ad the board already places outside the candidate's
+`allowedLocations` (not remote, and a location naming only countries outside them,
+`work_authorization.outside_allowed_before_enrichment`): scoring caps it at 40 from the
+same fields, so a model call would only be discarded. `--read-outside-allowed`
+turns that off, and an empty `allowedLocations` skips nothing. Results cache on the job under `llmFacts`, keyed by a fingerprint
 of the ad, so reruns are free. `llm_client.py` holds a provider table —
 OpenAI, DeepSeek, OpenRouter, Groq, Ollama, a `custom` endpoint, and the
 Claude Code CLI as a keyless fallback. `HOLOJOB_LLM_PROVIDER` chooses.
@@ -125,7 +129,7 @@ It returns no number. The code decides what the answer costs:
     strong +5, good 0, partial -8, poor -15, any dealbreaker -15
 
 Only jobs scoring 65 or more are sent: the largest raise is +5 and Apply
-starts at 70, so a job below 65 cannot change decision, and 65 is above both
+starts at 70 (labels.py `APPLY_MIN_SCORE`), so a job below 65 cannot change decision, and 65 is above both
 hard caps (red flag 54, off-track 50), so capped jobs are never sent. A job a
 hard rule applies to (`hardCapped` on the result) can be lowered by the judge
 but never raised. At most 50 jobs are sent per run (`--judge-limit`, 0 for no
@@ -158,9 +162,12 @@ judge; `tests/js/judgeBoundary.test.js` pins both routes.
 desired range `desiredSalaryMinEur`/`desiredSalaryMaxEur`, all EUR per month,
 carried into `jobFitPreferences` by the intelligence generator and never sent to the
 judge. Scoring parses the job's free-text `salary` into `salaryMonthlyEur`
-(`{min, max}`) only when the text names EUR, a yearly or monthly interval and one
-amount or range; any other currency, a missing one (LinkedIn's formatter drops USD),
-an hourly rate or an open-ended "up to / from" is unknown. `belowMinSalary` is true
+(`{min, max, currency, converted}`) only when the text names one currency (EUR, USD
+or GBP), a yearly or monthly interval and one amount or range; USD and GBP are
+converted at the fixed rates in `salary.py` (`EUR_PER_UNIT`) and shown as "≈". JobSpy's
+formatter drops the currency when it is USD, so exactly its own shape
+(`92900 - 209500 yearly`) is read as USD; free text with no currency, any other
+currency (PLN, CHF, CA$), an hourly rate or an open-ended "up to / from" is unknown. `belowMinSalary` is true
 when the top of the range is under the minimum, false when it reaches it, null when
 the pay or the minimum is unknown. The job list shows a "Below min salary" badge, and
 the Filters panel has Min salary and Desired salary from/to, pre-filled from the
@@ -247,18 +254,20 @@ model, have it return a fact, and let `scorer.py` decide what the fact costs.
 
 ## Open problems
 
-1. **`skill_match` saturates.** Eleven of 23 jobs score exactly 100, which
-   is not a result, it is a bug. Suspect the `achievable` accumulator in
-   `_credit` or the must-have blend. The intent: must-haves are *reported*
-   (they populate `missingSkills`, which feeds resume tailoring) and do NOT
-   move the score, because judging whether a sentence like "experience
-   shipping LLM-powered features" is met by counting shared tokens blurs the
-   whole dimension. Verify what the file actually does before changing it.
+1. ~~`skill_match` saturates~~ — no longer: on the 2026-10-24 run (430 jobs) it is
+   the one dimension that discriminates (mean 47, 44 distinct values; `TARGET_COVERAGE`
+   was recalibrated). The flat ones are `roleMatch` (95 for 273 of 288 uncapped jobs,
+   since every ad was found by a target-role search), `cultureMatch` (58 for 266) and
+   `locationMatch` (60 for 226). They give every job about 70 points before skills
+   count, so scores bunch between 68 and 78 and the median uncapped job is 70. The
+   real remaining work is giving those three dimensions something to separate on.
 2. **Seven ads still have `workMode: unclear`.** The model is right — those
    ads do not say. But "Serbia" alone and "Belgrade, Serbia" are treated the
    same, and a country without a city is weaker evidence of an office.
-3. **`priority()` in labels.py** has a dead branch: `>= 85` and `>= 70` both
-   return P1.
+3. ~~`priority()` dead branch~~ — P1 is now a separate line, `P1_MIN_SCORE = 76` in
+   labels.py (Apply stays at 70). At 70 it held 175 of 430 jobs (41%); at 76 it holds
+   37 (9%), and Apply-level jobs below it are P2. It is one number calibrated by hand
+   against a run: recheck it after any weights or dimension change.
 4. **No regression tests.** The Infostud and Workable clients parse other
    people's page structures and will break silently when those change. A
    test asserting a non-empty result would catch it.

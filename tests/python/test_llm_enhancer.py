@@ -110,11 +110,14 @@ def test_raise_stops_at_100(intelligence):
 
 
 def test_label_and_priority_follow_the_new_score(intelligence):
-    result = enhancer(Stub(reply("strong"))).enhance(JOB, base(66), intelligence)
-    assert result["matchScore"] == 71
+    result = enhancer(Stub(reply("strong"))).enhance(JOB, base(72), intelligence)
+    assert result["matchScore"] == 77
     assert result["matchLabel"] == "Strong"
     assert result["applyRecommendation"] == "Apply"
     assert result["priority"] == "P1"
+    # A raise into Apply that stays under the P1 line is P2.
+    raised = enhancer(Stub(reply("strong"))).enhance(JOB, base(66), intelligence)
+    assert (raised["matchScore"], raised["applyRecommendation"], raised["priority"]) == (71, "Apply", "P2")
     assert result["reasons"][-1].startswith("LLM fit: strong (+5)")
 
 

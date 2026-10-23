@@ -47,7 +47,7 @@ class NoOpEnhancer:
 # every job is judged again rather than served from an older question's cache.
 PROMPT_VERSION = 2
 
-# The Apply/P1 line in labels.py is 70 and the largest raise is +5, so a job
+# The Apply line in labels.py is 70 and the largest raise is +5, so a job
 # below 65 cannot reach Apply whatever the model says. 65 is also above both
 # hard caps (red flag 54, off-track 50), so capped jobs are never sent.
 DEFAULT_THRESHOLD = 65

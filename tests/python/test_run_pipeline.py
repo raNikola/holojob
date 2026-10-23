@@ -158,3 +158,14 @@ def test_unwritable_data_dir_is_a_setup_error_before_anything_runs(env, monkeypa
     assert rp.main([]) == rp.EXIT_SETUP
     assert calls == []
     assert "Nothing started" in capsys.readouterr().err
+
+
+def test_ads_enrichment_skipped_on_purpose_do_not_count_against_the_share():
+    prefs = {"allowedLocations": ["EU"]}
+    jobs = [{"title": "PM", "location": "Berlin, Germany", "llmFacts": {"_fingerprint": "x"}}] * 8 + \
+           [{"title": "PM", "location": "London, England, UK"}] * 2
+    assert rp.enriched_share(jobs) == 0.8
+    assert rp.enriched_share(jobs, prefs) == 1.0
+    # an unread ad inside the allowed places still counts as missing
+    jobs.append({"title": "PM", "location": "Berlin, Germany"})
+    assert rp.enriched_share(jobs, prefs) == 8 / 9
