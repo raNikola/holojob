@@ -195,6 +195,9 @@ proper noun in it is in the CV. The review (`CvAnalysisReview`) compares with th
 (new / already there / differs) and writes only ticked items, into `parsedData` (skills,
 workExperience, education, certifications, plus `experienceDetail`, `competencyGroups`,
 `toolGroups`) and Questionnaire answers 4 and 17. Only the default CV can be applied.
+Apply then regenerates the intelligence and syncs it to disk (`regenerateAfterApply.js`, the
+same steps as the Regenerate Intelligence button, local and rule-based) so scoring sees the
+change; the entry remembers which items were applied (`analysis.applied`, `analysis.lastApply`).
 Results cache in `data/cache/cv_analysis.json` by a fingerprint of the redacted text,
 provider, model and prompt version; the entry keeps its last analysis. The model is
 `judge_model(provider)`.

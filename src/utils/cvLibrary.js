@@ -131,3 +131,11 @@ export function cvFilesToDiscard(snapshot, current) {
 export function setCvAnalysis(profile, id, analysis) {
   return { ...profile, cvLibrary: (profile.cvLibrary || []).map((c) => (c.id === id ? { ...c, analysis } : c)) }
 }
+
+/** Merge fields into an entry's analysis (what was applied, the result of the last apply). */
+export function patchCvAnalysis(profile, id, patch) {
+  return {
+    ...profile,
+    cvLibrary: (profile.cvLibrary || []).map((c) => (c.id === id && c.analysis ? { ...c, analysis: { ...c.analysis, ...patch } } : c)),
+  }
+}
