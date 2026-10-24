@@ -15,6 +15,8 @@ import { QUESTIONS, QUESTION_COUNT } from '../../data/questions'
 import { validateStep, validateQuestionnaireSection, validateQuestion } from '../../utils/validators'
 import { profileChangedSince, takeProfileSnapshot } from '../../utils/profileSnapshot'
 import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
+import { deleteCvFile } from '../../modules/cvs/cvApi'
+import { cvFilesToDiscard } from '../../utils/cvLibrary'
 
 const STEP_CONFIG = [
   { title: 'Welcome', description: '' },
@@ -101,7 +103,11 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   const cancelEdit = () => {
     if (snapshot) {
       const changed = profileChangedSince(snapshot, profile)
+      // A CV uploaded in this session has its PDF stored already; the restore
+      // drops its entry, so the file would be left behind with no owner.
+      const orphans = cvFilesToDiscard(snapshot, profile)
       restoreProfile(snapshot)
+      for (const id of orphans) deleteCvFile(id).catch(() => {})
       // Some steps mirror the profile to disk as they go; put that copy back too.
       if (changed) void saveProfileToDataDir(snapshot)
     }

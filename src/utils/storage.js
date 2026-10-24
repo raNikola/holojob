@@ -4,6 +4,7 @@ import { normalizeLanguages } from './languages'
 import { normalizeAllowedLocations, normalizeRelocation, normalizeWorkAuthorization } from './workAuthorization'
 import { normalizeSalaryTargets } from './salary'
 import { joinAnswerList, repairCommaAnswer } from './answerList'
+import { ensureCvLibrary } from './cvLibrary'
 
 export const STORAGE_KEY = 'job-dashboard-candidate-profile'
 
@@ -147,8 +148,8 @@ export function loadProfile() {
       },
     }
     const migrated = repairProjectsAnswer(migrateQuestionnaireAnswers(parsed))
-    const withCompletion = migrateOnboardingComplete(migrated)
-    if (withCompletion.meta?.onboardingComplete && !migrated.meta?.onboardingComplete) {
+    const withCompletion = ensureCvLibrary(migrateOnboardingComplete(migrated))
+    if ((withCompletion.meta?.onboardingComplete && !migrated.meta?.onboardingComplete) || !Array.isArray(stored.cvLibrary)) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(withCompletion))
     }
     return withCompletion

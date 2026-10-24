@@ -9,6 +9,7 @@ import CandidateIntelligenceScreen from './components/intelligence/CandidateInte
 import JobDiscoveryScreen from './components/jobs/JobDiscoveryScreen'
 import ApplicationHome from './components/applications/ApplicationHome'
 import ResumeLibrary from './components/resumes/ResumeLibrary'
+import CvLibrary from './components/cvs/CvLibrary'
 import SettingsHome from './components/settings/SettingsHome'
 import CareerStrategyScreen from './components/ai/CareerStrategyScreen'
 import AICommandCenter from './components/ai/AICommandCenter'
@@ -71,6 +72,7 @@ function AppContent() {
       {activeView === VIEWS.JOBS && <JobDiscoveryScreen />}
       {activeView === VIEWS.APPLICATIONS && <ApplicationHome />}
       {activeView === VIEWS.RESUMES && <ResumeLibrary onNavigate={setView} />}
+      {activeView === VIEWS.CVS && <CvLibrary />}
       {activeView === VIEWS.CAREER_STRATEGY && <CareerStrategyScreen />}
       {activeView === VIEWS.AI_COMMAND && <AICommandCenter />}
       {activeView === VIEWS.OUTREACH && <OutreachDashboard />}

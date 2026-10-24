@@ -2,6 +2,7 @@ import { createContext, useContext, useCallback, useEffect, useState } from 'rea
 import { loadProfile, saveProfile, restoreProfile as restoreStorage, clearProfile as clearStorage, getDefaultProfile } from '../utils/storage'
 import { extractProfileFromResume } from '../utils/profileExtractor'
 import { SKILLS_DICTIONARY } from '../data/skillsDictionary'
+import { addCv, ensureCvLibrary, registerActiveUpload, removeCv, renameCv, setDefaultCv, syncDefaultEntry } from '../utils/cvLibrary'
 import { joinAnswerList, parseAnswerList } from '../utils/answerList'
 
 // Seed Q2 and Q5 with resume skills so the questionnaire is pre-filled on arrival.
@@ -73,6 +74,18 @@ export function ProfileProvider({ children }) {
     return extracted
   }, [])
 
+  // CV library actions (profile.cvLibrary). All are pure profile updates; the
+  // files themselves are stored and deleted through modules/cvs/cvApi.
+  const cvActions = {
+    // Before an Edit Profile upload replaces profile.resume: keep its edits in the library.
+    beforeActiveUpload: () => setProfile((prev) => saveProfile(syncDefaultEntry(ensureCvLibrary(prev)))),
+    registerActiveUpload: (entry) => setProfile((prev) => saveProfile(registerActiveUpload(prev, entry))),
+    addCv: (entry, options) => setProfile((prev) => saveProfile(addCv(prev, entry, options))),
+    setDefaultCv: (id) => setProfile((prev) => saveProfile(setDefaultCv(prev, id))),
+    renameCv: (id, label) => setProfile((prev) => saveProfile(renameCv(prev, id, label))),
+    removeCv: (id) => setProfile((prev) => saveProfile(removeCv(prev, id))),
+  }
+
   const markFieldEdited = useCallback((fieldKey) => {
     setProfile((prev) => saveProfile({
       ...prev,
@@ -122,6 +135,7 @@ export function ProfileProvider({ children }) {
       markOnboardingComplete,
       startProfileEdit,
       restoreProfile,
+      cvActions,
     }}>
       {children}
     </ProfileContext.Provider>

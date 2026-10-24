@@ -6,9 +6,11 @@ import ResumeTextPreview from './ResumeTextPreview'
 import { useProfile } from '../../context/ProfileContext'
 import { extractTextFromPdf } from '../../utils/resumeParser'
 import { importLinkedInProfile } from '../../modules/profile/linkedinImport'
+import { uploadCvFile } from '../../modules/cvs/cvApi'
+import { newCvId } from '../../utils/cvLibrary'
 
 export default function ResumeUpload() {
-  const { profile, updateProfile, applyResumeExtraction } = useProfile()
+  const { profile, updateProfile, applyResumeExtraction, cvActions } = useProfile()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [dragOver, setDragOver] = useState(false)
@@ -19,6 +21,8 @@ export default function ResumeUpload() {
     setLoading(true)
     try {
       const rawText = await extractTextFromPdf(file)
+      // Keep the current résumé's edits in the CV library before it is replaced.
+      cvActions.beforeActiveUpload()
       if (mode === 'linkedin') {
         const mapped = await importLinkedInProfile(rawText)
         updateProfile((prev) => ({
@@ -49,12 +53,21 @@ export default function ResumeUpload() {
         }))
         applyResumeExtraction(rawText)
       }
+      // The upload becomes the active CV and is listed under My CVs. Saving the
+      // file is best effort: the text and profile data are already in place.
+      let id = newCvId()
+      let filePath = null
+      try {
+        const stored = await uploadCvFile(file)
+        if (stored) { id = stored; filePath = `profile/cvs/${stored}.pdf` }
+      } catch { /* the entry is kept without a stored file */ }
+      cvActions.registerActiveUpload({ id, filePath })
     } catch (err) {
       setError(err.message || 'Failed to parse PDF.')
     } finally {
       setLoading(false)
     }
-  }, [updateProfile, applyResumeExtraction, importMode])
+  }, [updateProfile, applyResumeExtraction, cvActions, importMode])
 
   const onDrop = useCallback((e) => {
     e.preventDefault()
