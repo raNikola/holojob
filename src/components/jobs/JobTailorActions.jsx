@@ -79,7 +79,7 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
     if (compact) return null
     return (
       <p className="text-xs text-stone-500">
-        Run: <code className="text-[10px]">{buildTailorCommand({ jobId: job.jobId })}</code>
+        Run: <code className="text-[length:calc(var(--text-xs)-0.125rem)]">{buildTailorCommand({ jobId: job.jobId })}</code>
       </p>
     )
   }
@@ -155,7 +155,7 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
         title={evaluating ? 'AI evaluation…' : 'AI log'}
       />
       {assets?.provenancePassed === false && (
-        <p className="text-[10px] text-amber-600 dark:text-amber-400">Provenance warnings</p>
+        <p className="text-[length:calc(var(--text-xs)-0.125rem)] text-amber-600 dark:text-amber-400">Provenance warnings</p>
       )}
     </div>
   )

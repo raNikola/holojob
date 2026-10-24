@@ -17,9 +17,9 @@ export default function JobDescription({ text }) {
   return (
     <div>
       <h4 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Description</h4>
-      <div className="mt-2 space-y-3 text-base text-stone-700 dark:text-stone-300">
+      <div className="mt-2 space-y-3 text-sm text-stone-700 dark:text-stone-300">
         {parseDescription(shown).map((b, i) => {
-          if (b.type === 'h') return <h5 key={i} className="pt-1 text-base font-semibold text-stone-900 dark:text-stone-100"><Runs runs={b.runs} /></h5>
+          if (b.type === 'h') return <h5 key={i} className="pt-1 text-sm font-semibold text-stone-900 dark:text-stone-100"><Runs runs={b.runs} /></h5>
           if (b.type === 'ul' || b.type === 'ol') {
             const List = b.type
             return (
@@ -32,7 +32,7 @@ export default function JobDescription({ text }) {
         })}
       </div>
       {canExpand && (
-        <button type="button" className="mt-2 text-sm text-teal-600" onClick={() => setExpanded(!expanded)}>
+        <button type="button" className="mt-2 text-xs text-teal-600" onClick={() => setExpanded(!expanded)}>
           {expanded ? 'Show less' : 'Show more'}
         </button>
       )}

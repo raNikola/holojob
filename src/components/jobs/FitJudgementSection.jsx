@@ -22,7 +22,7 @@ export default function FitJudgementSection({ fit }) {
     return (
       <div>
         <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">Fit judgement</h4>
-        <p className="text-base text-stone-600 dark:text-stone-400">Judge call failed: {fit.error} (local score kept)</p>
+        <p className="text-sm text-stone-600 dark:text-stone-400">Judge call failed: {fit.error} (local score kept)</p>
       </div>
     )
   }
@@ -33,14 +33,14 @@ export default function FitJudgementSection({ fit }) {
   return (
     <div className="space-y-3 rounded-lg border border-stone-200 p-3 dark:border-stone-800">
       <h4 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Fit judgement</h4>
-      <div className="flex flex-wrap items-center gap-2 text-base">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
         <Badge variant={FIT_VARIANT[fit.fit] || 'default'}>{fit.fit}</Badge>
         <span className="text-stone-700 dark:text-stone-300">
           {signed}
           {fit.localScore != null && <> (local {fit.localScore} → {fit.localScore + adjustment})</>}
         </span>
       </div>
-      {fit.fitReason && <p className="text-base text-stone-700 dark:text-stone-300">{fit.fitReason}</p>}
+      {fit.fitReason && <p className="text-sm text-stone-700 dark:text-stone-300">{fit.fitReason}</p>}
 
       {fit.requirements?.length > 0 && (
         <div>
@@ -49,7 +49,7 @@ export default function FitJudgementSection({ fit }) {
             {fit.requirements.map((r) => {
               const s = STATUS[r.status] || STATUS.unclear
               return (
-                <li key={r.requirement} className="text-base">
+                <li key={r.requirement} className="text-sm">
                   <span className={`mr-1.5 font-semibold ${s.className}`} title={s.label} aria-label={s.label}>{s.mark}</span>
                   <span className="text-stone-800 dark:text-stone-200">{r.requirement}</span>
                   {r.evidence && <span className="block pl-5 text-xs text-stone-500">{r.evidence}</span>}
@@ -74,7 +74,7 @@ export default function FitJudgementSection({ fit }) {
       {fit.dealbreakers?.length > 0 && (
         <div>
           <Heading className="text-red-600">Dealbreakers</Heading>
-          <ul className="list-inside list-disc text-base text-red-700 dark:text-red-400">
+          <ul className="list-inside list-disc text-sm text-red-700 dark:text-red-400">
             {fit.dealbreakers.map((d) => <li key={d}>{d}</li>)}
           </ul>
         </div>
