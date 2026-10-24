@@ -1,8 +1,9 @@
 import { createContext, useContext, useCallback, useEffect, useState } from 'react'
 import { loadProfile, saveProfile, restoreProfile as restoreStorage, clearProfile as clearStorage, getDefaultProfile } from '../utils/storage'
+import { applySuggestions } from '../utils/cvAnalysis'
 import { extractProfileFromResume } from '../utils/profileExtractor'
 import { SKILLS_DICTIONARY } from '../data/skillsDictionary'
-import { addCv, ensureCvLibrary, registerActiveUpload, removeCv, renameCv, setDefaultCv, syncDefaultEntry } from '../utils/cvLibrary'
+import { addCv, ensureCvLibrary, registerActiveUpload, removeCv, renameCv, setCvAnalysis, setDefaultCv, syncDefaultEntry } from '../utils/cvLibrary'
 import { joinAnswerList, parseAnswerList } from '../utils/answerList'
 
 // Seed Q2 and Q5 with resume skills so the questionnaire is pre-filled on arrival.
@@ -84,6 +85,13 @@ export function ProfileProvider({ children }) {
     setDefaultCv: (id) => setProfile((prev) => saveProfile(setDefaultCv(prev, id))),
     renameCv: (id, label) => setProfile((prev) => saveProfile(renameCv(prev, id, label))),
     removeCv: (id) => setProfile((prev) => saveProfile(removeCv(prev, id))),
+    setCvAnalysis: (id, analysis) => setProfile((prev) => saveProfile(setCvAnalysis(prev, id, analysis))),
+    // Only the default CV is applied: its data is what the rest of the app reads.
+    applyCvAnalysis: (id, selected) => setProfile((prev) => {
+      const entry = prev.cvLibrary?.find((c) => c.id === id)
+      if (!entry?.analysis || prev.defaultCvId !== id) return prev
+      return saveProfile(syncDefaultEntry(applySuggestions(prev, entry.analysis.facts, selected)))
+    }),
   }
 
   const markFieldEdited = useCallback((fieldKey) => {

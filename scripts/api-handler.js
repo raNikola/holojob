@@ -27,6 +27,7 @@ import {
   runQualityAudit,
 } from './run-quality-audit.js'
 import { importLinkedInText } from './run-linkedin-import.js'
+import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -476,6 +477,35 @@ export async function handleApiRequest(req, res) {
   if (url === '/api/claude/login' && req.method === 'POST') {
     const status = await ensureClaudeLogin()
     sendJson(res, 200, status)
+    return true
+  }
+
+  // CV analysis. The preview returns the redacted text a run would send and calls
+  // nothing; the run sends it to the LLM provider and, like the judge, needs an
+  // explicit confirmation in the body, which only the confirm dialog sends.
+  if (url === '/api/ai/cv-analyze/preview' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const result = await previewCvAnalysis(body)
+      sendJson(res, result.ok ? 200 : 400, result)
+    } catch (e) {
+      sendJson(res, 400, { error: e.message })
+    }
+    return true
+  }
+
+  if (url === '/api/ai/cv-analyze' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      if (body.confirm !== true) {
+        sendJson(res, 400, { error: 'A CV analysis needs { "confirm": true }.' })
+        return true
+      }
+      const result = await runCvAnalysis(body, { force: body.force === true })
+      sendJson(res, result.ok ? 200 : 502, result)
+    } catch (e) {
+      sendJson(res, 500, { error: e.message })
+    }
     return true
   }
 
