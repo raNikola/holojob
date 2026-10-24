@@ -2,15 +2,7 @@ import SelectField from '../ui/SelectField'
 import MultiSelectField from '../ui/MultiSelectField'
 import Textarea from '../ui/Textarea'
 import { SKILLS_DICTIONARY } from '../../data/skillsDictionary'
-
-function parseAnswer(answer) {
-  if (!answer || typeof answer !== 'string') return []
-  return answer.split(',').map((s) => s.trim()).filter(Boolean)
-}
-
-function joinAnswer(values) {
-  return values.filter(Boolean).join(', ')
-}
+import { joinAnswerList as joinAnswer, parseAnswerList as parseAnswer } from '../../utils/answerList'
 
 export default function QuestionField({ question, answer, onChange, profile, allParsedSkills = [], repoProjects = [] }) {
   const label = `${question.id}. ${question.text}`

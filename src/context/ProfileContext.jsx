@@ -2,6 +2,7 @@ import { createContext, useContext, useCallback, useEffect, useState } from 'rea
 import { loadProfile, saveProfile, restoreProfile as restoreStorage, clearProfile as clearStorage, getDefaultProfile } from '../utils/storage'
 import { extractProfileFromResume } from '../utils/profileExtractor'
 import { SKILLS_DICTIONARY } from '../data/skillsDictionary'
+import { joinAnswerList, parseAnswerList } from '../utils/answerList'
 
 // Seed Q2 and Q5 with resume skills so the questionnaire is pre-filled on arrival.
 const SKILL_QS = [2, 5]
@@ -16,8 +17,8 @@ function seedSkillAnswers(profile, skills) {
   for (const qid of SKILL_QS) {
     const idx = answers.findIndex((a) => a.id === qid)
     const current = idx >= 0 ? answers[idx].answer || '' : ''
-    if (current.split(',').filter(Boolean).length > 1) continue  // already answered
-    const entry = { id: qid, question: `Q${qid}`, answer: matched.join(', ') }
+    if (parseAnswerList(current).length > 1) continue  // already answered
+    const entry = { id: qid, question: `Q${qid}`, answer: joinAnswerList(matched) }
     if (idx >= 0) answers[idx] = entry
     else answers.push(entry)
   }

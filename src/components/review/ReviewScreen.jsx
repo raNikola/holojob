@@ -10,6 +10,7 @@ import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
 import { validateProfileForIntelligence } from '../../modules/intelligence/intelligenceValidators'
 import { regenerateIntelligence, saveIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { isApiAvailable } from '../../utils/apiAvailability'
+import { parseAnswerList } from '../../utils/answerList'
 
 function Section({ title, onEdit, children }) {
   return (
@@ -30,7 +31,7 @@ function Section({ title, onEdit, children }) {
 
 function AnswerDisplay({ answer }) {
   if (!answer) return null
-  const parts = answer.split(',').map((s) => s.trim()).filter(Boolean)
+  const parts = parseAnswerList(answer)
   if (parts.length <= 1) return <p className="mt-1 text-sm text-stone-800 dark:text-stone-200">{answer}</p>
   return (
     <div className="mt-1 flex flex-wrap gap-1.5">
