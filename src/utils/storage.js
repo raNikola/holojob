@@ -151,4 +151,10 @@ export function saveProfile(profile) {
   return updated
 }
 
+/** Write a profile back exactly as it was (saveProfile would stamp a new updatedAt). */
+export function restoreProfile(snapshot) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
+  return snapshot
+}
+
 export function clearProfile() { localStorage.removeItem(STORAGE_KEY) }

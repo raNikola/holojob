@@ -13,6 +13,8 @@ import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
 import { QUESTIONS, QUESTION_COUNT } from '../../data/questions'
 import { validateStep, validateQuestionnaireSection, validateQuestion } from '../../utils/validators'
+import { profileChangedSince, takeProfileSnapshot } from '../../utils/profileSnapshot'
+import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
 
 const STEP_CONFIG = [
   { title: 'Welcome', description: '' },
@@ -29,7 +31,9 @@ const EDIT_START_STEP = 1
 
 export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   const isEdit = mode === 'edit'
-  const { currentStep, setStep, profile } = useProfile()
+  const { currentStep, setStep, profile, restoreProfile } = useProfile()
+  // The profile as it was when this edit began, for Cancel. Nothing is kept in onboarding.
+  const [snapshot] = useState(() => (mode === 'edit' ? takeProfileSnapshot(profile) : null))
   const [errors, setErrors] = useState([])
   const [questionnaireIndex, setQuestionnaireIndex] = useState(0)
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
@@ -92,6 +96,16 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
       if (currentStep === QUESTIONNAIRE_STEP) setQuestionnaireIndex(0)
       setStep(currentStep - 1)
     }
+  }
+
+  const cancelEdit = () => {
+    if (snapshot) {
+      const changed = profileChangedSince(snapshot, profile)
+      restoreProfile(snapshot)
+      // Some steps mirror the profile to disk as they go; put that copy back too.
+      if (changed) void saveProfileToDataDir(snapshot)
+    }
+    onComplete?.()
   }
 
   const jumpToStep = (step) => {
@@ -176,9 +190,14 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
             </Button>
             <div className="flex items-center gap-2">
               {isEdit && (
-                <Button variant="secondary" onClick={() => onComplete?.()}>
-                  Done
-                </Button>
+                <>
+                  <Button variant="ghost" onClick={cancelEdit}>
+                    Cancel
+                  </Button>
+                  <Button variant="secondary" onClick={() => onComplete?.()}>
+                    Done
+                  </Button>
+                </>
               )}
               <Button onClick={goNext}>
                 Continue <ChevronRight className="h-4 w-4" />
