@@ -22,7 +22,7 @@ export default function MultiSelectField({
 
   const addCustom = () => {
     const trimmed = customInput.trim()
-    if (trimmed && !selected.includes(trimmed)) onChange([...selected, trimmed])
+    if (trimmed && !selected.some((s) => s.toLowerCase() === trimmed.toLowerCase())) onChange([...selected, trimmed])
     setCustomInput('')
     setShowCustom(false)
   }

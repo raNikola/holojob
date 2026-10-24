@@ -10,6 +10,7 @@ import { regenerateIntelligence, saveIntelligence } from '../../modules/intellig
 import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
 import { VIEWS } from '../../modules/appNavigation'
 import { QUESTIONS } from '../../data/questions'
+import { describeAnswer } from '../../modules/profile/answerDisplay'
 
 // Wizard steps, as numbered in OnboardingWizard.
 const RESUME_STEP = 1
@@ -122,16 +123,30 @@ export default function ProfileHome({ onNavigate }) {
         <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">
           {answeredCount} of {QUESTIONS.length} questions answered
         </p>
-        <div className="space-y-3">
-          {questionnaire.answers?.slice(0, 5).map((a) => (
-            <div key={a.id} className="border-b border-stone-100 pb-2 last:border-0 dark:border-stone-800">
-              <p className="text-xs font-medium text-stone-500">{a.question}</p>
-              <p className="mt-0.5 text-sm text-stone-800 dark:text-stone-200">{a.answer}</p>
+        <div className="space-y-5">
+          {(questionnaire.answers || []).map((a) => describeAnswer(a, profile)).filter(Boolean).map((d) => (
+            <div key={d.id} className="border-b border-stone-100 pb-4 last:border-0 last:pb-0 dark:border-stone-800">
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{d.label}</p>
+              {d.kind === 'chips' && (
+                <ul className="mt-2 flex flex-wrap gap-1.5">
+                  {d.items.map((item) => (
+                    <li key={item} className="rounded-full bg-stone-100 px-2.5 py-1 text-xs text-stone-800 dark:bg-stone-800 dark:text-stone-200">{item}</li>
+                  ))}
+                </ul>
+              )}
+              {d.kind === 'bullets' && (
+                <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm text-stone-800 marker:text-stone-400 dark:text-stone-200">
+                  {d.items.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              )}
+              {d.kind === 'prose' && (
+                <p className="mt-2 max-w-prose whitespace-pre-line text-sm leading-relaxed text-stone-800 dark:text-stone-200">{d.text}</p>
+              )}
+              {d.kind === 'text' && (
+                <p className="mt-1.5 text-sm text-stone-800 dark:text-stone-200">{d.text}</p>
+              )}
             </div>
           ))}
-          {answeredCount > 5 && (
-            <p className="text-xs text-stone-500">+ {answeredCount - 5} more — use Edit Profile to view all</p>
-          )}
         </div>
       </Card>
     </div>

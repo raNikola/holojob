@@ -15,11 +15,8 @@ import {
   LEADERSHIP_EXAMPLES,
   WEAKNESSES_IMPROVING,
 } from '../../data/questionOptions.js'
+import { parseAnswerList } from '../../utils/answerList.js'
 
-function splitCommaList(answer) {
-  if (!answer || typeof answer !== 'string') return []
-  return answer.split(',').map((s) => s.trim()).filter(Boolean)
-}
 
 function filterToAllowedOptions(values, allowedOptions) {
   const allowed = new Set(allowedOptions)
@@ -34,15 +31,15 @@ function parseSingleAnswer(raw, allowedOptions) {
 }
 
 function parseSkillsAnswer(raw) {
-  return splitCommaList(raw)
+  return parseAnswerList(raw)
 }
 
 function parseMultiAnswer(raw, allowedOptions) {
-  return filterToAllowedOptions(splitCommaList(raw), allowedOptions)
+  return filterToAllowedOptions(parseAnswerList(raw), allowedOptions)
 }
 
 function parseProjectsAnswer(raw, resumeProjects) {
-  const values = splitCommaList(raw)
+  const values = parseAnswerList(raw)
   const allowed = new Set([...PROJECT_THEMES, ...resumeProjects])
   return values.filter((v) => allowed.has(v))
 }

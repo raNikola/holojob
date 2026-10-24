@@ -3,6 +3,7 @@ import { loadIntelligence } from '../modules/intelligence/intelligenceExport'
 import { normalizeLanguages } from './languages'
 import { normalizeAllowedLocations, normalizeRelocation, normalizeWorkAuthorization } from './workAuthorization'
 import { normalizeSalaryTargets } from './salary'
+import { joinAnswerList, repairCommaAnswer } from './answerList'
 
 export const STORAGE_KEY = 'job-dashboard-candidate-profile'
 
@@ -107,6 +108,22 @@ function migrateOnboardingComplete(profile) {
   return profile
 }
 
+// The projects answer (question 4) was once stored comma-joined, which cut each
+// project sentence at its commas and let repeated clicks pile up copies. Rewrite
+// it once as one entry per line, sentences whole and repeats dropped.
+export const PROJECTS_QUESTION_ID = 4
+export function repairProjectsAnswer(profile) {
+  const answers = profile.questionnaire?.answers
+  const entry = answers?.find((a) => a.id === PROJECTS_QUESTION_ID)
+  if (!entry?.answer || entry.answer.includes('\n')) return profile
+  const repaired = joinAnswerList(repairCommaAnswer(entry.answer, profile.resume?.parsedData?.projects || []))
+  if (repaired === entry.answer) return profile
+  return {
+    ...profile,
+    questionnaire: { ...profile.questionnaire, answers: answers.map((a) => (a === entry ? { ...a, answer: repaired } : a)) },
+  }
+}
+
 export function loadProfile() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -129,7 +146,7 @@ export function loadProfile() {
         ...normalizeSalaryTargets(stored.basicProfile),
       },
     }
-    const migrated = migrateQuestionnaireAnswers(parsed)
+    const migrated = repairProjectsAnswer(migrateQuestionnaireAnswers(parsed))
     const withCompletion = migrateOnboardingComplete(migrated)
     if (withCompletion.meta?.onboardingComplete && !migrated.meta?.onboardingComplete) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(withCompletion))

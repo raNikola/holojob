@@ -9,6 +9,7 @@ import { useProfile } from '../../context/ProfileContext'
 import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
 import { useOperationLog } from '../../hooks/useOperationLog'
 import { ensureApiAvailable } from '../../utils/apiAvailability'
+import { joinAnswerList, parseAnswerList } from '../../utils/answerList'
 
 // SKILLS QUESTION IDs
 const SKILL_QS = [2, 5]
@@ -109,8 +110,8 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion 
         const idx = answers.findIndex((a) => a.id === qid)
         const current = idx >= 0 ? answers[idx].answer || '' : ''
         // Only seed if there's no real answer yet (empty or a single leftover)
-        if (current.split(',').filter(Boolean).length > 1) continue
-        const entry = { id: qid, question: `Q${qid}`, answer: autoSkills.join(', ') }
+        if (parseAnswerList(current).length > 1) continue
+        const entry = { id: qid, question: `Q${qid}`, answer: joinAnswerList(autoSkills) }
         if (idx >= 0) answers[idx] = entry
         else answers.push(entry)
         didSeed = true
