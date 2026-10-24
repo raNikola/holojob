@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applySuggestions, buildSuggestions, defaultSelection } from '../../src/utils/cvAnalysis'
+import { applySuggestions, applyToDefaultCv, buildSuggestions, defaultSelection, looksCutOff } from '../../src/utils/cvAnalysis'
 import { parseAnswerList } from '../../src/utils/answerList'
 
 const facts = {
@@ -87,5 +87,49 @@ describe('applySuggestions', () => {
     const p = { ...profile(), questionnaire: { answers: [] } }
     const out = applySuggestions(p, facts, new Set(['summary']))
     expect(out.questionnaire.answers).toEqual([expect.objectContaining({ id: 17, answer: 'I lead B2B products.' })])
+  })
+})
+
+describe('applyToDefaultCv', () => {
+  const withLibrary = () => ({
+    ...profile(),
+    defaultCvId: 'a',
+    cvLibrary: [{ id: 'a', analysis: { facts, applied: [] }, parsedData: {} }],
+  })
+
+  it('applies the ticked, usable items and remembers which ones', () => {
+    const result = applyToDefaultCv(withLibrary(), 'a', new Set(['skill:cursor', 'skill:php', 'edu:1']))
+    expect(result.count).toBe(2)
+    const analysis = result.profile.cvLibrary[0].analysis
+    expect(new Set(analysis.applied)).toEqual(new Set(['skill:cursor', 'edu:1']))
+    expect(analysis.lastApply).toMatchObject({ count: 2, state: 'pending' })
+    expect(result.profile.resume.parsedData.skills).toContain('Cursor')
+  })
+  it('tells an applied item from one that was already there', () => {
+    const { profile: after } = applyToDefaultCv(withLibrary(), 'a', new Set(['skill:cursor']))
+    const skills = buildSuggestions(after, facts).skills
+    expect(skills.map((i) => i.status)).toEqual(['have', 'have', 'have'])
+    expect(new Set(after.cvLibrary[0].analysis.applied)).toEqual(new Set(['skill:cursor']))
+  })
+  it('does not count groups or the summary again once they are in the profile', () => {
+    const first = applyToDefaultCv(withLibrary(), 'a', new Set(['competencyGroups', 'toolGroups', 'summary']))
+    expect(first.count).toBe(3)
+    const again = applyToDefaultCv(first.profile, 'a', new Set(['competencyGroups', 'toolGroups', 'summary']))
+    expect(again.count).toBe(0)
+  })
+  it('does nothing for a CV that is not the default, or when nothing usable is ticked', () => {
+    expect(applyToDefaultCv({ ...withLibrary(), defaultCvId: 'b' }, 'a', new Set(['skill:cursor']))).toBeNull()
+    const noop = applyToDefaultCv(withLibrary(), 'a', new Set(['skill:php']))
+    expect(noop.count).toBe(0)
+  })
+})
+
+describe('a cut-off education entry', () => {
+  it('is spotted, and its replacement stays unticked', () => {
+    expect(looksCutOff('.Sc. Software Engineering — Uni | 2016')).toBe(true)
+    expect(looksCutOff('B. Sc. Software Engineering')).toBe(false)
+    const s = buildSuggestions(profile(), facts)
+    expect(s.education[0]).toMatchObject({ status: 'differs', existingCutOff: true })
+    expect(defaultSelection(s).has('edu:0')).toBe(false)
   })
 })

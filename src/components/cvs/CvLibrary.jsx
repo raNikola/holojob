@@ -9,6 +9,7 @@ import { extractTextFromPdf } from '../../utils/resumeParser'
 import { extractProfileFromResume } from '../../utils/profileExtractor'
 import { cvDownloadUrl, deleteCvFile, uploadCvFile } from '../../modules/cvs/cvApi'
 import { canRemoveCv } from '../../utils/cvLibrary'
+import { regenerateAndSync } from '../../modules/cvs/regenerateAfterApply'
 import CvAnalyzeDialog from './CvAnalyzeDialog'
 import CvAnalysisReview from './CvAnalysisReview'
 
@@ -38,7 +39,7 @@ function LabelEditor({ initial, onSave, onCancel }) {
   )
 }
 
-function CvCard({ cv, profile, isDefault, canDelete, busy, onSetDefault, onRename, onDelete, onAnalysis, onApplyAnalysis }) {
+function CvCard({ cv, profile, isDefault, canDelete, busy, onSetDefault, onRename, onDelete, onAnalysis, onApplyAnalysis, onRetrySync }) {
   const [editing, setEditing] = useState(false)
   const [dialog, setDialog] = useState(null)
   const [reviewOpen, setReviewOpen] = useState(false)
@@ -114,7 +115,7 @@ function CvCard({ cv, profile, isDefault, canDelete, busy, onSetDefault, onRenam
         </div>
       </div>
       {reviewOpen && cv.analysis && (
-        <CvAnalysisReview profile={profile} cv={cv} isDefault={isDefault} onApply={onApplyAnalysis} />
+        <CvAnalysisReview profile={profile} cv={cv} isDefault={isDefault} onApply={onApplyAnalysis} onRetrySync={onRetrySync} />
       )}
       {dialog && (
         <CvAnalyzeDialog
@@ -178,6 +179,22 @@ export default function CvLibrary() {
     }
   }
 
+  const recordApply = (cv, count, result) => cvActions.patchCvAnalysis(cv.id, {
+    lastApply: { at: new Date().toISOString(), count, state: result.ok ? 'synced' : 'failed', error: result.error || null },
+  })
+
+  // Write the ticked suggestions, then regenerate intelligence from the result so
+  // scoring sees them, the same as the Regenerate Intelligence button.
+  const applyAnalysis = async (cv, selected) => {
+    const applied = cvActions.applyCvAnalysis(cv.id, selected)
+    if (!applied || applied.count === 0) return
+    recordApply(cv, applied.count, await regenerateAndSync(applied.profile))
+  }
+
+  const retrySync = async (cv) => {
+    recordApply(cv, cv.analysis?.lastApply?.count || 0, await regenerateAndSync(profile))
+  }
+
   const remove = async (cv) => {
     setError(null)
     setNotice(null)
@@ -237,7 +254,8 @@ export default function CvLibrary() {
             onRename={(label) => cvActions.renameCv(cv.id, label)}
             onDelete={() => remove(cv)}
             onAnalysis={(analysis) => cvActions.setCvAnalysis(cv.id, analysis)}
-            onApplyAnalysis={(selected) => cvActions.applyCvAnalysis(cv.id, selected)}
+            onApplyAnalysis={(selected) => applyAnalysis(cv, selected)}
+            onRetrySync={() => retrySync(cv)}
           />
         ))
       )}

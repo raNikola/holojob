@@ -4,6 +4,7 @@
 // applySuggestions runs only from the review's Apply button.
 
 import { joinAnswerList, parseAnswerList } from './answerList'
+import { patchCvAnalysis, syncDefaultEntry } from './cvLibrary'
 
 export const PROJECTS_QUESTION_ID = 4
 export const SUMMARY_QUESTION_ID = 17
@@ -85,7 +86,7 @@ export function buildSuggestions(profile, facts) {
     const existing = idx >= 0 ? pd.education[idx] : null
     const matches = existing && contains(existing, e.degree) && (!e.year || contains(existing, e.year))
     return {
-      id: `edu:${i}`, value: formatEducation(e), existing, existingIndex: idx,
+      id: `edu:${i}`, value: formatEducation(e), existing, existingIndex: idx, existingCutOff: looksCutOff(existing),
       status: !existing ? 'new' : matches ? 'have' : 'differs',
     }
   })
@@ -173,4 +174,36 @@ export function applySuggestions(profile, facts, selected) {
   }
   if (selected.has('summary') && s.summary) next = setAnswer(next, SUMMARY_QUESTION_ID, s.summary.draft)
   return next
+}
+
+/** The ticked ids that would change something: what is already in the profile is left out. */
+export function usableIds(s, selected) {
+  const status = new Map([...s.skills, ...s.projects, ...s.experience, ...s.education, ...s.certifications].map((i) => [i.id, i.status]))
+  status.set('competencyGroups', s.competencyGroups.status)
+  status.set('toolGroups', s.toolGroups.status)
+  if (s.summary) status.set('summary', s.summary.status)
+  return new Set([...selected].filter((id) => status.has(id) && status.get(id) !== 'have' && status.get(id) !== 'none'))
+}
+
+/** An entry that starts with punctuation was cut off somewhere ("B. Sc." read as ".Sc."). */
+export const looksCutOff = (text) => /^[^\p{L}\p{N}]/u.test((text || '').trim())
+
+/**
+ * Apply the ticked suggestions of one CV to the profile, only when it is the
+ * default CV (its data is what the rest of the app reads). Items that were
+ * already in the profile are not counted. The entry remembers what it applied,
+ * so the review can tell "applied" from "was already there".
+ * Returns { profile, count } or null.
+ */
+export function applyToDefaultCv(profile, id, selected) {
+  const entry = profile.cvLibrary?.find((c) => c.id === id)
+  if (!entry?.analysis || profile.defaultCvId !== id) return null
+  const s = buildSuggestions(profile, entry.analysis.facts)
+  const usable = usableIds(s, selected)
+  if (usable.size === 0) return { profile, count: 0 }
+  const applied = applySuggestions(profile, entry.analysis.facts, usable)
+  const withMemory = patchCvAnalysis(
+    applied, id, { applied: [...new Set([...(entry.analysis.applied || []), ...usable])], lastApply: { at: new Date().toISOString(), count: usable.size, state: 'pending' } },
+  )
+  return { profile: syncDefaultEntry(withMemory), count: usable.size }
 }
