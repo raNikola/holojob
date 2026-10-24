@@ -144,7 +144,7 @@ export default function RelatedContactsPanel({ job, onJobUpdated }) {
                   disabled={!acceptTosRisk || tosConfirmText.trim().toLowerCase() !== 'i understand'}
                   className="w-full rounded border border-stone-300 px-2 py-1 font-mono text-xs disabled:opacity-50 dark:border-stone-700 dark:bg-stone-900"
                 />
-                <p className="text-[11px] text-stone-500">
+                <p className="text-[13px] text-stone-500">
                   linkedin.com → DevTools → Application → Cookies → copy the <code>li_at</code> value.
                   Stored only in this browser. Falls back to safe search if LinkedIn blocks the session.
                 </p>

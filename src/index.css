@@ -39,3 +39,22 @@ body {
 }
 
 .animate-fade-in { animation: fade-in 0.35s ease-out forwards; }
+/*
+ * One step up on Tailwind's type scale for everything inside the job detail panel
+ * (xs -> sm -> base -> lg -> xl -> 2xl), so shared components such as badges, buttons
+ * and contact cards read larger there without changing anywhere else, and the
+ * hierarchy between labels and body text is kept. Literal values, because a
+ * variable that refers to another one of the same set would step twice.
+ */
+.panel-text-up {
+  --text-xs: 0.875rem;
+  --text-xs--line-height: calc(1.25 / 0.875);
+  --text-sm: 1rem;
+  --text-sm--line-height: calc(1.5 / 1);
+  --text-base: 1.125rem;
+  --text-base--line-height: calc(1.75 / 1.125);
+  --text-lg: 1.25rem;
+  --text-lg--line-height: calc(1.75 / 1.25);
+  --text-xl: 1.5rem;
+  --text-xl--line-height: calc(2 / 1.5);
+}
