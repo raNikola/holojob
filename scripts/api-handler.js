@@ -27,6 +27,7 @@ import {
   runQualityAudit,
 } from './run-quality-audit.js'
 import { importLinkedInText } from './run-linkedin-import.js'
+import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -158,6 +159,24 @@ function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = []
     req.on('data', (c) => chunks.push(c))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', reject)
+  })
+}
+
+function readLimitedBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    let size = 0
+    req.on('data', (c) => {
+      size += c.length
+      if (size > limit) {
+        reject(new Error('File is too large. Maximum size is 10 MB.'))
+        req.destroy()
+        return
+      }
+      chunks.push(c)
+    })
     req.on('end', () => resolve(Buffer.concat(chunks)))
     req.on('error', reject)
   })
@@ -458,6 +477,44 @@ export async function handleApiRequest(req, res) {
     const status = await ensureClaudeLogin()
     sendJson(res, 200, status)
     return true
+  }
+
+  // Uploaded CVs (data/profile/cvs). The client names a CV only by its id.
+  if (url === '/api/cvs' && req.method === 'POST') {
+    try {
+      const saved = saveCvFile(await readLimitedBody(req, MAX_CV_BYTES))
+      sendJson(res, 200, { ok: true, id: saved.id, size: saved.size })
+    } catch (e) {
+      sendJson(res, 400, { error: e.message })
+    }
+    return true
+  }
+
+  const cvMatch = /^\/api\/cvs\/([^/]+)(\/file)?$/.exec(url)
+  if (cvMatch) {
+    const [, id, isFile] = cvMatch
+    if (!isCvId(id)) {
+      sendJson(res, 400, { error: 'Invalid CV id' })
+      return true
+    }
+    if (req.method === 'GET' && isFile) {
+      const file = cvFilePath(id)
+      if (!fs.existsSync(file)) {
+        sendJson(res, 404, { error: 'File not found' })
+        return true
+      }
+      const name = new URL(req.url, 'http://localhost').searchParams.get('name') || 'cv.pdf'
+      const safeName = name.replace(/[^\w .()[\]-]/g, '_').slice(0, 120) || 'cv.pdf'
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`)
+      fs.createReadStream(file).pipe(res)
+      return true
+    }
+    if (req.method === 'DELETE' && !isFile) {
+      sendJson(res, 200, { ok: true, deleted: deleteCvFile(id) })
+      return true
+    }
   }
 
   if (url.startsWith('/api/resumes/') && req.method === 'GET') {
