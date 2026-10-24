@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { ExternalLink, X } from 'lucide-react'
 import Badge from '../ui/Badge'
 import { ApplyBadge, MatchScoreBadge, PriorityBadge } from './JobScoreBadge'
@@ -9,6 +8,7 @@ import RelatedContactsPanel from '../outreach/RelatedContactsPanel'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { isCapReason } from '../../modules/jobs/workAuthorization'
+import JobDescription from './JobDescription'
 import { formatSeen, historyBadges } from '../../modules/jobs/jobHistory'
 import { formatMonthlyEur, salaryBadges } from '../../modules/jobs/jobSalary'
 import FitJudgementSection, { isFitReason } from './FitJudgementSection'
@@ -20,17 +20,6 @@ const DIMENSION_LABELS = {
   experienceMatch: 'Experience',
   locationMatch: 'Location',
   cultureMatch: 'Culture',
-}
-
-function stripDescription(html) {
-  return (html || '')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&#39;/g, "'")
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 function ScoreBreakdown({ breakdown }) {
@@ -75,10 +64,8 @@ export default function JobDetailDrawer({
   onStatusChange,
   onApplicationSave,
 }) {
-  const [expandedDesc, setExpandedDesc] = useState(false)
   if (!job) return null
 
-  const desc = stripDescription(job.description)
   const showScores = hasMatchScores([job])
   const limits = (job.reasons || []).filter(isCapReason)
   const positiveReasons = (job.reasons || []).filter((r) => !r.startsWith('Red flag:') && !isCapReason(r) && !isFitReason(r))
@@ -87,11 +74,11 @@ export default function JobDetailDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="Close" />
-      <aside className="relative flex h-full w-full max-w-lg flex-col overflow-y-auto bg-white shadow-xl dark:bg-stone-950">
+      <aside className="relative flex h-full w-full max-w-[75rem] flex-col overflow-y-auto bg-white shadow-xl dark:bg-stone-950">
         <div className="sticky top-0 flex items-start justify-between border-b border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-950">
           <div>
             <h2 className="font-display text-lg font-semibold text-stone-900 dark:text-stone-100">{job.title}</h2>
-            <p className="text-sm text-stone-600 dark:text-stone-400">{job.company}</p>
+            <p className="text-base text-stone-600 dark:text-stone-400">{job.company}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-stone-100 dark:hover:bg-stone-800">
             <X className="h-5 w-5" />
@@ -130,19 +117,7 @@ export default function JobDetailDrawer({
             </a>
           )}
 
-          {desc && (
-            <div>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Description</h4>
-              <p className="mt-1 text-sm text-stone-700 dark:text-stone-300">
-                {expandedDesc ? desc : `${desc.slice(0, 400)}${desc.length > 400 ? '…' : ''}`}
-              </p>
-              {desc.length > 400 && (
-                <button type="button" className="mt-1 text-xs text-teal-600" onClick={() => setExpandedDesc(!expandedDesc)}>
-                  {expandedDesc ? 'Show less' : 'Show more'}
-                </button>
-              )}
-            </div>
-          )}
+          <JobDescription text={job.description} />
 
           {showScores && (
             <>

@@ -1,5 +1,5 @@
 import { createContext, useContext, useCallback, useEffect, useState } from 'react'
-import { loadProfile, saveProfile, clearProfile as clearStorage, getDefaultProfile } from '../utils/storage'
+import { loadProfile, saveProfile, restoreProfile as restoreStorage, clearProfile as clearStorage, getDefaultProfile } from '../utils/storage'
 import { extractProfileFromResume } from '../utils/profileExtractor'
 import { SKILLS_DICTIONARY } from '../data/skillsDictionary'
 
@@ -102,6 +102,13 @@ export function ProfileProvider({ children }) {
     setProfile((prev) => saveProfile({ ...prev, meta: { ...prev.meta, lastStep: step } }))
   }, [])
 
+  // Cancel in Edit Profile: put back the profile as it was when the edit began,
+  // in state and in localStorage.
+  const restoreProfile = useCallback((snapshot) => {
+    setProfile(restoreStorage(snapshot))
+    setCurrentStep(snapshot.meta?.lastStep ?? 0)
+  }, [])
+
   return (
     <ProfileContext.Provider value={{
       profile,
@@ -113,6 +120,7 @@ export function ProfileProvider({ children }) {
       resetProfile,
       markOnboardingComplete,
       startProfileEdit,
+      restoreProfile,
     }}>
       {children}
     </ProfileContext.Provider>
