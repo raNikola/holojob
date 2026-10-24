@@ -115,3 +115,13 @@ def test_a_figure_with_a_plus_matches_the_cv_either_way():
     facts, _ = verify({"draft_career_summary": "I ran 250 sites and 10+ projects."}, "Ran 250+ websites on 10 projects")
     assert facts["draftCareerSummary"]
     assert verify({"skills": ["C++", "C#"]}, "Wrote C++ and C# code")[0]["skills"] == ["C++", "C#"]
+
+
+def test_hyphenated_words_pass_whatever_spacing_the_pdf_left_around_the_hyphen():
+    draft = {"draft_career_summary": "I build API-driven platforms and AI-assisted workflows with Cross-Functional teams."}
+    for cv in ("API -driven platforms, AI- assisted workflows, Cross - Functional teams",
+               "api-driven platforms, ai-assisted workflows, cross-functional teams",
+               "API\u2011Driven platforms and AI \u2013 assisted workflows and Cross-Functional teams"):
+        assert verify(draft, cv)[0]["draftCareerSummary"], cv
+    facts, rejected = verify(draft, "platforms and workflows and teams")
+    assert facts["draftCareerSummary"] == "" and "API-driven" in rejected[0]["reason"]

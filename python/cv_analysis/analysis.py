@@ -177,7 +177,9 @@ def _draft_problems(draft: str, source: _Source) -> list[str]:
             problems.append(number)
     for sentence in re.split(r"(?<=[.!?])\s+", draft):
         for word in re.findall(r"\b[A-Z][\w+#&-]*", sentence)[1:] if sentence else []:
-            if word != "I" and normalize(word) and normalize(word) not in source.words:
+            # Compared as a phrase: "API-driven" is "api driven", and the CV's own
+            # "API -driven" (a PDF spacing quirk) reads the same.
+            if word != "I" and normalize(word) and not source.has(word):
                 problems.append(word)
     return problems
 
