@@ -23,6 +23,7 @@ __pycache__/
 data/cache/
 data/resumes/
 data/profile/*.json
+data/profile/cvs/
 data/jobs/*.json
 data/jobs/*.csv
 data/intelligence/*.json

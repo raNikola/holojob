@@ -126,3 +126,8 @@ export function cvFilesToDiscard(snapshot, current) {
   const kept = new Set((snapshot?.cvLibrary || []).map((c) => c.id))
   return (current?.cvLibrary || []).filter((c) => c.filePath && !kept.has(c.id)).map((c) => c.id)
 }
+
+/** Keep the last analysis of a CV on its entry; it is data about the file, not the profile. */
+export function setCvAnalysis(profile, id, analysis) {
+  return { ...profile, cvLibrary: (profile.cvLibrary || []).map((c) => (c.id === id ? { ...c, analysis } : c)) }
+}

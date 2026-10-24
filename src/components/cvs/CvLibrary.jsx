@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Check, Download, FileText, Loader2, Pencil, Star, Trash2, Upload, X } from 'lucide-react'
+import { Check, Download, Sparkles, FileText, Loader2, Pencil, Star, Trash2, Upload, X } from 'lucide-react'
 import Card from '../ui/Card'
 import Alert from '../ui/Alert'
 import Badge from '../ui/Badge'
@@ -9,6 +9,8 @@ import { extractTextFromPdf } from '../../utils/resumeParser'
 import { extractProfileFromResume } from '../../utils/profileExtractor'
 import { cvDownloadUrl, deleteCvFile, uploadCvFile } from '../../modules/cvs/cvApi'
 import { canRemoveCv } from '../../utils/cvLibrary'
+import CvAnalyzeDialog from './CvAnalyzeDialog'
+import CvAnalysisReview from './CvAnalysisReview'
 
 function formatDate(value) {
   if (!value) return '—'
@@ -36,8 +38,10 @@ function LabelEditor({ initial, onSave, onCancel }) {
   )
 }
 
-function CvCard({ cv, isDefault, canDelete, busy, onSetDefault, onRename, onDelete }) {
+function CvCard({ cv, profile, isDefault, canDelete, busy, onSetDefault, onRename, onDelete, onAnalysis, onApplyAnalysis }) {
   const [editing, setEditing] = useState(false)
+  const [dialog, setDialog] = useState(null)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const hasFile = Boolean(cv.filePath)
 
@@ -80,6 +84,14 @@ function CvCard({ cv, isDefault, canDelete, busy, onSetDefault, onRename, onDele
               <Star className="h-4 w-4" /> Set as default
             </Button>
           )}
+          {cv.analysis && (
+            <Button variant="secondary" onClick={() => setReviewOpen((o) => !o)}>
+              {reviewOpen ? 'Hide analysis' : 'Review analysis'}
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => setDialog({ force: Boolean(cv.analysis) })} disabled={busy || !cv.rawText}>
+            <Sparkles className="h-4 w-4" /> {cv.analysis ? 'Re-analyze' : 'Analyze with AI'}
+          </Button>
           <Button variant="ghost" onClick={() => setEditing(true)} disabled={busy || editing}>
             <Pencil className="h-4 w-4" /> Rename
           </Button>
@@ -101,6 +113,30 @@ function CvCard({ cv, isDefault, canDelete, busy, onSetDefault, onRename, onDele
           )}
         </div>
       </div>
+      {reviewOpen && cv.analysis && (
+        <CvAnalysisReview profile={profile} cv={cv} isDefault={isDefault} onApply={onApplyAnalysis} />
+      )}
+      {dialog && (
+        <CvAnalyzeDialog
+          profile={profile}
+          cv={cv}
+          force={cv.analysis ? dialog.force : false}
+          onClose={() => setDialog(null)}
+          onDone={(result) => {
+            onAnalysis({
+              facts: result.facts,
+              rejected: result.rejected,
+              fingerprint: result.fingerprint,
+              provider: result.provider,
+              model: result.model,
+              analyzedAt: result.analyzedAt,
+              promptVersion: result.promptVersion,
+            })
+            setDialog(null)
+            setReviewOpen(true)
+          }}
+        />
+      )}
     </Card>
   )
 }
@@ -193,12 +229,15 @@ export default function CvLibrary() {
           <CvCard
             key={cv.id}
             cv={cv}
+            profile={profile}
             isDefault={cv.id === profile.defaultCvId}
             canDelete={canRemoveCv(profile, cv.id)}
             busy={busyId === cv.id}
             onSetDefault={() => { setNotice(null); cvActions.setDefaultCv(cv.id) }}
             onRename={(label) => cvActions.renameCv(cv.id, label)}
             onDelete={() => remove(cv)}
+            onAnalysis={(analysis) => cvActions.setCvAnalysis(cv.id, analysis)}
+            onApplyAnalysis={(selected) => cvActions.applyCvAnalysis(cv.id, selected)}
           />
         ))
       )}

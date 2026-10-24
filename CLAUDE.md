@@ -175,8 +175,35 @@ profile until touched; a job with unreadable pay always passes them. The minimum
 read from the intelligence file on every scoring run, so a re-score picks up a changed
 minimum without discovery once the intelligence is regenerated and synced.
 
-**Privacy exception.** Everything else in this repo keeps personal data on the
-server. The judge is the one deliberate exception, and only when `--judge` is
+**My CVs** (`src/utils/cvLibrary.js`, `scripts/cv-store.js`). Every uploaded CV is kept:
+the PDF as `data/profile/cvs/<id>.pdf` (server-made id, `%PDF-` and 10 MB checked;
+`/api/cvs`), and an entry in `profile.cvLibrary` (`id, label, fileName, uploadedAt,
+filePath, rawText, parsedData, importSource, analysis`). `profile.resume` keeps its shape
+and is the active CV that the rest of the app reads; `profile.defaultCvId` says which
+entry it is. Setting a default copies the entry into `profile.resume`, after writing the
+outgoing default's form edits back into its entry (the live copy is `profile.resume`).
+The default cannot be deleted. The first load migrates an existing `profile.resume` into
+the library (its PDF was never stored, so `filePath` is null). Cancel in Edit Profile
+deletes the PDFs of CVs added during that session (`cvFilesToDiscard`).
+
+**CV analysis** (`python/cv_analysis/`, `POST /api/ai/cv-analyze`). On demand, from a My CVs
+card. The model reads the CV and returns facts it copied from it: the CV's own competency
+and tool groups, roles with bullets, skills, key projects, education, certifications, and a
+draft career summary. `analysis.verify` then checks every item against the CV text and
+drops (and reports) what is not there; the draft summary is kept only when each number and
+proper noun in it is in the CV. The review (`CvAnalysisReview`) compares with the profile
+(new / already there / differs) and writes only ticked items, into `parsedData` (skills,
+workExperience, education, certifications, plus `experienceDetail`, `competencyGroups`,
+`toolGroups`) and Questionnaire answers 4 and 17. Only the default CV can be applied.
+Results cache in `data/cache/cv_analysis.json` by a fingerprint of the redacted text,
+provider, model and prompt version; the entry keeps its last analysis. The model is
+`judge_model(provider)`.
+
+**Privacy exceptions.** Everything else in this repo keeps personal data on the
+server. The CV analysis is one: it sends the text of one CV with the name, e-mail
+addresses, phone numbers and links replaced by placeholders (`redact.py`), only after the
+confirm dialog has shown that exact text and the provider; `/api/ai/cv-analyze` refuses a
+body without `"confirm": true`. The judge is the other, and only when `--judge` is
 passed: it sends the ad plus a digest of `candidate-intelligence.json` (seniority,
 years, target roles, spoken languages, career narrative, skills, domains,
 project / ownership / leadership / impact examples, strengths, known gaps) to
