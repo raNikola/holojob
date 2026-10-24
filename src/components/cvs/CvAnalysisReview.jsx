@@ -5,7 +5,7 @@ import { buildSuggestions, defaultSelection } from '../../utils/cvAnalysis'
 
 const STATUS_LABEL = { new: 'New', have: 'Already in your profile', differs: 'Differs from your profile' }
 
-function Row({ id, selected, toggle, status, children, disabled }) {
+function Row({ id, selected, toggle, status, children, disabled, nested }) {
   const off = disabled || status === 'have'
   return (
     <li className="flex items-start gap-2 py-1.5">
@@ -17,12 +17,16 @@ function Row({ id, selected, toggle, status, children, disabled }) {
         onChange={() => toggle(id)}
         className="mt-1 h-4 w-4 shrink-0 accent-teal-600"
       />
-      <label htmlFor={id} className={`min-w-0 flex-1 text-sm ${off ? 'text-stone-500' : 'text-stone-800 dark:text-stone-200'}`}>
-        {children}
-        {status !== 'new' && (
-          <span className={`ml-2 text-xs ${status === 'differs' ? 'text-amber-700 dark:text-amber-400' : 'text-stone-500'}`}>{STATUS_LABEL[status]}</span>
-        )}
-      </label>
+      <div className="min-w-0 flex-1">
+        <label htmlFor={id} className={`block text-sm ${off ? 'text-stone-500' : 'text-stone-800 dark:text-stone-200'}`}>
+          {children}
+          {status !== 'new' && (
+            <span className={`ml-2 text-xs ${status === 'differs' ? 'text-amber-700 dark:text-amber-400' : 'text-stone-500'}`}>{STATUS_LABEL[status]}</span>
+          )}
+        </label>
+        {/* Outside the label, so opening the bullets does not tick the role. */}
+        {nested}
+      </div>
     </li>
   )
 }
@@ -105,18 +109,27 @@ export default function CvAnalysisReview({ profile, cv, isDefault, onApply }) {
         <Section title="Work experience" hint="Saved as structured roles with their bullets. A role your profile lacks is also added to its work-experience list.">
           <ul>
             {s.experience.map((i) => (
-              <Row key={i.id} id={i.id} selected={selected} toggle={toggle} status={i.status} disabled={locked}>
+              <Row
+                key={i.id}
+                id={i.id}
+                selected={selected}
+                toggle={toggle}
+                status={i.status}
+                disabled={locked}
+                nested={i.role.bullets.length > 0 && (
+                  <details className="mt-0.5 text-sm" data-testid={`bullets-${i.id}`}>
+                    <summary className="cursor-pointer text-xs text-stone-500">Show {i.role.bullets.length} bullets</summary>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-stone-700 dark:text-stone-300">
+                      {i.role.bullets.map((b) => <li key={b}>{b}</li>)}
+                    </ul>
+                  </details>
+                )}
+              >
                 <span className="font-medium">{i.label}</span>
                 <span className="ml-2 text-xs text-stone-500">{i.role.bullets.length} bullets</span>
               </Row>
             ))}
           </ul>
-          {s.experience.map((i) => i.role.bullets.length > 0 && (
-            <details key={`${i.id}-b`} className="ml-6 text-sm">
-              <summary className="cursor-pointer text-xs text-stone-500">{i.role.company}: bullets</summary>
-              <ul className="mt-1 list-disc space-y-1 pl-5 text-stone-700 dark:text-stone-300">{i.role.bullets.map((b) => <li key={b}>{b}</li>)}</ul>
-            </details>
-          ))}
         </Section>
       )}
 
