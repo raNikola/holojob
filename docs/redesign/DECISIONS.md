@@ -23,10 +23,11 @@ Evidence-based job matching. The score measures evidence of what the candidate h
 13. Application tracking is independent of job discovery. An application has its own identity and its own store; it keeps a snapshot of the posting (title, company, location, URL, description, source, dates) taken when it is created. The posting may disappear from search results, close or be pruned from the ledger; the application, the CV version sent, its statuses, notes and full history stay permanently. Discovery never deletes, rewrites or re-keys an application.
 14. Personal identifiers never leave the server. Anything sent to an AI provider is redacted first: full name, phone numbers, e-mail addresses and personal links (personal site / CV site, LinkedIn, GitHub and any other profile URL). Work history, roles, dates, bullets and skills may be sent, behind an explicit confirm, as the judge and CV analysis already do.
 15. Single user for now. Access from several devices comes later; it will need server-side storage as the master instead of the browser's localStorage. New stores (applications, evidence, confirmed facts) are designed so they can move server-side without changing their shape.
+16. Job sources are user configuration, not code. Which boards are active, which companies are watched and any source keys are edited in Settings and stored server-side under data/ (private, never in git). No source group is hard-coded as the default; the active set is the user's. companies/*.json in the repo becomes a one-time seed for migration only. Design: [SOURCES_SPEC.md](SOURCES_SPEC.md).
 
 ## Scope and rules
 - Career OS stays the base app: UI, job sources incl. Serbian sites, AI provider layer, data.
-- Logic and code may be ported from MIT repos: career-ops-hq/career-ops, applypack/applypack, Gsync/jobsync, tcpsyn/CareerPulse, romit-23/jobapply. DaKheera47/job-ops is Commons Clause: ideas only, never copy its code.
+- Other projects are references, not code sources. Study how they solved a problem (read their code and ADRs), then design and implement our own version that fits Holojob's stack, data model and conventions, simplified or improved where we can. Copy code verbatim only for a small pure function where re-writing it adds nothing; any such copy is listed in THIRD_PARTY_NOTICES.md. DaKheera47/job-ops stays ideas-only.
 - No inline or per-file attribution comments. One THIRD_PARTY_NOTICES.md holds the MIT notice of every repo code was copied from; an entry is removed once that code is fully rewritten.
 - Code, comments and identifiers are in English.
 - Everything under data/ (incl. candidate-intelligence.json), CVs and secrets are private and never committed.
@@ -40,3 +41,5 @@ The phase list, status and acceptance criteria live in one place: [../ROADMAP.md
 - 2026-10-25 - Shadow mode: the new Fit is computed and shown next to the current matchScore and changes no ranking until the owner has compared the two on real runs.
 - 2026-10-25 - Single user stays for now; multi-device access is a later goal (principle 15).
 - 2026-10-25 - Application tracking must be independent of discovery (principle 13). There are no tracked applications yet, so no migration is needed.
+- 2026-10-25 - Porting rule replaced: other projects are references, not code sources; verbatim copies only for small pure functions and listed in THIRD_PARTY_NOTICES.md (Scope and rules).
+- 2026-10-25 - Principle 16 added: job sources are user configuration stored server-side under data/, not code; the repo's companies/*.json becomes a one-time migration seed. Spec: SOURCES_SPEC.md.

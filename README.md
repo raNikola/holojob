@@ -153,6 +153,7 @@ npm run lint
 - [docs/ROADMAP.md](docs/ROADMAP.md) - phases and Phase 1 acceptance criteria
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - how the pipeline, scoring, judge and CV features work today
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) - terms used in the docs
+- [docs/redesign/SOURCES_SPEC.md](docs/redesign/SOURCES_SPEC.md) - spec of Settings > Sources (job boards and watched companies as user configuration)
 - [docs/redesign/ENGINE_CONTRACT.md](docs/redesign/ENGINE_CONTRACT.md) - draft JSON contract of the scoring engine
 - [docs/redesign/DECISIONS.md](docs/redesign/DECISIONS.md) - principles and owner decisions
 - [docs/redesign/PHASE0_AUDIT.md](docs/redesign/PHASE0_AUDIT.md) - current state and module decisions
