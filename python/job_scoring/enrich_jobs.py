@@ -39,6 +39,7 @@ from job_fingerprint import (  # noqa: E402,F401
     PROMPT_VERSION,
     job_fingerprint,
 )
+from requirement_ids import assign_id  # noqa: E402
 from llm_client import (  # noqa: E402
     LlmRefused,
     LlmUnavailable,
@@ -67,6 +68,10 @@ ROLE_TRACKS = {
 }
 SENIORITIES = {"junior", "mid", "senior", "lead", "head", "unclear"}
 VISA_SPONSORSHIP = {"offered", "not_offered", "not_mentioned"}
+# ENGINE_CONTRACT.md section 3.1. Work authorization, location, salary and
+# role family are gates, not requirements.
+REQUIREMENT_KINDS = {"skill", "experience", "domain", "education", "certification", "language", "other"}
+IMPORTANCES = {"must", "preferred", "nice"}
 
 # Enforced by providers that support JSON schema; the rest get json_object
 # and _coerce catches the difference.
@@ -83,8 +88,7 @@ FACT_SCHEMA = {
             "role_track_evidence",
             "seniority",
             "years_required",
-            "must_haves",
-            "nice_to_haves",
+            "requirements",
             "domain",
             "listing_quality_flags",
             "job_country",
@@ -99,8 +103,20 @@ FACT_SCHEMA = {
             "role_track_evidence": {"type": ["string", "null"]},
             "seniority": {"type": "string", "enum": sorted(SENIORITIES)},
             "years_required": {"type": ["integer", "null"]},
-            "must_haves": {"type": "array", "items": {"type": "string"}},
-            "nice_to_haves": {"type": "array", "items": {"type": "string"}},
+            "requirements": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["text", "kind", "importance", "posting_quote"],
+                    "properties": {
+                        "text": {"type": "string"},
+                        "kind": {"type": "string", "enum": sorted(REQUIREMENT_KINDS)},
+                        "importance": {"type": "string", "enum": sorted(IMPORTANCES)},
+                        "posting_quote": {"type": "string"},
+                    },
+                },
+            },
             "domain": {"type": ["string", "null"]},
             "listing_quality_flags": {"type": "array", "items": {"type": "string"}},
             "job_country": {"type": ["string", "null"]},
@@ -136,8 +152,15 @@ Return ONLY a JSON object of this exact shape, with no prose around it:
   "role_track_evidence": "<the ad's own sentence, or null>",
   "seniority": "junior" | "mid" | "senior" | "lead" | "head" | "unclear",
   "years_required": <integer, or null if the ad does not say>,
-  "must_haves": ["<up to 8 stated requirements>"],
-  "nice_to_haves": ["<up to 6>"],
+  "requirements": [
+    {{
+      "text": "<one requirement, in plain words>",
+      "kind": "skill" | "experience" | "domain" | "education" | \
+"certification" | "language" | "other",
+      "importance": "must" | "preferred" | "nice",
+      "posting_quote": "<the ad's exact words that state it>"
+    }}
+  ],
   "domain": "<one or two words for the industry, or null>",
   "listing_quality_flags": ["<up to 4 problems with the ad itself>"],
   "job_country": "<ISO 3166 two-letter code of the country the role is based in, or null>",
@@ -179,6 +202,25 @@ role that is not remote.
 with a visa or work permit. "not_offered" where it says it does not, or that \
 applicants must already have the right to work there. Otherwise \
 "not_mentioned".
+
+8. requirements lists EVERY requirement the ad states, however many there \
+are. One item per requirement: a list of several skills in one sentence \
+("React, Node.js and PostgreSQL") is one item per skill. Leave out where the \
+hire must live, the right to work, salary and the job title itself; those are \
+answered elsewhere.
+
+9. posting_quote is copied character for character from the ad: the words \
+that state the requirement, with no paraphrase, no ellipsis and no added \
+words. Several items may share one quote.
+
+10. kind: "skill" a tool, technology or method; "experience" years or a kind \
+of work done before; "domain" knowledge of an industry or field; \
+"education" a degree or field of study; "certification" a named \
+certificate; "language" a spoken language; "other" anything else.
+
+11. importance: "nice" where the ad calls it a plus, a bonus or nice to have; \
+"preferred" where it says preferred, ideally or desirable; "must" where it \
+says required or must, and for a requirement the ad lists without saying.
 """
 
 
@@ -208,6 +250,31 @@ def _coerce(raw: dict) -> dict:
             return []
         return [str(i).strip() for i in items if str(i).strip()][:limit]
 
+    def requirements() -> list[dict]:
+        # No count limit: every requirement the ad states is kept. An item
+        # with no text or quote, or an importance outside the enum, is dropped
+        # rather than guessed at; an unknown kind is "other".
+        items = raw.get("requirements")
+        kept = []
+        for item in items if isinstance(items, list) else []:
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get("text") or "").strip()
+            quote = str(item.get("posting_quote") or "").strip()
+            importance = str(item.get("importance") or "").strip().lower()
+            if not text or not quote or importance not in IMPORTANCES:
+                continue
+            kind = str(item.get("kind") or "").strip().lower()
+            kept.append({
+                "text": text,
+                "kind": kind if kind in REQUIREMENT_KINDS else "other",
+                "importance": importance,
+                "postingQuote": quote,
+            })
+        return kept
+
+    reqs = requirements()
+
     return {
         "workMode": one_of("work_mode", WORK_MODES, "unclear"),
         "workModeEvidence": raw.get("work_mode_evidence") or None,
@@ -215,8 +282,11 @@ def _coerce(raw: dict) -> dict:
         "roleTrackEvidence": raw.get("role_track_evidence") or None,
         "seniority": one_of("seniority", SENIORITIES, "unclear"),
         "yearsRequired": years,
-        "mustHaves": strings("must_haves", 8),
-        "niceToHaves": strings("nice_to_haves", 6),
+        "requirements": reqs,
+        # Read by skill_match.py and the fit judge; derived from requirements
+        # so the ad is not asked the same question twice.
+        "mustHaves": [r["text"] for r in reqs if r["importance"] == "must"],
+        "niceToHaves": [r["text"] for r in reqs if r["importance"] != "must"],
         "domain": raw.get("domain") or None,
         "listingFlags": strings("listing_quality_flags", 4),
         # Codes the geography table does not know are dropped, not guessed at:
@@ -242,6 +312,8 @@ def extract(job: dict, model: str | None, provider: str | None) -> dict:
     facts = _coerce(
         complete_json(prompt, schema=FACT_SCHEMA, model=model, provider=provider)
     )
+    # Ids are code's job, not the model's (ENGINE_CONTRACT.md section 2, step 2).
+    facts["requirements"] = [assign_id(r) for r in facts["requirements"]]
     facts["_fingerprint"] = _fingerprint(job)
     return facts
 
