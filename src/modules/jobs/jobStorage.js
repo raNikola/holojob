@@ -48,14 +48,38 @@ export function loadJobs() {
   }
 }
 
-export function saveJobs(state) {
+// Read again from the scored-jobs file on every load while the API is up; the
+// browser alone holds status, tracking, assets, outreach and filters, never these.
+const FILE_FIELDS = ['description', 'llmFacts', 'engineShadow']
+
+/** The job without the fields the scored-jobs file carries in full. */
+export function slimJob(job) {
+  const slim = { ...job }
+  for (const field of FILE_FIELDS) delete slim[field]
+  return slim
+}
+
+/**
+ * Stores the job list. When it does not fit in localStorage (about 5M
+ * characters; a few hundred enriched ads pass that), stores it without the
+ * fields the file restores, and failing that keeps the list in memory only.
+ */
+export function saveJobs(state, storage = globalThis.localStorage) {
   const payload = {
     meta: state.meta,
     jobs: state.jobs,
     filters: state.filters,
     importedAt: state.importedAt,
   }
-  localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(payload))
+  try {
+    storage.setItem(JOBS_STORAGE_KEY, JSON.stringify(payload))
+  } catch {
+    try {
+      storage.setItem(JOBS_STORAGE_KEY, JSON.stringify({ ...payload, jobs: payload.jobs.map(slimJob), slim: true }))
+    } catch (error) {
+      console.warn(`Job list not saved in this browser: ${error.message}`)
+    }
+  }
   return payload
 }
 

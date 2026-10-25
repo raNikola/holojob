@@ -7,7 +7,7 @@ import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
 import { clearIntelligence, saveIntelligence } from '../../modules/intelligence/intelligenceExport'
-import { JOBS_STORAGE_KEY, importJobsFromFile, loadJobs } from '../../modules/jobs/jobStorage'
+import { JOBS_STORAGE_KEY, importJobsFromFile, loadJobs, saveJobs } from '../../modules/jobs/jobStorage'
 import {
   buildDiscoveryCommand,
   buildScoringCommand,
@@ -76,7 +76,7 @@ export default function SettingsHome() {
     try {
       const json = JSON.parse(await file.text())
       const next = importJobsFromFile(json, loadJobs())
-      localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(next))
+      saveJobs(next)
       setStatus(`Imported ${next.jobs.length} jobs.`)
     } catch (e) {
       setImportError(e.message)
