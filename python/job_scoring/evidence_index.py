@@ -36,7 +36,7 @@ _CV_ANALYSIS = Path(__file__).resolve().parents[1] / "cv_analysis"
 if str(_CV_ANALYSIS) not in sys.path:
     sys.path.append(str(_CV_ANALYSIS))
 
-from redact import redact_cv_text  # noqa: E402
+from redact import identity_of, redact_cv_text  # noqa: E402
 
 SOURCES = ("role", "project", "example", "questionnaire", "fact")
 
@@ -213,9 +213,7 @@ def build_evidence(profile: dict, intelligence: dict) -> list[dict]:
     """
     profile = profile or {}
     intelligence = intelligence or {}
-    basic = profile.get("basicProfile") or {}
-    links = _strings((((profile.get("resume") or {}).get("parsedData")) or {}).get("links"))
-    full_name = str(basic.get("fullName") or "")
+    full_name, links = identity_of(profile)
 
     seen: dict[str, None] = {}
     index = []

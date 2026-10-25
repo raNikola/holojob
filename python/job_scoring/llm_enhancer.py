@@ -13,7 +13,10 @@ candidate-intelligence.json (see _candidate_digest), including the spoken
 languages, which generateCandidateIntelligence derives from the profile's
 basicProfile.languages. Name, email, phone,
 salary, links, locations, raw resume text and questionnaire answers are never
-read here, so they cannot be sent.
+read here, so they cannot be sent. The digest's text can still carry them
+(a narrative or an example that names a site or an address), so every line
+but the language list goes through redact.py first, with the profile's name
+and links (DECISIONS.md principle 14).
 """
 
 from __future__ import annotations
@@ -28,6 +31,12 @@ from typing import Protocol
 from enrich_jobs import MAX_DESCRIPTION_CHARS
 from labels import apply_recommendation, match_label, priority
 from llm_client import LlmRefused, LlmUnavailable, complete_json
+
+_CV_ANALYSIS = Path(__file__).resolve().parents[1] / "cv_analysis"
+if str(_CV_ANALYSIS) not in sys.path:
+    sys.path.append(str(_CV_ANALYSIS))
+
+from redact import redact_cv_text  # noqa: E402
 
 
 class ScoreEnhancer(Protocol):
@@ -190,8 +199,13 @@ class NotCached(Exception):
     """A cache-only enhancer met a job it has no stored judgement for."""
 
 
-def _candidate_digest(intelligence: dict) -> str:
-    """The only candidate data the judge sees. Add fields here deliberately."""
+def _candidate_digest(intelligence: dict, identity: tuple[str, list[str]] | None = None) -> str:
+    """The only candidate data the judge sees. Add fields here deliberately.
+
+    `identity` is redact.identity_of(profile). Every line is redacted with it
+    except the language list, which is sent as it is on purpose (CLAUDE.md).
+    """
+    name, links = identity or ("", [])
     summary = intelligence.get("candidateSummary") or {}
     experience = intelligence.get("experienceMap") or {}
     roles = intelligence.get("roleStrategy") or {}
@@ -201,30 +215,30 @@ def _candidate_digest(intelligence: dict) -> str:
         if isinstance(group, list)
         for skill in group
     ]
-    return "\n".join(
-        [
-            f"Seniority: {summary.get('seniorityLevel') or 'unstated'}. "
-            f"Years of experience: {experience.get('yearsOfExperience') or 'unstated'}.",
-            f"Target roles: {_joined(roles.get('primaryTargetRoles'))}",
-            f"Languages: {_joined(intelligence.get('languages'))}",
-            f"Summary: {summary.get('careerNarrative') or '(none stated)'}",
-            f"Skills: {_joined(dict.fromkeys(skills))}",
-            f"Domains worked in: {_joined(experience.get('domainsWorkedIn'))}",
-            "Project highlights:",
-            _bullets(experience.get("projectHighlights")),
-            "Ownership examples:",
-            _bullets(experience.get("ownershipExamples")),
-            "Leadership examples:",
-            _bullets(experience.get("leadershipExamples")),
-            "Business impact:",
-            _bullets(experience.get("businessImpactExamples")),
-            f"Strengths: {_joined(intelligence.get('candidateStrengths'))}",
-            f"Known gaps: {_joined(intelligence.get('candidateWeaknesses'))}",
-        ]
-    )
+    languages = f"Languages: {_joined(intelligence.get('languages'))}"
+    lines = [
+        f"Seniority: {summary.get('seniorityLevel') or 'unstated'}. "
+        f"Years of experience: {experience.get('yearsOfExperience') or 'unstated'}.",
+        f"Target roles: {_joined(roles.get('primaryTargetRoles'))}",
+        languages,
+        f"Summary: {summary.get('careerNarrative') or '(none stated)'}",
+        f"Skills: {_joined(dict.fromkeys(skills))}",
+        f"Domains worked in: {_joined(experience.get('domainsWorkedIn'))}",
+        "Project highlights:",
+        _bullets(experience.get("projectHighlights")),
+        "Ownership examples:",
+        _bullets(experience.get("ownershipExamples")),
+        "Leadership examples:",
+        _bullets(experience.get("leadershipExamples")),
+        "Business impact:",
+        _bullets(experience.get("businessImpactExamples")),
+        f"Strengths: {_joined(intelligence.get('candidateStrengths'))}",
+        f"Known gaps: {_joined(intelligence.get('candidateWeaknesses'))}",
+    ]
+    return "\n".join(line if line is languages else redact_cv_text(line, name, links)[0] for line in lines)
 
 
-def build_prompt(job: dict, intelligence: dict) -> str:
+def build_prompt(job: dict, intelligence: dict, identity: tuple[str, list[str]] | None = None) -> str:
     facts = job.get("llmFacts") or {}
     years = facts.get("yearsRequired")
     return PROMPT.format(
@@ -236,7 +250,7 @@ def build_prompt(job: dict, intelligence: dict) -> str:
         seniority=facts.get("seniority") or "unclear",
         years_required=years if years is not None else "not stated",
         must_haves=_joined(facts.get("mustHaves")),
-        candidate=_candidate_digest(intelligence),
+        candidate=_candidate_digest(intelligence, identity),
     )
 
 
@@ -292,8 +306,11 @@ class LlmFitEnhancer:
         complete=complete_json,
         cache_only: bool = False,
         limit: int | None = None,
+        identity: tuple[str, list[str]] | None = None,
     ):
         self.provider = provider
+        # redact.identity_of(profile): stripped from the digest, never sent.
+        self.identity = identity
         self.model = model
         self.threshold = threshold
         self.cache_path = cache_path
@@ -343,7 +360,7 @@ class LlmFitEnhancer:
         self._selected = {key for _, _, key in eligible[: max(0, self.limit)]}
 
     def _judge(self, job: dict, intelligence: dict) -> tuple[dict, str, bool]:
-        prompt = build_prompt(job, intelligence)
+        prompt = build_prompt(job, intelligence, self.identity)
         fingerprint = self._fingerprint(prompt)
         with self._lock:
             cached = self._cache.get(fingerprint)

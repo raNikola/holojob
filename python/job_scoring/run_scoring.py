@@ -29,6 +29,7 @@ from llm_enhancer import (  # noqa: E402
 )
 from scorer import resolve_weights, score_jobs  # noqa: E402
 from match_engine import shadow  # noqa: E402
+from redact import identity_of  # noqa: E402 (on the path through llm_enhancer)
 
 INTELLIGENCE_PATH = ROOT / "data" / "intelligence" / "candidate-intelligence.json"
 JOBS_PATH = ROOT / "data" / "jobs" / "discovered_jobs.json"
@@ -44,19 +45,23 @@ def _no_network(*_args, **_kwargs):
     raise RuntimeError("a cache-only run must never call the model")
 
 
-def _shadow_engine(intelligence: dict, judge: bool, provider: str, model: str | None):
+def _load_profile() -> dict | None:
+    return json.loads(PROFILE_PATH.read_text(encoding="utf-8")) if PROFILE_PATH.exists() else None
+
+
+def _shadow_engine(profile: dict | None, intelligence: dict, judge: bool, provider: str, model: str | None):
     """The shadow engine when HOLOJOB_ENGINE_SHADOW is on and a profile is on disk, else None."""
     if not shadow.enabled():
         return None
-    if not PROFILE_PATH.exists():
+    if profile is None:
         print(f"engine (shadow): skipped, no profile at {PROFILE_PATH}", file=sys.stderr)
         return None
     from confirmed_facts import load as load_confirmed_facts
     from evidence_index import build_candidate
 
-    profile = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
     candidate = build_candidate(profile, intelligence, load_confirmed_facts())
-    return shadow.ShadowEngine(candidate, judge=judge, provider=provider, model=model)
+    return shadow.ShadowEngine(candidate, judge=judge, provider=provider, model=model,
+                               identity=identity_of(profile))
 
 
 def parse_args() -> argparse.Namespace:
@@ -107,6 +112,11 @@ def main() -> int:
         print("Invalid discovered jobs format", file=sys.stderr)
         return 1
 
+    profile = _load_profile()
+    # The owner's name and links, to strip from the judge's digest; never sent.
+    # Every enhancer gets it, so a cache-only run builds the same prompts and
+    # finds the judgements a judged run stored.
+    identity = identity_of(profile)
     provider = args.judge_provider or active_provider()
     model = args.judge_model or judge_model(provider)
     limit = args.judge_limit if args.judge_limit > 0 else None
@@ -115,7 +125,7 @@ def main() -> int:
         # under the same cap, without calling anything.
         enhancer = LlmFitEnhancer(
             provider, model, threshold=args.judge_threshold, cache_path=FIT_CACHE_PATH,
-            limit=limit,
+            limit=limit, identity=identity,
             **({"complete": _no_network, "cache_only": True} if args.judge_preview else {}),
         )
         if args.judge:
@@ -130,7 +140,7 @@ def main() -> int:
         # replaced with one that raises.
         enhancer = LlmFitEnhancer(
             provider, model, threshold=args.judge_threshold, cache_path=FIT_CACHE_PATH,
-            complete=_no_network, cache_only=True,
+            complete=_no_network, cache_only=True, identity=identity,
         )
 
     scored = score_jobs(jobs, intelligence, enhancer, workers=args.workers)
@@ -141,7 +151,7 @@ def main() -> int:
     # current score's. A failure here is reported and never stops the run.
     engine, engine_summary = None, None
     try:
-        engine = _shadow_engine(intelligence, args.judge, provider, model)
+        engine = _shadow_engine(profile, intelligence, args.judge, provider, model)
         if engine and args.judge_preview:
             engine_summary = engine.preview(scored)
         elif engine:

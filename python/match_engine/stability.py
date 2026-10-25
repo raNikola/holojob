@@ -52,6 +52,7 @@ from match_engine.calibrate import (  # noqa: E402
 from confirmed_facts import load as load_confirmed_facts  # noqa: E402
 from enrich_jobs import _fingerprint, extract  # noqa: E402
 from evidence_index import build_candidate  # noqa: E402
+from redact import identity_of  # noqa: E402
 import requirement_frames  # noqa: E402
 import llm_client  # noqa: E402
 from llm_client import active_provider, judge_model  # noqa: E402
@@ -139,7 +140,9 @@ def run(args) -> tuple[dict, dict]:
         frames.clear()
     while len(runs) < RUNS:
         runs.append({})
-    candidate = build_candidate(_load(PROFILE_PATH), _load(INTELLIGENCE_PATH), load_confirmed_facts())
+    profile = _load(PROFILE_PATH)
+    candidate = build_candidate(profile, _load(INTELLIGENCE_PATH), load_confirmed_facts())
+    identity = identity_of(profile)
     shared_extraction = _load(CALIBRATION_CACHE).get("extraction", {}) if args.matcher_only else {}
     provider = args.provider or active_provider()
     model = args.model or judge_model(provider)
@@ -170,7 +173,7 @@ def run(args) -> tuple[dict, dict]:
                         requirement_frames.remember(frames, job, facts)
             # A fresh cache per call: each run asks the matcher again.
             outcome = match_posting(posting_from_job({**job, "llmFacts": facts}), candidate,
-                                    confirmed=True, provider=provider, model=model, cache=None)
+                                    confirmed=True, provider=provider, model=model, cache=None, identity=identity)
             result = {"extraction": facts}
             if outcome.output is None:  # kept with its extraction; the matcher is retried next time
                 result["error"] = outcome.error
