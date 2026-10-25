@@ -8,7 +8,7 @@ verify.py then decides what each proposal is worth.
 Privacy. This sends candidate evidence to the provider (CLAUDE.md, "Privacy
 rules and exceptions"): the evidence items' text, role and dates, built from a
 profile already redacted by evidence_index.py and passed through redact.py
-again here. Never sent: gates (work authorization, locations, languages,
+again here, with the same name and links (`identity`, redact.identity_of). Never sent: gates (work authorization, locations, languages,
 salary), confirmed facts and their notes, the profile version. It runs only
 under the confirmation a judged run already carries (`--judge`, or the confirm
 dialog behind /api's judged route); `match_posting` refuses without it.
@@ -197,26 +197,32 @@ words about what the job is.
 """
 
 
-def _evidence_payload(evidence: list[dict]) -> list[dict]:
-    """What the provider receives of each evidence item, redacted once more."""
+def _evidence_payload(evidence: list[dict], identity: tuple[str, list[str]] | None = None) -> list[dict]:
+    """What the provider receives of each evidence item, redacted once more.
+
+    `identity` is redact.identity_of(profile): with it the name and the
+    profile's own links are stripped too, as evidence_index.py's pass does.
+    """
+    name, links = identity or ("", [])
     out = []
     for item in evidence:
         sent = {k: item.get(k) for k in EVIDENCE_FIELDS}
-        sent["text"], _ = redact_cv_text(sent["text"] or "")
+        sent["text"], _ = redact_cv_text(sent["text"] or "", name, links)
         if sent["role"]:
-            sent["role"], _ = redact_cv_text(sent["role"])
+            sent["role"], _ = redact_cv_text(sent["role"], name, links)
         out.append(sent)
     return out
 
 
-def build_prompt(description: str, asked: list[tuple[str, dict]], evidence: list[dict]) -> str:
+def build_prompt(description: str, asked: list[tuple[str, dict]], evidence: list[dict],
+                 identity: tuple[str, list[str]] | None = None) -> str:
     requirements = [
         {"ref": ref, "text": r["text"], "kind": r["kind"], "importance": r["importance"]} for ref, r in asked
     ]
     return PROMPT.format(
         description=description,
         requirements=json.dumps(requirements, ensure_ascii=False, indent=1),
-        evidence=json.dumps(_evidence_payload(evidence), ensure_ascii=False, indent=1),
+        evidence=json.dumps(_evidence_payload(evidence, identity), ensure_ascii=False, indent=1),
     )
 
 
@@ -284,6 +290,7 @@ def match_posting(
     model: str | None = None,
     complete: Callable = complete_json,
     cache: dict | None = None,
+    identity: tuple[str, list[str]] | None = None,
 ) -> MatchOutcome:
     """Match one posting's requirements to the candidate's evidence and verify the result.
 
@@ -291,6 +298,8 @@ def match_posting(
     facts.requirements); `candidate` is evidence_index.build_candidate(...).
     `confirmed` must be True: it is the judged run's confirmation, passed on.
     A successful output is stored in `cache` under cache_key(); a failure never is.
+    `identity` is redact.identity_of(profile), for the second redaction pass;
+    it is used only to strip, never sent.
     """
     if confirmed is not True:
         raise NotConfirmed("the matcher sends candidate evidence; it runs only in a confirmed (--judge) run")
@@ -321,7 +330,7 @@ def match_posting(
             asked.append((f"r{index + 1}", req))
 
     try:
-        proposals, gate_quotes = _ask(build_prompt(description, asked, evidence), complete, provider, model)
+        proposals, gate_quotes = _ask(build_prompt(description, asked, evidence, identity), complete, provider, model)
     except (LlmUnavailable, LlmRefused, SchemaViolation) as exc:
         return MatchOutcome(posting_id, None, warnings, f"no engine output for this posting: {exc}")
 

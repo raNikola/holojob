@@ -32,6 +32,7 @@ import match_engine  # noqa: E402,F401  (puts job_scoring on the path)
 from confirmed_facts import load as load_confirmed_facts  # noqa: E402
 from enrich_jobs import _fingerprint, extract  # noqa: E402
 from evidence_index import build_candidate  # noqa: E402
+from redact import identity_of  # noqa: E402
 from job_fingerprint import job_fingerprint  # noqa: E402
 import requirement_frames  # noqa: E402
 from llm_client import active_provider, judge_model  # noqa: E402
@@ -61,11 +62,9 @@ def load_env_file(path: Path) -> None:
 def run(args) -> list[dict]:
     cache = json.loads(CACHE_PATH.read_text(encoding="utf-8")) if CACHE_PATH.exists() else {}
     extractions, matches = cache.setdefault("extraction", {}), cache.setdefault("match", {})
-    candidate = build_candidate(
-        json.loads(PROFILE_PATH.read_text(encoding="utf-8")),
-        json.loads(INTELLIGENCE_PATH.read_text(encoding="utf-8")),
-        load_confirmed_facts(),
-    )
+    profile = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+    candidate = build_candidate(profile, json.loads(INTELLIGENCE_PATH.read_text(encoding="utf-8")), load_confirmed_facts())
+    identity = identity_of(profile)
     provider = args.provider or active_provider()
     model = args.model or judge_model(provider)
     frames = requirement_frames.load()
@@ -88,7 +87,8 @@ def run(args) -> list[dict]:
             if not args.judge:
                 rows.append({"fixture": path.name, "error": "not matched under this profile version; run with --judge"})
                 continue
-            outcome = match_posting(posting, candidate, confirmed=True, provider=provider, model=model, cache=matches)
+            outcome = match_posting(posting, candidate, confirmed=True, provider=provider, model=model, cache=matches,
+                                    identity=identity)
             if outcome.output is None:
                 rows.append({"fixture": path.name, "error": outcome.error})
                 continue

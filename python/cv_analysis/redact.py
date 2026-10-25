@@ -62,6 +62,16 @@ def _name_spans(text: str, names: list[str]) -> list[tuple[int, int]]:
     return spans
 
 
+def identity_of(profile: dict | None) -> tuple[str, list[str]]:
+    """(full name, links) the profile names as the candidate's own: what
+    redact_cv_text needs, besides its patterns, to strip the name and a bare
+    personal site. Every caller sending profile-derived text reads them here."""
+    profile = profile or {}
+    name = str((profile.get("basicProfile") or {}).get("fullName") or "")
+    links = (((profile.get("resume") or {}).get("parsedData")) or {}).get("links")
+    return name, [str(l).strip() for l in links if str(l or "").strip()] if isinstance(links, list) else []
+
+
 def redact_cv_text(text: str, full_name: str = "", links: list[str] | None = None) -> tuple[str, dict]:
     """(redacted text, how many of each kind were removed)."""
     removed = {"names": 0, "emails": 0, "phones": 0, "links": 0}

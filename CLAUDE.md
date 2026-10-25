@@ -66,16 +66,19 @@ provider, each behind an explicit confirm; a fourth is a known gap.
 - **Fit judge**, only with `--judge`: sends the ad plus a digest of
   `candidate-intelligence.json` (seniority, years, target roles, spoken languages,
   career narrative, skills, domains, project / ownership / leadership / impact examples,
-  strengths, known gaps). Never sent: name, email, phone, salary, links, preferred
-  locations, raw resume text, questionnaire answers. Add a field to `_candidate_digest`
+  strengths, known gaps). Every line but the language list goes through `redact.py`
+  with the profile's name and links first. Never sent: name, email, phone, salary,
+  links, preferred locations, raw resume text, questionnaire answers. Add a field to `_candidate_digest`
   only deliberately, and update this list.
 - **Evidence matcher** (`python/match_engine/matcher.py`), only under the same `--judge`
   confirmation (`match_posting` refuses without `confirmed=True`): sends the ad, its
   requirements, and the evidence index items (id, source, role, start, end, text), built
-  from the profile and intelligence and passed through `redact.py`. Never sent: gates
+  from the profile and intelligence and passed through `redact.py` twice (building
+  the index, and again in the matcher), each time with the profile's name and links. Never sent: gates
   (work authorization, locations, languages, salary), confirmed facts or their notes,
   name, contacts, links. Runs only in a judged scoring run with `CAREER_OS_ENGINE_SHADOW` on
   (shadow mode, `match_engine/shadow.py`); the judge's confirm dialog then lists it.
+  `tests/python/test_engine_privacy.py` checks all of these at `requests.post`.
 - **Known gap:** LLM tailoring (`resume_generator/llm_tailor.py`, Claude Code CLI) also
   sends candidate data (parsed CV sections about_me, experience, skill_categories,
   education, an intelligence summary and project intelligence) with no confirm step and

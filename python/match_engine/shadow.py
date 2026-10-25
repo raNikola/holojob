@@ -61,8 +61,10 @@ class ShadowEngine:
 
     def __init__(self, candidate: dict, *, judge: bool, provider: str, model: str | None,
                  cache_path: Path | None = None, limit: int | None = DEFAULT_LIMIT,
-                 complete=complete_json, workers: int = 4):
+                 complete=complete_json, workers: int = 4, identity: tuple[str, list[str]] | None = None):
         self.candidate = candidate
+        # redact.identity_of(profile), for the matcher's redaction; never sent.
+        self.identity = identity
         self.judge = judge
         self.provider = provider
         self.model = model
@@ -117,7 +119,7 @@ class ShadowEngine:
                 self._count("beyondLimit")
                 return None
             outcome = match_posting(posting, self.candidate, confirmed=True, provider=self.provider,
-                                    model=self.model, complete=self._complete)
+                                    model=self.model, complete=self._complete, identity=self.identity)
             if outcome.output is None:
                 print(f"engine (shadow) failed: {(job.get('title') or '?')[:45]}: {outcome.error}",
                       file=sys.stderr)
