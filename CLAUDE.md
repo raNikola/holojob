@@ -1,4 +1,4 @@
-# Career OS — working notes
+# Holojob (formerly Career OS) — working notes
 
 Read docs/redesign/DECISIONS.md before any redesign work.
 
@@ -217,6 +217,12 @@ project / ownership / leadership / impact examples, strengths, known gaps) to
 the configured provider. Never sent: name, email, phone, salary, links,
 preferred locations, raw resume text, questionnaire answers. Add a field to
 `_candidate_digest` only deliberately, and update this list.
+
+Known gap: LLM tailoring (`resume_generator/llm_tailor.py`, Claude Code CLI) also
+sends candidate data - the parsed CV sections (about_me, experience,
+skill_categories, education), an intelligence summary and project intelligence -
+with no confirm step and no redaction pass. DECISIONS.md principle 14 requires
+both; it is scheduled with the fact gate (Phase 4).
 
 A dealbreaker needs the candidate text to *contradict* a hard condition (the ad
 requires Russian, the digest lists Serbian and English). Silence is not

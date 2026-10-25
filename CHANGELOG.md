@@ -1,6 +1,28 @@
 # Changelog
 
-All notable changes to Career OS are documented here.
+All notable changes to Holojob are documented here. Entries before the fork are Career OS history.
+
+## [Unreleased] - Holojob
+
+### Added
+
+- Project renamed to **Holojob** and moved to the private repo `raNikola/holojob`; Career OS stays as the `upstream` remote (fetch only).
+- Redesign documents: `docs/VISION.md`, `docs/GOALS.md`, `docs/ROADMAP.md`, `docs/redesign/DECISIONS.md`, `docs/redesign/PHASE0_AUDIT.md`, `docs/redesign/data-shapes.md`.
+- Posting fixtures in `tests/fixtures/postings/` for the Phase 1 stability test.
+- `AUTHORS.md`.
+
+### Changed
+
+- README rewritten for Holojob; the Career OS README is kept in `docs/career-os/README.md`.
+- `package.json`: name `holojob`, author, repository, `private: true` (no accidental npm publish).
+
+### Removed
+
+- Third-party peer chat data (`data/chat/`) from the tracked files.
+
+### Inherited before the fork (DS9 customizations of Career OS)
+
+- Serbian discovery group (LinkedIn via JobSpy, Infostud, Workable, Greenhouse, Lever, Ashby), job history ledger, LLM enrichment of ads into facts, work-authorization caps, opt-in fit judgement, salary flag, CV library and verified CV analysis. See CLAUDE.md.
 
 ## [1.0.0] - 2026-06-10
 

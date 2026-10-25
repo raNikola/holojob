@@ -1,12 +1,14 @@
-# Contributing to Career OS
+# Contributing to Holojob
 
-Thank you for helping improve Career OS. This project is licensed under [AGPL-3.0](LICENSE).
+Holojob is a private, single-owner project (owner: Nikola Randjelovic). Changes go through the owner. Read [docs/redesign/DECISIONS.md](docs/redesign/DECISIONS.md) and [CLAUDE.md](CLAUDE.md) before any change. Licensed under [AGPL-3.0](LICENSE).
+
+The rest of this guide is inherited from Career OS and still applies to setup, branches and checks.
 
 ## Development setup
 
 ```bash
 git clone <your-fork-url>
-cd career-os
+cd holojob
 npm run setup
 npm run dev
 ```

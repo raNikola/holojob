@@ -49,6 +49,7 @@ So Phase 1 is an **adaptation of existing modules**, not a new engine from zero.
 | Tracker | `applicationTracking` on the job record (`src/modules/jobs/applicationTracking.js`): applied, date, URL, recruiter, notes, follow-up date, one `interviewStage` from a fixed list; `followUps.js`; `ApplicationTrackerPanel.jsx`. | No event log, no channel, no CV version, no outcome enum. **Risk:** tracking lives on the job and `mergeStatusOnImport` (`src/modules/jobs/jobStorage.js`) keeps only incoming jobs, so an applied job that leaves the discovered list loses its tracking. |
 | Interview prep | Browser AI feature `interviewPrep` (`aiPromptLibrary.js`: technical, behavioral, system design, STAR answers, company questions). | Not tied to the job's requirement statuses or to a story bank. |
 | Fact gate | `python/resume_generator/provenance_checker.py` (54 lines: substring and metric regex against profile facts); CV analysis `verify`. | Weak compared to ApplyPack's `fact-check.ts`. |
+| Privacy of tailoring | `python/resume_generator/llm_tailor.py` sends parsed CV sections (about_me, experience, skill_categories, education), an intelligence summary and project intelligence to the Claude Code CLI. | Not listed under "Privacy exceptions" in CLAUDE.md; no confirm step and no redaction pass. Against principle 14; fix with H in Phase 4 (redact with `redact.py`, add the confirm, list it in CLAUDE.md). |
 | Market report | None. `llmFacts.mustHaves` for every ledger job already exist. | Build. A raw version is cheap now; the real one needs canonical ids. |
 
 ## 3. Module decisions
@@ -127,6 +128,15 @@ Output:
 7. Tests: pure-function tests for the scorer, anchor and id mapping; a parity test that the role-family enum and the prompt stay in step.
 
 ## 6. Decisions needed from the owner
+
+**Resolved 2026-10-25** (recorded in DECISIONS.md, principles 13-15 and the decisions log):
+1. Privacy: yes, with full name, phones, e-mails and personal links (CV site, LinkedIn, GitHub, any profile URL) redacted.
+2. Budget: top 50 per run, as the judge does today.
+3. Single user stays for now; multi-device access later. CLAUDE.md is not changed for this yet.
+4. Shadow mode first: yes.
+5. No applications are tracked yet, so nothing to migrate. Application tracking becomes independent of discovery (principle 13), built in Phase 3.
+
+The original questions, for reference:
 
 1. **Privacy.** Evidence matching needs candidate text with roles, dates and bullets, more than today's digest. Proposal: send the evidence index built from `experienceDetail` and the example lists, redacted with `redact.py` (no name, contacts, links), behind the same explicit confirm as `--judge`. Yes / no?
 2. **Budget.** Matching runs per job and profile version. Today the judge is capped at 50 jobs per run above 65. Proposal for shadow mode: prefilter + the top 50 by current score, cache everything. Rough size per job: ad up to `MAX_DESCRIPTION_CHARS` plus evidence index plus about 1k tokens out. Confirm the cap.

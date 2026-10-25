@@ -1,9 +1,14 @@
 {
-  "name": "career-os",
-  "private": false,
+  "name": "holojob",
+  "private": true,
   "version": "1.0.0",
   "license": "AGPL-3.0",
-  "description": "Open-source local-first job hunt automation for tech professionals",
+  "description": "Self-hosted, evidence-based job search: AI cites the evidence, code computes the score.",
+  "author": "Nikola Randjelovic (https://github.com/raNikola)",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/raNikola/holojob.git"
+  },
   "type": "module",
   "scripts": {
     "setup": "node scripts/setup.js --all",
