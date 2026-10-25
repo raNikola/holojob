@@ -3,8 +3,5 @@
   { "company": "DBeaver", "board": "dbeaver" },
   { "company": "Fivetran", "board": "fivetran" },
   { "company": "Nebius", "board": "nebius" },
-  { "company": "Fundraise Up", "board": "fundraiseup-serbia" },
-  { "company": "Stripe", "board": "stripe" },
-  { "company": "Coinbase", "board": "coinbase" },
-  { "company": "Anthropic", "board": "anthropic" }
+  { "company": "Fundraise Up", "board": "fundraiseup-serbia" }
 ]
