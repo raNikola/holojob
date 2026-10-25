@@ -191,6 +191,9 @@ def test_profile_version_is_deterministic():
         {"intelligence": {"languages": ["English (fluent)"], "jobFitPreferences": {
             "allowedLocations": ["REMOTE"], "minSalaryEur": 3500,
             "workAuthorization": {"holds": [], "openToSponsorship": True}}}},  # salary floor
+        {"intelligence": {"languages": ["English (fluent)"], "jobFitPreferences": {
+            "allowedLocations": ["REMOTE"], "minSalaryEur": 3000, "relocation": "abroad",
+            "workAuthorization": {"holds": [], "openToSponsorship": True}}}},  # commute preference
     ],
 )
 def test_any_change_under_candidate_changes_the_version(change):
@@ -203,7 +206,10 @@ def test_role_family_is_part_of_the_version():
 
 
 def test_gates_take_nothing_by_default():
-    assert build_gates({}) == {"workAuthorization": {}, "allowedLocations": [], "languages": [], "minSalaryEur": None}
+    assert build_gates({}) == {
+        "workAuthorization": {}, "allowedLocations": [], "languages": [], "minSalaryEur": None,
+        "preferredLocations": [], "remotePreference": None, "relocation": None, "country": None,
+    }
 
 
 # --- confirmed facts store ------------------------------------------------------

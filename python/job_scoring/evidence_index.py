@@ -243,7 +243,12 @@ def build_evidence(profile: dict, intelligence: dict) -> list[dict]:
 
 
 def build_gates(intelligence: dict) -> dict:
-    """`candidate.gates` (section 1.1) from the intelligence's own fields; nothing defaulted."""
+    """`candidate.gates` (section 1.1) from the intelligence's own fields; nothing defaulted.
+
+    The last four are what location_match.py reads to decide whether the
+    candidate can get to the work; the location gate reuses that logic, so
+    they belong to the profile version like every other gate input.
+    """
     prefs = (intelligence or {}).get("jobFitPreferences") or {}
     floor = prefs.get("minSalaryEur")
     return {
@@ -251,6 +256,10 @@ def build_gates(intelligence: dict) -> dict:
         "allowedLocations": _strings(prefs.get("allowedLocations")),
         "languages": _strings((intelligence or {}).get("languages")),
         "minSalaryEur": floor if isinstance(floor, (int, float)) and not isinstance(floor, bool) and floor >= 0 else None,
+        "preferredLocations": _strings(prefs.get("preferredLocations")),
+        "remotePreference": str(prefs.get("remotePreference") or "").strip() or None,
+        "relocation": str(prefs.get("relocation") or "").strip() or None,
+        "country": str(prefs.get("country") or "").strip() or None,
     }
 
 
