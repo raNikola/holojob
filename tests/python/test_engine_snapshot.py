@@ -1,13 +1,14 @@
 """The 10-fixture calibration run, pinned (step 7).
 
-tests/fixtures/engine-snapshot.json holds one matcher run on the owner's
-evidence index, as verified requirements without any candidate text and the
-five gate results, plus what the engine made of them. Re-scoring those same
+data/engine-snapshot.json holds one matcher run on the owner's evidence
+index, as verified requirements without any candidate text and the five gate
+results, plus what the engine made of them. It is generated from the profile,
+so it stays on the server (gitignored) and the tests skip without it. Re-scoring those same
 inputs under the current constants must give the same results, so a change
 to constants.py or fit.py fails here and the diff names every fixture it
 moves. After a deliberate change, regenerate with
 
-    .venv/bin/python python/match_engine/calibrate.py --snapshot tests/fixtures/engine-snapshot.json
+    .venv/bin/python python/match_engine/calibrate.py --snapshot data/engine-snapshot.json
 """
 
 import json
@@ -17,9 +18,10 @@ import pytest
 
 from match_engine.fit import score
 
-SNAPSHOT = json.loads(
-    (Path(__file__).resolve().parents[1] / "fixtures" / "engine-snapshot.json").read_text(encoding="utf-8")
-)
+SNAPSHOT_PATH = Path(__file__).resolve().parents[2] / "data" / "engine-snapshot.json"
+if not SNAPSHOT_PATH.exists():
+    pytest.skip(f"no {SNAPSHOT_PATH.name}; write it with calibrate.py --snapshot", allow_module_level=True)
+SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
 
 
 def test_snapshot_covers_every_fixture():

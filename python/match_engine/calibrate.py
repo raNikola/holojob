@@ -10,7 +10,8 @@ matcher (the ad plus the candidate's redacted evidence index, CLAUDE.md
 answer is stored in data/cache/engine-calibration.json, so later runs score
 the same answers under the current constants without calling anything.
 
---snapshot writes what tests/python/test_engine_snapshot.py pins: per
+--snapshot writes what tests/python/test_engine_snapshot.py pins (to
+data/engine-snapshot.json, kept on the server like the cache): per
 fixture, the verified requirements without any candidate text (no evidence
 id, no evidence quote) and the five gate results.
 """
