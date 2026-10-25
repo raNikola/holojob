@@ -39,7 +39,7 @@ from llm_client import active_provider, judge_model  # noqa: E402
 from match_engine.constants import ENGINE_VERSION  # noqa: E402
 from match_engine.fit import score  # noqa: E402
 from match_engine.gates import gate_results  # noqa: E402
-from match_engine.matcher import cache_key, match_posting  # noqa: E402
+from match_engine.matcher import cache_key, match_posting, posting_from_job  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures" / "postings"
 CACHE_PATH = ROOT / "data" / "cache" / "engine-calibration.json"
@@ -56,14 +56,6 @@ def load_env_file(path: Path) -> None:
             continue
         key, value = line.split("=", 1)
         os.environ.setdefault(key.strip(), value.strip().strip("'\""))
-
-
-def _posting(job: dict) -> dict:
-    return {
-        "id": job["jobId"], "title": job.get("title") or "", "company": job.get("company") or "",
-        "location": job.get("location") or "", "description": job.get("description") or "",
-        "facts": job.get("llmFacts") or {},
-    }
 
 
 def run(args) -> list[dict]:
@@ -88,7 +80,7 @@ def run(args) -> list[dict]:
             facts = extractions[path.name] = extract(job, None, provider, requirement_frames.previous_for(frames, job))
             requirement_frames.remember(frames, job, facts)
         job["llmFacts"] = facts
-        posting = _posting(job)
+        posting = posting_from_job(job)
 
         key = cache_key(job_fingerprint(posting), candidate["profileVersion"])
         output = matches.get(key)

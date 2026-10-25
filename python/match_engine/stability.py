@@ -47,7 +47,6 @@ from match_engine.calibrate import (  # noqa: E402
     FIXTURES,
     INTELLIGENCE_PATH,
     PROFILE_PATH,
-    _posting,
     load_env_file,
 )
 from confirmed_facts import load as load_confirmed_facts  # noqa: E402
@@ -60,7 +59,7 @@ from llm_client import active_provider, judge_model  # noqa: E402
 from match_engine.constants import ENGINE_VERSION  # noqa: E402
 from match_engine.fit import score  # noqa: E402
 from match_engine.gates import gate_results  # noqa: E402
-from match_engine.matcher import match_posting  # noqa: E402
+from match_engine.matcher import match_posting, posting_from_job  # noqa: E402
 
 CACHE_PATH = ROOT / "data" / "cache" / "engine-stability.json"
 RUNS = 3
@@ -170,7 +169,7 @@ def run(args) -> tuple[dict, dict]:
                     with lock:
                         requirement_frames.remember(frames, job, facts)
             # A fresh cache per call: each run asks the matcher again.
-            outcome = match_posting(_posting({**job, "llmFacts": facts}), candidate,
+            outcome = match_posting(posting_from_job({**job, "llmFacts": facts}), candidate,
                                     confirmed=True, provider=provider, model=model, cache=None)
             result = {"extraction": facts}
             if outcome.output is None:  # kept with its extraction; the matcher is retried next time

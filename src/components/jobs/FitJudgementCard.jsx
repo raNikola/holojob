@@ -18,12 +18,44 @@ function FieldList({ title, items, tone }) {
   )
 }
 
+function plural(n, one, many) {
+  return `${n} ${n === 1 ? one : many}`
+}
+
+/**
+ * The shadow engine's part of a judged run (CAREER_OS_ENGINE_SHADOW on): its
+ * matcher sends the ad and the redacted evidence index, so the dialog lists it.
+ */
+function EngineShadowPart({ engine, provider, leaves }) {
+  return (
+    <div className="space-y-2 rounded-lg border border-dashed border-violet-300 p-3 dark:border-violet-700">
+      <p className="text-sm text-stone-600 dark:text-stone-400">
+        <strong>New engine (shadow):</strong> {engine.cached} cached (not re-sent) · {plural(engine.toSend, 'new call', 'new calls')}
+        {engine.beyondLimit > 0 && <> · {engine.beyondLimit} more are left out: at most {engine.limit} per run</>}.
+        {' '}Each call sends one job ad, its requirements and your evidence index
+        {leaves ? <> to <strong>{provider}</strong>, outside this server.</> : <> to <strong>{provider}</strong>, a model on this machine.</>}
+        {' '}Its result is shown next to the score and changes nothing.
+      </p>
+      <FieldList title="Sent" items={engine.sent} tone="text-amber-700 dark:text-amber-400" />
+      <FieldList title="Never sent" items={engine.neverSent} tone="text-emerald-700 dark:text-emerald-400" />
+    </div>
+  )
+}
+
 function ConfirmDialog({ preview, sending, onCancel, onConfirm }) {
   const leaves = preview.leavesServer
-  const nothingToJudge = preview.eligible === 0
-  const confirmLabel = preview.toSend > 0
-    ? `Send ${preview.toSend} ${preview.toSend === 1 ? 'job' : 'jobs'} to ${preview.provider}`
-    : `Apply ${preview.cached} cached judgements (nothing sent)`
+  const engine = preview.engine?.enabled && !preview.engine.error ? preview.engine : null
+  const engineSend = engine?.toSend ?? 0
+  const nothingToJudge = preview.eligible === 0 && !engineSend && !engine?.cached
+  const judgeOnly = !engine
+  const totalSend = preview.toSend + engineSend
+  const confirmLabel = judgeOnly
+    ? (preview.toSend > 0
+      ? `Send ${preview.toSend} ${preview.toSend === 1 ? 'job' : 'jobs'} to ${preview.provider}`
+      : `Apply ${preview.cached} cached judgements (nothing sent)`)
+    : (totalSend > 0
+      ? `Make ${plural(totalSend, 'call', 'calls')} to ${preview.provider}`
+      : 'Apply cached results (nothing sent)')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="judge-confirm-title">
@@ -34,18 +66,22 @@ function ConfirmDialog({ preview, sending, onCancel, onConfirm }) {
             <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
             {nothingToJudge
               ? 'No job scores high enough to judge'
-              : preview.toSend > 0
-                ? `Send ${preview.toSend} job ${preview.toSend === 1 ? 'ad' : 'ads'} to ${recipient(preview)}?`
-                : `Apply ${preview.cached} cached ${preview.cached === 1 ? 'judgement' : 'judgements'}? Nothing is sent`}
+              : !judgeOnly
+                ? (totalSend > 0
+                  ? `Make ${plural(totalSend, 'call', 'calls')} to ${recipient(preview)}?`
+                  : 'Apply cached results? Nothing is sent')
+                : preview.toSend > 0
+                  ? `Send ${preview.toSend} job ${preview.toSend === 1 ? 'ad' : 'ads'} to ${recipient(preview)}?`
+                  : `Apply ${preview.cached} cached ${preview.cached === 1 ? 'judgement' : 'judgements'}? Nothing is sent`}
           </h3>
           <button type="button" onClick={onCancel} disabled={sending} className="rounded-lg p-1 hover:bg-stone-100 dark:hover:bg-stone-800">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {nothingToJudge ? (
+        {nothingToJudge || preview.eligible === 0 ? (
           <p className="text-sm text-stone-600 dark:text-stone-400">
-            Only jobs scoring {preview.threshold} or more locally are judged. None do, so nothing would be sent.
+            Only jobs scoring {preview.threshold} or more locally are judged. None do, so nothing would be sent{engine ? ' for the fit judgement' : ''}.
           </p>
         ) : (
           <>
@@ -59,6 +95,7 @@ function ConfirmDialog({ preview, sending, onCancel, onConfirm }) {
             <FieldList title="Never sent" items={preview.neverSent} tone="text-emerald-700 dark:text-emerald-400" />
           </>
         )}
+        {engine && <EngineShadowPart engine={engine} provider={preview.provider} leaves={leaves} />}
 
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="secondary" onClick={onCancel} disabled={sending}>Cancel</Button>
