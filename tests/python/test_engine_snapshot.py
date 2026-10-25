@@ -42,14 +42,14 @@ def test_label_and_bucket_table():
         result = score(entry["requirements"], [{**g, "quote": None} for g in entry["gates"]])
         table[fixture] = (result["label"], result["bucket"])
     assert table == {
-        "ashby-1.json": ("Incomplete", "blocked"),
-        "greenhouse-1.json": ("Incomplete", "blocked"),
-        "greenhouse-2.json": ("Incomplete", "blocked"),
-        "greenhouse-3.json": ("Incomplete", "blocked"),
+        "ashby-1.json": ("Partial", "blocked"),
+        "greenhouse-1.json": ("Weak", "blocked"),
+        "greenhouse-2.json": ("Weak", "blocked"),
+        "greenhouse-3.json": ("Weak", "blocked"),
         "infostud-1.json": ("Incomplete", "check_first"),
         "infostud-2.json": ("Incomplete", "blocked"),
         "linkedin-1.json": ("Good", "apply"),
-        "linkedin-2.json": ("Incomplete", "check_first"),
-        "workable-1.json": ("Incomplete", "check_first"),
+        "linkedin-2.json": ("Partial", "check_first"),
+        "workable-1.json": ("Weak", "check_first"),
         "workable-2.json": ("Good", "apply"),
     }

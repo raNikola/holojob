@@ -29,13 +29,13 @@ from job_fingerprint import job_fingerprint
 from llm_client import LlmRefused, LlmUnavailable, active_provider, complete_json
 from redact import redact_cv_text
 
+from .gates import GATES, settle_language
 from .verify import STATUSES, apply_confirmed_fact, apply_proposal, drop_unquoted
 
-MATCH_PROMPT_VERSION = 1
+MATCH_PROMPT_VERSION = 2
 # One string for both prompts, as the contract's `promptVersion` asks.
 PROMPT_VERSION = f"extract-{EXTRACTION_PROMPT_VERSION}.match-{MATCH_PROMPT_VERSION}"
 
-GATES = ("work_authorization", "location", "language", "salary_floor", "role_family")
 EVIDENCE_FIELDS = ("id", "source", "role", "start", "end", "text")
 
 
@@ -73,7 +73,13 @@ MATCH_SCHEMA = {
                     "required": ["ref", "status", "evidence_id", "evidence_quote", "strength"],
                     "properties": {
                         "ref": {"type": "string"},
-                        "status": {"type": "string", "enum": list(STATUSES)},
+                        "status": {
+                            "type": "string",
+                            "enum": list(STATUSES),
+                            "description": "MISSING when the evidence covers the topic and does not contain it; "
+                                           "UNKNOWN only when the evidence says nothing about the topic at all "
+                                           "or it is a trait a work history does not record (rule 2).",
+                        },
                         "evidence_id": {"type": ["string", "null"]},
                         "evidence_quote": {"type": ["string", "null"]},
                         "strength": {"type": "integer", "enum": [0, 1, 2, 3, 4]},
@@ -142,11 +148,21 @@ Rules:
 
 1. One entry in "matches" for every requirement ref, no more, no fewer.
 
-2. status: MET when an evidence item shows the candidate has done what the \
-requirement asks; PARTIAL when it covers part of it, a related thing, or only \
-lists it; MISSING only when the evidence covers the topic and clearly does \
-not include it; UNKNOWN when the evidence cannot settle it. Silence is \
-UNKNOWN, never MISSING.
+2. status:
+   - MET when an evidence item shows the candidate has done what the \
+requirement asks.
+   - PARTIAL when an item covers part of it, a related thing, or only lists it.
+   - MISSING when the evidence covers the requirement's topic and does not \
+contain it: the evidence describes the area the requirement belongs to (the \
+candidate's tools and technologies, their domains and employers, their roles \
+and what they did in them) in enough detail that, had the candidate done \
+this, it would show there, and nothing there shows or hints at it.
+   - UNKNOWN when the evidence cannot settle it: it says nothing about that \
+area at all, or the requirement is a personal trait, an attitude or a \
+condition of employment that a work history does not record, so its absence \
+tells nothing.
+   Not finding a quote is not by itself UNKNOWN. Ask whether the evidence \
+covers the topic: if it does and the requirement is absent, that is MISSING.
 
 3. For MET and PARTIAL, evidence_id names one item and evidence_quote copies \
 the words from that item's text that show it, character for character, with \
@@ -156,7 +172,24 @@ no paraphrase and no ellipsis. For MISSING and UNKNOWN both are null.
 mentioned within a role, 3 described as work the candidate did, 4 described \
 as work done with a measurable outcome.
 
-5. gates: for each, copy the ad's own sentence about it, or null when the ad \
+5. Examples (the evidence described, not quoted):
+   - "Knowledge of AWS, Azure or GCP": the evidence lists the candidate's \
+tools and describes technical product work, and no cloud platform appears \
+anywhere. MISSING.
+   - "Practical familiarity with Docker": the evidence lists tools and \
+technologies and Docker or containers are not among them. MISSING.
+   - "Experience in hospitality or travel tech": the evidence names the \
+candidate's employers, products and domains, none in hospitality or travel. \
+MISSING.
+   - "At least 3 years managing product managers": the roles are dated and \
+described, and none mentions managing other product managers, though some \
+mention leading a team. PARTIAL for the team leadership, quoting it.
+   - "Bring curiosity", "Self-discipline", "Adherence to company policies": \
+a trait or condition a work history does not record. UNKNOWN.
+   - "Experience with Kubernetes" when the evidence has no list of tools and \
+no technical work described at all. UNKNOWN.
+
+6. gates: for each, copy the ad's own sentence about it, or null when the ad \
 says nothing. work_authorization is the right to work or visas; location is \
 where the hire must be or may work from; language is a spoken language the ad \
 asks for; salary_floor is the pay the ad states; role_family is the ad's own \
@@ -272,6 +305,9 @@ def match_posting(
     for index, req in enumerate(requirements):
         if req["id"] in facts:
             resolved[index] = apply_confirmed_fact(req, facts[req["id"]], evidence_by_id)
+        elif (settled := settle_language(req, candidate)) is not None:
+            # Settled from candidate.gates.languages, which never goes to the provider.
+            resolved[index] = settled
         else:
             asked.append((f"r{index + 1}", req))
 

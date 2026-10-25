@@ -34,8 +34,9 @@ from salary import below_minimum, parse_monthly_eur
 from scorer import accepted_tracks
 from text_utils import normalize_text
 
-from .matcher import GATES
+from .verify import CONFIRMED_FACT_STRENGTH, _resolved
 
+GATES = ("work_authorization", "location", "language", "salary_floor", "role_family")
 PASS, UNKNOWN, FAIL = "pass", "unknown", "fail"
 _RANK = {PASS: 0, UNKNOWN: 1, FAIL: 2}
 
@@ -137,6 +138,50 @@ def required_languages(job: dict, requirements: list[dict] | None = None) -> set
     return found
 
 
+# Where a language requirement settled in code points for its evidence: the
+# candidate's own language list, which is never sent to the provider.
+LANGUAGES_EVIDENCE_ID = "gates.languages"
+
+
+def _spoken(gates: dict) -> dict[str, str]:
+    """Each language the candidate lists, by name, with the entry that names it ("English (fluent)")."""
+    spoken = {}
+    for entry in gates.get("languages") or []:
+        for lang in _languages_in(normalize_text(entry)):
+            spoken.setdefault(lang, entry)
+    return spoken
+
+
+def settle_language(req: dict, candidate: dict) -> dict | None:
+    """A kind-language requirement resolved in code, or None to leave it to the matcher.
+
+    The language name only, not the level, by the language gate's own
+    matching. MET when the candidate lists every language the requirement
+    names, credited as their own statement (CONFIRMED_FACT_STRENGTH); MISSING
+    when one is not listed and no evidence item mentions it; UNKNOWN when the
+    candidate lists no languages at all. A requirement that names no language
+    the table knows, or one the evidence mentions but the list lacks, goes to
+    the matcher as before.
+    """
+    if req.get("kind") != "language":
+        return None
+    named = _languages_in(normalize_text(f"{req.get('text') or ''} {req.get('postingQuote') or ''}"))
+    if not named:
+        return None
+    gates = candidate.get("gates") or {}
+    if not gates.get("languages"):
+        return _resolved(req, "UNKNOWN", None, None, False, 0)
+    spoken = _spoken(gates)
+    lacking = named - set(spoken)
+    if not lacking:
+        quote = "; ".join(sorted({spoken[lang] for lang in named}))
+        return _resolved(req, "MET", LANGUAGES_EVIDENCE_ID, quote, True, CONFIRMED_FACT_STRENGTH)
+    mentioned = set().union(*(_languages_in(normalize_text(e.get("text") or "")) for e in candidate.get("evidence") or []))
+    if lacking & mentioned:
+        return None
+    return _resolved(req, "MISSING", None, None, False, 0)
+
+
 def _prefs(gates: dict) -> dict:
     """candidate.gates in the jobFitPreferences shape the existing modules read."""
     return {
@@ -180,7 +225,7 @@ def language_result(job: dict, gates: dict, requirements: list[dict] | None = No
     neither from the ad nor from "English (fluent)".
     """
     required = required_languages(job, requirements)
-    spoken = set().union(*(_languages_in(normalize_text(s)) for s in gates.get("languages") or []))
+    spoken = set(_spoken(gates))
     if not required or not spoken:
         return UNKNOWN
     return PASS if required <= spoken else FAIL

@@ -206,8 +206,10 @@ def test_a_full_match_with_gate_quotes_passed_through():
 
 
 def test_an_omitted_or_malformed_answer_drops_only_that_requirement():
+    # The third requirement as kind "other", so the matcher is asked about it (a language one is settled in code).
+    asked = REQS[:2] + [{**REQS[2], "kind": "other"}]
     fake = Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "PROBABLY", None, None, 1)))
-    outcome = _run(fake)
+    outcome = _run(fake, posting=_posting(asked))
     assert [r["id"] for r in outcome.output["requirements"]] == ["product-management"]
     assert sum("no usable answer" in w for w in outcome.warnings) == 2
 
@@ -262,3 +264,64 @@ def test_the_prompt_carries_no_identifier_and_no_gate_data():
 
 def test_the_cache_key_is_ad_profile_and_prompt():
     assert cache_key("ad", "pv").startswith("ad:pv:extract-")
+
+
+# --- language requirements settled in code ------------------------------------------
+
+def _language_candidate(languages, evidence=EVIDENCE):
+    return {**_candidate(), "gates": {"languages": languages}, "evidence": evidence}
+
+
+def test_a_spoken_language_is_met_without_asking_the_model():
+    fake = Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "PARTIAL", "ev-b", "SQL", 1)))
+    outcome = _run(fake, candidate=_language_candidate(["Serbian (native)", "English (fluent)"]))
+    english = next(r for r in outcome.output["requirements"] if r["kind"] == "language")
+    assert (english["status"], english["quoteVerified"], english["evidenceQuote"]) == ("MET", True, "English (fluent)")
+    assert english["evidenceId"] == "gates.languages" and english["strength"] == CONFIRMED_FACT_STRENGTH
+    # Not asked: the prompt carries r1 and r2 only, and none of the candidate's languages.
+    assert '"r3"' not in fake.prompts[0] and "Fluent English" not in fake.prompts[0].split("END JOB AD")[1]
+    assert "Serbian (native)" not in fake.prompts[0]
+
+
+def test_an_unlisted_language_nobody_mentions_is_missing():
+    outcome = _run(Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0))),
+                   candidate=_language_candidate(["German (C1)"]))
+    english = next(r for r in outcome.output["requirements"] if r["kind"] == "language")
+    assert (english["status"], english["strength"], english["evidenceId"]) == ("MISSING", 0, None)
+
+
+def test_an_unlisted_language_the_evidence_mentions_goes_to_the_model():
+    evidence = EVIDENCE + [{"id": "ev-c", "text": "Ran workshops in English for UK clients.", "source": "role",
+                            "role": "PM — Acme", "start": None, "end": None, "strength": 3}]
+    fake = Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0),
+                       ("r3", "PARTIAL", "ev-c", "Ran workshops in English", 3)))
+    outcome = _run(fake, candidate=_language_candidate(["German (C1)"], evidence))
+    assert '"r3"' in fake.prompts[0]
+    assert next(r for r in outcome.output["requirements"] if r["kind"] == "language")["status"] == "PARTIAL"
+
+
+def test_no_listed_languages_leaves_a_language_requirement_unknown():
+    outcome = _run(Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0))),
+                   candidate=_language_candidate([]))
+    assert next(r for r in outcome.output["requirements"] if r["kind"] == "language")["status"] == "UNKNOWN"
+
+
+def test_a_language_requirement_naming_no_known_language_goes_to_the_model():
+    reqs = REQS[:2] + [_req("prov:bbbbbbbbbbbb", "The local language", "Fully remote within Serbia", kind="language")]
+    fake = Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0), ("r3", "UNKNOWN", None, None, 0)))
+    _run(fake, posting=_posting(reqs), candidate=_language_candidate(["English (fluent)"]))
+    assert '"r3"' in fake.prompts[0]
+
+
+def test_a_confirmed_fact_outranks_the_language_list():
+    fact = {"competencyId": "prov:aaaaaaaaaaaa", "has": False, "note": ""}
+    candidate = {**_language_candidate(["English (fluent)"]), "confirmedFacts": [fact]}
+    outcome = _run(Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0))), candidate=candidate)
+    assert next(r for r in outcome.output["requirements"] if r["kind"] == "language")["status"] == "MISSING"
+
+
+def test_the_prompt_draws_the_missing_unknown_line_from_the_contract():
+    from match_engine.matcher import PROMPT
+    assert "Silence is UNKNOWN, never MISSING" not in PROMPT
+    assert "covers the requirement's topic and does not" in PROMPT
+    assert "no cloud platform appears" in PROMPT and "MISSING." in PROMPT
