@@ -35,6 +35,7 @@ evidence); code verifies both quotes.
 | `candidate.gates.allowedLocations` | string[] | Places the candidate accepts; empty gates nothing. |
 | `candidate.gates.languages` | string[] | Spoken languages with level, for example `Serbian (native)`. Empty means unstated, not "none". |
 | `candidate.gates.minSalaryEur` | number or null | Monthly floor in EUR; null when unset. |
+| `candidate.gates.preferredLocations`, `remotePreference`, `relocation`, `country` | string[] / string or null | The commute and relocation preferences `location_match.py` reads; the location gate reuses that logic. |
 
 Personal identifiers are never part of the input. The profile is redacted before it is built (DECISIONS.md
 principle 14): no name, phone, e-mail or personal link appears in `evidence[].text`, `confirmedFacts[].note` or
@@ -103,13 +104,18 @@ anywhere else that can reach a provider.
         },
         "gates": {
           "type": "object",
-          "required": ["workAuthorization", "allowedLocations", "languages", "minSalaryEur"],
+          "required": ["workAuthorization", "allowedLocations", "languages", "minSalaryEur",
+                       "preferredLocations", "remotePreference", "relocation", "country"],
           "additionalProperties": false,
           "properties": {
             "workAuthorization": { "type": "object" },
             "allowedLocations": { "type": "array", "items": { "type": "string" } },
             "languages": { "type": "array", "items": { "type": "string" } },
-            "minSalaryEur": { "type": ["number", "null"], "minimum": 0 }
+            "minSalaryEur": { "type": ["number", "null"], "minimum": 0 },
+            "preferredLocations": { "type": "array", "items": { "type": "string" } },
+            "remotePreference": { "type": ["string", "null"] },
+            "relocation": { "type": ["string", "null"] },
+            "country": { "type": ["string", "null"] }
           }
         }
       }
@@ -368,6 +374,10 @@ constants in code, set in Phase 1.
   statuses, location from `location_match` and `geography.py`, language from `candidate.gates.languages` against
   the ad's stated languages, salary floor from `salary.py`, role family from the role-family config. The model
   contributes only the quote from the ad.
+- Gates read the discovered job with its `llmFacts` (`match_engine/gates.py`), not `posting`: salary, `isRemote`,
+  `workMode`, `remoteEligibility` and `visaSponsorship` are not posting fields.
+- `caps` lists every cap whose condition holds, including `gate_blocked`, which never moves Fit. A blocked label
+  that would be `Strong` or `Good` becomes `Partial`; `Partial`, `Weak` and `Incomplete` stay.
 
 ### 5.5 Caps and labels
 
@@ -422,6 +432,8 @@ a calibration run on `tests/fixtures/postings/` before Phase 1 code depends on i
 
 1. Values of `STRENGTH_CREDIT`, `IMPORTANCE_WEIGHT`, `PARTIAL_FACTOR`, `MIN_CONFIDENCE`, `MAX_UNKNOWN_MUST_RATIO`,
    `ROLE_MISMATCH_FIT_CAP`, `UNVERIFIED_FIT_CAP` and the three label thresholds.
+   Proposed in engine 0.2.0 from one matcher run on the fixtures (`match_engine/calibrate.py`, reasoning in
+   `match_engine/constants.py`); pinned by `tests/python/test_engine_snapshot.py`. Awaiting the owner's review.
 2. The exact downgrade rule on an unverified quote (section 5.2) and what makes a MISSING legitimate rather than
    UNKNOWN (section 4.1).
 3. The bucket rule (section 5.4) and the `gate_blocked` label limit.
