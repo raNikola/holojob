@@ -57,8 +57,8 @@ Do not build `.venv` with Python 3.15 (pinned pandas 2.3.3 has no wheel).
 
 ## Privacy rules and exceptions
 
-Personal data stays on the server. Two steps send candidate data to the configured
-provider, each behind an explicit confirm; a third is a known gap.
+Personal data stays on the server. Three steps send candidate data to the configured
+provider, each behind an explicit confirm; a fourth is a known gap.
 
 - **CV analysis** sends the text of one CV with name, e-mails, phones and links replaced
   by placeholders (`redact.py`), only after the confirm dialog has shown that exact text
@@ -69,6 +69,12 @@ provider, each behind an explicit confirm; a third is a known gap.
   strengths, known gaps). Never sent: name, email, phone, salary, links, preferred
   locations, raw resume text, questionnaire answers. Add a field to `_candidate_digest`
   only deliberately, and update this list.
+- **Evidence matcher** (`python/match_engine/matcher.py`), only under the same `--judge`
+  confirmation (`match_posting` refuses without `confirmed=True`): sends the ad, its
+  requirements, and the evidence index items (id, source, role, start, end, text), built
+  from the profile and intelligence and passed through `redact.py`. Never sent: gates
+  (work authorization, locations, languages, salary), confirmed facts or their notes,
+  name, contacts, links. Not wired into any run yet.
 - **Known gap:** LLM tailoring (`resume_generator/llm_tailor.py`, Claude Code CLI) also
   sends candidate data (parsed CV sections about_me, experience, skill_categories,
   education, an intelligence summary and project intelligence) with no confirm step and
