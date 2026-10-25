@@ -36,6 +36,7 @@
  * @property {WorkAuthorization} [workAuthorization]
  * @property {string[]} [allowedLocations] Country, region or REMOTE codes; empty gates nothing.
  * @property {'none' | 'abroad' | 'anywhere'} [relocation]
+ * @property {string} [roleFamily] An id from src/data/roleFamilies.json, or '' when none is chosen.
  */
 
 /**
@@ -73,6 +74,7 @@
  * @property {Object} atsKeywordBank
  * @property {Object} searchStrategy
  * @property {string[]} languages Derived from basicProfile.languages, e.g. "Serbian (native)".
+ * @property {string|null} roleFamily basicProfile.roleFamily; null when none is chosen.
  * @property {ScoringWeights} scoringWeights
  * @property {Object} [meta]
  */

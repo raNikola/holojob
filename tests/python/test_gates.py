@@ -192,8 +192,34 @@ def test_role_family_unknown_without_a_track():
     assert role_family_result(job(), "product") == "unknown"
 
 
-def test_role_family_null_uses_the_transition_family():
-    assert role_family_result(job(facts={"roleTrack": "product_management"}), None) == "pass"
+@pytest.mark.parametrize("family", [None, ""])
+def test_role_family_unknown_without_a_family(family):
+    # No family is assumed: not product, not anything else.
+    for track in ("product_management", "engineering", "other"):
+        assert role_family_result(job(facts={"roleTrack": track}), family) == "unknown"
+
+
+def test_an_unset_family_never_blocks_or_caps():
+    from match_engine.fit import score
+
+    gates = gate_results(job(facts={"roleTrack": "engineering"}), {"gates": cand_gates(), "roleFamily": None})
+    role = next(g for g in gates if g["gate"] == "role_family")
+    assert role["result"] == "unknown"
+    out = score([], gates)
+    assert "role_family_mismatch" not in out["caps"]
+    assert {"competencyId": "role_family", "question": "Is this the kind of role you are looking for?"} in out["questions"]
+
+
+@pytest.mark.parametrize("family,track,result", [
+    ("product", "product_management", "pass"),
+    ("product", "product_ownership", "pass"),
+    ("product", "engineering", "fail"),
+    ("engineering", "engineering", "pass"),
+    ("engineering", "product_management", "fail"),
+    ("delivery", "project_delivery", "pass"),
+])
+def test_role_family_follows_the_chosen_family(family, track, result):
+    assert role_family_result(job(facts={"roleTrack": track}), family) == result
 
 
 # --- all five and the bucket ----------------------------------------------------------

@@ -244,3 +244,12 @@ def test_the_last_answer_for_a_competency_wins(tmp_path):
 
 def test_the_store_lives_with_the_git_ignored_profile():
     assert confirmed_facts.CONFIRMED_FACTS_PATH == ROOT / "data" / "profile" / "confirmed-facts.json"
+
+
+def test_role_family_comes_from_the_intelligence_and_moves_the_profile_version():
+    from evidence_index import build_candidate
+
+    unset = build_candidate({}, {}, [])
+    chosen = build_candidate({}, {"roleFamily": "product"}, [])
+    assert unset["roleFamily"] is None and chosen["roleFamily"] == "product"
+    assert unset["profileVersion"] != chosen["profileVersion"]

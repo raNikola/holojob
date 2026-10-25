@@ -33,8 +33,20 @@ def test_product_family_accepts_exactly_the_old_set():
     assert accepted_tracks({"roleFamily": "product"}) == ("product", {"product_management", "product_ownership"})
 
 
-def test_missing_family_behaves_as_product():
-    assert accepted_tracks({}) == accepted_tracks({"roleFamily": "product"})
+def test_no_family_assumes_none():
+    assert accepted_tracks({}) == (None, None)
+    assert accepted_tracks({"roleFamily": ""}) == (None, None)
+
+
+@pytest.mark.parametrize("track", ["engineering", "project_delivery", "other"])
+def test_without_a_family_no_job_is_capped_for_its_role(track):
+    result = score_job(_job(track), {})
+    assert not any(r.startswith("Capped: the ad describes") for r in result["reasons"])
+    assert "No role family set in the profile: the role is not checked against one" in result["reasons"]
+
+
+def test_no_family_scores_like_a_family_that_accepts_the_track():
+    assert score_job(_job("engineering"), {})["matchScore"] == score_job(_job("engineering"), {"roleFamily": "engineering"})["matchScore"]
 
 
 def test_unknown_family_is_an_error():

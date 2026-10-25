@@ -43,15 +43,17 @@ def resolve_weights(saved: dict | None) -> dict:
 # families in step with ROLE_TRACKS in enrich_jobs.py.
 ROLE_FAMILIES_FILE = Path(__file__).resolve().parents[2] / "src" / "data" / "roleFamilies.json"
 ROLE_FAMILIES = json.loads(ROLE_FAMILIES_FILE.read_text(encoding="utf-8"))
-# Until the profile carries candidate.roleFamily (ENGINE_CONTRACT.md 1.1), an
-# intelligence without one keeps the behaviour it had before the config.
-TRANSITION_ROLE_FAMILY = "product"
+# The family is the candidate's choice (basicProfile.roleFamily, copied onto the
+# intelligence); nothing is assumed without one. Unknown never caps: with no
+# family no job is off track.
 OFF_TRACK_CAP = 50
 
 
-def accepted_tracks(intelligence: dict) -> tuple[str, set[str]]:
-    """The candidate's role family and the role tracks it accepts."""
-    family = intelligence.get("roleFamily") or TRANSITION_ROLE_FAMILY
+def accepted_tracks(intelligence: dict) -> tuple[str | None, set[str] | None]:
+    """The candidate's role family and the role tracks it accepts; (None, None) when none is set."""
+    family = intelligence.get("roleFamily") or None
+    if family is None:
+        return None, None
     if family not in ROLE_FAMILIES:
         raise ValueError(f"Unknown role family {family!r}; known: {', '.join(sorted(ROLE_FAMILIES))}")
     return family, set(ROLE_FAMILIES[family]["acceptedRoleTracks"])
@@ -104,7 +106,7 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
 
     track = (job.get("llmFacts") or {}).get("roleTrack")
     family, family_tracks = accepted_tracks(intelligence)
-    off_track = bool(track) and track not in family_tracks
+    off_track = bool(track) and family_tracks is not None and track not in family_tracks
     if off_track:
         match_score = min(match_score, OFF_TRACK_CAP)
 
@@ -125,6 +127,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     reasons = role_reasons + skill_reasons + industry_reasons + exp_reasons + loc_reasons + cult_reasons
     if off_track:
         reasons.append(f"Capped: the ad describes {track}, not a {family} role")
+    elif track and family is None:
+        reasons.append("No role family set in the profile: the role is not checked against one")
     if red_flags:
         reasons.extend([f"Red flag: {f}" for f in red_flags])
     if authorization_cap is not None:

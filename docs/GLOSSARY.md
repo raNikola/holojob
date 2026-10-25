@@ -55,10 +55,12 @@ is scored immediately; the user confirming it only promotes it into the permanen
 preferred, nice) and a verbatim quote from the ad.
 
 **Role family** - A group of related roles (Product, Engineering, Design, QA, Data, ...) that holds title synonyms for
-search, the role gate and, later, prompt variants for CVs and cover letters. A mismatch caps Fit.
+search, the role gate and, later, prompt variants for CVs and cover letters. A mismatch caps Fit. The candidate chooses one in the profile
+(`basicProfile.roleFamily`); none is assumed, so with none chosen the role gate is unknown.
 
 **Role track** - The enrichment fact that says what kind of work a job is (`product_management`, `product_ownership`,
-delivery, ...). Today's scorer caps a job at 50 when the track is neither product management nor product ownership.
+delivery, ...). Today's scorer caps a job at 50 when its track is not one the candidate's role family accepts
+(`src/data/roleFamilies.json`); with no role family chosen in the profile, no job is capped for its track.
 
 **Shadow mode** - Running the new Fit next to the current `matchScore` and showing both, while the new one changes no
 ranking, label or priority until the owner has compared them on real runs.

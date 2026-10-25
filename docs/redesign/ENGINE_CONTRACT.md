@@ -22,7 +22,7 @@ evidence); code verifies both quotes.
 | `posting.description` | string | Full ad text. Every `postingQuote` must be a substring of it. |
 | `posting.facts` | object | The enrichment facts (`llmFacts`: role track, seniority, years, work mode, country, visa text), including the `requirements[]` the extraction step produced (section 2.2). |
 | `candidate.profileVersion` | string | Hash of everything under `candidate` that can change a result. Part of the cache key. |
-| `candidate.roleFamily` | string | One id from the role-family config (for example `product`). |
+| `candidate.roleFamily` | string or null | One id from the role-family config (for example `product`), chosen in the profile (`basicProfile.roleFamily`). Null when none is chosen: nothing is assumed, and the role-family gate is `unknown`. |
 | `candidate.evidence[]` | array | The evidence index: one item per piece of text the candidate's history offers. |
 | `evidence[].id` | string | Stable id within the profile version. |
 | `evidence[].text` | string | The candidate's own words. Every `evidenceQuote` must be a substring of it. |
@@ -71,7 +71,7 @@ anywhere else that can reach a provider.
       "additionalProperties": false,
       "properties": {
         "profileVersion": { "type": "string", "minLength": 1 },
-        "roleFamily": { "type": "string", "minLength": 1 },
+        "roleFamily": { "type": ["string", "null"], "minLength": 1 },
         "evidence": {
           "type": "array",
           "items": {

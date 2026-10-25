@@ -278,7 +278,7 @@ def profile_version(evidence: list[dict], confirmed_facts: list[dict], gates: di
 
 
 def build_candidate(profile: dict, intelligence: dict, confirmed_facts: list[dict]) -> dict:
-    """The engine's `candidate` input, minus nothing; `roleFamily` is null until the profile carries it."""
+    """The engine's `candidate` input, minus nothing; `roleFamily` is null when the profile sets none."""
     evidence = build_evidence(profile, intelligence)
     gates = build_gates(intelligence)
     role_family = (intelligence or {}).get("roleFamily") or None
