@@ -1,4 +1,4 @@
-# Quality Audit & ATS Validation Engine (Module 9)
+# Quality Audit & ATS Validation Engine
 
 Deterministic QA layer that audits pipeline outputs before trusting the system at scale.
 
@@ -21,7 +21,7 @@ Provenance/truth safety (`provenance_auditor.py`) reduces resume and ATS scores 
 - `data/intelligence/candidate-intelligence.json`
 - `data/jobs/scored_jobs.json`
 - `data/resumes/{jobId}/tailored_resume.md`
-- `data/resumes/{jobId}/tailored_resume.pdf`
+- `data/resumes/{jobId}/*_Resume.pdf` (the older `tailored_resume.pdf` name is still read)
 - `data/resumes/{jobId}/cover_letter.md`
 - `job.outreach` and `job.aiInsights` (from scored jobs if present)
 

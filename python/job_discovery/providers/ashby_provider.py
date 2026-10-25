@@ -10,11 +10,10 @@ from pathlib import Path
 import requests
 
 from providers.base_provider import JobProvider, build_canonical_job, filter_jobs
-from providers.config_paths import resolve_config
 
 logger = logging.getLogger(__name__)
 
-CONFIG_PATH = resolve_config("ashby.json", "ashby_companies.json")
+CONFIG_PATH = Path(__file__).resolve().parents[3] / "companies" / "ashby.json"
 API_URL = "https://api.ashbyhq.com/posting-api/job-board/{slug}"
 
 

@@ -26,6 +26,7 @@ data/profile/*.json
 data/profile/cvs/
 data/jobs/*.json
 data/jobs/*.csv
+data/jobs/.pipeline.lock
 data/intelligence/*.json
 data/analytics/
 data/audits/

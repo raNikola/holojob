@@ -16,8 +16,8 @@ rest have no provider in this repo.
 | File | ATS | Format |
 |------|-----|--------|
 | `greenhouse.json` | Greenhouse | `[{ "company": "Stripe", "board": "stripe" }, ...]` |
-| `lever.json` | Lever | `["figma", "netflix", ...]` |
-| `ashby.json` | Ashby | `["cursor", "linear", ...]` |
+| `lever.json` | Lever | `["holycode", "everseen", ...]` |
+| `ashby.json` | Ashby | `["splitmetrics", "stora", ...]` |
 
 ## How to find board slugs
 
@@ -41,5 +41,5 @@ rest have no provider in this repo.
 ## Validate after editing
 
 ```bash
-node scripts/validate-companies.js
+npm run validate:companies
 ```

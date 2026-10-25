@@ -1,5 +1,7 @@
 # Career OS: flow and architecture audit
 
+> **Historical.** Written for Career OS before the Holojob redesign; kept for its list of known problems. Current plans are in [../ROADMAP.md](../ROADMAP.md).
+
 Written 2026-10-24, after the My CVs library (`6692378`), CV analysis (`6692378`) and
 the review fixes (`0a27cf5`). It maps what the code does today, traced through the code
 and not from the docs, and lists the problems found. Nothing in it has been fixed yet; it
