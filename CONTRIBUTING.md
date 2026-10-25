@@ -1,6 +1,8 @@
 # Contributing to Holojob
 
-Thank you for helping improve Holojob. This project is licensed under [AGPL-3.0](LICENSE).
+Holojob is a private, single-owner project (owner: Nikola Randjelovic). Changes go through the owner. Read [docs/redesign/DECISIONS.md](docs/redesign/DECISIONS.md) and [CLAUDE.md](CLAUDE.md) before any change. Licensed under [AGPL-3.0](LICENSE).
+
+The rest of this guide is inherited from Holojob and still applies to setup, branches and checks.
 
 ## Development setup
 

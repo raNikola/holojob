@@ -4,7 +4,7 @@
 
 If you discover a security issue, please **do not** open a public GitHub issue with exploit details.
 
-Email the maintainers privately with:
+Contact the owner privately (GitHub [@raNikola](https://github.com/raNikola)) with:
 
 - Description of the issue
 - Steps to reproduce
@@ -15,7 +15,7 @@ We will acknowledge receipt within 5 business days.
 
 ## Sensitive data
 
-Holojob is **local-first**. Your profile, resumes, and job data stay on your machine unless you explicitly configure cloud AI API keys.
+Holojob is **self-hosted**. Your profile, resumes, and job data stay on your machine unless you explicitly configure cloud AI API keys.
 
 **Never commit:**
 
@@ -32,7 +32,7 @@ Cloud AI providers (OpenAI, Anthropic, etc.) are optional. Keys are stored in br
 
 ## LinkedIn scraping
 
-Holojob outreach includes an optional **deep mode** that automates linkedin.com with your `li_at` cookie. This may violate LinkedIn's Terms of Service and can result in account suspension or a permanent ban. Deep mode requires explicit user consent (`acceptTosRisk` in the API/UI, `--i-accept-tos-risk` on the CLI). The default search mode does not authenticate to LinkedIn.
+Holojob outreach (inherited from Holojob) includes an optional **deep mode** that automates linkedin.com with your `li_at` cookie. This may violate LinkedIn's Terms of Service and can result in account suspension or a permanent ban. Deep mode requires explicit user consent (`acceptTosRisk` in the API/UI, `--i-accept-tos-risk` on the CLI). The default search mode does not authenticate to LinkedIn.
 
 Never commit `data/outreach/linkedin_session.json` or share your `li_at` cookie.
 

@@ -1,5 +1,7 @@
 # Holojob - Product decisions
 
+Owner and author: Nikola Randjelovic (raNikola).
+
 Origin: fork of raNikola/holojob (AGPL-3.0), customized on DS9. The original repo is kept as the `upstream` remote for reference only.
 
 ## Thesis
@@ -18,6 +20,9 @@ Evidence-based job matching. The score measures evidence of what the candidate h
 10. Role families (Product, Engineering, Design, QA, Data, ...) hold title synonyms for search and the role gate, and later prompt variants for CV and cover letters. The old developer skill dictionary is kept as an alias list for Engineering/QA, not as a score source.
 11. The skill/competency dictionary emerges from analyzed postings (market report) and is confirmed by the user, not hand-written from scratch.
 12. The 17-question questionnaire is kept, optional, and restructured (story bank, skills with evidence, preferences, positioning, gates). AI can prefill it from the CV through the existing review screen.
+13. Application tracking is independent of job discovery. An application has its own identity and its own store; it keeps a snapshot of the posting (title, company, location, URL, description, source, dates) taken when it is created. The posting may disappear from search results, close or be pruned from the ledger; the application, the CV version sent, its statuses, notes and full history stay permanently. Discovery never deletes, rewrites or re-keys an application.
+14. Personal identifiers never leave the server. Anything sent to an AI provider is redacted first: full name, phone numbers, e-mail addresses and personal links (personal site / CV site, LinkedIn, GitHub and any other profile URL). Work history, roles, dates, bullets and skills may be sent, behind an explicit confirm, as the judge and CV analysis already do.
+15. Single user for now. Access from several devices comes later; it will need server-side storage as the master instead of the browser's localStorage. New stores (applications, evidence, confirmed facts) are designed so they can move server-side without changing their shape.
 
 ## Scope and rules
 - Holojob stays the base app: UI, job sources incl. Serbian sites, AI provider layer, data.
@@ -27,9 +32,16 @@ Evidence-based job matching. The score measures evidence of what the candidate h
 - Everything under data/ (incl. candidate-intelligence.json), CVs and secrets are private and never committed.
 
 ## Phases
-0. Read-only audit -> per-module decision: Reuse / Adapt / Build / Skip, with source paths, changes needed, effort, risks.
-1. Scoring core: prefilter, requirement extraction, evidence matching + deterministic score, role families.
+0. Read-only audit -> per-module decision: Reuse / Adapt / Build / Skip, with source paths, changes needed, effort, risks. Done: docs/redesign/PHASE0_AUDIT.md.
+1. Scoring core: prefilter, requirement extraction, evidence matching + deterministic score, role families. Runs in shadow mode first.
 2. Evidence profile, questionnaire restructure, ask-user loop.
-3. Application tracker: stages, append-only event log, channel, CV version, follow-up nudges, import of past applications.
+3. Application tracker: own store independent of discovery (principle 13), stages, append-only event log, channel, CV version, follow-up nudges, import of past applications.
 4. Interview prep, CV / cover letter with fact gate, market report.
 5. Feedback loop: conversion by channel and fit band, calibration against real outcomes.
+
+## Owner decisions log
+- 2026-10-25 - Privacy: matching may send redacted work history (principle 14), behind the same explicit confirm as the judge.
+- 2026-10-25 - Budget: matching keeps the judge's limit, the top 50 jobs per run by local score, everything cached.
+- 2026-10-25 - Shadow mode: the new Fit is computed and shown next to the current matchScore and changes no ranking until the owner has compared the two on real runs.
+- 2026-10-25 - Single user stays for now; multi-device access is a later goal (principle 15).
+- 2026-10-25 - Application tracking must be independent of discovery (principle 13). There are no tracked applications yet, so no migration is needed.
