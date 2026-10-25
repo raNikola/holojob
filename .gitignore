@@ -20,6 +20,7 @@ __pycache__/
 .pytest_cache/
 
 # Runtime data — never commit personal/job data
+data/*.json
 data/cache/
 data/resumes/
 data/profile/*.json
