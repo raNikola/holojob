@@ -36,7 +36,7 @@ def test_the_schema_offers_exactly_those_enums():
 def test_strict_schema_requires_every_item_field():
     assert ITEM_SCHEMA["additionalProperties"] is False
     assert set(ITEM_SCHEMA["required"]) == set(ITEM_SCHEMA["properties"]) == {
-        "text", "kind", "importance", "posting_quote",
+        "text", "kind", "importance", "posting_quote", "previous_id",
     }
     assert "requirements" in FACT_SCHEMA["schema"]["required"]
     assert "must_haves" not in FACT_SCHEMA["schema"]["properties"]
@@ -59,7 +59,7 @@ def test_coerce_maps_an_unknown_kind_to_other_and_drops_an_unknown_importance():
         "not an object",
     ]})
     assert facts["requirements"] == [
-        {"text": "Python", "kind": "other", "importance": "must", "postingQuote": "Python"},
+        {"text": "Python", "kind": "other", "importance": "must", "postingQuote": "Python", "previousId": None},
     ]
 
 

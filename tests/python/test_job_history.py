@@ -168,7 +168,7 @@ def test_enrichment_reuses_ledger_facts_and_calls_the_model_only_for_new_ads(tmp
     write_jobs(jobs_file, [known, fresh])  # as discovery writes it: no facts on the records
 
     asked = []
-    monkeypatch.setattr(enrich_jobs, "extract", lambda j, model, provider: (asked.append(j["jobId"]), facts_for(j))[1])
+    monkeypatch.setattr(enrich_jobs, "extract", lambda j, model, provider, previous=None: (asked.append(j["jobId"]), facts_for(j))[1])
     monkeypatch.setattr("sys.argv", ["enrich_jobs.py", "--jobs", str(jobs_file), "--workers", "1"])
     assert enrich_jobs.main() == 0
 
@@ -187,7 +187,7 @@ def test_a_second_enrichment_run_makes_no_calls(tmp_path, monkeypatch, capsys):
     jh.save(jh.ledger_path(jobs_file), ledger)
     write_jobs(jobs_file, [j])
     calls = []
-    monkeypatch.setattr(enrich_jobs, "extract", lambda x, m, p: (calls.append(1), facts_for(x))[1])
+    monkeypatch.setattr(enrich_jobs, "extract", lambda x, m, p, previous=None: (calls.append(1), facts_for(x))[1])
     monkeypatch.setattr("sys.argv", ["enrich_jobs.py", "--jobs", str(jobs_file), "--workers", "1"])
     enrich_jobs.main()
     write_jobs(jobs_file, [j])  # the next discovery run rewrites the file without facts

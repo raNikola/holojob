@@ -895,6 +895,27 @@ Fields added later, in the browser job store and not in this file until saved:
 
 Map keys are cache fingerprints. The cache is also read, without any model call, by every local scoring run.
 
+## Requirement frames
+
+- **Path:** `data/cache/requirement-frames.json`
+- **Purpose:** The last requirements read from each ad, fed back to its next extraction so a requirement read again keeps its id and text (DECISIONS.md principle 9, ENGINE_CONTRACT.md section 6). Generated from ads only, never from the candidate; gitignored like the rest of `data/cache/`.
+- **Written by:** `job_scoring/enrich_jobs.py` and `match_engine/calibrate.py` (`job_scoring/requirement_frames.py`). `match_engine/stability.py` keeps its own frames inside `data/cache/engine-stability.json`.
+
+```json
+{
+  "<frameKey>": [
+    {
+      "id": "<string>",
+      "text": "<string>",
+      "kind": "<string>",
+      "importance": "<string>"
+    }
+  ]
+}
+```
+
+Map keys are `requirement_frames.frame_key()`: the ad's title, company and description, without the prompt version, so a frame survives a prompt bump. An ad whose text changes gets no frame from here; the requirements on its own `llmFacts` are used instead.
+
 ## Outreach contacts
 
 - **Path:** `data/outreach/<jobId>/contacts.json`

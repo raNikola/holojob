@@ -65,7 +65,7 @@ def _run_enrich(tmp_path, monkeypatch, jobs, intelligence, extra=()):
     intel_file = tmp_path / "intel.json"
     intel_file.write_text(json.dumps(intelligence))
     read = []
-    monkeypatch.setattr(enrich_jobs, "extract", lambda j, model, provider: read.append(j["jobId"]) or FACTS)
+    monkeypatch.setattr(enrich_jobs, "extract", lambda j, model, provider, previous=None: read.append(j["jobId"]) or FACTS)
     monkeypatch.setattr(sys, "argv", ["enrich_jobs.py", "--jobs", str(jobs_file), "--intelligence", str(intel_file), *extra])
     assert enrich_jobs.main() == 0
     return read
@@ -96,7 +96,7 @@ def test_no_intelligence_file_means_nothing_is_skipped(tmp_path, monkeypatch):
     jobs_file = tmp_path / "jobs.json"
     jobs_file.write_text(json.dumps({"jobs": [job("London, England, UK")]}))
     read = []
-    monkeypatch.setattr(enrich_jobs, "extract", lambda j, m, p: read.append(1) or FACTS)
+    monkeypatch.setattr(enrich_jobs, "extract", lambda j, m, p, previous=None: read.append(1) or FACTS)
     monkeypatch.setattr(sys, "argv", ["enrich_jobs.py", "--jobs", str(jobs_file), "--intelligence", str(tmp_path / "missing.json")])
     assert enrich_jobs.main() == 0
     assert read == [1]
