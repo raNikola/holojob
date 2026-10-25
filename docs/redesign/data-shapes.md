@@ -508,7 +508,8 @@ Fields that exist in the browser profile and appear in the disk mirror only afte
 
 - **Path:** `data/jobs/scored_jobs.json`
 - **Purpose:** Everything in discovered jobs plus scores, label, priority, reasons, work-authorization status, salary parse. What the UI job list loads (copy in browser key `job-dashboard-discovered-jobs`).
-- **Written by:** `run_scoring.py` (`--judge` adds `llmFit`).
+- **Written by:** `run_scoring.py` (`--judge` adds `llmFit`; with `HOLOJOB_ENGINE_SHADOW` on, every job with an
+  engine output gets `engineShadow` and `meta.engineShadow` counts them, see "Engine shadow output").
 
 ```json
 {
@@ -915,6 +916,50 @@ Map keys are cache fingerprints. The cache is also read, without any model call,
 ```
 
 Map keys are `requirement_frames.frame_key()`: the ad's title, company and description, without the prompt version, so a frame survives a prompt bump. An ad whose text changes gets no frame from here; the requirements on its own `llmFacts` are used instead.
+
+## Engine shadow output
+
+- **On:** each scored job as `engineShadow`, when `HOLOJOB_ENGINE_SHADOW` is on (`match_engine/shadow.py`).
+- **Purpose:** The Phase 1 engine's verdict next to `matchScore`, read only (ENGINE_CONTRACT.md section 7). Nothing
+  reads it to rank, sort, filter or label; the UI shows it in a dashed "new engine (shadow)" box.
+- **Shape:** the contract's output (section 3) plus `labelText`, `warnings`, `provider`, `model`, `fromCache`. A
+  failed matcher call is `{"engineVersion", "error"}` and is not cached. No field when there is no output.
+
+```json
+{
+  "engineVersion": "<string>",
+  "promptVersion": "<string>",
+  "profileVersion": "<string>",
+  "adFingerprint": "<string>",
+  "cacheKey": "<string>",
+  "requirements": [{ "id": "<string>", "text": "<string>", "importance": "<string>", "status": "<string>",
+                     "strength": "<number>", "postingQuote": "<string>", "evidenceId": "<null>|<string>",
+                     "evidenceQuote": "<null>|<string>", "quoteVerified": "<boolean>" }],
+  "gates": [{ "gate": "<string>", "result": "<string>", "quote": "<null>|<string>" }],
+  "fit": "<number>",
+  "confidence": "<number>",
+  "label": "<string>",
+  "labelText": "<string>",
+  "bucket": "<string>",
+  "caps": ["<string>"],
+  "counts": { "mustMet": "<number>", "mustTotal": "<number>", "preferredMet": "<number>",
+              "preferredTotal": "<number>", "unknown": "<number>", "blockers": "<number>" },
+  "questions": [{ "competencyId": "<string>", "question": "<string>" }],
+  "cvCoverage": "<null>",
+  "warnings": ["<string>"],
+  "provider": "<string>",
+  "model": "<null>|<string>",
+  "fromCache": "<boolean>"
+}
+```
+
+## Engine cache
+
+- **Path:** `data/cache/engine.json`
+- **Purpose:** The matcher's verified answers per posting, keyed by the contract's cache key (ad fingerprint, profile
+  version, prompt version). Written only by a judged run; every other scoring run re-applies them without a call, and
+  Fit, gates and label are recomputed from them in code under the current constants.
+- **Written by:** `match_engine/shadow.py` (from `run_scoring.py --judge`).
 
 ## Outreach contacts
 

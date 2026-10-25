@@ -261,6 +261,15 @@ def _ask(prompt: str, complete: Callable, provider: str, model: str | None) -> t
     raise AssertionError("unreachable")
 
 
+def posting_from_job(job: dict) -> dict:
+    """The contract's posting input (section 1) from a discovered or scored job and its llmFacts."""
+    return {
+        "id": job.get("jobId") or "", "title": job.get("title") or "", "company": job.get("company") or "",
+        "location": job.get("location") or "", "description": job.get("description") or "",
+        "facts": job.get("llmFacts") or {},
+    }
+
+
 def cache_key(ad_fingerprint: str, profile_version: str) -> str:
     """Section 6: adFingerprint + profileVersion + promptVersion."""
     return f"{ad_fingerprint}:{profile_version}:{PROMPT_VERSION}"

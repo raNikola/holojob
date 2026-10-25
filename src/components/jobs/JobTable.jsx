@@ -10,6 +10,7 @@ import { salaryBadges } from '../../modules/jobs/jobSalary'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
 import { ApplyBadge, MatchScoreBadge, PriorityBadge } from './JobScoreBadge'
 import JobTailorActions from './JobTailorActions'
+import { EngineShadowBadge } from './EngineShadowSection'
 import SortableTh, { useTableSort } from '../ui/SortableTh'
 import { sortRows } from '../../modules/tableSort'
 import { PRIORITIES } from '../../modules/jobs/matchScore'
@@ -122,6 +123,7 @@ function JobCard({
           </div>
           <div className="flex flex-col items-end gap-1">
             {showScores && <MatchScoreBadge job={job} />}
+            {showScores && <EngineShadowBadge shadow={job.engineShadow} />}
             {showScores && <AuthorizationBadge job={job} />}
             <StatusBadge status={job.status} />
             <HistoryBadges job={job} />
@@ -217,6 +219,7 @@ export default function JobTable({
                 {showScores && (
                   <td className="px-4 py-3">
                     <MatchScoreBadge job={job} />
+                    {job.engineShadow && <div className="mt-1"><EngineShadowBadge shadow={job.engineShadow} /></div>}
                     <div className="mt-1"><AuthorizationBadge job={job} /></div>
                   </td>
                 )}

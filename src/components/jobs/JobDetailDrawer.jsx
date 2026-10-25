@@ -12,6 +12,7 @@ import JobDescription from './JobDescription'
 import { formatSeen, historyBadges } from '../../modules/jobs/jobHistory'
 import { formatMonthlyEur, salaryBadges } from '../../modules/jobs/jobSalary'
 import FitJudgementSection, { isFitReason } from './FitJudgementSection'
+import EngineShadowSection, { EngineShadowBadge } from './EngineShadowSection'
 
 const DIMENSION_LABELS = {
   roleMatch: 'Role',
@@ -125,6 +126,7 @@ export default function JobDetailDrawer({
                 <MatchScoreBadge job={job} />
                 <PriorityBadge priority={job.priority} />
                 <ApplyBadge recommendation={job.applyRecommendation} />
+                <EngineShadowBadge shadow={job.engineShadow} />
               </div>
               <ScoreBreakdown breakdown={job.scoreBreakdown} />
               <div>
@@ -144,6 +146,7 @@ export default function JobDetailDrawer({
                 </div>
               )}
               <FitJudgementSection fit={job.llmFit} />
+              <EngineShadowSection shadow={job.engineShadow} />
               {positiveReasons.length > 0 && (
                 <div>
                   <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">Why this scored well</h4>

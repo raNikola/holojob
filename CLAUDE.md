@@ -74,7 +74,8 @@ provider, each behind an explicit confirm; a fourth is a known gap.
   requirements, and the evidence index items (id, source, role, start, end, text), built
   from the profile and intelligence and passed through `redact.py`. Never sent: gates
   (work authorization, locations, languages, salary), confirmed facts or their notes,
-  name, contacts, links. Not wired into any run yet.
+  name, contacts, links. Runs only in a judged scoring run with `HOLOJOB_ENGINE_SHADOW` on
+  (shadow mode, `match_engine/shadow.py`); the judge's confirm dialog then lists it.
 - **Known gap:** LLM tailoring (`resume_generator/llm_tailor.py`, Claude Code CLI) also
   sends candidate data (parsed CV sections about_me, experience, skill_categories,
   education, an intelligence summary and project intelligence) with no confirm step and

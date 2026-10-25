@@ -2,7 +2,8 @@
 
 The matcher (contract section 2, step 3), the code that verifies its quotes
 (section 5.2), the gates (gates.py, section 5.4) and Fit, confidence, caps,
-bucket and label (fit.py, sections 5.1, 5.3-5.5). Not wired into a run yet.
+bucket and label (fit.py, sections 5.1, 5.3-5.5). Wired into run_scoring.py in
+shadow mode only (shadow.py, section 7), behind HOLOJOB_ENGINE_SHADOW.
 
 The engine reuses job_scoring's text folding, provider plumbing and ad
 fingerprint rather than keeping copies of them.

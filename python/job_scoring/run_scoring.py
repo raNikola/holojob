@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+# match_engine is a package under python/; appended, so no folder there shadows a module here.
+if str(ROOT / "python") not in sys.path:
+    sys.path.append(str(ROOT / "python"))
 
 from llm_client import active_provider, judge_model  # noqa: E402
 from llm_enhancer import (  # noqa: E402
@@ -25,11 +28,13 @@ from llm_enhancer import (  # noqa: E402
     LlmFitEnhancer,
 )
 from scorer import resolve_weights, score_jobs  # noqa: E402
+from match_engine import shadow  # noqa: E402
 
 INTELLIGENCE_PATH = ROOT / "data" / "intelligence" / "candidate-intelligence.json"
 JOBS_PATH = ROOT / "data" / "jobs" / "discovered_jobs.json"
 OUTPUT_PATH = ROOT / "data" / "jobs" / "scored_jobs.json"
 FIT_CACHE_PATH = ROOT / "data" / "cache" / "llm_fit.json"
+PROFILE_PATH = ROOT / "data" / "profile" / "candidate-profile.json"
 
 # Providers that answer from this machine; every other one is a remote service.
 LOCAL_PROVIDERS = {"ollama"}
@@ -37,6 +42,21 @@ LOCAL_PROVIDERS = {"ollama"}
 
 def _no_network(*_args, **_kwargs):
     raise RuntimeError("a cache-only run must never call the model")
+
+
+def _shadow_engine(intelligence: dict, judge: bool, provider: str, model: str | None):
+    """The shadow engine when HOLOJOB_ENGINE_SHADOW is on and a profile is on disk, else None."""
+    if not shadow.enabled():
+        return None
+    if not PROFILE_PATH.exists():
+        print(f"engine (shadow): skipped, no profile at {PROFILE_PATH}", file=sys.stderr)
+        return None
+    from confirmed_facts import load as load_confirmed_facts
+    from evidence_index import build_candidate
+
+    profile = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+    candidate = build_candidate(profile, intelligence, load_confirmed_facts())
+    return shadow.ShadowEngine(candidate, judge=judge, provider=provider, model=model)
 
 
 def parse_args() -> argparse.Namespace:
@@ -115,6 +135,28 @@ def main() -> int:
 
     scored = score_jobs(jobs, intelligence, enhancer, workers=args.workers)
     c = enhancer.counts
+
+    # Shadow mode (ENGINE_CONTRACT.md section 7): adds engineShadow to each job
+    # and changes no other field, so ranking, labels and priority stay the
+    # current score's. A failure here is reported and never stops the run.
+    engine, engine_summary = None, None
+    try:
+        engine = _shadow_engine(intelligence, args.judge, provider, model)
+        if engine and args.judge_preview:
+            engine_summary = engine.preview(scored)
+        elif engine:
+            scored = engine.apply(scored)
+            engine.save()
+            engine_summary = {"enabled": True, **engine.counts, "limit": engine.limit if args.judge else None}
+            n = engine.counts
+            print(f"engine (shadow): {n['matched']} new calls, {n['cached']} from cache; without output: "
+                  f"{n['uncached']} not matched yet (needs a judged run), {n['beyondLimit']} beyond the "
+                  f"per-run limit, {n['noRequirements']} with no requirements extracted, {n['closed']} closed; "
+                  f"{n['failed']} failed")
+    except Exception as exc:  # shadow output is optional; the scoring run is not
+        print(f"engine (shadow): skipped after an error: {exc}", file=sys.stderr)
+        engine_summary = {"enabled": True, "error": str(exc)[:300]}
+
     if args.judge_preview:
         eligible = c["cached"] + c["uncached"] + c["beyond_limit"]
         print(json.dumps({
@@ -129,6 +171,7 @@ def main() -> int:
             "beyondLimit": c["beyond_limit"],
             "sent": DIGEST_FIELDS,
             "neverSent": NEVER_SENT,
+            "engine": engine_summary or {"enabled": False},
         }))
         return 0
     judge_summary = {
@@ -167,6 +210,7 @@ def main() -> int:
             "discoveryGeneratedAt": (discovered.get("meta") or {}).get("generatedAt") if isinstance(discovered, dict) else None,
             "weights": weights,
             "judge": judge_summary,
+            "engineShadow": engine_summary or {"enabled": False},
             "jobCount": len(scored),
             "summary": {
                 "excellent": labels.get("Excellent", 0),
