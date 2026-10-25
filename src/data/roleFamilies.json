@@ -1,0 +1,112 @@
+{
+  "product": {
+    "titleSynonyms": [
+      "Product Manager",
+      "Senior Product Manager",
+      "Technical Product Manager",
+      "Lead Product Manager",
+      "Group Product Manager",
+      "Principal Product Manager",
+      "Product Owner",
+      "Product Lead",
+      "Head of Product",
+      "Director of Product",
+      "VP of Product",
+      "Chief Product Officer"
+    ],
+    "acceptedRoleTracks": ["product_management", "product_ownership"]
+  },
+  "engineering": {
+    "titleSynonyms": [
+      "Software Engineer",
+      "Software Developer",
+      "Backend Engineer",
+      "Frontend Engineer",
+      "Full Stack Developer",
+      "Mobile Developer",
+      "DevOps Engineer",
+      "Site Reliability Engineer",
+      "Platform Engineer",
+      "Engineering Manager",
+      "Tech Lead",
+      "Staff Engineer",
+      "Head of Engineering"
+    ],
+    "acceptedRoleTracks": ["engineering"]
+  },
+  "design": {
+    "titleSynonyms": [
+      "Product Designer",
+      "UX Designer",
+      "UI Designer",
+      "UX/UI Designer",
+      "Interaction Designer",
+      "Visual Designer",
+      "UX Researcher",
+      "Design Lead",
+      "Head of Design"
+    ],
+    "acceptedRoleTracks": ["design"]
+  },
+  "qa": {
+    "titleSynonyms": [
+      "QA Engineer",
+      "Test Engineer",
+      "Software Tester",
+      "QA Automation Engineer",
+      "SDET",
+      "Quality Assurance Engineer",
+      "QA Lead",
+      "Test Manager"
+    ],
+    "acceptedRoleTracks": ["engineering"]
+  },
+  "data": {
+    "titleSynonyms": [
+      "Data Engineer",
+      "Data Scientist",
+      "Data Analyst",
+      "Analytics Engineer",
+      "Machine Learning Engineer",
+      "BI Developer",
+      "Business Intelligence Analyst",
+      "Head of Data"
+    ],
+    "acceptedRoleTracks": ["engineering"]
+  },
+  "delivery": {
+    "titleSynonyms": [
+      "Project Manager",
+      "Delivery Manager",
+      "Program Manager",
+      "Programme Manager",
+      "Technical Program Manager",
+      "Scrum Master",
+      "Agile Coach",
+      "PMO Lead"
+    ],
+    "acceptedRoleTracks": ["project_delivery", "program_management"]
+  },
+  "marketing": {
+    "titleSynonyms": [
+      "Marketing Manager",
+      "Product Marketing Manager",
+      "Growth Marketing Manager",
+      "Digital Marketing Manager",
+      "Content Marketing Manager",
+      "Head of Marketing"
+    ],
+    "acceptedRoleTracks": ["marketing"]
+  },
+  "sales": {
+    "titleSynonyms": [
+      "Account Executive",
+      "Sales Manager",
+      "Business Development Manager",
+      "Account Manager",
+      "Sales Engineer",
+      "Head of Sales"
+    ],
+    "acceptedRoleTracks": ["sales"]
+  }
+}
