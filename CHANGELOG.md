@@ -13,12 +13,19 @@ All notable changes to Holojob are documented here. Entries before the fork are 
 
 ### Changed
 
-- README rewritten for Holojob; the Holojob README is kept in `docs/holojob/README.md`.
+- README rewritten for Holojob; the old Holojob README was folded into it (troubleshooting) and removed.
 - `package.json`: name `holojob`, author, repository, `private: true` (no accidental npm publish).
 
 ### Removed
 
 - Third-party peer chat data (`data/chat/`) from the tracked files.
+- Upstream leftovers: `run.sh`, `run.bat`, root `setup.sh`, `scripts/setup.sh`, `scripts/setup-jobspy.sh`, `.github/` (CI, issue and PR templates), `CONTRIBUTING.md`, `SECURITY.md` (its data-handling and LinkedIn guidance moved into the README), Vite template assets, `python/job_discovery/run_jobspy.py`, `scripts/generate-roles.js` and the `@sparring/tech-roles-library` dependency.
+- The legacy company lists in `python/job_discovery/config/` and the fallback in `providers/config_paths.py`; the providers read only `companies/`. Stripe, Coinbase and Anthropic (Greenhouse boards that still resolve) were carried over into `companies/greenhouse.json`; Notion and Rippling (Greenhouse), all five legacy Lever slugs and Scale AI (Ashby) no longer resolve and were dropped.
+- `data/jobs/.pipeline.lock` is no longer tracked (git-ignored).
+
+### Fixed
+
+- The favicon link in `index.html` pointed at a missing `/vite.svg`; it now uses `/favicon.svg`.
 
 ### Inherited before the fork (DS9 customizations of Holojob)
 

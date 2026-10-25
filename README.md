@@ -85,7 +85,7 @@ Lever, Ashby. Data flows `data/jobs/discovered_jobs.json` -> `data/jobs/scored_j
 | `<PROVIDER>_MODEL`, `<PROVIDER>_JUDGE_MODEL` | Model overrides for enrichment and judgement |
 | `PORT` | Server port inside the container (default 5173) |
 | `CLAUDE_AUTO_LOGIN` | Open the Claude Code login on startup (0 to disable) |
-| `LINKEDIN_LI_AT` | Optional LinkedIn cookie for deep outreach mode (see SECURITY.md) |
+| `LINKEDIN_LI_AT` | Optional LinkedIn cookie for deep outreach mode (see Privacy: LinkedIn deep mode) |
 
 Browser AI features (copilot, interview coach) keep their own provider settings in Settings.
 
@@ -100,6 +100,18 @@ Browser AI features (copilot, interview coach) keep their own provider settings 
     education), the intelligence summary and project intelligence; it has no confirm step and no
     redaction pass yet. This is a known gap against [DECISIONS.md](docs/redesign/DECISIONS.md)
     principle 14 and is scheduled with the fact gate in Phase 4.
+- **Sensitive files.** Never commit `data/profile/*.json`, `data/resumes/`, `data/cache/repos/`, `.env` or
+  `data/outreach/linkedin_session.json`. If one is committed by mistake, rotate the credentials and remove it
+  from history before pushing anywhere.
+- **API keys** are read from the environment on the server; browser AI features keep their keys in the
+  browser's localStorage (Settings) and send them only to the provider you choose.
+- **LinkedIn deep mode.** Outreach has an optional deep mode that automates linkedin.com with your `li_at`
+  cookie (`LINKEDIN_LI_AT`, or `data/outreach/linkedin_session.json`). This may violate LinkedIn's Terms of
+  Service and can get the account suspended or banned. It runs only with explicit consent
+  (`acceptTosRisk` in the API and UI, `--i-accept-tos-risk` on the scraper CLI). The default search mode does
+  not authenticate to LinkedIn. Never share the cookie.
+- **Vulnerabilities:** contact the owner privately ([@raNikola](https://github.com/raNikola)), not in a public issue.
+- **License:** AGPL-3.0. A modified version deployed as a network service must offer its source to its users.
 
 ## Tests
 
@@ -118,7 +130,7 @@ npm run lint
 - [docs/redesign/PHASE0_AUDIT.md](docs/redesign/PHASE0_AUDIT.md) - current state and module decisions
 - [docs/redesign/data-shapes.md](docs/redesign/data-shapes.md) - data files and their shapes
 - [CLAUDE.md](CLAUDE.md) - working notes for the codebase
-- [docs/holojob/README.md](docs/holojob/README.md) - the inherited Holojob README (reference)
+- [docs/holojob/FLOW_AUDIT.md](docs/holojob/FLOW_AUDIT.md) - Holojob flow audit (historical)
 
 ## Credits and license
 

@@ -21,7 +21,6 @@
     "test:js": "vitest run",
     "test:python": ".venv/bin/python -m pytest tests/python -q",
     "preview": "vite preview",
-    "generate-roles": "node scripts/generate-roles.js",
     "regenerate-intelligence": "node scripts/regenerate-intelligence.js",
     "setup:jobspy": "node scripts/setup.js --jobspy",
     "setup:jobs": "node scripts/setup.js --jobs",
@@ -36,7 +35,6 @@
     "validate:companies": "node scripts/validate-companies.js"
   },
   "dependencies": {
-    "@sparring/tech-roles-library": "^1.1.1",
     "adm-zip": "^0.5.17",
     "archiver": "^8.0.0",
     "lucide-react": "^1.17.0",

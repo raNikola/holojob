@@ -1,4 +1,4 @@
-# Job Scoring (Module 4)
+# Job Scoring
 
 Deterministic job scoring against `candidate-intelligence.json`.
 
@@ -8,6 +8,8 @@ Deterministic job scoring against `candidate-intelligence.json`.
 source .venv/bin/activate
 python python/job_scoring/run_scoring.py
 ```
+
+or `npm run score:jobs`. The opt-in fit judgement (`--judge`) sends data to the configured provider; see [CLAUDE.md](../../CLAUDE.md) for its privacy rules.
 
 ## Input / output
 

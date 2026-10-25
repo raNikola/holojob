@@ -10,11 +10,10 @@ from pathlib import Path
 import requests
 
 from providers.base_provider import JobProvider, build_canonical_job, filter_jobs
-from providers.config_paths import resolve_config
 
 logger = logging.getLogger(__name__)
 
-CONFIG_PATH = resolve_config("lever.json", "lever_companies.json")
+CONFIG_PATH = Path(__file__).resolve().parents[3] / "companies" / "lever.json"
 API_URL = "https://api.lever.co/v0/postings/{company}"
 # A company on Lever's EU-hosted instance 404s on the main API; its own
 # hosted board (jobs.eu.lever.co) names api.eu.lever.co as the primary and

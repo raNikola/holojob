@@ -4,7 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist/**', '.venv/**', 'data/**', 'scripts/generate-roles.js'] },
+  { ignores: ['dist/**', '.venv/**', 'data/**'] },
   {
     files: ['scripts/**/*.js'],
     languageOptions: {

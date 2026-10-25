@@ -1,4 +1,4 @@
-# Resume Tailoring (Module 5)
+# Resume Tailoring
 
 Truth-only tailored resumes from profile + intelligence + scored job.
 
@@ -10,13 +10,13 @@ Output HTML/PDF uses a Calibri-style layout matching a one-page professional res
 
 ```bash
 source .venv/bin/activate
-pip install jinja2
 python python/resume_generator/run_tailor.py --job-id <jobId>
 python python/resume_generator/run_tailor.py --priority P1 --limit 5
+python python/resume_generator/run_tailor.py --job-id <jobId> --no-llm   # rule-based only, no model call
 ```
 
 ## Output
 
-`data/resumes/{jobId}/tailored_resume.md`, `.html`, `.pdf`, `cover_letter.md`
+In `data/resumes/{jobId}/`: `tailored_resume.md`, `tailored_resume.html`, `cover_letter.md`, and the spec-named files `<Name>_<Company>_<Role>_Resume.pdf` / `.docx` / `.json` and `..._CoverLetter.pdf` (naming from `HOLOJOB_GENERATION_CONTEXT.md` Part 6).
 
 Paths stored in `tailoredAssets` on each job in `scored_jobs.json`.

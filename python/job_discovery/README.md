@@ -1,26 +1,11 @@
-# Job Discovery (Module 3)
+# Job Discovery
 
-Python pipeline that uses [JobSpy](https://github.com/speedyapply/JobSpy) to discover jobs from Module 2 search strategy.
+Python pipeline that discovers jobs from the search strategy in the candidate intelligence, through several providers (JobSpy for LinkedIn, Infostud, Workable, Greenhouse, Lever, Ashby and others).
 
 ## Prerequisites
 
-- Python 3.10+
-- Node.js project root at `job-automation-dashboard`
-
-## Setup
-
-From project root:
-
-```bash
-npm run setup:jobspy
-```
-
-Or manually:
-
-```bash
-bash scripts/setup-jobspy.sh
-source .venv/bin/activate
-```
+- Python 3.12 (3.11 works; the pinned pandas has no wheel for 3.15)
+- Node.js at the project root
 
 ## Input
 
@@ -32,26 +17,18 @@ data/intelligence/candidate-intelligence.json
 
 Required fields: `searchStrategy.jobSpySearchTerms`, `searchStrategy.locationFilters`, `searchStrategy.remoteFilters`.
 
-## Run discovery
-
-```bash
-source .venv/bin/activate
-python python/job_discovery/run_jobspy.py
-```
-
 ## Output
 
 ```
-data/jobs/raw_jobs.csv
-data/jobs/normalized_jobs.json
 data/jobs/discovered_jobs.json
+data/jobs/job_history.json
 ```
 
-Import `discovered_jobs.json` in the React Job Discovery dashboard.
+The Jobs screen reads `discovered_jobs.json` after scoring.
 
-## Module 3.1 — Multi-Provider Discovery
+## Multi-provider discovery
 
-Setup (JobSpy + Playwright):
+Setup (venv, requirements, Playwright):
 
 ```bash
 npm run setup:jobs
@@ -73,14 +50,8 @@ stops and says so; there is no default country.
 
 Provider groups: `all`, `ats`, `remote`, `startup`, `serbia`.
 
-The existing JobSpy-only runner is unchanged:
-
-```bash
-python python/job_discovery/run_jobspy.py --country <country> --locations "<city>, <country>" "Remote"
-```
-
 ## Notes
 
 - Scraping depends on network access and job board rate limits.
-- LinkedIn may fail individually; Indeed/Glassdoor/Google continue.
+- LinkedIn may fail or rate-limit; the other providers continue. Serbia is not supported by Indeed or Glassdoor, so the `serbia` group uses LinkedIn only through JobSpy.
 - **Indeed / Glassdoor:** pass an exact country name via `--country` (e.g. `USA`, `UK`). The adapter sets JobSpy `country_indeed` accordingly. Use `--locations` for city narrowing. Remote locations use `is_remote=True` with country scoping only.
