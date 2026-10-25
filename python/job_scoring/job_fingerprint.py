@@ -12,7 +12,7 @@ import hashlib
 
 # Bump when the enrichment prompt changes: every ad is then read again rather
 # than served from a cache built by an older question.
-PROMPT_VERSION = 2
+PROMPT_VERSION = 3
 
 # Everything extracted is stated in the opening half of an ad. The rest is
 # benefits copy and equal-opportunity boilerplate.
