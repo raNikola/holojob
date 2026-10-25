@@ -410,7 +410,13 @@ constants in code, set in Phase 1.
 entry, not of the key, so a switch of model is a visible miss that is recorded. An entry stored under a different
 `engineVersion` is recomputed from the cached model answers when the model steps are unchanged, and re-run
 otherwise. The previous requirement frame of the same ad is fed back to the extraction step so that requirement ids
-stay stable across runs (DECISIONS.md principle 9). Model calls use deterministic settings where the provider allows.
+stay stable across runs (DECISIONS.md principle 9): the prompt lists the previous id and text of each requirement, the
+model names the previous id of a requirement it reads again, and code reuses that id and text when the id is in the
+frame and not already taken. Frames are stored in `data/cache/requirement-frames.json`, keyed by the ad's content
+without the prompt version, so they survive a prompt bump (`job_scoring/requirement_frames.py`). Model calls use
+deterministic settings where the provider allows: OpenAI gets temperature 0 and a fixed seed, which OpenAI treats as
+best effort, so stability is measured with tolerances (`match_engine/stability.py`, ROADMAP.md Phase 1) and never
+assumed byte-identical. A model that rejects one of these settings is asked again without it.
 
 Contract version `0.x` may change without notice. From `1.0` a change to a field or enum is a major version.
 

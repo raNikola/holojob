@@ -33,6 +33,7 @@ from confirmed_facts import load as load_confirmed_facts  # noqa: E402
 from enrich_jobs import _fingerprint, extract  # noqa: E402
 from evidence_index import build_candidate  # noqa: E402
 from job_fingerprint import job_fingerprint  # noqa: E402
+import requirement_frames  # noqa: E402
 from llm_client import active_provider, judge_model  # noqa: E402
 
 from match_engine.constants import ENGINE_VERSION  # noqa: E402
@@ -75,6 +76,7 @@ def run(args) -> list[dict]:
     )
     provider = args.provider or active_provider()
     model = args.model or judge_model(provider)
+    frames = requirement_frames.load()
     rows = []
     for path in sorted(FIXTURES.glob("*.json")):
         job = json.loads(path.read_text(encoding="utf-8"))
@@ -83,7 +85,8 @@ def run(args) -> list[dict]:
             if not args.judge:
                 rows.append({"fixture": path.name, "error": "not extracted yet; run with --judge"})
                 continue
-            facts = extractions[path.name] = extract(job, None, provider)
+            facts = extractions[path.name] = extract(job, None, provider, requirement_frames.previous_for(frames, job))
+            requirement_frames.remember(frames, job, facts)
         job["llmFacts"] = facts
         posting = _posting(job)
 
@@ -104,6 +107,7 @@ def run(args) -> list[dict]:
     if args.judge:
         CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
         CACHE_PATH.write_text(json.dumps(cache, indent=1, ensure_ascii=False), encoding="utf-8")
+        requirement_frames.save(frames)
     return rows
 
 

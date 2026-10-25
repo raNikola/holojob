@@ -35,6 +35,18 @@ CLI_TIMEOUT = 240
 HTTP_TIMEOUT = 90
 HTTP_RETRIES = 3
 
+# Sampling settings sent to OpenAI (ENGINE_CONTRACT.md section 6: "deterministic
+# settings where the provider allows"). OpenAI's determinism is best effort, not
+# a guarantee: the same seed and temperature 0 make repeated answers far more
+# alike, but a backend change can still alter one. So this narrows the drift the
+# stability test measures (match_engine/stability.py); it does not remove it,
+# and nothing may depend on two answers being byte-identical.
+DETERMINISTIC = {"temperature": 0, "seed": 20261025}
+DETERMINISTIC_PROVIDERS = {"openai"}
+# (provider, model, setting) a 400 has shown the model rejects, e.g. reasoning
+# models that take no temperature; later calls leave it out.
+_REJECTED: set[tuple[str, str, str]] = set()
+
 _FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.I)
 
 
@@ -226,6 +238,16 @@ def _loose_json(text: str) -> dict:
 # --- OpenAI-compatible HTTP ------------------------------------------------
 
 
+def _rejected_setting(error_text: str, body: dict) -> str | None:
+    """The DETERMINISTIC setting a 400 names, when the body carries it."""
+    try:
+        error = json.loads(error_text).get("error") or {}
+    except (json.JSONDecodeError, AttributeError):
+        error = {}
+    named = f"{error.get('param') or ''} {error.get('message') or ''}".lower()
+    return next((k for k in DETERMINISTIC if k in body and k in named), None)
+
+
 def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str) -> dict:
     import requests
 
@@ -243,6 +265,8 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str)
         body["response_format"] = {"type": "json_schema", "json_schema": schema}
     elif provider.json_mode in ("schema", "object"):
         body["response_format"] = {"type": "json_object"}
+    if provider.name in DETERMINISTIC_PROVIDERS:
+        body.update({k: v for k, v in DETERMINISTIC.items() if (provider.name, model, k) not in _REJECTED})
 
     headers = {"Content-Type": "application/json"}
     if key:
@@ -251,24 +275,34 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str)
     url = f"{provider.base_url}/chat/completions"
     last_error = ""
 
-    for attempt in range(HTTP_RETRIES):
+    # A rejected DETERMINISTIC setting is asked again without it; that is not
+    # one of the HTTP_RETRIES, which are for transient failures.
+    attempt = 0
+    while attempt < HTTP_RETRIES:
         try:
             response = requests.post(
                 url, headers=headers, json=body, timeout=HTTP_TIMEOUT
             )
         except requests.RequestException as exc:
             last_error = str(exc)[:200]
-            time.sleep(2.0 * (attempt + 1))
+            attempt += 1
+            time.sleep(2.0 * attempt)
             continue
 
         if response.status_code in (401, 403):
             raise LlmUnavailable(f"{provider.name} rejected the key ({response.status_code})")
+        if response.status_code == 400 and (rejected := _rejected_setting(response.text, body)):
+            # The model takes no such setting: ask again without it, and remember.
+            _REJECTED.add((provider.name, model, rejected))
+            body.pop(rejected)
+            continue
         if response.status_code == 400:
             # A body the endpoint will not accept is our bug, not a blip.
             raise LlmRefused(f"{provider.name} rejected the request: {response.text[:300]}")
         if response.status_code in (408, 429, 500, 502, 503, 529):
             last_error = f"HTTP {response.status_code}"
-            time.sleep(2.0 * (attempt + 1))
+            attempt += 1
+            time.sleep(2.0 * attempt)
             continue
         if not response.ok:
             raise LlmUnavailable(
