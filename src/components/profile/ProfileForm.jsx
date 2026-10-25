@@ -8,6 +8,7 @@ import SelectField from '../ui/SelectField'
 import { useProfile } from '../../context/ProfileContext'
 import { LANGUAGE_PROFICIENCIES } from '../../utils/languages'
 import { AUTHORIZATION_BASES, RELOCATION_OPTIONS, REMOTE } from '../../utils/workAuthorization'
+import { ROLE_FAMILY_IDS, ROLE_FAMILY_LABELS } from '../../utils/roleFamily'
 import geography from '../../data/geography.json'
 
 function ListEditor({ label, items = [], onChange, confidenceKey, confidence }) {
@@ -229,6 +230,14 @@ export default function ProfileForm() {
           <Input label="Minimum salary (EUR/month)" type="number" min={0} value={bp.minSalaryEur ?? ''} onChange={(e) => setBasic('minSalaryEur', e.target.value === '' ? null : Number(e.target.value))} placeholder="Flags jobs paying less" />
           <Input label="Desired salary from (EUR/month)" type="number" min={0} value={bp.desiredSalaryMinEur ?? ''} onChange={(e) => setBasic('desiredSalaryMinEur', e.target.value === '' ? null : Number(e.target.value))} />
           <Input label="Desired salary to (EUR/month)" type="number" min={0} value={bp.desiredSalaryMaxEur ?? ''} onChange={(e) => setBasic('desiredSalaryMaxEur', e.target.value === '' ? null : Number(e.target.value))} />
+        </div>
+        <div className="mt-4">
+          <label className="mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300">Role family</label>
+          <select value={bp.roleFamily || ''} onChange={(e) => setBasic('roleFamily', e.target.value)} className={SELECT_CLASS}>
+            <option value="">Not set</option>
+            {ROLE_FAMILY_IDS.map((id) => <option key={id} value={id}>{ROLE_FAMILY_LABELS[id] || id}</option>)}
+          </select>
+          <p className="mt-1 text-xs text-stone-500">The kind of role you are after. Scoring caps jobs outside it; until you choose one, no job is capped for its role. Regenerate intelligence after changing it.</p>
         </div>
         <div className="mt-4 space-y-4">
           <RoleCombobox

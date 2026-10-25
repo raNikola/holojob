@@ -166,6 +166,7 @@ Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intell
   "languages": [
     "<string>"
   ],
+  "roleFamily": "<null>|<string>",
   "scoringWeights": {
     "roleMatch": "<number>",
     "skillMatch": "<number>",
@@ -228,7 +229,8 @@ Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intell
     "allowedLocations": [
       "<string>"
     ],
-    "relocation": "<string>"
+    "relocation": "<string>",
+    "roleFamily": "<string>"
   },
   "resume": {
     "fileName": "<string>",

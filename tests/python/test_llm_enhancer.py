@@ -201,7 +201,8 @@ def test_capped_jobs_in_a_run_are_never_sent(intelligence):
         "jobUrl": "https://example.com/1",
         "llmFacts": {"roleTrack": "project_delivery", "workMode": "remote"},
     }
-    result = score_jobs([job], intelligence, enhancer(stub))[0]
+    # Off track for a product candidate; with no family set nothing is off track.
+    result = score_jobs([job], {**intelligence, "roleFamily": "product"}, enhancer(stub))[0]
     assert result["hardCapped"] is True
     assert result["matchScore"] <= 50
     assert stub.calls == []

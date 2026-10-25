@@ -5,6 +5,7 @@ import { normalizeAllowedLocations, normalizeRelocation, normalizeWorkAuthorizat
 import { normalizeSalaryTargets } from './salary'
 import { joinAnswerList, repairCommaAnswer } from './answerList'
 import { ensureCvLibrary } from './cvLibrary'
+import { normalizeRoleFamily } from './roleFamily'
 
 export const STORAGE_KEY = 'job-dashboard-candidate-profile'
 
@@ -22,6 +23,7 @@ export function getDefaultProfile() {
       workAuthorization: { holds: [], openToSponsorship: false },
       allowedLocations: [],
       relocation: 'none',
+      roleFamily: '',
     },
     resume: {
       fileName: '', uploadedAt: '', rawText: '',
@@ -144,6 +146,7 @@ export function loadProfile() {
         workAuthorization: normalizeWorkAuthorization(stored.basicProfile?.workAuthorization),
         allowedLocations: normalizeAllowedLocations(stored.basicProfile?.allowedLocations),
         relocation: normalizeRelocation(stored.basicProfile?.relocation),
+        roleFamily: normalizeRoleFamily(stored.basicProfile?.roleFamily),
         ...normalizeSalaryTargets(stored.basicProfile),
       },
     }

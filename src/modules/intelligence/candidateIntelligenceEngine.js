@@ -12,6 +12,7 @@ import { validateIntelligenceMapping } from './intelligenceValidators.js'
 import { runIntelligenceQualityChecks } from './intelligenceQualityChecks.js'
 import { buildCandidateStrengths } from './strengthsBuilder.js'
 import { formatLanguages } from '../../utils/languages.js'
+import { normalizeRoleFamily } from '../../utils/roleFamily.js'
 import defaultWeights from '../../data/scoringWeights.json'
 
 // The one set of default weights, shared with the settings panel and the Python
@@ -69,6 +70,9 @@ export function generateCandidateIntelligence(rawProfile, options = {}) {
     // Derived from basicProfile.languages ("Serbian (native)"); the fit judge's
     // digest reads this list, so it is never typed in by hand here.
     languages: formatLanguages(ctx.basicProfile?.languages),
+    // The family the candidate chose in the profile (src/data/roleFamilies.json);
+    // null when none is chosen, and scoring then assumes none.
+    roleFamily: normalizeRoleFamily(ctx.basicProfile?.roleFamily) || null,
     scoringWeights: resolveScoringWeights(options.previousIntelligence?.scoringWeights),
     meta: {
       generatedAt: new Date().toISOString(),

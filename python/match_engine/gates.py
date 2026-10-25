@@ -12,7 +12,8 @@ and matchScore read the same facts the same way:
                       requirements and from the ad's own sentences.
   salary_floor        salary.parse_monthly_eur and salary.below_minimum.
   role_family         the posting's llmFacts.roleTrack against the role-family
-                      config (scorer.accepted_tracks).
+                      config (scorer.accepted_tracks); unknown when the profile
+                      sets no family.
 
 The model's quote for a gate is carried for display and decides nothing.
 Unknown is never fail: a gate fails only on a stated fact that rules the job
@@ -243,11 +244,11 @@ def salary_floor_result(job: dict, gates: dict) -> str:
 def role_family_result(job: dict, role_family: str | None) -> str:
     """The posting's role track against the tracks the candidate's family accepts.
 
-    A null family uses scorer.py's transition family, as matchScore does,
-    until the profile carries one (contract 1.1).
+    Unknown when the profile sets no family or the ad's track was not read:
+    nothing is assumed in either case.
     """
     track = (job.get("llmFacts") or {}).get("roleTrack")
-    if not track:
+    if not track or not role_family:
         return UNKNOWN
     _, tracks = accepted_tracks({"roleFamily": role_family})
     return PASS if track in tracks else FAIL
