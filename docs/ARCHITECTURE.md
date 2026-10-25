@@ -267,8 +267,7 @@ Carried over from the former "Next, in order" list (nothing else from it is stil
    the jobs (the fit judgement itself is built).
 8. **Companies not covered by Greenhouse / Lever / Ashby:** `companies/` holds only
    companies from the owner's application history whose board slug resolved against
-   the live API (Stripe, Coinbase and Anthropic were added from the old upstream list
-   because their Greenhouse boards still resolve). Not covered: Revolut (Workable,
+   the live API. Not covered: Revolut (Workable,
    already reached by the `workable` search), Nutanix (Jobvite), Openprovider
    (Recruitee), Proxify, Cleverbridge, DataWalk (no supported ATS found). Lever's EU
    instance (`api.eu.lever.co`, Everseen) is tried as a fallback; Fundraise Up's board
