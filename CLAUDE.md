@@ -1,5 +1,7 @@
 # Holojob — working notes
 
+Read docs/redesign/DECISIONS.md before any redesign work.
+
 Personal job-hunt pipeline, single user, running in Podman on a home server
 (DS9). Not a product: optimise for this one candidate, a senior/technical
 product manager based in Niš, Serbia, who will not relocate to Belgrade and
@@ -15,9 +17,11 @@ needs remote or near-remote work.
 - Changing `.env` requires `podman-compose up -d --force-recreate`; a
   restart does not re-read it.
 - The owner runs the commands. Propose them, do not assume they ran.
-- This repo is local-only and is never pushed: personal data must never leave
-  the home server. The push URL of `origin` is `no-push` and `.git/hooks/pre-push`
-  always refuses, on purpose. Do not "fix" either as if it were broken.
+- Personal data must never leave the home server. The repo is pushed only to the
+  owner's private GitHub repo (`origin` = `git@github.com:raNikola/holojob.git`;
+  `upstream` = raNikola/holojob, fetch only, push URL `no-push`).
+  `.git/hooks/pre-push` refuses every remote except `origin`. Everything under
+  `data/` except the tracked examples, `.env`, CVs and keys stay in `.gitignore`.
 
 ## Container gotchas
 
