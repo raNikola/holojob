@@ -1,3 +1,5 @@
+> Dated snapshot as of commit a3b6ce8; not updated afterwards. Sections of CLAUDE.md cited below now live in [../ARCHITECTURE.md](../ARCHITECTURE.md); the current phase list is [../ROADMAP.md](../ROADMAP.md).
+
 # Phase 0 audit - code side
 
 Scope: the Holojob code on `main` (commit 897c09f) measured against `DECISIONS.md`,

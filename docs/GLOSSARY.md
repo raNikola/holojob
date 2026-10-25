@@ -8,7 +8,7 @@ describe what runs today.
 ## Terms
 
 **Bucket** - The outcome of the gates for one posting: Apply, Check first or Blocked. A bucket is never a number and
-never changes Fit. See [Gate](#gate).
+never changes Fit. See Gate.
 
 **Canonical competency** - An entry in a role family's fixed competency list (for example "stakeholder management" for
 Product). Posting requirements are mapped to canonical ids so the same skill is the same id in every ad.
