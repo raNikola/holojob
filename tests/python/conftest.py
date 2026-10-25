@@ -11,6 +11,11 @@ for sub in ("job_discovery", "resume_generator", "job_scoring", "cv_analysis"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+# match_engine is a package: python/ itself goes last, so none of its folders
+# shadows a flat module above.
+if str(ROOT / "python") not in sys.path:
+    sys.path.append(str(ROOT / "python"))
+
 
 def pytest_configure(config):
     config.addinivalue_line(
