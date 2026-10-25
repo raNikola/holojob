@@ -32,12 +32,7 @@ Evidence-based job matching. The score measures evidence of what the candidate h
 - Everything under data/ (incl. candidate-intelligence.json), CVs and secrets are private and never committed.
 
 ## Phases
-0. Read-only audit -> per-module decision: Reuse / Adapt / Build / Skip, with source paths, changes needed, effort, risks. Done: docs/redesign/PHASE0_AUDIT.md.
-1. Scoring core: prefilter, requirement extraction, evidence matching + deterministic score, role families. Runs in shadow mode first.
-2. Evidence profile, questionnaire restructure, ask-user loop.
-3. Application tracker: own store independent of discovery (principle 13), stages, append-only event log, channel, CV version, follow-up nudges, import of past applications.
-4. Interview prep, CV / cover letter with fact gate, market report.
-5. Feedback loop: conversion by channel and fit band, calibration against real outcomes.
+The phase list, status and acceptance criteria live in one place: [../ROADMAP.md](../ROADMAP.md).
 
 ## Owner decisions log
 - 2026-10-25 - Privacy: matching may send redacted work history (principle 14), behind the same explicit confirm as the judge.

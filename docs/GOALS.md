@@ -9,12 +9,12 @@ evidence of fit, applying with an honest, well-targeted CV, and arriving prepare
 
 | Goal | Measure |
 |---|---|
-| Rank postings by evidence of fit, not keywords | Fit separates jobs: scores no longer bunch in a narrow band; the top of the list matches the owner's own judgment on a reviewed sample |
+| Rank postings by evidence of fit, not keywords | Fit separates jobs: scores no longer bunch in a narrow band; the top of the list matches the owner's own judgment on a reviewed sample; shadow mode changes no ranking meanwhile ([Phase 1 criterion 2](ROADMAP.md#phase-1-acceptance-criteria---proposed-owner-to-confirm)) |
 | Every score is explainable | Each Fit shows must-have x/y, preferred x/y, unknowns, blockers, confidence and a per-requirement quote |
-| Stable results | The same posting and profile give the same requirements, statuses and Fit across runs (measured on the fixtures) |
+| Stable results | The same posting and profile give the same requirements, statuses and Fit across runs (measured on the fixtures; [Phase 1 criterion 1](ROADMAP.md#phase-1-acceptance-criteria---proposed-owner-to-confirm)) |
 | Honest documents | No tailored CV or cover letter contains a claim or number missing from the CV or confirmed facts (fact gate) |
 | Nothing is lost | An application, its CV version, statuses, notes and history survive the posting disappearing from search |
-| Private by default | No name, contact detail or personal link is ever sent to an AI provider |
+| Private by default | No name, contact detail or personal link is ever sent to an AI provider ([Phase 1 criterion 3](ROADMAP.md#phase-1-acceptance-criteria---proposed-owner-to-confirm)) |
 | Learn from outcomes | Once outcomes are recorded, calibration shows whether higher Fit converts to more interviews |
 | Works beyond product management | A second role family works by configuration, without code changes |
 

@@ -36,7 +36,7 @@ The rule of the codebase: **the model marks facts, the code scores.**
    candidate's history; code verifies the quote and computes Fit, confidence and gates.
    Unknown is never treated as missing - it becomes a question.
 
-Details: [CLAUDE.md](CLAUDE.md) (working notes) and [docs/redesign/DECISIONS.md](docs/redesign/DECISIONS.md).
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [CLAUDE.md](CLAUDE.md) (rules), [docs/GLOSSARY.md](docs/GLOSSARY.md) and [docs/redesign/DECISIONS.md](docs/redesign/DECISIONS.md).
 
 ## Quick start
 
@@ -62,6 +62,16 @@ podman-compose up -d --build     # or: docker compose up -d --build
 
 `docker-compose.yml` maps host port 3073 to the app's 5173 and bind-mounts `./data`.
 Changing `.env` needs `podman-compose up -d --force-recreate`; a restart does not re-read it.
+
+## Data and storage
+
+- The browser's `localStorage` is the master for the profile, the intelligence, the job list and application
+  tracking.
+- The files under `data/` are mirrors: written when the app syncs, and read by the Python pipeline. Everything
+  there except `data/examples/` is git-ignored and private.
+- Edit profile data in the profile form, not in the disk file: a correction made only in
+  `data/profile/candidate-profile.json` is overwritten at the next sync.
+- Shapes of every file: [docs/redesign/data-shapes.md](docs/redesign/data-shapes.md).
 
 ## Pipeline
 
@@ -121,15 +131,33 @@ npm run test:python      # pytest only (host .venv, Python 3.12)
 npm run lint
 ```
 
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `npm run setup` fails on Python | Use Python 3.11 or 3.12 with `python3` on PATH. 3.15 cannot install the pinned pandas 2.3.3 |
+| Discovery stops with a message about the country | Set the country in the candidate intelligence (regenerate it from the profile form) or pass `--country`; there is no default country |
+| Discovery returns few jobs | Check the network and the slugs in `companies/*.json` (`npm run validate:companies`); LinkedIn rate-limits and Serbia is unsupported by Indeed and Glassdoor |
+| Playwright errors | Re-run `npm run setup`, or `.venv/bin/python -m playwright install chromium` |
+| Tailoring fails without an AI provider | `python python/resume_generator/run_tailor.py --job-id <id> --no-llm` still produces the rule-based CV and cover letter |
+| Port in use | Outside the container set `PORT` in `.env` and restart. In the container the app listens on 5173; change the host port in `docker-compose.yml` (`3073:5173`) |
+| `.env` change has no effect in the container | `podman-compose up -d --force-recreate`; a restart does not re-read it |
+| `import pandas` fails with `podman exec holojob python` | The image predates the `ENV PATH` line in the Dockerfile; rebuild it (`podman-compose build`) |
+| `pytest` not found in the container | The image carries no tests; run `npm run test:python` on the host |
+| Jobs not showing in the UI | Run discovery and scoring (`npm run pipeline`); check the Pipeline health card on the Jobs screen |
+
 ## Documentation
 
 - [docs/VISION.md](docs/VISION.md) - what Holojob is and is not
 - [docs/GOALS.md](docs/GOALS.md) - goals and how they are measured
-- [docs/ROADMAP.md](docs/ROADMAP.md) - phases
+- [docs/ROADMAP.md](docs/ROADMAP.md) - phases and Phase 1 acceptance criteria
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - how the pipeline, scoring, judge and CV features work today
+- [docs/GLOSSARY.md](docs/GLOSSARY.md) - terms used in the docs
+- [docs/redesign/ENGINE_CONTRACT.md](docs/redesign/ENGINE_CONTRACT.md) - draft JSON contract of the scoring engine
 - [docs/redesign/DECISIONS.md](docs/redesign/DECISIONS.md) - principles and owner decisions
 - [docs/redesign/PHASE0_AUDIT.md](docs/redesign/PHASE0_AUDIT.md) - current state and module decisions
 - [docs/redesign/data-shapes.md](docs/redesign/data-shapes.md) - data files and their shapes
-- [CLAUDE.md](CLAUDE.md) - working notes for the codebase
+- [CLAUDE.md](CLAUDE.md) - rules and conventions for the codebase
 - [docs/holojob/FLOW_AUDIT.md](docs/holojob/FLOW_AUDIT.md) - Holojob flow audit (historical)
 
 ## Credits and license
