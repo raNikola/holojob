@@ -31,6 +31,8 @@ data/jobs/.pipeline.lock
 data/intelligence/*.json
 data/competencies-review.md
 data/competency-candidates.md
+data/competency-audit.md
+data/competency-audit-scratch/
 data/analytics/
 data/audits/
 data/outreach/

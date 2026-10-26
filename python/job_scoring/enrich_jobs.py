@@ -372,11 +372,14 @@ def _reuse_previous(
             used.add(pid)
             req["text"] = by_id[pid]["text"]
             if mapper and pid.startswith(PROVISIONAL_PREFIX):
-                upgraded = mapper.resolve(req, suggested)
+                upgraded, route = mapper.resolve_with_route(req, suggested)
                 if not upgraded["provisional"]:
                     mapper.record_remap(pid, upgraded["id"])
+                    mapper.count_route(route)
                     out.append(upgraded)
                     continue
+            if mapper:
+                mapper.count_route("frame")
             out.append({**req, "id": pid, "provisional": pid.startswith(PROVISIONAL_PREFIX)})
         else:
             out.append(mapper.resolve(req, suggested) if mapper else assign_id(req))
