@@ -97,3 +97,28 @@ def test_main_refuses_an_invalid_list(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(report.competencies, "load", lambda family: [{"id": "Bad Id"}])
     assert report.main(["--frames", str(tmp_path / "none.json"), "--out", str(report.DATA_DIR / "x.json")]) == 1
     assert not (report.DATA_DIR / "x.json").exists()
+
+
+def test_review_lists_every_competency_in_order_with_header_counts():
+    comps = [*COMPS, {"id": "kid", "definition": "A child; not the parent.", "kind": "domain",
+                      "parent": "map-reading", "aliases": ["kid one", "kid two"]}]
+    md = report.review_markdown(comps, "fiction")
+    assert "4 competencies" not in md and "3 competencies, 5 aliases." in md
+    assert md.index("## team-spirit") < md.index("## map-reading") < md.index("## kid")
+    kid = md[md.index("## kid"):]
+    assert "- Kind: domain" in kid and "- Parent: map-reading" in kid
+    assert "- Definition: A child; not the parent." in kid and "  - kid two" in kid
+    assert "Parent" not in md[: md.index("## kid")]
+
+
+def test_write_review_refuses_outside_data_and_invalid_lists(tmp_path, monkeypatch):
+    monkeypatch.setattr(report, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(report.competencies, "load", lambda family: COMPS)
+    with pytest.raises(SystemExit):
+        report.write_review("fiction", tmp_path / "elsewhere.md")
+    out = report.write_review("fiction", tmp_path / "data" / "r.md")
+    assert out.read_text(encoding="utf-8").startswith("# Competency review: fiction")
+    monkeypatch.setattr(report.competencies, "load", lambda family: [{"id": "Bad Id"}])
+    with pytest.raises(SystemExit):
+        report.write_review("fiction", tmp_path / "data" / "r2.md")
+    assert not (tmp_path / "data" / "r2.md").exists()

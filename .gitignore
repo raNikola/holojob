@@ -29,6 +29,7 @@ data/jobs/*.json
 data/jobs/*.csv
 data/jobs/.pipeline.lock
 data/intelligence/*.json
+data/competencies-review.md
 data/analytics/
 data/audits/
 data/outreach/
