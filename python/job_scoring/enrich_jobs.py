@@ -139,8 +139,9 @@ def fact_schema(with_competencies: bool = False) -> dict:
         return FACT_SCHEMA
     schema = copy.deepcopy(FACT_SCHEMA)
     item = schema["schema"]["properties"]["requirements"]["items"]
-    item["required"].append("competency_id")
+    item["required"] += ["competency_id", "covers"]
     item["properties"]["competency_id"] = {"type": ["string", "null"]}
+    item["properties"]["covers"] = {"type": "string", "enum": list(competency_mapping.COVERS)}
     return schema
 
 
@@ -308,7 +309,10 @@ def _coerce(raw: dict) -> dict:
             if not text or not quote or importance not in IMPORTANCES:
                 continue
             kind = str(item.get("kind") or "").strip().lower()
-            suggestion = {"competencyId": str(item.get("competency_id") or "").strip()} if "competency_id" in item else {}
+            suggestion = {
+                "competencyId": str(item.get("competency_id") or "").strip(),
+                "covers": str(item.get("covers") or "").strip().lower(),
+            } if "competency_id" in item else {}
             kept.append({
                 "text": text,
                 "kind": kind if kind in REQUIREMENT_KINDS else "other",
@@ -368,11 +372,12 @@ def _reuse_previous(
         req = dict(req)
         pid = req.pop("previousId", None)
         suggested = req.pop("competencyId", None)
+        covers = req.pop("covers", None)
         if pid in by_id and pid not in used:
             used.add(pid)
             req["text"] = by_id[pid]["text"]
             if mapper and pid.startswith(PROVISIONAL_PREFIX):
-                upgraded, route = mapper.resolve_with_route(req, suggested)
+                upgraded, route = mapper.resolve_with_route(req, suggested, covers)
                 if not upgraded["provisional"]:
                     mapper.record_remap(pid, upgraded["id"])
                     mapper.count_route(route)
@@ -382,7 +387,7 @@ def _reuse_previous(
                 mapper.count_route("frame")
             out.append({**req, "id": pid, "provisional": pid.startswith(PROVISIONAL_PREFIX)})
         else:
-            out.append(mapper.resolve(req, suggested) if mapper else assign_id(req))
+            out.append(mapper.resolve(req, suggested, covers) if mapper else assign_id(req))
     return out
 
 
