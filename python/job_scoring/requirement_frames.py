@@ -55,12 +55,27 @@ def frame_of(requirements: list[dict]) -> list[dict]:
     return [{k: r.get(k) for k in FRAME_FIELDS} for r in requirements if r.get("id")]
 
 
-def previous_for(frames: dict, job: dict) -> list[dict]:
-    """The stored frame for this ad, else the requirements on the job's own llmFacts, else none."""
+def apply_remap(frames: dict, remap: dict[str, str]) -> int:
+    """Rewrite in place every frame id that has gained a canonical id (prov:<hash> -> id); the number changed."""
+    changed = 0
+    for frame in frames.values():
+        for r in frame:
+            if r.get("id") in remap:
+                r["id"] = remap[r["id"]]
+                changed += 1
+    return changed
+
+
+def previous_for(frames: dict, job: dict, remap: dict[str, str] | None = None) -> list[dict]:
+    """The stored frame for this ad, else the requirements on the job's own llmFacts, else none.
+
+    Ids that have since gained a canonical id (the remap table) come back as that id.
+    """
     stored = frames.get(frame_key(job))
-    if stored:
-        return stored
-    return frame_of(((job.get("llmFacts") or {}).get("requirements")) or [])
+    frame = stored or frame_of(((job.get("llmFacts") or {}).get("requirements")) or [])
+    if not remap:
+        return frame
+    return [{**r, "id": remap.get(r["id"], r["id"])} for r in frame]
 
 
 def remember(frames: dict, job: dict, facts: dict) -> None:

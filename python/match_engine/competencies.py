@@ -21,8 +21,7 @@ import json
 import re
 from pathlib import Path
 
-from enrich_jobs import REQUIREMENT_KINDS
-from requirement_ids import canonical_id, dictionary_terms_in, load_dictionary
+from requirement_ids import REQUIREMENT_KINDS, canonical_id, dictionary_terms_in, load_dictionary
 
 from .normalize import normalize
 
