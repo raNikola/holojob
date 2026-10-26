@@ -20,6 +20,10 @@ DICTIONARY_FILE = Path(__file__).resolve().parents[2] / "src" / "data" / "skills
 
 PROVISIONAL_PREFIX = "prov:"
 
+# ENGINE_CONTRACT.md section 3.1. Work authorization, location, salary and
+# role family are gates, not requirements.
+REQUIREMENT_KINDS = {"skill", "experience", "domain", "education", "certification", "language", "other"}
+
 # A requirement of these kinds that names a skill is about that skill ("5+
 # years of Python"). A certification, a degree or a spoken language that
 # mentions one is a different competency ("AWS Certified Solutions Architect"

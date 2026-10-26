@@ -27,6 +27,15 @@ def _requirement_frames_in_tmp(tmp_path, monkeypatch):
     monkeypatch.setattr(requirement_frames, "FRAMES_PATH", tmp_path / "requirement-frames.json")
 
 
+@pytest.fixture(autouse=True)
+def _competency_files_in_tmp(tmp_path, monkeypatch):
+    """No test reads or writes the server's learned aliases or remap table."""
+    import competency_mapping
+
+    monkeypatch.setattr(competency_mapping, "ALIASES_PATH", tmp_path / "competency-aliases.json")
+    monkeypatch.setattr(competency_mapping, "REMAP_PATH", tmp_path / "requirement-remap.json")
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "network: hits a live third-party site; skipped when unreachable"
