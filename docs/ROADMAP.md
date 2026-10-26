@@ -47,6 +47,8 @@ could never be reused. Built in four phases, each measured by the share of provi
    proposes new competencies or aliases, and the audit tool for the accuracy gate (a sample of about 100 real
    requirements: correct, wrong, legitimately provisional). The owner sets the acceptable wrong-merge rate after
    the first measurement.
+   Seed, validator (`python/match_engine/competencies.py`) and report (`npm run competencies:report`, writes
+   `data/competency-report.json`) exist; the audit tool does not yet.
 2. **Mapping in extraction.** The model picks a `competencyId` from the list or NONE; code accepts only listed ids;
    precedence previous frame > alias > dictionary > model suggestion > provisional; pending aliases and the
    `prov:` -> canonical remap table under `data/`; one re-extraction of the stored ads.
