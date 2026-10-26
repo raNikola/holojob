@@ -31,6 +31,7 @@ def req(text, kind="skill", suggested=None, previous=None, **extra):
     r = {"text": text, "kind": kind, "importance": "must", "postingQuote": text, "previousId": previous, **extra}
     if suggested is not None:
         r["competencyId"] = suggested
+        r.setdefault("covers", "none" if suggested.lower() in cm.NONE_ANSWERS | {"none"} else "whole")
     return r
 
 
@@ -196,6 +197,8 @@ def test_coerce_reads_competency_id_only_when_the_model_gave_the_field():
     (null,) = _coerce({"requirements": [{**base, "competency_id": None}]})["requirements"]
     assert "competencyId" not in without
     assert with_["competencyId"] == "kazoo-playing" and null["competencyId"] == ""
+    (covered,) = _coerce({"requirements": [{**base, "competency_id": "x", "covers": " Part "}]})["requirements"]
+    assert covered["covers"] == "part" and with_["covers"] == ""
 
 
 def test_schema_has_the_field_only_with_a_competency_list():
@@ -204,6 +207,7 @@ def test_schema_has_the_field_only_with_a_competency_list():
     assert "competency_id" not in plain["properties"] and "competency_id" not in plain["required"]
     assert with_["properties"]["competency_id"] == {"type": ["string", "null"]}
     assert set(with_["required"]) == set(with_["properties"])
+    assert with_["properties"]["covers"]["enum"] == ["whole", "part", "none"]
     assert "competency_id" not in enrich_jobs.FACT_SCHEMA["schema"]["properties"]["requirements"]["items"]["properties"]
 
 
@@ -215,7 +219,7 @@ def prompts(monkeypatch):
         seen.append((prompt, schema))
         return {"requirements": [{"text": "Can toot a kazoo", "kind": "skill", "importance": "must",
                                   "posting_quote": "Plays the kazoo.", "previous_id": None,
-                                  "competency_id": "kazoo-playing"}]}
+                                  "competency_id": "kazoo-playing", "covers": "whole"}]}
 
     monkeypatch.setattr(enrich_jobs, "complete_json", complete)
     return seen
@@ -309,3 +313,101 @@ def test_an_invalid_seed_leaves_requirements_unmapped(tmp_path, monkeypatch, pro
     monkeypatch.setattr(cm.competencies, "load", lambda family: [{"id": "Bad Id"}])
     assert cm.load_mapper("fiction") is None
     assert cm.load_mapper(None) is None
+
+
+# --- covers ----------------------------------------------------------------------------
+
+def pick(m, text="Can toot a kazoo", competency="kazoo-playing", covers="whole", kind="skill"):
+    (r,) = _reuse_previous([req(text, kind=kind, suggested=competency, covers=covers)], None, m)
+    return r
+
+
+def test_only_a_whole_cover_is_accepted(tmp_path):
+    m = mapper(tmp_path)
+    assert pick(m)["id"] == "kazoo-playing"
+    assert m.stats == {"accepted": 1}
+
+
+def test_part_leaves_the_requirement_provisional_and_stores_no_alias(tmp_path):
+    m = mapper(tmp_path)
+    r = pick(m, "Five years of kazoo playing", covers="part")
+    assert r["provisional"] is True and r["id"] == provisional_id("Five years of kazoo playing")
+    assert m.stats == {"part": 1} and m.parts == [("Five years of kazoo playing", "kazoo-playing")]
+    assert m.learned == {} and m.remap == {}
+    m.save()
+    assert not (tmp_path / "aliases.json").exists()
+
+
+@pytest.mark.parametrize("competency,covers", [
+    (None, "whole"), ("", "part"), ("kazoo-playing", "none"), ("kazoo-playing", ""), ("kazoo-playing", "mostly"),
+])
+def test_a_covers_that_contradicts_the_id_is_an_inconsistency_treated_as_none(tmp_path, competency, covers):
+    m = mapper(tmp_path)
+    r = _reuse_previous([{**req("Can toot a kazoo"), "competencyId": competency or "", "covers": covers}], None, m)[0]
+    assert r["provisional"] is True
+    assert m.stats == {"inconsistent": 1} and m.learned == {}
+
+
+def test_none_with_no_id_is_a_plain_none_even_without_a_readable_covers(tmp_path):
+    m = mapper(tmp_path)
+    for covers in ("none", "", "garbage"):
+        _reuse_previous([{**req("Broad thing"), "competencyId": "", "covers": covers}], None, m)
+    assert m.stats == {"none": 3}
+
+
+def test_whole_still_needs_the_id_on_the_list_and_the_kind(tmp_path):
+    m = mapper(tmp_path)
+    assert pick(m, "Invented", competency="made-up")["provisional"]
+    assert pick(m, "Knows juggling", competency="juggling-degree")["provisional"]
+    assert m.stats == {"rejected: not on the list": 1, "rejected: kind differs": 1}
+    assert m.kind_rejections == {("skill", "education"): 1}
+
+
+def test_a_part_naming_an_id_off_the_list_is_a_rejection_not_a_part(tmp_path):
+    m = mapper(tmp_path)
+    pick(m, "Something", competency="made-up", covers="part")
+    assert m.stats == {"rejected: not on the list": 1} and m.parts == []
+
+
+def test_decisions_record_every_consulted_suggestion(tmp_path):
+    m = mapper(tmp_path)
+    pick(m)
+    pick(m, "Two things", covers="part")
+    _reuse_previous([req("Broad thing", suggested="NONE")], None, m)
+    assert [(d["text"], d["covers"], d["outcome"]) for d in m.decisions] == [
+        ("Can toot a kazoo", "whole", "accepted"), ("Two things", "part", "part"), ("Broad thing", "none", "none")]
+
+
+def test_the_prompt_rules_and_examples():
+    rule = cm.COMPETENCY_RULE
+    assert '"whole"' in rule and '"part"' in rule and '"none"' in rule and "When in doubt" in rule
+    examples = [line for line in rule.splitlines() if line.startswith('- "') and "->" in line]
+    assert 6 <= len(examples) <= 8
+    assert {e.rsplit(",", 1)[-1].split("(")[0].strip() for e in examples} == {"whole", "part", "none"}
+    assert any("years" in e for e in examples) and any(" and " in e or " or " in e for e in examples)
+
+
+# --- the kind table ------------------------------------------------------------------------
+
+def test_the_shipped_table_relaxes_only_the_soft_kinds():
+    assert cm.KIND_GROUPS == (frozenset({"skill", "experience", "other"}),)
+    assert cm.kinds_compatible("experience", "skill") and cm.kinds_compatible("other", "skill")
+    assert not cm.kinds_compatible("experience", "domain") and not cm.kinds_compatible("education", "experience")
+
+
+def test_an_empty_table_is_strict_and_a_group_relaxes_its_kinds(monkeypatch):
+    monkeypatch.setattr(cm, "KIND_GROUPS", ())
+    assert cm.kinds_compatible("skill", "skill") and not cm.kinds_compatible("skill", "experience")
+    monkeypatch.setattr(cm, "KIND_GROUPS", (frozenset({"skill", "experience", "other"}),))
+    assert cm.kinds_compatible("skill", "experience") and cm.kinds_compatible("other", "skill")
+    assert not cm.kinds_compatible("domain", "skill") and not cm.kinds_compatible("education", "other")
+    assert cm.kinds_compatible("domain", "domain")
+
+
+def test_the_table_changes_acceptance(tmp_path, monkeypatch):
+    m = mapper(tmp_path)
+    monkeypatch.setattr(cm, "KIND_GROUPS", ())
+    assert pick(m, "Plays kazoo for years", kind="experience")["provisional"]
+    monkeypatch.setattr(cm, "KIND_GROUPS", (frozenset({"skill", "experience", "other"}),))
+    assert pick(m, "Plays kazoo for years", kind="experience")["id"] == "kazoo-playing"
+    assert pick(m, "Knows juggling", competency="juggling-degree")["provisional"], "education stays strict"

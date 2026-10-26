@@ -29,6 +29,20 @@ REMAP_PATH = ROOT / "data" / "requirement-remap.json"
 
 PENDING, REVIEWED = "pending", "reviewed"
 NONE_ANSWERS = {"", "none", "null"}
+COVERS = ("whole", "part", "none")
+
+# Kinds the model and the seed may disagree about without a rejection. Each
+# group is a set of interchangeable kinds; a kind in no group must match
+# exactly. The soft kinds are interchangeable (audit 2c-2b: 17 of 23 kind
+# rejections were between them); domain and education stay strict. An empty
+# tuple makes the check strict again.
+KIND_GROUPS: tuple[frozenset, ...] = (frozenset({"skill", "experience", "other"}),)
+
+
+def kinds_compatible(requirement_kind: str | None, competency_kind: str | None) -> bool:
+    return requirement_kind == competency_kind or any(
+        requirement_kind in g and competency_kind in g for g in KIND_GROUPS
+    )
 
 COMPETENCIES_BLOCK = """
 === COMPETENCIES (a fixed list of requirement ids with their definitions) ===
@@ -37,14 +51,35 @@ COMPETENCIES_BLOCK = """
 """
 
 COMPETENCY_FIELD = """,
-      "competency_id": "<an id from COMPETENCIES, or null>\""""
+      "competency_id": "<an id from COMPETENCIES, or null>",
+      "covers": "whole" | "part" | "none\""""
 
 COMPETENCY_RULE = """
-13. competency_id: pick an id from COMPETENCIES only where the requirement is \
-that competency at the same or a narrower scope, as its definition says. \
-Answer null where the requirement is broader than the competency, names two \
-competencies, or is not clearly covered by one. Never force a match, and \
-never invent an id: null is the right answer for most requirements.
+13. competency_id and covers. A competency here is one fixed piece of content. \
+Pick an id from COMPETENCIES only where the competency covers the requirement, \
+and say how much of it with covers:
+- "whole": the competency covers ALL of the requirement, every condition, \
+domain, tool or second activity it names. Use it only for a requirement that \
+names exactly one competency's content and nothing more.
+- "part": the competency covers only one component of a requirement that \
+names more than one thing, or the requirement adds a condition the \
+competency does not carry (a number of years, a level, a named industry or \
+tool). Give the id of the component it covers.
+- "none": no competency fits; competency_id is then null.
+When in doubt, answer "part" or "none". Never force a match and never invent \
+an id: use only ids listed in COMPETENCIES. null is the right answer for most \
+requirements.
+
+Illustration only, with an invented list: lantern-making ("making lanterns"), \
+bridge-inspection ("inspecting bridges for faults"). Not part of COMPETENCIES.
+- "Lantern making skills" -> lantern-making, whole
+- "Able to inspect bridges for faults" -> bridge-inspection, whole
+- "5+ years of lantern making" -> lantern-making, part (adds a number of years)
+- "Lantern making for museum exhibitions" -> lantern-making, part (adds a named domain)
+- "Inspects bridges and writes the repair budget" -> bridge-inspection, part (a second activity)
+- "Lantern making or bridge inspection" -> lantern-making, part (names two competencies)
+- "Cheerful and punctual" -> null, none
+- "Comfortable working near the harbour" -> null, none
 """
 
 
@@ -93,6 +128,9 @@ class Mapper:
         self.stats: Counter = Counter()  # what the model's suggestions came to
         self.routes: Counter = Counter()  # how each requirement got its id: frame, alias, dictionary, model, provisional
         self.picks: list[tuple[str, str]] = []  # (text, competency id) of every accepted suggestion
+        self.parts: list[tuple[str, str]] = []  # (text, competency id) of every "part" answer
+        self.kind_rejections: Counter = Counter()  # (requirement kind, competency kind) of picks the kind check refused
+        self.decisions: list[dict] = []  # every suggestion consulted: text, id, covers, outcome
         self._lock = threading.Lock()
         self._dirty = False
 
@@ -117,29 +155,52 @@ class Mapper:
             return REVIEWED if learned.get("status") == REVIEWED else PENDING
         return None
 
-    def _suggestion(self, requirement: dict, suggested: str | None) -> str | None:
-        """The model's competencyId if code accepts it; every outcome is counted."""
+    def _suggestion(self, requirement: dict, suggested: str | None, covers: str | None = None) -> str | None:
+        """The model's competencyId if code accepts it; every outcome is counted.
+
+        Accepted only for covers "whole", an id on the list, and a compatible kind.
+        "part" leaves the requirement provisional and stores nothing. A covers
+        that contradicts the id (whole with no id, none with an id, part with
+        no id, or no readable covers with an id) is an inconsistency, treated as none.
+        """
         answer = (suggested or "").strip()
-        if answer.lower() in NONE_ANSWERS:
-            self.stats["none"] += 1
-            return None
+        has_id = answer.lower() not in NONE_ANSWERS
+        said = (covers or "").strip().lower()
+        covers_read = said if said in COVERS else None
+        text = str(requirement.get("text"))
+
+        def decide(outcome: str, result: str | None = None) -> str | None:
+            self.stats[outcome] += 1
+            self.decisions.append({"text": text, "id": answer if has_id else None, "covers": covers_read or "unreadable",
+                                   "outcome": outcome})
+            return result
+
+        if not has_id:
+            if covers_read == "whole" or covers_read == "part":
+                return decide("inconsistent")
+            return decide("none")
+        if covers_read in (None, "none"):
+            return decide("inconsistent")
         comp = self.by_id.get(answer)
         if comp is None:
-            self.stats["rejected: not on the list"] += 1
-            return None
-        if comp["kind"] != requirement.get("kind"):
-            self.stats["rejected: kind differs"] += 1
-            return None
-        self.stats["accepted"] += 1
-        return answer
+            return decide("rejected: not on the list")
+        if covers_read == "part":
+            self.parts.append((text, answer))
+            return decide("part")
+        if not kinds_compatible(requirement.get("kind"), comp["kind"]):
+            self.kind_rejections[(requirement.get("kind"), comp["kind"])] += 1
+            return decide("rejected: kind differs")
+        return decide("accepted", answer)
 
-    def resolve(self, requirement: dict, suggested: str | None = None) -> dict:
+    def resolve(self, requirement: dict, suggested: str | None = None, covers: str | None = None) -> dict:
         """The requirement with `id` and `provisional` set: alias > dictionary term > accepted suggestion > hash."""
-        resolved, route = self.resolve_with_route(requirement, suggested)
+        resolved, route = self.resolve_with_route(requirement, suggested, covers)
         self.count_route(route)
         return resolved
 
-    def resolve_with_route(self, requirement: dict, suggested: str | None = None) -> tuple[dict, str]:
+    def resolve_with_route(
+        self, requirement: dict, suggested: str | None = None, covers: str | None = None
+    ) -> tuple[dict, str]:
         """resolve(), and the route taken: "alias", "dictionary", "model" or "provisional"."""
         text = requirement.get("text")
         with self._lock:
@@ -150,7 +211,7 @@ class Mapper:
             assigned = assign_id(requirement)
             if not assigned["provisional"]:
                 return assigned, "dictionary"
-            cid = self._suggestion(requirement, suggested)
+            cid = self._suggestion(requirement, suggested, covers)
             if cid:
                 self.learned[competencies.alias_key(text)] = {"competencyId": cid, "status": PENDING}
                 self.picks.append((str(text), cid))
