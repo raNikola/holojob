@@ -30,6 +30,7 @@ data/jobs/*.csv
 data/jobs/.pipeline.lock
 data/intelligence/*.json
 data/competencies-review.md
+data/competency-candidates.md
 data/analytics/
 data/audits/
 data/outreach/

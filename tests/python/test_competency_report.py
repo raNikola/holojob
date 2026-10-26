@@ -122,3 +122,32 @@ def test_write_review_refuses_outside_data_and_invalid_lists(tmp_path, monkeypat
     with pytest.raises(SystemExit):
         report.write_review("fiction", tmp_path / "data" / "r2.md")
     assert not (tmp_path / "data" / "r2.md").exists()
+
+
+def test_candidates_are_the_most_frequent_uncovered_groups_with_their_closest():
+    frames = {
+        "ad1": [req("Plays the kazoo"), req("Strong team spirit"), req("Team spirited people"), req("Folds maps")],
+        "ad2": [req("plays the kazoo."), req("Folds maps"), req("Map readin")],
+        "ad3": [req("Plays the kazoo"), req("Plays the kazoo!"), req("Juggles")],
+    }
+    rows = report.candidate_rows(frames, COMPS, limit=2)
+    assert [r["text"] for r in rows] == ["plays the kazoo", "folds maps"]
+    assert rows[0]["ads"] == 3 and rows[0]["examples"][0] == "Plays the kazoo"
+    assert len(rows[0]["examples"]) <= 3 and rows[0]["closest"] is None
+    everything = {r["text"]: r for r in report.candidate_rows(frames, COMPS)}
+    assert "strong team spirit" not in everything and "map readin" not in everything
+    assert everything["team spirited people"]["closest"]["competency"] == "team-spirit"
+    assert 0 < everything["team spirited people"]["closest"]["similarity"] <= 1
+
+
+def test_candidates_file_is_written_under_data_only(tmp_path, monkeypatch):
+    monkeypatch.setattr(report, "DATA_DIR", tmp_path / "data")
+    frames = {"ad1": [req("Plays the kazoo")], "ad2": [req("Plays the kazoo")]}
+    with pytest.raises(SystemExit):
+        report.write_candidates(frames, COMPS, tmp_path / "elsewhere.md")
+    out = report.write_candidates(frames, COMPS, tmp_path / "data" / "c.md")
+    text = out.read_text(encoding="utf-8")
+    assert "## plays the kazoo" in text and "- Ads: 2" in text and "- Closest: none" in text
+    with pytest.raises(SystemExit):
+        report.write_candidates(frames, [{"id": "Bad Id"}], tmp_path / "data" / "c2.md")
+    assert not (tmp_path / "data" / "c2.md").exists()
