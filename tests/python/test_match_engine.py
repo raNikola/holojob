@@ -283,9 +283,17 @@ def test_a_spoken_language_is_met_without_asking_the_model():
     assert "Serbian (native)" not in fake.prompts[0]
 
 
-def test_an_unlisted_language_nobody_mentions_is_missing():
+def test_an_unlisted_language_nobody_mentions_is_unknown():
     outcome = _run(Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0))),
                    candidate=_language_candidate(["German (C1)"]))
+    english = next(r for r in outcome.output["requirements"] if r["kind"] == "language")
+    assert (english["status"], english["strength"], english["evidenceId"]) == ("UNKNOWN", 0, None)
+
+
+def test_a_language_confirmed_as_not_spoken_is_missing():
+    candidate = _language_candidate(["German (C1)"])
+    candidate["gates"]["languagesNotSpoken"] = ["English"]
+    outcome = _run(Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0))), candidate=candidate)
     english = next(r for r in outcome.output["requirements"] if r["kind"] == "language")
     assert (english["status"], english["strength"], english["evidenceId"]) == ("MISSING", 0, None)
 

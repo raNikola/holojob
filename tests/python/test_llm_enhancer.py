@@ -199,7 +199,7 @@ def test_capped_jobs_in_a_run_are_never_sent(intelligence):
         "location": "Remote",
         "description": "Run sprints and chase delivery dates. " * 10,
         "jobUrl": "https://example.com/1",
-        "llmFacts": {"roleTrack": "project_delivery", "workMode": "remote"},
+        "llmFacts": {"roleTrack": "project_delivery", "roleTrackEvidence": "Run sprints and chase delivery dates.", "workMode": "remote"},
     }
     # Off track for a product candidate; with no family set nothing is off track.
     result = score_jobs([job], {**intelligence, "roleFamily": "product"}, enhancer(stub))[0]

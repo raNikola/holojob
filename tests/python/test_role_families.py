@@ -62,7 +62,7 @@ def _job(track):
         "location": "Remote",
         "description": "Own the roadmap, discovery, stakeholders, B2B SaaS platform, APIs.",
         "remote": "remote",
-        "llmFacts": {"roleTrack": track},
+        "llmFacts": {"roleTrack": track, "roleTrackEvidence": "Own the roadmap and discovery."},
     }
 
 
@@ -73,7 +73,7 @@ def _job(track):
         ("product", "product_ownership", False),
         ("product", "project_delivery", True),
         ("product", "engineering", True),
-        ("product", "other", True),
+        ("product", "other", False),
         ("engineering", "engineering", False),
         ("engineering", "product_management", True),
     ],
@@ -85,3 +85,10 @@ def test_off_track_cap_follows_the_family(family, track, capped):
     assert (reason in result["reasons"]) is capped
     if capped:
         assert result["matchScore"] <= OFF_TRACK_CAP
+
+
+def test_a_track_without_evidence_does_not_cap():
+    job = _job("engineering")
+    job["llmFacts"].pop("roleTrackEvidence")
+    result = score_job(job, {"roleFamily": "product"})
+    assert not any(r.startswith("Capped: the ad describes") for r in result["reasons"])

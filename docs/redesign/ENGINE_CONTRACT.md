@@ -34,6 +34,7 @@ evidence); code verifies both quotes.
 | `candidate.gates.workAuthorization` | object | Where the candidate may work without sponsorship and whether a sponsored role is acceptable (`jobFitPreferences.workAuthorization`). |
 | `candidate.gates.allowedLocations` | string[] | Places the candidate accepts; empty gates nothing. |
 | `candidate.gates.languages` | string[] | Spoken languages with level, for example `Serbian (native)`. Empty means unstated, not "none". |
+| `candidate.gates.languagesNotSpoken` | string[] (optional) | Language names the owner confirmed they do not speak (profile `basicProfile.languagesNotSpoken`, default empty, present only when set). Only these can fail the language gate or settle a language requirement as MISSING; a required language that is merely unlisted is UNKNOWN. |
 | `candidate.gates.minSalaryEur` | number or null | Monthly floor in EUR; null when unset. |
 | `candidate.gates.preferredLocations`, `remotePreference`, `relocation`, `country` | string[] / string or null | The commute and relocation preferences `location_match.py` reads; the location gate reuses that logic. |
 
@@ -111,6 +112,7 @@ anywhere else that can reach a provider.
             "workAuthorization": { "type": "object" },
             "allowedLocations": { "type": "array", "items": { "type": "string" } },
             "languages": { "type": "array", "items": { "type": "string" } },
+            "languagesNotSpoken": { "type": "array", "items": { "type": "string" } },
             "minSalaryEur": { "type": ["number", "null"], "minimum": 0 },
             "preferredLocations": { "type": "array", "items": { "type": "string" } },
             "remotePreference": { "type": ["string", "null"] },

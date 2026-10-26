@@ -168,3 +168,53 @@ def test_scoring_with_the_flag_but_no_judge_calls_nothing(scoring, monkeypatch):
     out = scoring()
     meta = out["meta"]["engineShadow"]
     assert meta["enabled"] is True and meta["matched"] == 0 and "error" not in meta
+
+
+# --- the cheap gates before the top-N cut (all data fictional) ------------------------
+
+DE = {"id": "de", "provisional": False, "text": "Fluent German", "kind": "language", "importance": "must",
+      "postingQuote": "Fluent German required"}
+EN_CAND = {**CANDIDATE, "gates": {"languages": ["English (fluent)"]}}
+NO_DE_CAND = {**CANDIDATE, "gates": {"languages": ["English (fluent)"], "languagesNotSpoken": ["German"]}}
+
+
+def judged(tmp_path, candidate, limit):
+    return ShadowEngine(candidate, judge=True, provider="test", model="m", cache_path=tmp_path / "engine.json",
+                        limit=limit, complete=Fake(), workers=1)
+
+
+def german(job_id, score):
+    return job(job_id, score, requirements=(REQ, DE), description=DESCRIPTION + "\nFluent German required")
+
+
+def test_a_confirmed_fail_is_excluded_and_the_next_ad_takes_its_place(tmp_path):
+    jobs = [german("a", 90), job("b", 80), job("c", 70)]
+    eng = judged(tmp_path, NO_DE_CAND, limit=2)
+    assert eng.plan(jobs) == {"b", "c"}
+    assert eng.excluded == {"language": 1, "work_authorization": 0, "role_family": 0}
+    out = eng.apply(jobs)
+    assert "engineShadow" not in out[0] and eng.counts["excluded"] == 1 and eng.counts["matched"] == 2
+
+
+def test_an_unknown_gate_never_excludes_and_does_not_move_the_score(tmp_path):
+    jobs = [german("a", 90), job("b", 80)]
+    eng = judged(tmp_path, EN_CAND, limit=1)
+    assert eng.plan(jobs) == {"a"}
+    assert sum(eng.excluded.values()) == 0
+    out = {j["jobId"]: j for j in eng.apply(jobs)}
+    assert out["a"]["matchScore"] == 90
+    plain = judged(tmp_path, EN_CAND, limit=2).apply([job("b", 80)])[0]["engineShadow"]
+    unknown = [r for r in out["a"]["engineShadow"]["requirements"] if r["kind"] == "language"][0]
+    assert unknown["status"] == "UNKNOWN"
+    assert out["a"]["engineShadow"]["fit"] == plain["fit"]
+    assert out["a"]["engineShadow"]["confidence"] <= plain["confidence"]
+
+
+def test_a_role_family_fail_with_evidence_is_excluded(tmp_path):
+    off = job("a", 90)
+    off["llmFacts"] = {**off["llmFacts"], "roleTrack": "engineering", "roleTrackEvidence": "Writes Go services."}
+    guess = job("g", 85)
+    guess["llmFacts"] = {**guess["llmFacts"], "roleTrack": "other"}
+    eng = judged(tmp_path, CANDIDATE, limit=2)
+    assert eng.plan([off, guess, job("b", 80)]) == {"g", "b"}
+    assert eng.excluded["role_family"] == 1
