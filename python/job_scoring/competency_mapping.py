@@ -90,7 +90,9 @@ class Mapper:
             if isinstance(v, dict) and v.get("competencyId") in self.by_id
         }
         self.remap = load_remap(self.remap_path)
-        self.stats: Counter = Counter()
+        self.stats: Counter = Counter()  # what the model's suggestions came to
+        self.routes: Counter = Counter()  # how each requirement got its id: frame, alias, dictionary, model, provisional
+        self.picks: list[tuple[str, str]] = []  # (text, competency id) of every accepted suggestion
         self._lock = threading.Lock()
         self._dirty = False
 
@@ -133,22 +135,33 @@ class Mapper:
 
     def resolve(self, requirement: dict, suggested: str | None = None) -> dict:
         """The requirement with `id` and `provisional` set: alias > dictionary term > accepted suggestion > hash."""
+        resolved, route = self.resolve_with_route(requirement, suggested)
+        self.count_route(route)
+        return resolved
+
+    def resolve_with_route(self, requirement: dict, suggested: str | None = None) -> tuple[dict, str]:
+        """resolve(), and the route taken: "alias", "dictionary", "model" or "provisional"."""
         text = requirement.get("text")
         with self._lock:
             cid = self.alias_hit(text)
             if cid:
                 self._gain(text, cid)
-                return {**requirement, "id": cid, "provisional": False}
+                return {**requirement, "id": cid, "provisional": False}, "alias"
             assigned = assign_id(requirement)
             if not assigned["provisional"]:
-                return assigned
+                return assigned, "dictionary"
             cid = self._suggestion(requirement, suggested)
             if cid:
                 self.learned[competencies.alias_key(text)] = {"competencyId": cid, "status": PENDING}
+                self.picks.append((str(text), cid))
                 self._gain(text, cid)
                 self._dirty = True
-                return {**requirement, "id": cid, "provisional": False}
-            return assigned
+                return {**requirement, "id": cid, "provisional": False}, "model"
+            return assigned, "provisional"
+
+    def count_route(self, route: str) -> None:
+        with self._lock:
+            self.routes[route] += 1
 
     def _gain(self, text: str | None, cid: str) -> None:
         self.record_remap(provisional_id(text), cid)
