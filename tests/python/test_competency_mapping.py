@@ -411,3 +411,26 @@ def test_the_table_changes_acceptance(tmp_path, monkeypatch):
     monkeypatch.setattr(cm, "KIND_GROUPS", (frozenset({"skill", "experience", "other"}),))
     assert pick(m, "Plays kazoo for years", kind="experience")["id"] == "kazoo-playing"
     assert pick(m, "Knows juggling", competency="juggling-degree")["provisional"], "education stays strict"
+
+
+# --- dry run ---------------------------------------------------------------------------
+
+def test_dry_run_counts_the_calls_and_sends_and_writes_nothing(tmp_path, monkeypatch, prompts, capsys):
+    monkeypatch.setattr(cm.competencies, "load", lambda family: COMPS)
+    before_jobs = None
+    jobs = tmp_path / "jobs.json"
+    jobs.write_text(json.dumps({"jobs": [dict(AD), {**AD, "jobId": "j2", "title": "Other"}]}), encoding="utf-8")
+    before_jobs = jobs.read_bytes()
+    intel = tmp_path / "intel.json"
+    intel.write_text(json.dumps({"roleFamily": "fiction"}), encoding="utf-8")
+    rf.save({rf.frame_key(AD): [{"id": "x", "text": "t", "kind": "skill", "importance": "must"}]})
+    frames_before = rf.FRAMES_PATH.read_bytes()
+    monkeypatch.setattr(sys, "argv", ["enrich_jobs.py", "--jobs", str(jobs), "--intelligence", str(intel),
+                                      "--ledger", str(tmp_path / "ledger.json"), "--dry-run"])
+    assert enrich_jobs.main() == 0
+    out = capsys.readouterr().out
+    assert prompts == [], "no model call"
+    assert "to read now (model calls): 2, of which 1 carry a previous frame" in out
+    assert "3 competencies" in out and "input tokens" in out
+    assert jobs.read_bytes() == before_jobs and rf.FRAMES_PATH.read_bytes() == frames_before
+    assert not (tmp_path / "ledger.json").exists() and not cm.ALIASES_PATH.exists()

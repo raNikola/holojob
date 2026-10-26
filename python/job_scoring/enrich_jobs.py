@@ -391,17 +391,12 @@ def _reuse_previous(
     return out
 
 
-def extract(
-    job: dict, model: str | None, provider: str | None, previous: list[dict] | None = None,
-    mapper: competency_mapping.Mapper | None = None,
-) -> dict:
-    """The ad's facts; `previous` is its last requirement frame (requirement_frames.py), or None.
-
-    With a `mapper` (the role family has a competency list) the prompt lists the
-    competencies and asks for a competencyId per requirement.
-    """
+def build_prompt(
+    job: dict, previous: list[dict] | None = None, mapper: competency_mapping.Mapper | None = None
+) -> str:
+    """The extraction prompt for one ad; with a `mapper` it lists the competencies and asks for a competency_id."""
     description = (job.get("description") or "")[:MAX_DESCRIPTION_CHARS]
-    prompt = PROMPT.format(
+    return PROMPT.format(
         title=job.get("title") or "(not stated)",
         company=job.get("company") or "(not stated)",
         location=job.get("location") or "(not stated)",
@@ -411,6 +406,18 @@ def extract(
         competency_field=competency_mapping.COMPETENCY_FIELD if mapper else "",
         competency_rule=competency_mapping.COMPETENCY_RULE if mapper else "",
     )
+
+
+def extract(
+    job: dict, model: str | None, provider: str | None, previous: list[dict] | None = None,
+    mapper: competency_mapping.Mapper | None = None,
+) -> dict:
+    """The ad's facts; `previous` is its last requirement frame (requirement_frames.py), or None.
+
+    With a `mapper` (the role family has a competency list) the prompt lists the
+    competencies and asks for a competencyId per requirement.
+    """
+    prompt = build_prompt(job, previous, mapper)
     facts = _coerce(
         complete_json(prompt, schema=fact_schema(bool(mapper)), model=model, provider=provider)
     )
@@ -427,6 +434,19 @@ def _role_family(intelligence_path: Path) -> str | None:
     return json.loads(intelligence_path.read_text(encoding="utf-8")).get("roleFamily") or None
 
 
+def _dry_run(args, jobs, pending, skipped, from_ledger, outside, frames, remap, mapper) -> int:
+    """What a real run would do, from the same pending list and the same prompts. Sends nothing, writes nothing."""
+    chars = [len(build_prompt(job, requirement_frames.previous_for(frames, job, remap), mapper)) for _, job in pending]
+    with_frame = sum(1 for _, job in pending if requirement_frames.previous_for(frames, job, remap))
+    print(f"dry run, nothing sent: {len(jobs)} ads in {args.jobs.name}")
+    print(f"  to read now (model calls): {len(pending)}, of which {with_frame} carry a previous frame")
+    print(f"  kept as they are: {skipped} cached ({from_ledger} from the ledger), {outside} outside the allowed locations")
+    print(f"  competency list in the prompt: {'yes, ' + str(len(mapper.comps)) + ' competencies' if mapper else 'no'}")
+    print(f"  prompt size: {sum(chars)} characters in total, about {sum(chars) // 4} input tokens "
+          f"(characters / 4; the answers are not estimated)")
+    return 0
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Extract job facts with an LLM.")
     p.add_argument("--jobs", type=Path, default=JOBS_PATH)
@@ -439,6 +459,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=0, help="stop after N jobs")
     p.add_argument("--force", action="store_true", help="re-read cached jobs")
     p.add_argument("--workers", type=int, default=8, help="parallel calls")
+    p.add_argument("--dry-run", action="store_true", help="count the ads and calls and estimate the prompt size; send nothing")
     p.add_argument(
         "--intelligence",
         type=Path,
@@ -505,6 +526,8 @@ def main() -> int:
     remap = mapper.remap if mapper else competency_mapping.load_remap()
     frames = requirement_frames.load()
     remapped = requirement_frames.apply_remap(frames, remap)
+    if args.dry_run:
+        return _dry_run(args, jobs, pending, skipped, from_ledger, outside, frames, remap, mapper)
     done = failed = 0
     # Every call waits on a network round trip or a subprocess, so a small
     # pool turns a sequential pass into a parallel one. Each worker handles
