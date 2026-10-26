@@ -36,6 +36,30 @@ engine invariants in [ENGINE_CONTRACT.md](redesign/ENGINE_CONTRACT.md) section 5
 fit" is judged by the owner on real runs after shadow mode; "Honest documents" and "Nothing is lost" belong to
 Phases 4 and 3.
 
+## Phase 1 follow-up: stable requirement ids - PLANNED
+
+Decided 2026-10-26 ([DECISIONS.md](redesign/DECISIONS.md)). Today 92% of requirement ids are provisional (a hash of
+the ad's own wording), so a requirement worded differently in another ad gets another id and the owner's answers
+could never be reused. Built in four phases, each measured by the share of provisional ids before moving on:
+
+1. **Seed, report and audit tool.** The curated competency list for the product family
+   (`src/data/competencies/product.json`), a local report (no model call) that groups frequent provisional texts and
+   proposes new competencies or aliases, and the audit tool for the accuracy gate (a sample of about 100 real
+   requirements: correct, wrong, legitimately provisional). The owner sets the acceptable wrong-merge rate after
+   the first measurement.
+2. **Mapping in extraction.** The model picks a `competencyId` from the list or NONE; code accepts only listed ids;
+   precedence previous frame > alias > dictionary > model suggestion > provisional; pending aliases and the
+   `prov:` -> canonical remap table under `data/`; one re-extraction of the stored ads.
+3. **Version split.** `evidenceVersion` and `answersVersion`; answers applied in code on top of cached verdicts
+   ([ENGINE_CONTRACT.md](redesign/ENGINE_CONTRACT.md) 6.1).
+4. **Gate quotes into extraction,** so an ad whose requirements all resolve locally makes zero matcher calls.
+
+Deferred (TODO, not scheduled):
+
+- A per-competency verdict cache keyed by (competency id, qualifier, evidence version), so a verdict is reused across
+  ads without a call.
+- Local embeddings as an extra mapping step, only if the mapping proves noisy in the audit.
+
 ## Later
 
 - Multi-device access with server-side storage as the master.

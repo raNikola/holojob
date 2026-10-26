@@ -418,6 +418,27 @@ deterministic settings where the provider allows: OpenAI gets temperature 0 and 
 best effort, so stability is measured with tolerances (`match_engine/stability.py`, ROADMAP.md Phase 1) and never
 assumed byte-identical. A model that rejects one of these settings is asked again without it.
 
+### 6.1 Planned: evidence and answers versions (not yet implemented)
+
+Owner decision of 2026-10-26 ([DECISIONS.md](DECISIONS.md)). The table and cache key above describe the code as it
+is today; this subsection describes the change that is planned and is not built. Until it is, `profileVersion`
+stays one hash that covers confirmed facts and gates.
+
+`profileVersion` is split in two:
+
+| Version | Covers | Invalidates cached model verdicts |
+|---|---|---|
+| `evidenceVersion` | The evidence index, the role family, `promptVersion` and `engineVersion`. | Yes. It is the only thing that does. |
+| `answersVersion` | Confirmed facts and gate values. | No. |
+
+The cache key becomes `adFingerprint` + `evidenceVersion`. The matcher sends every requirement of the ad to the model
+and caches its verdicts under that key. Confirmed answers and gates are then applied in code on top of the cached
+verdicts at every scoring run, which costs no model call: an answer overrides a status, never a stored model answer.
+A new answer therefore changes the result but never forces a re-match. An answer applies only to a requirement that
+resolves to the same canonical competency and carries no stricter qualifier than the answer (DECISIONS.md, 2026-10-26).
+The output echoes both versions. Gate quotes come from the extraction step (which never sees the candidate), so an ad
+whose requirements all resolve locally makes no matcher call.
+
 Contract version `0.x` may change without notice. From `1.0` a change to a field or enum is a major version.
 
 ## 7. Errors
