@@ -31,11 +31,14 @@ import requirement_frames  # noqa: E402
 from requirement_ids import PROVISIONAL_PREFIX  # noqa: E402
 
 NEAR_THRESHOLD = 0.85
+SHOWN_THRESHOLD = 0.5  # the candidates file shows a closest competency from this similarity up
 DEFAULT_MIN_ADS = 2
 EXAMPLES_PER_GROUP = 3
 DATA_DIR = ROOT / "data"
 DEFAULT_OUT = DATA_DIR / "competency-report.json"
 REVIEW_OUT = DATA_DIR / "competencies-review.md"
+CANDIDATES_OUT = DATA_DIR / "competency-candidates.md"
+CANDIDATE_LIMIT = 40
 
 
 def provisional_groups(frames: dict) -> dict[str, dict]:
@@ -74,8 +77,8 @@ def baseline(groups: dict[str, dict], index: dict[str, str]) -> dict[str, int]:
     return {k: out[k] for k in ("occurrences", "occurrencesResolved", "distinctTexts", "distinctTextsResolved", "ads", "adsWithAResolved")}
 
 
-def closest(key: str, index: dict[str, str]) -> dict | None:
-    """The competency whose alias is most like the key, or None below NEAR_THRESHOLD."""
+def closest(key: str, index: dict[str, str], threshold: float = NEAR_THRESHOLD) -> dict | None:
+    """The competency whose alias is most like the key, or None below the threshold."""
     best_alias, best = None, 0.0
     matcher = SequenceMatcher(autojunk=False)
     matcher.set_seq2(key)
@@ -86,7 +89,7 @@ def closest(key: str, index: dict[str, str]) -> dict | None:
         ratio = matcher.ratio()
         if ratio > best:
             best_alias, best = alias, ratio
-    if best_alias is None or best < NEAR_THRESHOLD:
+    if best_alias is None or best < threshold:
         return None
     return {"competency": index[best_alias], "alias": best_alias, "similarity": round(best, 3)}
 
@@ -138,6 +141,46 @@ def review_markdown(comps: list[dict], family: str) -> str:
     return "\n".join(lines)
 
 
+def candidate_rows(frames: dict, comps: list[dict], limit: int = CANDIDATE_LIMIT) -> list[dict]:
+    """The `limit` most frequent groups (by ads) no alias and no near alias covers, each with its closest competency if any."""
+    index = competencies.alias_index(comps)
+    ranked = sorted(provisional_groups(frames).items(), key=lambda kv: (-len(kv[1]["ads"]), kv[0]))
+    rows = []
+    for key, g in ranked:
+        if key in index:
+            continue
+        near = closest(key, index, SHOWN_THRESHOLD)
+        if near and near["similarity"] >= NEAR_THRESHOLD:
+            continue
+        rows.append({"text": key, "ads": len(g["ads"]), "examples": [w for w, _ in g["wordings"].most_common(EXAMPLES_PER_GROUP)], "closest": near})
+        if len(rows) == limit:
+            break
+    return rows
+
+
+def candidates_markdown(rows: list[dict]) -> str:
+    """Ad wordings only, nothing from the profile."""
+    lines = ["# Competency candidates", "", f"{len(rows)} groups with no alias and no close alias, most frequent first.", ""]
+    for r in rows:
+        lines += [f"## {r['text']}", "", f"- Ads: {r['ads']}", "- Examples:"]
+        lines += [f"  - {w}" for w in r["examples"]]
+        near = r["closest"]
+        lines.append(f"- Closest: {near['competency']} (alias {near['alias']!r}, {near['similarity']})" if near else "- Closest: none")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def write_candidates(frames: dict, comps: list[dict], out: Path = CANDIDATES_OUT, limit: int = CANDIDATE_LIMIT) -> Path:
+    """Validate the list and write the candidates file under data/ (SystemExit otherwise)."""
+    problems = competencies.validate(comps)
+    if not comps or problems:
+        raise SystemExit("\n  ".join(["competency list is not usable:", *(problems or ["no list"])]))
+    path = checked_out_path(out)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(candidates_markdown(candidate_rows(frames, comps, limit)), encoding="utf-8")
+    return path
+
+
 def write_review(family: str, out: Path = REVIEW_OUT) -> Path:
     """Validate the family's list and write its review file under data/ (SystemExit otherwise)."""
     comps = competencies.load(family)
@@ -156,12 +199,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-ads", type=int, default=DEFAULT_MIN_ADS, help="smallest group (in ads) to list")
     parser.add_argument("--frames", type=Path, default=None, help="requirement frames file (default: the server's)")
     parser.add_argument("--out", type=Path, default=None, help="output file under data/")
+    parser.add_argument("--candidates", action="store_true", help="write the most frequent new-candidate groups instead of the report")
     parser.add_argument("--review", action="store_true", help="write the Markdown review of the list instead of the report")
     args = parser.parse_args(argv)
 
     if args.review:
         path = write_review(args.family, args.out or REVIEW_OUT)
         print(f"review: {path}")
+        return 0
+    if args.candidates:
+        path = write_candidates(requirement_frames.load(args.frames), competencies.load(args.family), args.out or CANDIDATES_OUT)
+        print(f"candidates: {path}")
         return 0
     args.out = args.out or DEFAULT_OUT
 

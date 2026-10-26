@@ -125,8 +125,8 @@
       ]
     },
     {
-      "id": "cross-functional-collaboration",
-      "definition": "Working productively with other functions such as engineering, design, sales and operations; does not count leading those teams.",
+      "id": "collaboration",
+      "definition": "Working well with colleagues in general; does not count collaboration specifically across functions, which is cross-functional-collaboration.",
       "kind": "skill",
       "aliases": [
         "collaboration",
@@ -134,12 +134,20 @@
         "strong collaboration skills",
         "excellent collaboration skills",
         "teamwork",
-        "team player",
+        "team player"
+      ]
+    },
+    {
+      "id": "cross-functional-collaboration",
+      "definition": "Working productively with other functions such as engineering, design, sales and operations; does not count leading those teams.",
+      "kind": "skill",
+      "aliases": [
         "cross-functional collaboration",
         "collaborating with cross-functional teams",
         "experience collaborating with cross-functional teams",
         "work cross-functionally"
-      ]
+      ],
+      "parent": "collaboration"
     },
     {
       "id": "cross-functional-leadership",
@@ -332,7 +340,6 @@
       "aliases": [
         "technical background",
         "engineering background",
-        "technical experience",
         "background in engineering",
         "strong technical background"
       ]
@@ -917,7 +924,6 @@
         "managing teams",
         "line management",
         "managing a team",
-        "leading teams",
         "experience managing teams"
       ]
     },

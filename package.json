@@ -33,6 +33,7 @@
     "claude:login": "node scripts/claude-auth.js",
     "audit:quality": "bash -c 'source .venv/bin/activate && python python/quality_audit/run_audit.py \"$@\"' --",
     "competencies:report": ".venv/bin/python python/match_engine/competency_report.py",
+    "competencies:candidates": ".venv/bin/python python/match_engine/competency_report.py --candidates",
     "competencies:review": ".venv/bin/python python/match_engine/competency_report.py --review",
     "validate:companies": "node scripts/validate-companies.js"
   },
