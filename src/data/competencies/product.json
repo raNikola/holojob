@@ -1,0 +1,1556 @@
+{
+  "family": "product",
+  "competencies": [
+    {
+      "id": "communication",
+      "definition": "Conveying ideas clearly to others in speech and writing; does not count a single named channel such as presentations or documentation, which have their own entries.",
+      "kind": "skill",
+      "aliases": [
+        "communication",
+        "communication skills",
+        "strong communication skills",
+        "excellent communication skills",
+        "exceptional communication skills",
+        "solid communication skills",
+        "good communication skills",
+        "communicate clearly",
+        "communicate effectively",
+        "clear communication",
+        "excellent communication",
+        "strong communication",
+        "have excellent communication skills",
+        "have strong communication skills"
+      ]
+    },
+    {
+      "id": "written-communication",
+      "definition": "Writing that is clear and well structured for its reader (memos, specs, updates); does not count spoken communication or software documentation tooling.",
+      "kind": "skill",
+      "parent": "communication",
+      "aliases": [
+        "written communication",
+        "written communication skills",
+        "strong written communication",
+        "strong written communication skills",
+        "excellent written communication skills",
+        "exceptional written communication skills",
+        "outstanding written communication skills",
+        "write clearly",
+        "writing skills"
+      ]
+    },
+    {
+      "id": "verbal-communication",
+      "definition": "Speaking clearly and persuasively in conversation and meetings; does not count written work or formal presentations.",
+      "kind": "skill",
+      "parent": "communication",
+      "aliases": [
+        "verbal communication",
+        "verbal communication skills",
+        "oral communication",
+        "oral communication skills",
+        "strong verbal communication skills",
+        "excellent verbal communication skills",
+        "exceptional verbal communication skills",
+        "spoken communication"
+      ]
+    },
+    {
+      "id": "presentation-skills",
+      "definition": "Preparing and delivering presentations to an audience; does not count day-to-day conversation or writing.",
+      "kind": "skill",
+      "parent": "communication",
+      "aliases": [
+        "presentation skills",
+        "presentation",
+        "presentations",
+        "strong presentation skills",
+        "excellent presentation skills",
+        "presentation communication",
+        "presenting"
+      ]
+    },
+    {
+      "id": "executive-communication",
+      "definition": "Communicating and reporting to senior leadership and executives; does not count general stakeholder communication with peers.",
+      "kind": "skill",
+      "parent": "communication",
+      "aliases": [
+        "executive communication",
+        "communicating with executives",
+        "executive presence",
+        "executive-level communication"
+      ]
+    },
+    {
+      "id": "storytelling",
+      "definition": "Shaping facts and strategy into a compelling narrative for an audience; does not count plain reporting.",
+      "kind": "skill",
+      "parent": "communication",
+      "aliases": [
+        "storytelling",
+        "data storytelling",
+        "compelling narratives"
+      ]
+    },
+    {
+      "id": "stakeholder-management",
+      "definition": "Building relationships with, and managing the expectations of, the people a product affects; does not count aligning peers by influence alone or customer research.",
+      "kind": "skill",
+      "aliases": [
+        "stakeholder management",
+        "stakeholder management skills",
+        "stakeholder engagement",
+        "managing stakeholders",
+        "strong stakeholder management skills",
+        "excellent stakeholder management skills",
+        "have strong stakeholder management skills",
+        "solid stakeholder management skills",
+        "stakeholder relationship management"
+      ]
+    },
+    {
+      "id": "influence-without-authority",
+      "definition": "Moving people and decisions without formal authority over them; does not count managing a reporting line.",
+      "kind": "skill",
+      "aliases": [
+        "influence without authority",
+        "influencing",
+        "influencing skills",
+        "influence",
+        "influence stakeholders",
+        "ability to influence without authority",
+        "ability to influence technical and business stakeholders",
+        "influence cross-functional teams"
+      ]
+    },
+    {
+      "id": "cross-functional-collaboration",
+      "definition": "Working productively with other functions such as engineering, design, sales and operations; does not count leading those teams.",
+      "kind": "skill",
+      "aliases": [
+        "collaboration",
+        "collaboration skills",
+        "strong collaboration skills",
+        "excellent collaboration skills",
+        "teamwork",
+        "team player",
+        "cross-functional collaboration",
+        "collaborating with cross-functional teams",
+        "experience collaborating with cross-functional teams",
+        "work cross-functionally"
+      ]
+    },
+    {
+      "id": "cross-functional-leadership",
+      "definition": "Leading initiatives that span several functions or teams without owning them; does not count line management or ordinary collaboration.",
+      "kind": "skill",
+      "aliases": [
+        "cross-functional leadership",
+        "lead cross-functional initiatives",
+        "leading cross-functional teams",
+        "align cross-functional teams",
+        "align diverse stakeholders"
+      ]
+    },
+    {
+      "id": "negotiation",
+      "definition": "Reaching agreements on terms, scope or priorities with another party; does not count general influence.",
+      "kind": "skill",
+      "aliases": [
+        "negotiation",
+        "negotiation skills",
+        "strong negotiation skills",
+        "negotiating"
+      ]
+    },
+    {
+      "id": "facilitation",
+      "definition": "Running workshops and meetings so a group reaches a decision; does not count presenting.",
+      "kind": "skill",
+      "aliases": [
+        "facilitation",
+        "facilitation skills",
+        "workshop facilitation",
+        "facilitating workshops"
+      ]
+    },
+    {
+      "id": "analytical-thinking",
+      "definition": "Breaking a problem into parts and reasoning about it with evidence; does not count operating a specific analytics tool or method.",
+      "kind": "skill",
+      "aliases": [
+        "analytical skills",
+        "analytical thinking",
+        "analytical mindset",
+        "analytical abilities",
+        "analytical ability",
+        "analytical capabilities",
+        "strong analytical skills",
+        "excellent analytical skills",
+        "solid analytical skills",
+        "analytical",
+        "analytical approach"
+      ]
+    },
+    {
+      "id": "problem-solving",
+      "definition": "Finding practical solutions to unclear or difficult problems; does not count purely analytical reporting.",
+      "kind": "skill",
+      "aliases": [
+        "problem-solving",
+        "problem solving",
+        "problem-solving skills",
+        "problem solving skills",
+        "strong problem-solving skills",
+        "solid problem-solving skills",
+        "exceptional problem-solving skills",
+        "problem-solving abilities",
+        "strong problem-solving abilities",
+        "problem-solving ability",
+        "problem-solving capabilities"
+      ]
+    },
+    {
+      "id": "critical-thinking",
+      "definition": "Questioning assumptions and weighing evidence before deciding; does not count problem solving in general.",
+      "kind": "skill",
+      "aliases": [
+        "critical thinking",
+        "critical thinking skills",
+        "strong critical thinking skills"
+      ]
+    },
+    {
+      "id": "strategic-thinking",
+      "definition": "Setting long-term direction and trading off options against goals; does not count planning a single project.",
+      "kind": "skill",
+      "aliases": [
+        "strategic thinking",
+        "strategic thinking skills",
+        "strong strategic thinking",
+        "strategic mindset",
+        "strategic thinker"
+      ]
+    },
+    {
+      "id": "prioritization",
+      "definition": "Ranking competing work by value, cost and urgency and saying no; does not count maintaining a backlog as such.",
+      "kind": "skill",
+      "aliases": [
+        "prioritization",
+        "prioritisation",
+        "prioritization skills",
+        "prioritization ability",
+        "ability to prioritize",
+        "manage competing priorities",
+        "ability to manage competing priorities",
+        "managing competing priorities",
+        "strong prioritization skills"
+      ]
+    },
+    {
+      "id": "decision-making",
+      "definition": "Making sound decisions with incomplete information; does not count using data as the basis, which is data-driven decision making.",
+      "kind": "skill",
+      "aliases": [
+        "decision-making",
+        "decision making",
+        "decision-making skills",
+        "good judgment",
+        "sound judgment",
+        "strong judgment"
+      ]
+    },
+    {
+      "id": "data-driven-decision-making",
+      "definition": "Basing product and business decisions on data and measured results; does not count the technical work of analysing data.",
+      "kind": "skill",
+      "aliases": [
+        "data-driven decision making",
+        "data-driven decision-making",
+        "data driven decision making",
+        "data-driven",
+        "data-driven approach",
+        "data-informed decision making",
+        "data-driven mindset",
+        "data-driven decisions"
+      ]
+    },
+    {
+      "id": "business-acumen",
+      "definition": "Understanding how a business makes money and what drives its results; does not count product judgment or pricing expertise.",
+      "kind": "skill",
+      "aliases": [
+        "business acumen",
+        "strong business acumen",
+        "business judgment",
+        "strong business judgment",
+        "commercial awareness",
+        "commercial mindset",
+        "commercial judgment",
+        "strong commercial judgment",
+        "business sense",
+        "business understanding"
+      ]
+    },
+    {
+      "id": "product-sense",
+      "definition": "Judgment about what makes a product valuable and usable to its users; does not count general business judgment.",
+      "kind": "skill",
+      "aliases": [
+        "product sense",
+        "strong product sense",
+        "product judgment",
+        "strong product judgment",
+        "product judgement",
+        "product instincts",
+        "strong product instincts",
+        "product intuition",
+        "product taste"
+      ]
+    },
+    {
+      "id": "technical-fluency",
+      "definition": "Understanding technology well enough to discuss tradeoffs with engineers; does not count hands-on engineering in a named stack.",
+      "kind": "skill",
+      "aliases": [
+        "technical fluency",
+        "technical acumen",
+        "technical depth",
+        "technical judgment",
+        "strong technical judgment",
+        "technical aptitude",
+        "strong technical foundation",
+        "a strong technical foundation"
+      ]
+    },
+    {
+      "id": "technical-background",
+      "definition": "A past career or education in engineering or another technical field; does not count technical fluency gained only on the job as a product person.",
+      "kind": "experience",
+      "aliases": [
+        "technical background",
+        "engineering background",
+        "technical experience",
+        "background in engineering",
+        "strong technical background"
+      ]
+    },
+    {
+      "id": "customer-empathy",
+      "definition": "Understanding and caring about the situation and feelings of users; does not count running user research.",
+      "kind": "other",
+      "aliases": [
+        "customer empathy",
+        "deep customer empathy",
+        "user empathy",
+        "empathy for customers",
+        "empathy for users"
+      ]
+    },
+    {
+      "id": "customer-centricity",
+      "definition": "Putting customer needs first in decisions; does not count customer research methods.",
+      "kind": "other",
+      "aliases": [
+        "customer-centric",
+        "customer centric",
+        "customer focus",
+        "customer-focused",
+        "customer obsession",
+        "customer-centricity"
+      ]
+    },
+    {
+      "id": "attention-to-detail",
+      "definition": "Noticing and correcting small errors in one's own and others' work; does not count formal quality assurance.",
+      "kind": "other",
+      "aliases": [
+        "attention to detail",
+        "high attention to detail",
+        "strong attention to detail",
+        "excellent attention to detail",
+        "detail-oriented",
+        "detail oriented",
+        "eye for detail"
+      ]
+    },
+    {
+      "id": "organizational-skills",
+      "definition": "Keeping work, information and commitments in order; does not count time management as such.",
+      "kind": "skill",
+      "aliases": [
+        "organizational skills",
+        "organisational skills",
+        "strong organizational skills",
+        "organizational",
+        "well organized"
+      ]
+    },
+    {
+      "id": "time-management",
+      "definition": "Planning one's own time to meet deadlines; does not count prioritizing a team's work.",
+      "kind": "skill",
+      "aliases": [
+        "time management",
+        "time-management",
+        "time-management skills",
+        "strong time-management skills",
+        "time management skills"
+      ]
+    },
+    {
+      "id": "ownership",
+      "definition": "Taking responsibility for an outcome from start to finish; does not count initiative alone.",
+      "kind": "other",
+      "aliases": [
+        "ownership",
+        "high ownership",
+        "strong ownership",
+        "take ownership",
+        "sense of ownership",
+        "ownership mentality"
+      ]
+    },
+    {
+      "id": "initiative",
+      "definition": "Acting without being asked and moving things forward; does not count working alone.",
+      "kind": "other",
+      "aliases": [
+        "initiative",
+        "take initiative",
+        "proactive",
+        "be proactive",
+        "self-starter",
+        "a self-starter",
+        "self-motivation",
+        "self-motivated",
+        "bias toward action",
+        "bias for action"
+      ]
+    },
+    {
+      "id": "independent-work",
+      "definition": "Working without close supervision; does not count taking initiative to start new work.",
+      "kind": "other",
+      "aliases": [
+        "work independently",
+        "ability to work independently",
+        "independent worker",
+        "working independently"
+      ]
+    },
+    {
+      "id": "curiosity",
+      "definition": "A habit of asking questions and learning new things; does not count a stated interest in one subject.",
+      "kind": "other",
+      "aliases": [
+        "curiosity",
+        "intellectual curiosity",
+        "curious mindset",
+        "natural curiosity"
+      ]
+    },
+    {
+      "id": "entrepreneurial-mindset",
+      "definition": "Acting like an owner of the business, comfortable with risk and building something new; does not count having founded a company.",
+      "kind": "other",
+      "aliases": [
+        "entrepreneurial mindset",
+        "entrepreneurial thinking",
+        "entrepreneurial",
+        "entrepreneurial spirit"
+      ]
+    },
+    {
+      "id": "comfort-with-ambiguity",
+      "definition": "Making progress where goals or information are unclear; does not count flexibility about priorities.",
+      "kind": "other",
+      "aliases": [
+        "comfort with ambiguity",
+        "comfort operating in ambiguity",
+        "comfortable with ambiguity",
+        "thrive in ambiguity",
+        "ability to work in ambiguity"
+      ]
+    },
+    {
+      "id": "fast-paced-environment",
+      "definition": "Working in a setting with quick change and short deadlines; does not count startup experience.",
+      "kind": "other",
+      "aliases": [
+        "fast-paced environment",
+        "fast paced environment",
+        "work in a fast-paced environment",
+        "thrive in a fast-paced environment"
+      ]
+    },
+    {
+      "id": "integrity",
+      "definition": "Honesty and consistent ethical conduct; does not count compliance knowledge.",
+      "kind": "other",
+      "aliases": [
+        "integrity",
+        "high integrity",
+        "strong integrity"
+      ]
+    },
+    {
+      "id": "product-strategy",
+      "definition": "Defining where a product is going and why, and how it wins; does not count planning the next releases, which is roadmapping.",
+      "kind": "skill",
+      "aliases": [
+        "product strategy",
+        "strong product strategy",
+        "product vision",
+        "product vision and strategy",
+        "define product vision and strategy",
+        "define and communicate product vision and strategy",
+        "vision and strategy"
+      ]
+    },
+    {
+      "id": "roadmapping",
+      "definition": "Building and maintaining a product roadmap that sequences work over time; does not count setting the strategy it serves.",
+      "kind": "skill",
+      "aliases": [
+        "roadmapping",
+        "roadmap development",
+        "roadmap planning",
+        "manage roadmaps",
+        "product roadmap",
+        "product roadmaps",
+        "product roadmapping",
+        "roadmap management",
+        "owning the product roadmap"
+      ]
+    },
+    {
+      "id": "product-discovery",
+      "definition": "Finding out which problems are worth solving before building, by research, testing and prototypes; does not count delivering what was already decided.",
+      "kind": "skill",
+      "aliases": [
+        "product discovery",
+        "product discovery skills",
+        "product discovery practices",
+        "solid understanding of product discovery practices",
+        "continuous discovery"
+      ]
+    },
+    {
+      "id": "customer-discovery",
+      "definition": "Learning customer problems and needs by direct contact with customers; does not count analysing usage data.",
+      "kind": "skill",
+      "parent": "product-discovery",
+      "aliases": [
+        "customer discovery",
+        "customer discovery skills",
+        "strong customer discovery skills"
+      ]
+    },
+    {
+      "id": "user-research",
+      "definition": "Studying user behaviour and needs with interviews, surveys and observation; does not count analysing product metrics.",
+      "kind": "skill",
+      "aliases": [
+        "user research",
+        "user research skills",
+        "ux research",
+        "customer research",
+        "market and user research"
+      ]
+    },
+    {
+      "id": "customer-interviews",
+      "definition": "Interviewing customers or users to understand their problems; does not count surveys or analytics.",
+      "kind": "skill",
+      "parent": "user-research",
+      "aliases": [
+        "customer interviews",
+        "conduct customer interviews",
+        "conducting customer interviews",
+        "user interviews",
+        "customer interviewing"
+      ]
+    },
+    {
+      "id": "market-analysis",
+      "definition": "Studying a market's size, segments and trends; does not count analysing specific competitors.",
+      "kind": "skill",
+      "aliases": [
+        "market analysis",
+        "market research",
+        "market trends",
+        "market sizing",
+        "market intelligence"
+      ]
+    },
+    {
+      "id": "competitive-analysis",
+      "definition": "Analysing competitors' products and positioning; does not count general market sizing.",
+      "kind": "skill",
+      "aliases": [
+        "competitive analysis",
+        "competitor analysis",
+        "competitive intelligence",
+        "competitive research"
+      ]
+    },
+    {
+      "id": "business-case-development",
+      "definition": "Building the financial and strategic case for an investment; does not count day-to-day budgeting.",
+      "kind": "skill",
+      "aliases": [
+        "business case development",
+        "business cases",
+        "build business cases",
+        "developing business cases",
+        "business case"
+      ]
+    },
+    {
+      "id": "requirements-writing",
+      "definition": "Writing product requirements, specs or PRDs that engineers can build from; does not count eliciting needs or user stories alone.",
+      "kind": "skill",
+      "aliases": [
+        "requirements writing",
+        "writing requirements",
+        "write clear product requirements",
+        "product requirements",
+        "product requirements documents",
+        "prd writing",
+        "requirements definition",
+        "defining requirements"
+      ]
+    },
+    {
+      "id": "user-stories",
+      "definition": "Writing user stories with their context and intent; does not count full specifications.",
+      "kind": "skill",
+      "parent": "requirements-writing",
+      "aliases": [
+        "user stories",
+        "writing user stories",
+        "write user stories",
+        "user story writing"
+      ]
+    },
+    {
+      "id": "acceptance-criteria",
+      "definition": "Defining testable acceptance criteria for a piece of work; does not count writing the stories themselves.",
+      "kind": "skill",
+      "parent": "requirements-writing",
+      "aliases": [
+        "acceptance criteria",
+        "defining acceptance criteria",
+        "experience defining acceptance criteria",
+        "writing acceptance criteria"
+      ]
+    },
+    {
+      "id": "backlog-management",
+      "definition": "Keeping a product backlog groomed, ordered and ready for the team; does not count the strategy or roadmap above it.",
+      "kind": "skill",
+      "aliases": [
+        "backlog management",
+        "backlog grooming",
+        "backlog refinement",
+        "backlog prioritization",
+        "managing the backlog",
+        "product backlog management",
+        "solid understanding of backlog management"
+      ]
+    },
+    {
+      "id": "experimentation",
+      "definition": "Designing and running experiments, including A/B tests, to test product hypotheses; does not count analysing usage metrics without an experiment.",
+      "kind": "skill",
+      "aliases": [
+        "experimentation",
+        "a/b testing",
+        "a/b tests",
+        "running a/b tests",
+        "experience running a/b tests",
+        "experiment design",
+        "split testing",
+        "ab testing",
+        "experience with experimentation",
+        "familiarity with experimentation"
+      ]
+    },
+    {
+      "id": "product-analytics",
+      "definition": "Measuring how a product is used with analytics tools and metrics; does not count running experiments or general data analysis.",
+      "kind": "skill",
+      "aliases": [
+        "product analytics",
+        "product metrics",
+        "usage analytics",
+        "experience with product analytics"
+      ]
+    },
+    {
+      "id": "funnel-analysis",
+      "definition": "Analysing conversion funnels to find drop-off; does not count general product analytics.",
+      "kind": "skill",
+      "parent": "product-analytics",
+      "aliases": [
+        "funnel analysis",
+        "conversion funnel analysis",
+        "conversion analysis",
+        "funnel optimization"
+      ]
+    },
+    {
+      "id": "metrics-and-okrs",
+      "definition": "Defining success metrics, KPIs and OKRs and tracking them; does not count analysing the underlying data.",
+      "kind": "skill",
+      "aliases": [
+        "okrs",
+        "kpis",
+        "kpi",
+        "success metrics",
+        "defining success metrics",
+        "kpi definition",
+        "goal setting",
+        "okr",
+        "okr setting"
+      ]
+    },
+    {
+      "id": "go-to-market",
+      "definition": "Planning how a product reaches its market: positioning, channels, launch plan; does not count the engineering delivery of the launch.",
+      "kind": "skill",
+      "aliases": [
+        "go-to-market",
+        "go to market",
+        "gtm",
+        "go-to-market strategy",
+        "go to market strategy",
+        "go-to-market planning"
+      ]
+    },
+    {
+      "id": "product-launch",
+      "definition": "Taking a product or feature from ready to released to customers; does not count the go-to-market strategy behind it.",
+      "kind": "experience",
+      "aliases": [
+        "product launch",
+        "product launches",
+        "launching products",
+        "product launch experience",
+        "feature launches"
+      ]
+    },
+    {
+      "id": "pricing-and-monetization",
+      "definition": "Setting prices, packaging and ways of earning revenue from a product; does not count general financial planning.",
+      "kind": "skill",
+      "aliases": [
+        "pricing",
+        "pricing strategy",
+        "pricing and packaging",
+        "monetization",
+        "monetisation",
+        "monetization strategy",
+        "knowledge of pricing",
+        "pricing models"
+      ]
+    },
+    {
+      "id": "end-to-end-product-ownership",
+      "definition": "Having taken a product through its whole lifecycle from idea to launch and improvement; does not count owning one stage only.",
+      "kind": "experience",
+      "aliases": [
+        "end-to-end product delivery",
+        "end-to-end product ownership",
+        "full product life cycle",
+        "full product lifecycle",
+        "product lifecycle",
+        "product life cycle",
+        "product lifecycle management",
+        "experience with end-to-end product delivery",
+        "concept to launch"
+      ]
+    },
+    {
+      "id": "feature-delivery",
+      "definition": "Shipping product features with attention to scope and tradeoffs; does not count owning the whole product lifecycle.",
+      "kind": "experience",
+      "aliases": [
+        "feature delivery",
+        "product feature delivery and tradeoffs",
+        "experience with product feature delivery and tradeoffs",
+        "experience with feature delivery and product tradeoffs",
+        "shipping features",
+        "delivering features"
+      ]
+    },
+    {
+      "id": "prototyping",
+      "definition": "Building quick prototypes or mockups to test ideas; does not count production design or engineering.",
+      "kind": "skill",
+      "aliases": [
+        "prototyping",
+        "rapid prototyping",
+        "building prototypes",
+        "prototype development"
+      ]
+    },
+    {
+      "id": "release-management",
+      "definition": "Planning and coordinating the release of software to production; does not count product launch marketing.",
+      "kind": "skill",
+      "aliases": [
+        "release management",
+        "release planning",
+        "release coordination",
+        "managing releases"
+      ]
+    },
+    {
+      "id": "project-management",
+      "definition": "Planning and driving a project to its deadline, scope and budget; does not count program management across projects or product management.",
+      "kind": "skill",
+      "aliases": [
+        "project management",
+        "project management skills",
+        "managing projects",
+        "project management methodologies",
+        "experience with project management methodologies",
+        "project planning"
+      ]
+    },
+    {
+      "id": "program-management",
+      "definition": "Coordinating several related projects toward one goal; does not count managing a single project.",
+      "kind": "skill",
+      "aliases": [
+        "program management",
+        "programme management",
+        "managing programs",
+        "technical program management",
+        "program management experience"
+      ]
+    },
+    {
+      "id": "change-management",
+      "definition": "Guiding people and organizations through a change in tools or ways of working; does not count release management.",
+      "kind": "skill",
+      "aliases": [
+        "change management",
+        "organizational change management",
+        "managing change",
+        "experience with change management"
+      ]
+    },
+    {
+      "id": "risk-management",
+      "definition": "Identifying, assessing and mitigating risks to a plan or business; does not count regulatory compliance as such.",
+      "kind": "skill",
+      "aliases": [
+        "risk management",
+        "risk assessment",
+        "managing risk",
+        "risk mitigation",
+        "risk analysis"
+      ]
+    },
+    {
+      "id": "process-improvement",
+      "definition": "Redesigning how work is done to make it faster or better; does not count automating a single task.",
+      "kind": "skill",
+      "aliases": [
+        "process improvement",
+        "continuous improvement",
+        "process optimization",
+        "process optimisation",
+        "process improvements",
+        "experience in process improvement"
+      ]
+    },
+    {
+      "id": "business-analysis",
+      "definition": "Analysing business needs and processes and turning them into requirements; does not count writing the product specification itself.",
+      "kind": "skill",
+      "aliases": [
+        "business analysis",
+        "business analyst",
+        "experience in business analysis",
+        "business process analysis"
+      ]
+    },
+    {
+      "id": "documentation",
+      "definition": "Writing and maintaining documentation for processes, products or systems; does not count specs written to drive a build, which is requirements writing.",
+      "kind": "skill",
+      "aliases": [
+        "documentation",
+        "technical documentation",
+        "writing documentation",
+        "documentation skills",
+        "creating documentation"
+      ]
+    },
+    {
+      "id": "leadership",
+      "definition": "Setting direction and motivating others toward it; does not count line management or technical leadership as such.",
+      "kind": "skill",
+      "aliases": [
+        "leadership",
+        "leadership skills",
+        "strong leadership skills",
+        "strong leadership",
+        "excellent leadership skills",
+        "leadership abilities"
+      ]
+    },
+    {
+      "id": "people-management",
+      "definition": "Managing a team of direct reports: hiring, feedback, performance; does not count leading without reports.",
+      "kind": "experience",
+      "aliases": [
+        "people management",
+        "people leadership",
+        "team management",
+        "managing teams",
+        "line management",
+        "managing a team",
+        "leading teams",
+        "experience managing teams"
+      ]
+    },
+    {
+      "id": "mentoring",
+      "definition": "Coaching less experienced colleagues; does not count managing them.",
+      "kind": "experience",
+      "aliases": [
+        "mentoring",
+        "coaching",
+        "mentoring others",
+        "mentoring junior team members",
+        "coaching and mentoring",
+        "mentoring and coaching"
+      ]
+    },
+    {
+      "id": "mentoring-product-managers",
+      "definition": "Having mentored or coached other product managers; does not count mentoring in other functions.",
+      "kind": "experience",
+      "parent": "mentoring",
+      "aliases": [
+        "experience mentoring product managers",
+        "experience mentoring other product managers",
+        "mentoring product managers",
+        "mentoring other product managers"
+      ]
+    },
+    {
+      "id": "technical-leadership",
+      "definition": "Guiding the technical direction of a team or product; does not count people management.",
+      "kind": "skill",
+      "aliases": [
+        "technical leadership",
+        "tech leadership",
+        "technical leadership skills"
+      ]
+    },
+    {
+      "id": "api-literacy",
+      "definition": "Understanding what APIs are and how products use them; does not count designing APIs or writing integrations, and the REST and GraphQL terms are in the skills dictionary.",
+      "kind": "skill",
+      "aliases": [
+        "apis",
+        "api",
+        "knowledge of apis",
+        "understanding of apis",
+        "familiarity with apis",
+        "understand apis",
+        "technical fluency with apis",
+        "experience with apis",
+        "api knowledge"
+      ]
+    },
+    {
+      "id": "api-design",
+      "definition": "Designing the contract and shape of an API; does not count merely using one.",
+      "kind": "skill",
+      "aliases": [
+        "api design",
+        "api development",
+        "designing apis",
+        "api-first design"
+      ]
+    },
+    {
+      "id": "sdks",
+      "definition": "Knowing software development kits and how developers consume them; does not count building one in a specific language.",
+      "kind": "skill",
+      "aliases": [
+        "sdks",
+        "sdk",
+        "experience with sdks",
+        "sdk development"
+      ]
+    },
+    {
+      "id": "software-development-lifecycle",
+      "definition": "Knowing the stages of building and releasing software; does not count a particular methodology, which Agile and Scrum cover.",
+      "kind": "skill",
+      "aliases": [
+        "sdlc",
+        "software development lifecycle",
+        "software development life cycle",
+        "software development lifecycles",
+        "understanding of software development lifecycles",
+        "software development process"
+      ]
+    },
+    {
+      "id": "software-testing",
+      "definition": "Knowing how software is tested and quality assured; does not count unit testing frameworks, which are in the skills dictionary.",
+      "kind": "skill",
+      "aliases": [
+        "testing",
+        "knowledge of testing",
+        "software testing",
+        "test strategy",
+        "testing practices",
+        "quality assurance"
+      ]
+    },
+    {
+      "id": "devops-practices",
+      "definition": "Knowing how development and operations teams build, release and run software together; does not count a specific CI/CD tool.",
+      "kind": "skill",
+      "aliases": [
+        "devops",
+        "devops practices",
+        "devops culture",
+        "devops methodology"
+      ]
+    },
+    {
+      "id": "workflow-automation",
+      "definition": "Automating repetitive work with scripts or tools; does not count building automation platforms.",
+      "kind": "skill",
+      "aliases": [
+        "automation",
+        "workflow automation",
+        "process automation",
+        "familiarity with automation",
+        "automation tools"
+      ]
+    },
+    {
+      "id": "observability",
+      "definition": "Monitoring and understanding the running state of systems with logs, metrics and traces; does not count business analytics.",
+      "kind": "skill",
+      "aliases": [
+        "observability",
+        "telemetry",
+        "monitoring and observability",
+        "application monitoring"
+      ]
+    },
+    {
+      "id": "distributed-systems",
+      "definition": "Understanding systems spread across several machines and their tradeoffs; does not count single-server application design.",
+      "kind": "skill",
+      "aliases": [
+        "distributed systems",
+        "knowledge of distributed systems",
+        "experience with distributed systems",
+        "large-scale distributed systems"
+      ]
+    },
+    {
+      "id": "cloud-fundamentals",
+      "definition": "General understanding of cloud infrastructure and services; does not count a named provider, which is in the skills dictionary.",
+      "kind": "skill",
+      "aliases": [
+        "cloud infrastructure",
+        "cloud platforms",
+        "cloud technologies",
+        "cloud environments",
+        "cloud computing",
+        "cloud services",
+        "familiarity with cloud infrastructure",
+        "familiarity with cloud platforms",
+        "understanding of cloud technologies"
+      ]
+    },
+    {
+      "id": "data-pipelines",
+      "definition": "Knowing how data is moved and transformed between systems; does not count analysing the result.",
+      "kind": "skill",
+      "aliases": [
+        "data pipelines",
+        "etl",
+        "elt",
+        "etl/elt",
+        "etl/elt processes",
+        "data integration",
+        "practical understanding of data pipelines",
+        "practical understanding of etl/elt processes"
+      ]
+    },
+    {
+      "id": "data-modeling",
+      "definition": "Designing the structure of data and its relationships; does not count writing queries.",
+      "kind": "skill",
+      "aliases": [
+        "data modeling",
+        "data modelling",
+        "practical understanding of data modeling",
+        "data models"
+      ]
+    },
+    {
+      "id": "data-governance",
+      "definition": "Policies and controls for data ownership, access and quality; does not count privacy regulation alone.",
+      "kind": "skill",
+      "aliases": [
+        "data governance",
+        "data governance principles",
+        "knowledge of data governance",
+        "practical understanding of data governance principles",
+        "data lineage",
+        "metadata management"
+      ]
+    },
+    {
+      "id": "data-quality",
+      "definition": "Keeping data accurate, complete and consistent; does not count governance policy.",
+      "kind": "skill",
+      "aliases": [
+        "data quality",
+        "practical understanding of data quality",
+        "data quality management",
+        "data validation"
+      ]
+    },
+    {
+      "id": "security-fundamentals",
+      "definition": "General understanding of information and application security; does not count identity management or compliance frameworks.",
+      "kind": "domain",
+      "aliases": [
+        "security",
+        "information security",
+        "application security",
+        "cybersecurity",
+        "cyber security",
+        "security best practices"
+      ]
+    },
+    {
+      "id": "identity-and-access-management",
+      "definition": "Products and concepts for identity, login and access control; does not count general security.",
+      "kind": "domain",
+      "aliases": [
+        "iam",
+        "identity and access management",
+        "identity management",
+        "authentication",
+        "authentication and authorization"
+      ]
+    },
+    {
+      "id": "data-privacy",
+      "definition": "Rules and practice for protecting personal data; does not count general security or data governance.",
+      "kind": "domain",
+      "aliases": [
+        "privacy",
+        "data privacy",
+        "privacy compliance",
+        "gdpr",
+        "privacy by design",
+        "privacy regulations"
+      ]
+    },
+    {
+      "id": "regulatory-compliance",
+      "definition": "Meeting legal and regulatory requirements in a sector; does not count risk management in general.",
+      "kind": "domain",
+      "aliases": [
+        "compliance",
+        "regulatory compliance",
+        "compliance frameworks",
+        "knowledge of compliance frameworks",
+        "regulatory requirements",
+        "regulated industries"
+      ]
+    },
+    {
+      "id": "generative-ai",
+      "definition": "Large language models and generative AI as a product capability; does not count classical machine learning, which is in the skills dictionary.",
+      "kind": "domain",
+      "aliases": [
+        "generative ai",
+        "genai",
+        "gen ai",
+        "llms",
+        "llm",
+        "large language models",
+        "foundation models",
+        "strong understanding of generative ai",
+        "understanding of generative ai"
+      ]
+    },
+    {
+      "id": "ai-agents",
+      "definition": "AI agents and agentic workflows built on language models; does not count generative AI features that are not agentic.",
+      "kind": "domain",
+      "parent": "generative-ai",
+      "aliases": [
+        "ai agents",
+        "agentic workflows",
+        "agentic ai",
+        "tool calling",
+        "multi-agent systems"
+      ]
+    },
+    {
+      "id": "retrieval-augmented-generation",
+      "definition": "Grounding language-model answers in retrieved documents; does not count fine-tuning.",
+      "kind": "domain",
+      "parent": "generative-ai",
+      "aliases": [
+        "rag",
+        "retrieval-augmented generation",
+        "retrieval augmented generation"
+      ]
+    },
+    {
+      "id": "prompt-engineering",
+      "definition": "Writing prompts and instructions that steer a language model; does not count evaluating its output.",
+      "kind": "skill",
+      "parent": "generative-ai",
+      "aliases": [
+        "prompt engineering",
+        "prompting",
+        "craft effective prompts",
+        "ability to craft effective prompts",
+        "prompt design"
+      ]
+    },
+    {
+      "id": "responsible-ai",
+      "definition": "Safe, fair and accountable use of AI, including guardrails; does not count general compliance.",
+      "kind": "domain",
+      "parent": "generative-ai",
+      "aliases": [
+        "responsible ai",
+        "responsible ai principles",
+        "ai ethics",
+        "ai safety",
+        "ai governance"
+      ]
+    },
+    {
+      "id": "technical-product-management",
+      "definition": "Having been a product manager for technical products or working closely with engineering as a technical PM; does not count a non-technical product role.",
+      "kind": "experience",
+      "aliases": [
+        "technical product manager",
+        "experience working as a technical product manager",
+        "managing technical products",
+        "experience managing technical products or online services"
+      ]
+    },
+    {
+      "id": "platform-product-management",
+      "definition": "Managing platform or infrastructure products used by other teams or developers; does not count an end-user application.",
+      "kind": "experience",
+      "aliases": [
+        "platform products",
+        "internal platforms",
+        "platform product",
+        "platform strategy"
+      ]
+    },
+    {
+      "id": "developer-products",
+      "definition": "Products built for developers: tools, platforms and developer experience; does not count a product that merely has an API.",
+      "kind": "domain",
+      "aliases": [
+        "developer platforms",
+        "developer tools",
+        "developer tooling",
+        "developer-facing products",
+        "developer products",
+        "developer experience",
+        "experience with developer platforms"
+      ]
+    },
+    {
+      "id": "platform-ecosystems",
+      "definition": "Platforms with third-party developers or partners building on them; does not count a closed product.",
+      "kind": "domain",
+      "aliases": [
+        "platform ecosystems",
+        "developer ecosystems",
+        "partner ecosystems",
+        "ecosystem growth",
+        "experience with developer ecosystems"
+      ]
+    },
+    {
+      "id": "saas-products",
+      "definition": "Subscription software delivered over the web; does not count on-premise software.",
+      "kind": "domain",
+      "aliases": [
+        "saas",
+        "saas products",
+        "software as a service",
+        "saas experience"
+      ]
+    },
+    {
+      "id": "b2b-products",
+      "definition": "Products sold to businesses rather than consumers; does not count consumer products.",
+      "kind": "domain",
+      "aliases": [
+        "b2b",
+        "b2b products",
+        "b2b saas",
+        "b2b saas experience",
+        "enterprise saas",
+        "enterprise software",
+        "enterprise products"
+      ]
+    },
+    {
+      "id": "marketplace-products",
+      "definition": "Two-sided marketplaces that connect buyers and sellers; does not count a single-seller shop.",
+      "kind": "domain",
+      "aliases": [
+        "marketplaces",
+        "marketplace",
+        "marketplace products",
+        "two-sided marketplaces",
+        "online marketplaces"
+      ]
+    },
+    {
+      "id": "startup-environment",
+      "definition": "Having worked at an early-stage or fast-growing company; does not count a large corporation's innovation team.",
+      "kind": "other",
+      "aliases": [
+        "startup experience",
+        "experience in startups",
+        "start-up experience",
+        "high-growth environment",
+        "scale-up experience"
+      ]
+    },
+    {
+      "id": "fintech",
+      "definition": "Financial technology products and companies; does not count banking operations as such.",
+      "kind": "domain",
+      "aliases": [
+        "fintech",
+        "fintech experience",
+        "experience in fintech",
+        "fintech products",
+        "financial technology"
+      ]
+    },
+    {
+      "id": "payments",
+      "definition": "Payment products and processing; does not count lending or trading.",
+      "kind": "domain",
+      "aliases": [
+        "payments",
+        "experience in payments",
+        "experience with payments",
+        "payment systems",
+        "payment processing",
+        "online payments",
+        "payments experience"
+      ]
+    },
+    {
+      "id": "banking",
+      "definition": "Retail, corporate or digital banking; does not count other financial services.",
+      "kind": "domain",
+      "aliases": [
+        "banking",
+        "background in banking",
+        "retail banking",
+        "banking experience",
+        "digital banking"
+      ]
+    },
+    {
+      "id": "financial-services",
+      "definition": "The financial-services industry in general; does not count the narrower sectors of banking, payments and trading.",
+      "kind": "domain",
+      "aliases": [
+        "financial services",
+        "financial institutions",
+        "experience in financial institutions",
+        "financial industry",
+        "financial services experience"
+      ]
+    },
+    {
+      "id": "trading-and-investing",
+      "definition": "Trading, brokerage and investment products; does not count payments or banking.",
+      "kind": "domain",
+      "aliases": [
+        "trading",
+        "trading experience",
+        "trading platforms",
+        "brokerage"
+      ]
+    },
+    {
+      "id": "ecommerce",
+      "definition": "Online selling of goods and services; does not count physical retail alone.",
+      "kind": "domain",
+      "aliases": [
+        "ecommerce",
+        "e-commerce",
+        "online retail",
+        "ecommerce experience",
+        "e-commerce experience"
+      ]
+    },
+    {
+      "id": "retail",
+      "definition": "The retail industry; does not count online-only commerce, which is ecommerce.",
+      "kind": "domain",
+      "aliases": [
+        "retail",
+        "experience in retail",
+        "retail experience"
+      ]
+    },
+    {
+      "id": "logistics",
+      "definition": "Transport, delivery and supply-chain operations; does not count warehouse software alone.",
+      "kind": "domain",
+      "aliases": [
+        "logistics",
+        "experience in logistics",
+        "supply chain",
+        "logistics experience",
+        "supply chain management"
+      ]
+    },
+    {
+      "id": "healthcare-technology",
+      "definition": "Technology for healthcare providers and patients; does not count general wellness apps.",
+      "kind": "domain",
+      "aliases": [
+        "healthcare technology",
+        "healthtech",
+        "health tech",
+        "digital health",
+        "healthcare it"
+      ]
+    },
+    {
+      "id": "hr-technology",
+      "definition": "Software for human resources, payroll and workforce management; does not count internal HR work.",
+      "kind": "domain",
+      "aliases": [
+        "hr technology",
+        "hr tech",
+        "hcm",
+        "human capital management"
+      ]
+    },
+    {
+      "id": "ad-tech",
+      "definition": "Advertising technology and programmatic advertising; does not count marketing work in general.",
+      "kind": "domain",
+      "aliases": [
+        "ad tech",
+        "adtech",
+        "programmatic advertising",
+        "advertising technology"
+      ]
+    },
+    {
+      "id": "gaming",
+      "definition": "The video game industry; does not count a personal interest in games.",
+      "kind": "domain",
+      "aliases": [
+        "gaming",
+        "video games",
+        "game industry",
+        "games industry",
+        "gaming industry"
+      ]
+    },
+    {
+      "id": "bachelors-degree",
+      "definition": "A completed bachelor's-level university degree in any field; does not count a master's degree or a stated field of study.",
+      "kind": "education",
+      "aliases": [
+        "bachelor's degree",
+        "a bachelor's degree",
+        "bachelors degree",
+        "bachelor degree",
+        "have a bachelor's degree",
+        "university degree",
+        "undergraduate degree"
+      ]
+    },
+    {
+      "id": "masters-degree",
+      "definition": "A completed master's-level degree; does not count an MBA or a bachelor's degree.",
+      "kind": "education",
+      "aliases": [
+        "master's degree",
+        "a master's degree",
+        "masters degree",
+        "master degree"
+      ]
+    },
+    {
+      "id": "advanced-degree",
+      "definition": "A graduate degree, either a master's or a doctorate, unspecified; does not count an MBA named alone or a bachelor's degree.",
+      "kind": "education",
+      "aliases": [
+        "advanced degree",
+        "graduate degree",
+        "postgraduate degree",
+        "advanced degree preferred"
+      ]
+    },
+    {
+      "id": "mba",
+      "definition": "A Master of Business Administration; does not count other master's degrees.",
+      "kind": "education",
+      "aliases": [
+        "mba",
+        "an mba",
+        "master of business administration",
+        "mba degree"
+      ]
+    },
+    {
+      "id": "english-proficiency",
+      "definition": "Working proficiency in English with no level named; does not count a required CEFR level, which stays a qualifier, or any other language.",
+      "kind": "language",
+      "aliases": [
+        "fluent english",
+        "fluency in english",
+        "fluent in english",
+        "english proficiency",
+        "english language proficiency",
+        "fluent written and spoken english",
+        "fluent english, written and spoken",
+        "fluent english language skills",
+        "english language skills",
+        "business english",
+        "professional english",
+        "excellent english"
+      ]
+    }
+  ]
+}

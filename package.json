@@ -32,6 +32,7 @@
     "import:job": "node scripts/run-job-import.js",
     "claude:login": "node scripts/claude-auth.js",
     "audit:quality": "bash -c 'source .venv/bin/activate && python python/quality_audit/run_audit.py \"$@\"' --",
+    "competencies:report": ".venv/bin/python python/match_engine/competency_report.py",
     "validate:companies": "node scripts/validate-companies.js"
   },
   "dependencies": {
