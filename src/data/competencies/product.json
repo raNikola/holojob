@@ -121,7 +121,8 @@
         "influence stakeholders",
         "ability to influence without authority",
         "ability to influence technical and business stakeholders",
-        "influence cross-functional teams"
+        "influence cross-functional teams",
+        "ability to influence stakeholders"
       ]
     },
     {
@@ -135,6 +136,18 @@
         "excellent collaboration skills",
         "teamwork",
         "team player"
+      ]
+    },
+    {
+      "id": "interpersonal-skills",
+      "definition": "Getting along and working well with other people one on one and in groups; does not count formal communication channels such as communication or presentation, nor influencing without authority.",
+      "kind": "skill",
+      "aliases": [
+        "interpersonal skills",
+        "excellent interpersonal skills",
+        "strong interpersonal skills",
+        "good interpersonal skills",
+        "strong interpersonal and communication skills"
       ]
     },
     {
@@ -530,7 +543,8 @@
         "product roadmaps",
         "product roadmapping",
         "roadmap management",
-        "owning the product roadmap"
+        "owning the product roadmap",
+        "experience owning or driving roadmap strategy and definition"
       ]
     },
     {
@@ -1503,7 +1517,10 @@
         "bachelor degree",
         "have a bachelor's degree",
         "university degree",
-        "undergraduate degree"
+        "undergraduate degree",
+        "bachelor's degree or equivalent experience",
+        "bachelor's degree or equivalent practical experience",
+        "bachelor's degree in a relevant field"
       ]
     },
     {
@@ -1525,7 +1542,8 @@
         "advanced degree",
         "graduate degree",
         "postgraduate degree",
-        "advanced degree preferred"
+        "advanced degree preferred",
+        "mba or advanced degree"
       ]
     },
     {

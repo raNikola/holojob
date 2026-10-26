@@ -29,7 +29,7 @@ def test_alias_key_is_the_one_comparison_form():
 
 def test_the_product_seed_is_valid():
     seed = load("product")
-    assert 60 <= len(seed) <= 120
+    assert 60 <= len(seed) <= 130
     assert validate(seed) == []
 
 
