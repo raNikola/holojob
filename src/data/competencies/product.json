@@ -1532,25 +1532,6 @@
         "master of business administration",
         "mba degree"
       ]
-    },
-    {
-      "id": "english-proficiency",
-      "definition": "Working proficiency in English with no level named; does not count a required CEFR level, which stays a qualifier, or any other language.",
-      "kind": "language",
-      "aliases": [
-        "fluent english",
-        "fluency in english",
-        "fluent in english",
-        "english proficiency",
-        "english language proficiency",
-        "fluent written and spoken english",
-        "fluent english, written and spoken",
-        "fluent english language skills",
-        "english language skills",
-        "business english",
-        "professional english",
-        "excellent english"
-      ]
     }
   ]
 }

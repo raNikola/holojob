@@ -35,6 +35,7 @@ DEFAULT_MIN_ADS = 2
 EXAMPLES_PER_GROUP = 3
 DATA_DIR = ROOT / "data"
 DEFAULT_OUT = DATA_DIR / "competency-report.json"
+REVIEW_OUT = DATA_DIR / "competencies-review.md"
 
 
 def provisional_groups(frames: dict) -> dict[str, dict]:
@@ -123,13 +124,46 @@ def checked_out_path(path: Path) -> Path:
     return resolved
 
 
+def review_markdown(comps: list[dict], family: str) -> str:
+    """The list as Markdown for the owner's review, in seed order. Nothing from ads or the profile."""
+    aliases = sum(len(c.get("aliases", [])) for c in comps)
+    lines = [f"# Competency review: {family}", "", f"{len(comps)} competencies, {aliases} aliases.", ""]
+    for c in comps:
+        lines += [f"## {c['id']}", "", f"- Kind: {c['kind']}"]
+        if c.get("parent"):
+            lines.append(f"- Parent: {c['parent']}")
+        lines += [f"- Definition: {c['definition']}", "- Aliases:"]
+        lines += [f"  - {a}" for a in c.get("aliases", [])]
+        lines.append("")
+    return "\n".join(lines)
+
+
+def write_review(family: str, out: Path = REVIEW_OUT) -> Path:
+    """Validate the family's list and write its review file under data/ (SystemExit otherwise)."""
+    comps = competencies.load(family)
+    problems = competencies.validate(comps)
+    if not comps or problems:
+        raise SystemExit("\n  ".join([f"competency list '{family}' is not usable:", *(problems or ["no list"])]))
+    path = checked_out_path(out)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(review_markdown(comps, family), encoding="utf-8")
+    return path
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--family", default="product")
     parser.add_argument("--min-ads", type=int, default=DEFAULT_MIN_ADS, help="smallest group (in ads) to list")
     parser.add_argument("--frames", type=Path, default=None, help="requirement frames file (default: the server's)")
-    parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--out", type=Path, default=None, help="output file under data/")
+    parser.add_argument("--review", action="store_true", help="write the Markdown review of the list instead of the report")
     args = parser.parse_args(argv)
+
+    if args.review:
+        path = write_review(args.family, args.out or REVIEW_OUT)
+        print(f"review: {path}")
+        return 0
+    args.out = args.out or DEFAULT_OUT
 
     comps = competencies.load(args.family)
     problems = competencies.validate(comps)
