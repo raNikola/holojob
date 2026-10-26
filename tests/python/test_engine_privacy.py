@@ -217,7 +217,7 @@ def test_the_languages_were_settled_locally(pipeline):
     asked = prompt.split("=== BEGIN REQUIREMENTS ===")[1].split("=== END REQUIREMENTS ===")[0]
     assert "SQL" in asked and "English" not in asked and "Spanish" not in asked
     statuses = {r["text"]: r["status"] for r in out["jobs"][0]["engineShadow"]["requirements"]}
-    assert statuses["Fluent English"] == "MET" and statuses["Spanish is a plus"] == "MISSING"
+    assert statuses["Fluent English"] == "MET" and statuses["Spanish is a plus"] == "UNKNOWN"
 
 
 # --- the Fit judge (llm_enhancer.py), in the same judged run --------------------

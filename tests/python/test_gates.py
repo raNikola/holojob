@@ -34,6 +34,11 @@ def cand_gates(**overrides):
     return {**base, **overrides}
 
 
+def tr(track):
+    """A role track with the evidence quote the cap requires."""
+    return {"roleTrack": track, "roleTrackEvidence": "Own the roadmap and discovery."}
+
+
 def job(location="Niš, Serbia", facts=None, **fields):
     return {"title": "Product Manager", "location": location, "description": "", "llmFacts": facts or {}, **fields}
 
@@ -140,8 +145,22 @@ def test_language_pass_when_every_required_language_is_spoken():
     assert language_result(job(description="Fluent English required."), cand_gates()) == "pass"
 
 
-def test_language_fail_on_a_language_the_candidate_does_not_list():
-    assert language_result(job(description="Fluent German and English required."), cand_gates()) == "fail"
+def test_language_unknown_on_a_language_the_candidate_does_not_list():
+    # A short list is not a statement that the rest is not spoken.
+    assert language_result(job(description="Fluent German and English required."), cand_gates()) == "unknown"
+
+
+def test_language_fail_only_on_a_language_confirmed_as_not_spoken():
+    gates = cand_gates(languagesNotSpoken=["German"])
+    assert language_result(job(description="Fluent German and English required."), gates) == "fail"
+    assert language_result(job(description="Fluent French and English required."), gates) == "unknown"
+
+
+def test_role_family_unknown_for_other_or_a_track_without_evidence():
+    assert role_family_result(job(facts={"roleTrack": "other", "roleTrackEvidence": "Sells devices."}), "product") == "unknown"
+    assert role_family_result(job(facts={"roleTrack": "engineering"}), "product") == "unknown"
+    assert role_family_result(job(facts={"roleTrack": "engineering", "roleTrackEvidence": " "}), "product") == "unknown"
+    assert role_family_result(job(facts=tr("engineering")), "product") == "fail"
 
 
 def test_language_unknown_when_the_ad_states_none():
@@ -176,16 +195,16 @@ def test_salary_unknown_without_a_floor():
 
 @pytest.mark.parametrize("track", ["product_management", "product_ownership"])
 def test_role_family_pass_on_an_accepted_track(track):
-    assert role_family_result(job(facts={"roleTrack": track}), "product") == "pass"
+    assert role_family_result(job(facts=tr(track)), "product") == "pass"
 
 
-@pytest.mark.parametrize("track", ["project_delivery", "engineering", "other"])
+@pytest.mark.parametrize("track", ["project_delivery", "engineering"])
 def test_role_family_fail_off_the_family(track):
-    assert role_family_result(job(facts={"roleTrack": track}), "product") == "fail"
+    assert role_family_result(job(facts=tr(track)), "product") == "fail"
 
 
 def test_role_family_follows_the_candidate_family():
-    assert role_family_result(job(facts={"roleTrack": "engineering"}), "engineering") == "pass"
+    assert role_family_result(job(facts=tr("engineering")), "engineering") == "pass"
 
 
 def test_role_family_unknown_without_a_track():
@@ -196,13 +215,13 @@ def test_role_family_unknown_without_a_track():
 def test_role_family_unknown_without_a_family(family):
     # No family is assumed: not product, not anything else.
     for track in ("product_management", "engineering", "other"):
-        assert role_family_result(job(facts={"roleTrack": track}), family) == "unknown"
+        assert role_family_result(job(facts=tr(track)), family) == "unknown"
 
 
 def test_an_unset_family_never_blocks_or_caps():
     from match_engine.fit import score
 
-    gates = gate_results(job(facts={"roleTrack": "engineering"}), {"gates": cand_gates(), "roleFamily": None})
+    gates = gate_results(job(facts=tr("engineering")), {"gates": cand_gates(), "roleFamily": None})
     role = next(g for g in gates if g["gate"] == "role_family")
     assert role["result"] == "unknown"
     out = score([], gates)
@@ -219,7 +238,7 @@ def test_an_unset_family_never_blocks_or_caps():
     ("delivery", "project_delivery", "pass"),
 ])
 def test_role_family_follows_the_chosen_family(family, track, result):
-    assert role_family_result(job(facts={"roleTrack": track}), family) == result
+    assert role_family_result(job(facts=tr(track)), family) == result
 
 
 # --- all five and the bucket ----------------------------------------------------------

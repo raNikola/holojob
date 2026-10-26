@@ -32,7 +32,7 @@ import re
 import work_authorization as wa
 from dimensions import location_match as lm
 from salary import below_minimum, parse_monthly_eur
-from scorer import accepted_tracks
+from scorer import accepted_tracks, track_has_evidence
 from text_utils import normalize_text
 
 from .verify import CONFIRMED_FACT_STRENGTH, _resolved
@@ -153,16 +153,22 @@ def _spoken(gates: dict) -> dict[str, str]:
     return spoken
 
 
+def _not_spoken(gates: dict) -> set[str]:
+    """Languages the candidate explicitly confirmed they do not speak (gates.languagesNotSpoken)."""
+    return _languages_in(normalize_text(" ".join(gates.get("languagesNotSpoken") or [])))
+
+
 def settle_language(req: dict, candidate: dict) -> dict | None:
     """A kind-language requirement resolved in code, or None to leave it to the matcher.
 
     The language name only, not the level, by the language gate's own
     matching. MET when the candidate lists every language the requirement
     names, credited as their own statement (CONFIRMED_FACT_STRENGTH); MISSING
-    when one is not listed and no evidence item mentions it; UNKNOWN when the
-    candidate lists no languages at all. A requirement that names no language
-    the table knows, or one the evidence mentions but the list lacks, goes to
-    the matcher as before.
+    only when one of them is in languagesNotSpoken, which the owner confirmed;
+    UNKNOWN when a language is simply not listed (a short list is not a
+    statement that the rest is not spoken) or the candidate lists none at all.
+    A requirement that names no language the table knows, or one the evidence
+    mentions but the list lacks, goes to the matcher as before.
     """
     if req.get("kind") != "language":
         return None
@@ -170,9 +176,11 @@ def settle_language(req: dict, candidate: dict) -> dict | None:
     if not named:
         return None
     gates = candidate.get("gates") or {}
+    spoken = _spoken(gates)
+    if named & (_not_spoken(gates) - set(spoken)):
+        return _resolved(req, "MISSING", None, None, False, 0)
     if not gates.get("languages"):
         return _resolved(req, "UNKNOWN", None, None, False, 0)
-    spoken = _spoken(gates)
     lacking = named - set(spoken)
     if not lacking:
         quote = "; ".join(sorted({spoken[lang] for lang in named}))
@@ -180,7 +188,7 @@ def settle_language(req: dict, candidate: dict) -> dict | None:
     mentioned = set().union(*(_languages_in(normalize_text(e.get("text") or "")) for e in candidate.get("evidence") or []))
     if lacking & mentioned:
         return None
-    return _resolved(req, "MISSING", None, None, False, 0)
+    return _resolved(req, "UNKNOWN", None, None, False, 0)
 
 
 def _prefs(gates: dict) -> dict:
@@ -220,16 +228,21 @@ def _commute_places(prefs: dict) -> list[str]:
 
 
 def language_result(job: dict, gates: dict, requirements: list[dict] | None = None) -> str:
-    """Unknown when the ad states no language or the candidate lists none; fail on one they do not speak.
+    """Unknown when the ad states no language or the candidate lists none; fail only on a language they confirmed they do not speak.
 
-    Only the language is compared, not the level: a stated level is read
-    neither from the ad nor from "English (fluent)".
+    A required language that is merely not listed is unknown, a question: the
+    list can be short. Only the language is compared, not the level: a stated
+    level is read neither from the ad nor from "English (fluent)".
     """
     required = required_languages(job, requirements)
     spoken = set(_spoken(gates))
-    if not required or not spoken:
+    if not required:
         return UNKNOWN
-    return PASS if required <= spoken else FAIL
+    if (required & _not_spoken(gates)) - spoken:
+        return FAIL
+    if not spoken:
+        return UNKNOWN
+    return PASS if required <= spoken else UNKNOWN
 
 
 def salary_floor_result(job: dict, gates: dict) -> str:
@@ -244,11 +257,13 @@ def salary_floor_result(job: dict, gates: dict) -> str:
 def role_family_result(job: dict, role_family: str | None) -> str:
     """The posting's role track against the tracks the candidate's family accepts.
 
-    Unknown when the profile sets no family or the ad's track was not read:
-    nothing is assumed in either case.
+    Unknown when the profile sets no family, the ad's track was not read, or
+    the track is "other" or has no evidence quote: nothing is assumed in any
+    of those cases (scorer.track_is_off_track).
     """
-    track = (job.get("llmFacts") or {}).get("roleTrack")
-    if not track or not role_family:
+    facts = job.get("llmFacts") or {}
+    track = facts.get("roleTrack")
+    if not track or not role_family or not track_has_evidence(facts):
         return UNKNOWN
     _, tracks = accepted_tracks({"roleFamily": role_family})
     return PASS if track in tracks else FAIL
@@ -272,6 +287,18 @@ def gate_results(job: dict, candidate: dict, quotes=None, requirements: list[dic
         "role_family": role_family_result(job, candidate.get("roleFamily")),
     }
     return [{"gate": gate, "result": results[gate], "quote": quotes.get(gate)} for gate in GATES]
+
+
+# The gates that need only what is stored with the ad (its text, llmFacts and
+# the candidate's profile): a fail here is known before any model call.
+CHEAP_GATES = ("language", "work_authorization", "role_family")
+
+
+def cheap_gate_failures(job: dict, candidate: dict) -> list[str]:
+    """The CHEAP_GATES that fail for this ad, from the existing gate functions; unknown never fails."""
+    reqs = (job.get("llmFacts") or {}).get("requirements")
+    failed = {g["gate"] for g in gate_results(job, candidate, None, reqs) if g["result"] == FAIL}
+    return [g for g in CHEAP_GATES if g in failed]
 
 
 def bucket_for(gates: list[dict]) -> str:

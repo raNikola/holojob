@@ -33,7 +33,7 @@ from llm_client import complete_json
 
 from .constants import ENGINE_VERSION
 from .fit import score
-from .gates import gate_results
+from .gates import CHEAP_GATES, cheap_gate_failures, gate_results
 from .matcher import EVIDENCE_FIELDS, cache_key, match_posting, posting_from_job
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -76,7 +76,10 @@ class ShadowEngine:
         self._cache: dict[str, dict] = (
             json.loads(self.cache_path.read_text(encoding="utf-8")) if self.cache_path.exists() else {})
         self.counts = {"matched": 0, "cached": 0, "uncached": 0, "beyondLimit": 0, "noRequirements": 0,
-                       "closed": 0, "failed": 0}
+                       "closed": 0, "failed": 0, "excluded": 0}
+        # Ads the cheap gates ruled out of the send, by gate (an ad failing two counts in both).
+        self.excluded: dict[str, int] = {g: 0 for g in CHEAP_GATES}
+        self._excluded_keys: set = set()
 
     def _count(self, key: str) -> None:
         with self._lock:
@@ -86,13 +89,23 @@ class ShadowEngine:
         return cache_key(job_fingerprint(posting), self.candidate["profileVersion"])
 
     def plan(self, jobs: list[dict]) -> set:
-        """The jobs a judged run may send: uncached, with requirements, open, the top `limit` by matchScore."""
+        """The jobs a judged run may send: uncached, with requirements, open, no confirmed fail on a cheap gate, the top `limit` by matchScore."""
         eligible = []
+        self.excluded = {g: 0 for g in CHEAP_GATES}
+        self._excluded_keys = set()
         for index, job in enumerate(jobs):
             posting = posting_from_job(job)
             if job.get("isClosed") or not posting["facts"].get("requirements"):
                 continue
             if self._cache_key(posting) in self._cache:
+                continue
+            failed = cheap_gate_failures(job, self.candidate)
+            if failed:
+                # A confirmed fail on a gate decided from the stored ad: not worth a
+                # call, and the next ad takes the place. Unknown never gets here.
+                self._excluded_keys.add(_key(job))
+                for gate in failed:
+                    self.excluded[gate] += 1
                 continue
             eligible.append((-(job.get("matchScore") or 0), index, _key(job)))
         eligible.sort()
@@ -114,6 +127,9 @@ class ShadowEngine:
         if output is None:
             if not self.judge:
                 self._count("uncached")
+                return None
+            if _key(job) in self._excluded_keys:
+                self._count("excluded")
                 return None
             if _key(job) not in send:
                 self._count("beyondLimit")
@@ -145,6 +161,10 @@ class ShadowEngine:
     def apply(self, jobs: list[dict]) -> list[dict]:
         """The same jobs, in the same order, each with engineShadow where there is an output."""
         send = self.plan(jobs) if self.judge else set()
+        if self.judge:
+            print(f"engine (shadow): excluded before the send by a confirmed gate fail: "
+                  + ", ".join(f"{g} {n}" for g, n in self.excluded.items())
+                  + f" ({len(self._excluded_keys)} ads)", flush=True)
         with ThreadPoolExecutor(max_workers=max(1, self.workers)) as pool:
             results = list(pool.map(lambda job: self._one(job, send), jobs))
         return [{**job, "engineShadow": shadow} if shadow else job for job, shadow in zip(jobs, results)]
@@ -158,7 +178,8 @@ class ShadowEngine:
             "enabled": True,
             "toSend": len(send),
             "cached": cached,
-            "beyondLimit": len(sendable) - cached - len(send),
+            "beyondLimit": len(sendable) - cached - len(send) - len(self._excluded_keys),
+            "excluded": dict(self.excluded),
             "limit": self.limit,
             "sent": SENT,
             "neverSent": NEVER_SENT,

@@ -249,7 +249,7 @@ def build_gates(intelligence: dict) -> dict:
     """
     prefs = (intelligence or {}).get("jobFitPreferences") or {}
     floor = prefs.get("minSalaryEur")
-    return {
+    gates = {
         "workAuthorization": prefs.get("workAuthorization") or {},
         "allowedLocations": _strings(prefs.get("allowedLocations")),
         "languages": _strings((intelligence or {}).get("languages")),
@@ -259,6 +259,12 @@ def build_gates(intelligence: dict) -> dict:
         "relocation": str(prefs.get("relocation") or "").strip() or None,
         "country": str(prefs.get("country") or "").strip() or None,
     }
+    # Optional: languages the owner confirmed they do not speak. Present only
+    # when set, so a profile without it keeps its profileVersion.
+    not_spoken = _strings((intelligence or {}).get("languagesNotSpoken"))
+    if not_spoken:
+        gates["languagesNotSpoken"] = not_spoken
+    return gates
 
 
 def profile_version(evidence: list[dict], confirmed_facts: list[dict], gates: dict, role_family: str | None) -> str:

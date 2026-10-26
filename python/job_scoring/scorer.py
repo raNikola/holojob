@@ -49,6 +49,16 @@ ROLE_FAMILIES = json.loads(ROLE_FAMILIES_FILE.read_text(encoding="utf-8"))
 OFF_TRACK_CAP = 50
 
 
+def track_has_evidence(facts: dict) -> bool:
+    """Whether the ad's role track is a reading worth capping on.
+
+    "other" is the extractor's fallback, and a track without an evidence quote
+    is a guess; both are treated like an unset family (neutral), so an ad with
+    no usable text is never capped as the wrong job.
+    """
+    return facts.get("roleTrack") != "other" and bool((facts.get("roleTrackEvidence") or "").strip())
+
+
 def accepted_tracks(intelligence: dict) -> tuple[str | None, set[str] | None]:
     """The candidate's role family and the role tracks it accepts; (None, None) when none is set."""
     family = intelligence.get("roleFamily") or None
@@ -104,9 +114,11 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     if red_flags and match_score > 55:
         match_score = min(match_score, 54)
 
-    track = (job.get("llmFacts") or {}).get("roleTrack")
+    facts = job.get("llmFacts") or {}
+    track = facts.get("roleTrack")
     family, family_tracks = accepted_tracks(intelligence)
-    off_track = bool(track) and family_tracks is not None and track not in family_tracks
+    off_track = (bool(track) and track_has_evidence(facts)
+                 and family_tracks is not None and track not in family_tracks)
     if off_track:
         match_score = min(match_score, OFF_TRACK_CAP)
 
