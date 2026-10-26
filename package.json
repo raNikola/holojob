@@ -35,6 +35,8 @@
     "competencies:report": ".venv/bin/python python/match_engine/competency_report.py",
     "competencies:candidates": ".venv/bin/python python/match_engine/competency_report.py --candidates",
     "competencies:audit-sample": ".venv/bin/python python/match_engine/competency_audit.py",
+    "competencies:backup": ".venv/bin/python python/match_engine/competency_backup.py backup",
+    "competencies:restore": ".venv/bin/python python/match_engine/competency_backup.py restore",
     "competencies:review": ".venv/bin/python python/match_engine/competency_report.py --review",
     "validate:companies": "node scripts/validate-companies.js"
   },
