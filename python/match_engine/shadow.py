@@ -42,6 +42,8 @@ CACHE_PATH = ROOT / "data" / "cache" / "engine.json"
 SHADOW_ENV = "HOLOJOB_ENGINE_SHADOW"
 # Off by default: per-ad evidence selection (evidence_select.py) changes what the matcher is sent.
 SELECT_ENV = "HOLOJOB_ENGINE_EVIDENCE_SELECT"
+# Off by default: the evidence index is sent without indentation and empty fields (matcher.compact_evidence).
+COMPACT_ENV = "HOLOJOB_ENGINE_COMPACT_EVIDENCE"
 # Section 7: at most 50 postings per run go to the model.
 DEFAULT_LIMIT = 50
 # What a judged run's confirm dialog lists for the matcher (CLAUDE.md, "Privacy rules and exceptions").
@@ -60,6 +62,11 @@ def select_mode(env=None) -> str | None:
     return mode_of((env if env is not None else os.environ).get(SELECT_ENV))
 
 
+def compact_enabled(env=None) -> bool:
+    return str((env if env is not None else os.environ).get(COMPACT_ENV) or "").strip().lower() in {
+        "1", "true", "yes", "on"}
+
+
 def _key(job: dict):
     return job.get("jobId") or id(job)
 
@@ -70,12 +77,13 @@ class ShadowEngine:
     def __init__(self, candidate: dict, *, judge: bool, provider: str, model: str | None,
                  cache_path: Path | None = None, limit: int | None = DEFAULT_LIMIT,
                  complete=complete_json, workers: int = 4, identity: tuple[str, list[str]] | None = None,
-                 select=None):
+                 select=None, compact=None):
         self.candidate = candidate
         # redact.identity_of(profile), for the matcher's redaction; never sent.
         self.identity = identity
         self.judge = judge
         self.select = select_mode() if select is None else mode_of(select)
+        self.compact = compact_enabled() if compact is None else bool(compact)
         self.provider = provider
         self.model = model
         self.cache_path = cache_path or CACHE_PATH
@@ -146,7 +154,7 @@ class ShadowEngine:
                 return None
             outcome = match_posting(posting, self.candidate, confirmed=True, provider=self.provider,
                                     model=self.model, complete=self._complete, identity=self.identity,
-                                    select=self.select)
+                                    select=self.select, compact=self.compact)
             if outcome.output is None:
                 print(f"engine (shadow) failed: {(job.get('title') or '?')[:45]}: {outcome.error}",
                       file=sys.stderr)

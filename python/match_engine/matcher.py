@@ -215,15 +215,35 @@ def _evidence_payload(evidence: list[dict], identity: tuple[str, list[str]] | No
     return out
 
 
+PAYLOAD_FULL = "full"
+PAYLOAD_COMPACT = "compact-1"
+
+
+def payload_format(compact=False) -> str:
+    return PAYLOAD_COMPACT if compact else PAYLOAD_FULL
+
+
+def compact_evidence(payload: list[dict]) -> str:
+    """The evidence index as JSON with no indentation, no spaces and no empty fields.
+
+    Same objects, ids and texts as the indented form; a field that is null or
+    empty is left out instead of being written as null. Only the formatting of
+    the blob differs, so the instructions around it stay word for word the same.
+    """
+    kept = [{k: v for k, v in item.items() if v not in (None, "")} for item in payload]
+    return json.dumps(kept, ensure_ascii=False, separators=(",", ":"))
+
+
 def build_prompt(description: str, asked: list[tuple[str, dict]], evidence: list[dict],
-                 identity: tuple[str, list[str]] | None = None) -> str:
+                 identity: tuple[str, list[str]] | None = None, compact=False) -> str:
     requirements = [
         {"ref": ref, "text": r["text"], "kind": r["kind"], "importance": r["importance"]} for ref, r in asked
     ]
     return PROMPT.format(
         description=description,
         requirements=json.dumps(requirements, ensure_ascii=False, indent=1),
-        evidence=json.dumps(_evidence_payload(evidence, identity), ensure_ascii=False, indent=1),
+        evidence=(compact_evidence(_evidence_payload(evidence, identity)) if compact
+                  else json.dumps(_evidence_payload(evidence, identity), ensure_ascii=False, indent=1)),
     )
 
 
@@ -303,6 +323,7 @@ def match_posting(
     cache: dict | None = None,
     identity: tuple[str, list[str]] | None = None,
     select=None,
+    compact=False,
 ) -> MatchOutcome:
     """Match one posting's requirements to the candidate's evidence and verify the result.
 
@@ -314,6 +335,9 @@ def match_posting(
     it is used only to strip, never sent.
     `select` (True / "strict" / "focused") sends only the evidence relevant to this ad (evidence_select.py);
     the verifier still resolves ids over the whole index.
+    `compact` sends the index in the compact serialization (compact_evidence); the cache key does not
+    change with it, since the instructions and the evidence are the same, and the entry records
+    `payloadFormat` as metadata.
     """
     if confirmed is not True:
         raise NotConfirmed("the matcher sends candidate evidence; it runs only in a confirmed (--judge) run")
@@ -348,7 +372,7 @@ def match_posting(
     try:
         mode = mode_of(select)
         sent = select_evidence(evidence, [r for _, r in asked], focused=mode == "focused")[0] if mode else evidence
-        proposals, gate_quotes = _ask(build_prompt(description, asked, sent, identity), complete, provider, model)
+        proposals, gate_quotes = _ask(build_prompt(description, asked, sent, identity, compact), complete, provider, model)
     except (LlmUnavailable, LlmRefused, SchemaViolation) as exc:
         return MatchOutcome(posting_id, None, warnings, f"no engine output for this posting: {exc}")
 
@@ -365,6 +389,7 @@ def match_posting(
     output = {
         "postingId": posting_id,
         "promptVersion": PROMPT_VERSION,
+        "payloadFormat": payload_format(compact),
         "profileVersion": candidate["profileVersion"],
         "adFingerprint": ad_fingerprint,
         "cacheKey": key,
