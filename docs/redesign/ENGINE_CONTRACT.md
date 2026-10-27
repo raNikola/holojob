@@ -507,3 +507,17 @@ Cache key: `adFingerprint:profileVersion:promptVersion`, plus `:sel-1` (strict) 
 The key keeps the **full** evidence version (`profileVersion`), not a hash of the selected subset, so any CV change
 invalidates every entry, as before; the suffix keeps results made from a subset apart from full-index ones. With the flag
 off, keys are exactly the old keys. Bump `SELECTION_VERSION` when the selection logic changes.
+
+## Compact evidence format (optional, default off)
+
+`CAREER_OS_ENGINE_COMPACT_EVIDENCE=1` sends the evidence index as JSON with no indentation, no spaces after
+separators and no null or empty fields (`matcher.compact_evidence`). Every item keeps all of its text, its id and
+the fields it has; a field that is absent means null. Unset or `0`: the payload is byte-identical to before.
+
+- **No version bump.** The instructions to the model are word for word the same (they never described the blob's
+  layout); only the blob's formatting differs. `promptVersion`, `profileVersion` and the cache key are unchanged, so
+  existing cache entries stay valid and answer lookups in either format.
+- New cache entries carry `payloadFormat` (`full` or `compact-1`) as metadata only, not in the key. If the compact
+  layout ever changes, change the name there; if instruction text must change, that is a `MATCH_PROMPT_VERSION` bump.
+- Independent of `CAREER_OS_ENGINE_EVIDENCE_SELECT`; the verifier still resolves ids over the full index.
+- `.env` change needs `podman-compose up -d --force-recreate`.
