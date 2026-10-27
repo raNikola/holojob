@@ -373,7 +373,7 @@ constants in code, set in Phase 1.
 - A `fail` gate is also reported in `counts.blockers` and in `caps` as `gate_blocked`, which limits the label (a
   blocked posting is never `Strong` or `Good`), not the number.
 - Gate results come from code, not from the model: work authorization from the existing `work_authorization.py`
-  statuses, location from `location_match` and `geography.py`, language from `candidate.gates.languages` against
+  statuses, location from `location_match`, `geography.py` and `location_text.py` (a remote ad is unknown until its text says Serbia, the Balkans or worldwide; a stated geography outside the allowed places fails), language from `candidate.gates.languages` against
   the ad's stated languages, salary floor from `salary.py`, role family from the role-family config. The model
   contributes only the quote from the ad.
 - Gates read the discovered job with its `llmFacts` (`match_engine/gates.py`), not `posting`: salary, `isRemote`,

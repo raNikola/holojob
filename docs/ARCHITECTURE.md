@@ -37,7 +37,7 @@ may live, and what the ad says about visa sponsorship. It never scores and
 never sees the
 candidate. It does not read an ad the board already places outside the candidate's
 `allowedLocations` (not remote, and a location naming only countries outside them,
-`work_authorization.outside_allowed_before_enrichment`): scoring caps it at 40 from the
+`work_authorization.outside_allowed_before_enrichment`; an ad whose own words say remote or open to a region is still read): scoring caps it at 40 from the
 same fields, so a model call would only be discarded. `--read-outside-allowed`
 turns that off, and an empty `allowedLocations` skips nothing. Results cache on the job under `llmFacts`, keyed by a fingerprint
 of the ad, so reruns are free. `llm_client.py` holds a provider table —
@@ -221,6 +221,15 @@ do not state.
   the same way: `needs_visa_refused` 25 (the ad will not sponsor),
   `outside_allowed` 40 (a location the candidate excluded), `needs_visa_silent`
   45 (the ad does not mention sponsorship; Weak, still reviewable).
+  When `allowedLocations` is set, `location_text.py` also reads the board's remote flag and
+  the stored description (no model): no remote signal and a place outside the list is
+  `outside_allowed` as before; a remote signal with a geography the ad states and the
+  candidate does not allow ("UK only", "must be based in the UK") is `outside_allowed` too;
+  a remote, worldwide or EU / Europe signal with no confirmed restriction is `unknown`
+  location, not capped, flagged "Verify location" (`workAuthorization.location`), and lowers
+  confidence only; "Serbia", "Balkans" or "worldwide" stated is `pass`. "Remote" alone never
+  means available from Serbia. Benefit lines ("fully remote workers") and a hybrid mention
+  are not a remote signal. An unknown location gets no ranking boost.
   `authorized`, `sponsored` and `unknown` are not capped, and nothing is ever
   hidden. The candidate's side is `jobFitPreferences.workAuthorization`
   (where they may work without sponsorship, and whether they are open to a
