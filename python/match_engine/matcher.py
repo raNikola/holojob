@@ -29,6 +29,7 @@ from job_fingerprint import job_fingerprint
 from llm_client import LlmRefused, LlmUnavailable, active_provider, complete_json
 from redact import redact_cv_text
 
+from .evidence_select import mode_of, select_evidence, version_of
 from .gates import GATES, settle_language
 from .verify import STATUSES, apply_confirmed_fact, apply_proposal, drop_unquoted
 
@@ -276,9 +277,19 @@ def posting_from_job(job: dict) -> dict:
     }
 
 
-def cache_key(ad_fingerprint: str, profile_version: str) -> str:
-    """Section 6: adFingerprint + profileVersion + promptVersion."""
-    return f"{ad_fingerprint}:{profile_version}:{PROMPT_VERSION}"
+def cache_key(ad_fingerprint: str, profile_version: str, selected=None) -> str:
+    """Section 6: adFingerprint + profileVersion + promptVersion.
+
+    With per-ad evidence selection on, the selection version is appended: a result
+    made from a subset of the evidence is not reused for a full-index run or the
+    other way round, and the key still carries the FULL evidence version
+    (profileVersion), so any CV change invalidates every entry. Off, the key is
+    exactly what it always was. `selected` is the flag value (True / "strict" /
+    "focused") or falsy.
+    """
+    key = f"{ad_fingerprint}:{profile_version}:{PROMPT_VERSION}"
+    version = version_of(mode_of(selected))
+    return f"{key}:{version}" if version else key
 
 
 def match_posting(
@@ -291,6 +302,7 @@ def match_posting(
     complete: Callable = complete_json,
     cache: dict | None = None,
     identity: tuple[str, list[str]] | None = None,
+    select=None,
 ) -> MatchOutcome:
     """Match one posting's requirements to the candidate's evidence and verify the result.
 
@@ -300,6 +312,8 @@ def match_posting(
     A successful output is stored in `cache` under cache_key(); a failure never is.
     `identity` is redact.identity_of(profile), for the second redaction pass;
     it is used only to strip, never sent.
+    `select` (True / "strict" / "focused") sends only the evidence relevant to this ad (evidence_select.py);
+    the verifier still resolves ids over the whole index.
     """
     if confirmed is not True:
         raise NotConfirmed("the matcher sends candidate evidence; it runs only in a confirmed (--judge) run")
@@ -308,7 +322,7 @@ def match_posting(
     description = posting.get("description") or ""
     provider = (provider or active_provider()).lower()
     ad_fingerprint = job_fingerprint(posting)
-    key = cache_key(ad_fingerprint, candidate["profileVersion"])
+    key = cache_key(ad_fingerprint, candidate["profileVersion"], select)
     if cache is not None and key in cache:
         return MatchOutcome(posting_id, cache[key])
 
@@ -332,7 +346,9 @@ def match_posting(
             asked.append((f"r{index + 1}", req))
 
     try:
-        proposals, gate_quotes = _ask(build_prompt(description, asked, evidence, identity), complete, provider, model)
+        mode = mode_of(select)
+        sent = select_evidence(evidence, [r for _, r in asked], focused=mode == "focused")[0] if mode else evidence
+        proposals, gate_quotes = _ask(build_prompt(description, asked, sent, identity), complete, provider, model)
     except (LlmUnavailable, LlmRefused, SchemaViolation) as exc:
         return MatchOutcome(posting_id, None, warnings, f"no engine output for this posting: {exc}")
 
