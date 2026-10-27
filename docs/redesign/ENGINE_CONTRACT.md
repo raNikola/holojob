@@ -493,3 +493,17 @@ Alternatives ("German or English", "English and/or Russian") are one demand, met
 - No languages listed in the profile: `unknown`.
 - Conflict: a must-have language the list does not cover, which a CV item mentions. The gate fails the ad and the
   requirement is MISSING; the matcher is not asked, and the conflict is added to `warnings` for the owner to settle.
+
+## Per-ad evidence selection (optional, default off)
+
+`match_engine/evidence_select.py`. With `CAREER_OS_ENGINE_EVIDENCE_SELECT` set (`1` = strict, `focused` = looser;
+changing `.env` needs `podman-compose up -d --force-recreate`) the matcher is sent, per ad, only the evidence items that
+share a keyword with a requirement it is asked about, plus the core: the first item of every role and every `fact`
+item (the tool and skill lists the MISSING rule needs). Items are sent unchanged, with their ids, so every quote stays
+verbatim; the verifier still resolves ids over the **whole** index. The requirements, gates, output schema and prompt
+are unchanged, and it only ever sends less than the full index (privacy list in `CLAUDE.md` still holds).
+
+Cache key: `adFingerprint:profileVersion:promptVersion`, plus `:sel-1` (strict) or `:sel-1-focused` when selection is on.
+The key keeps the **full** evidence version (`profileVersion`), not a hash of the selected subset, so any CV change
+invalidates every entry, as before; the suffix keeps results made from a subset apart from full-index ones. With the flag
+off, keys are exactly the old keys. Bump `SELECTION_VERSION` when the selection logic changes.

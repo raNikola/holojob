@@ -32,6 +32,7 @@ from job_fingerprint import job_fingerprint
 from llm_client import complete_json
 
 from .constants import ENGINE_VERSION
+from .evidence_select import mode_of
 from .fit import score
 from .gates import CHEAP_GATES, cheap_gate_failures, gate_results
 from .matcher import EVIDENCE_FIELDS, cache_key, match_posting, posting_from_job
@@ -39,6 +40,8 @@ from .matcher import EVIDENCE_FIELDS, cache_key, match_posting, posting_from_job
 ROOT = Path(__file__).resolve().parents[2]
 CACHE_PATH = ROOT / "data" / "cache" / "engine.json"
 SHADOW_ENV = "CAREER_OS_ENGINE_SHADOW"
+# Off by default: per-ad evidence selection (evidence_select.py) changes what the matcher is sent.
+SELECT_ENV = "CAREER_OS_ENGINE_EVIDENCE_SELECT"
 # Section 7: at most 50 postings per run go to the model.
 DEFAULT_LIMIT = 50
 # What a judged run's confirm dialog lists for the matcher (CLAUDE.md, "Privacy rules and exceptions").
@@ -52,6 +55,11 @@ def enabled(env=None) -> bool:
         "1", "true", "yes", "on"}
 
 
+def select_mode(env=None) -> str | None:
+    """None (off, the default), "strict" or "focused" from CAREER_OS_ENGINE_EVIDENCE_SELECT."""
+    return mode_of((env if env is not None else os.environ).get(SELECT_ENV))
+
+
 def _key(job: dict):
     return job.get("jobId") or id(job)
 
@@ -61,11 +69,13 @@ class ShadowEngine:
 
     def __init__(self, candidate: dict, *, judge: bool, provider: str, model: str | None,
                  cache_path: Path | None = None, limit: int | None = DEFAULT_LIMIT,
-                 complete=complete_json, workers: int = 4, identity: tuple[str, list[str]] | None = None):
+                 complete=complete_json, workers: int = 4, identity: tuple[str, list[str]] | None = None,
+                 select=None):
         self.candidate = candidate
         # redact.identity_of(profile), for the matcher's redaction; never sent.
         self.identity = identity
         self.judge = judge
+        self.select = select_mode() if select is None else mode_of(select)
         self.provider = provider
         self.model = model
         self.cache_path = cache_path or CACHE_PATH
@@ -86,7 +96,7 @@ class ShadowEngine:
             self.counts[key] += 1
 
     def _cache_key(self, posting: dict) -> str:
-        return cache_key(job_fingerprint(posting), self.candidate["profileVersion"])
+        return cache_key(job_fingerprint(posting), self.candidate["profileVersion"], self.select)
 
     def plan(self, jobs: list[dict]) -> set:
         """The jobs a judged run may send: uncached, with requirements, open, no confirmed fail on a cheap gate, the top `limit` by matchScore."""
@@ -135,7 +145,8 @@ class ShadowEngine:
                 self._count("beyondLimit")
                 return None
             outcome = match_posting(posting, self.candidate, confirmed=True, provider=self.provider,
-                                    model=self.model, complete=self._complete, identity=self.identity)
+                                    model=self.model, complete=self._complete, identity=self.identity,
+                                    select=self.select)
             if outcome.output is None:
                 print(f"engine (shadow) failed: {(job.get('title') or '?')[:45]}: {outcome.error}",
                       file=sys.stderr)
