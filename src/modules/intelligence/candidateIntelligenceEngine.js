@@ -11,7 +11,7 @@ import {
 import { validateIntelligenceMapping } from './intelligenceValidators.js'
 import { runIntelligenceQualityChecks } from './intelligenceQualityChecks.js'
 import { buildCandidateStrengths } from './strengthsBuilder.js'
-import { formatLanguages, normalizeLanguageNames } from '../../utils/languages.js'
+import { formatLanguages } from '../../utils/languages.js'
 import { normalizeRoleFamily } from '../../utils/roleFamily.js'
 import defaultWeights from '../../data/scoringWeights.json'
 
@@ -70,9 +70,6 @@ export function generateCandidateIntelligence(rawProfile, options = {}) {
     // Derived from basicProfile.languages ("Serbian (native)"); the fit judge's
     // digest reads this list, so it is never typed in by hand here.
     languages: formatLanguages(ctx.basicProfile?.languages),
-    // Optional: language names the owner confirmed they do not speak (basicProfile.languagesNotSpoken).
-    // Empty unless set; a language missing from the list above is only unknown, never a fail.
-    languagesNotSpoken: normalizeLanguageNames(ctx.basicProfile?.languagesNotSpoken),
     // The family the candidate chose in the profile (src/data/roleFamilies.json);
     // null when none is chosen, and scoring then assumes none.
     roleFamily: normalizeRoleFamily(ctx.basicProfile?.roleFamily) || null,

@@ -283,29 +283,58 @@ def test_a_spoken_language_is_met_without_asking_the_model():
     assert "Serbian (native)" not in fake.prompts[0]
 
 
-def test_an_unlisted_language_nobody_mentions_is_unknown():
-    outcome = _run(Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0))),
-                   candidate=_language_candidate(["German (C1)"]))
-    english = next(r for r in outcome.output["requirements"] if r["kind"] == "language")
-    assert (english["status"], english["strength"], english["evidenceId"]) == ("UNKNOWN", 0, None)
+def _language(outcome):
+    return next(r for r in outcome.output["requirements"] if r["kind"] == "language")
 
 
-def test_a_language_confirmed_as_not_spoken_is_missing():
-    candidate = _language_candidate(["German (C1)"])
-    candidate["gates"]["languagesNotSpoken"] = ["English"]
-    outcome = _run(Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0))), candidate=candidate)
-    english = next(r for r in outcome.output["requirements"] if r["kind"] == "language")
-    assert (english["status"], english["strength"], english["evidenceId"]) == ("MISSING", 0, None)
+def _lang_posting(text, importance="must"):
+    posting = _posting(REQS[:2] + [_req("prov:aaaaaaaaaaaa", text, text.lower(), importance=importance, kind="language")])
+    return {**posting, "description": DESCRIPTION + f"\n  * {text}"}
 
 
-def test_an_unlisted_language_the_evidence_mentions_goes_to_the_model():
-    evidence = EVIDENCE + [{"id": "ev-c", "text": "Ran workshops in English for UK clients.", "source": "role",
-                            "role": "PM — Acme", "start": None, "end": None, "strength": 3}]
+def _lang_run(text, languages, importance="must", evidence=EVIDENCE):
     fake = Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0),
                        ("r3", "PARTIAL", "ev-c", "Ran workshops in English", 3)))
-    outcome = _run(fake, candidate=_language_candidate(["German (C1)"], evidence))
-    assert '"r3"' in fake.prompts[0]
-    assert next(r for r in outcome.output["requirements"] if r["kind"] == "language")["status"] == "PARTIAL"
+    return fake, _run(fake, posting=_lang_posting(text, importance), candidate=_language_candidate(languages, evidence))
+
+
+def test_a_required_language_the_list_does_not_cover_is_missing():
+    fake, outcome = _lang_run("Fluent Russian", ["Serbian (native)", "English (fluent)"])
+    assert (_language(outcome)["status"], _language(outcome)["evidenceId"]) == ("MISSING", None)
+    assert '"r3"' not in fake.prompts[0]
+
+
+@pytest.mark.parametrize("text", ["Croatian", "Bosnian", "Serbo-Croatian", "Macedonian"])
+def test_a_relative_of_a_spoken_language_is_met(text):
+    _, outcome = _lang_run(f"Fluent {text}", ["Serbian (native)"])
+    assert (_language(outcome)["status"], _language(outcome)["quoteVerified"]) == ("MET", True)
+    assert _language(outcome)["evidenceQuote"] == "Serbian (native)"
+
+
+def test_alternatives_are_met_when_one_is_covered():
+    assert _lang_run("German or English", ["English (fluent)"])[1].output["requirements"][2]["status"] == "MET"
+    assert _lang_run("German or French", ["English (fluent)"])[1].output["requirements"][2]["status"] == "MISSING"
+
+
+def test_an_optional_language_not_covered_is_missing_like_any_optional_requirement():
+    _, outcome = _lang_run("German is a plus", ["English (fluent)"], importance="nice")
+    assert _language(outcome)["status"] == "MISSING" and _language(outcome)["importance"] == "nice"
+
+
+EVIDENCE_EN = EVIDENCE + [{"id": "ev-c", "text": "Ran workshops in English for UK clients.", "source": "role",
+                           "role": "PM — Acme", "start": None, "end": None, "strength": 3}]
+
+
+def test_an_optional_language_the_evidence_mentions_goes_to_the_model():
+    fake, outcome = _lang_run("English is a plus", ["German (C1)"], importance="nice", evidence=EVIDENCE_EN)
+    assert '"r3"' in fake.prompts[0] and _language(outcome)["status"] == "PARTIAL"
+
+
+def test_a_must_have_language_the_evidence_mentions_is_a_reported_conflict_not_a_choice():
+    fake, outcome = _lang_run("Fluent English", ["German (C1)"], evidence=EVIDENCE_EN)
+    assert '"r3"' not in fake.prompts[0] and _language(outcome)["status"] == "MISSING"
+    assert "conflict" not in _language(outcome)
+    assert any("must-have" in w and "English" in w for w in outcome.warnings)
 
 
 def test_no_listed_languages_leaves_a_language_requirement_unknown():

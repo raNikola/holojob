@@ -175,7 +175,7 @@ def test_scoring_with_the_flag_but_no_judge_calls_nothing(scoring, monkeypatch):
 DE = {"id": "de", "provisional": False, "text": "Fluent German", "kind": "language", "importance": "must",
       "postingQuote": "Fluent German required"}
 EN_CAND = {**CANDIDATE, "gates": {"languages": ["English (fluent)"]}}
-NO_DE_CAND = {**CANDIDATE, "gates": {"languages": ["English (fluent)"], "languagesNotSpoken": ["German"]}}
+NONE_CAND = {**CANDIDATE, "gates": {"languages": []}}
 
 
 def judged(tmp_path, candidate, limit):
@@ -189,7 +189,7 @@ def german(job_id, score):
 
 def test_a_confirmed_fail_is_excluded_and_the_next_ad_takes_its_place(tmp_path):
     jobs = [german("a", 90), job("b", 80), job("c", 70)]
-    eng = judged(tmp_path, NO_DE_CAND, limit=2)
+    eng = judged(tmp_path, EN_CAND, limit=2)
     assert eng.plan(jobs) == {"b", "c"}
     assert eng.excluded == {"language": 1, "work_authorization": 0, "location": 0, "role_family": 0}
     out = eng.apply(jobs)
@@ -198,12 +198,12 @@ def test_a_confirmed_fail_is_excluded_and_the_next_ad_takes_its_place(tmp_path):
 
 def test_an_unknown_gate_never_excludes_and_does_not_move_the_score(tmp_path):
     jobs = [german("a", 90), job("b", 80)]
-    eng = judged(tmp_path, EN_CAND, limit=1)
+    eng = judged(tmp_path, NONE_CAND, limit=1)
     assert eng.plan(jobs) == {"a"}
     assert sum(eng.excluded.values()) == 0
     out = {j["jobId"]: j for j in eng.apply(jobs)}
     assert out["a"]["matchScore"] == 90
-    plain = judged(tmp_path, EN_CAND, limit=2).apply([job("b", 80)])[0]["engineShadow"]
+    plain = judged(tmp_path, NONE_CAND, limit=2).apply([job("b", 80)])[0]["engineShadow"]
     unknown = [r for r in out["a"]["engineShadow"]["requirements"] if r["kind"] == "language"][0]
     assert unknown["status"] == "UNKNOWN"
     assert out["a"]["engineShadow"]["fit"] == plain["fit"]

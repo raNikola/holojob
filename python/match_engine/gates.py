@@ -71,6 +71,11 @@ LANGUAGES = {
     "English": r"english|englesk\w*",
     "Serbian": r"serbian|srpsk\w*",
     "Croatian": r"croatian|hrvatsk\w*",
+    "Bosnian": r"bosnian|bosansk\w*",
+    "Montenegrin": r"montenegrin|crnogorsk\w*",
+    # "BCS" alone is the British Computer Society in a UK ad, so it counts only next to "language".
+    "Serbo-Croatian": r"serbo[- ]?croatian|bcms|bhs|b/c/s|bcs(?= language| speaker)",
+    "Macedonian": r"macedonian|makedonsk\w*",
     "German": r"german|deutsch|nemack\w*|njemack\w*",
     "French": r"french|francusk\w*",
     "Spanish": r"spanish|spansk\w*",
@@ -101,11 +106,16 @@ _NAME = {lang: re.compile(rf"\b(?:{pattern})\b") for lang, pattern in LANGUAGES.
 _ASK_BEFORE = (
     r"fluen\w*|proficien\w*|command of|knowledge of|level of|native|exceptional|excellent|"
     r"advanced|intermediate|written|spoken|communicat\w*|speak\w*|"
-    r"\b[abc][12]\b|poznavanj\w*|znanj\w*|tecn\w*"
+    r"\b[abc][12]\b|poznavanj\w*|znanj\w*|tecn\w*|(?:required|mandatory|essential|must)\W+(?:\w+\W+){0,2}$"
 )
-_ASK_AFTER = r"written|spoken|fluen\w*|proficien\w*|level|\b[abc][12]\b|jezik\w*"
+# "required" must follow the language directly: "Spanish, where required" is about postings, not the hire.
+_ASK_AFTER = (r"written|spoken|fluen\w*|proficien\w*|level|\b[abc][12]\b|jezik\w*|native|"
+              r"^\W*(?:is\s+|are\s+)?(?:required|mandatory|essential)")
 # A clause that calls the language a plus is a nice-to-have, not a gate.
-_OPTIONAL = re.compile(r"\b(?:plus|advantage|bonus|nice to have|preferred|desirable|prednost)\b")
+_OPTIONAL = re.compile(
+    r"\b(?:plus|advantage|bonus|nice to have|preferred|desirable|prednost|an asset|beneficial|ideally|optional)\b")
+# "German or English", "English and/or Russian": any one of the named languages will do.
+_ALTERNATIVE = re.compile(r"\b(?:or|and/or|ili)\b|/")
 # Clauses are cut from the raw ad, before normalize_text collapses its line
 # breaks and tags: one bullet is one clause, so a "preferred" in one bullet
 # does not hide the language another bullet requires.
@@ -121,22 +131,91 @@ def _languages_in(text: str) -> set[str]:
     return {lang for lang, pattern in _NAME.items() if pattern.search(text)}
 
 
-def required_languages(job: dict, requirements: list[dict] | None = None) -> set[str]:
-    """Languages the ad requires: must-have language requirements, then the ad's own clauses."""
-    found = set()
+REQUIRED, OPTIONAL, MENTIONED = "required", "optional", "mentioned"
+
+
+def _split_by_marker(clause: str) -> list[str]:
+    """A clause cut at the commas where "a plus" starts or stops applying:
+    "German is an advantage, fluent English required" is two statements."""
+    parts = clause.split(", ")
+    out = [parts[0]]
+    for part in parts[1:]:
+        if bool(_OPTIONAL.search(out[-1])) != bool(_OPTIONAL.search(part)):
+            out.append(part)
+        else:
+            out[-1] += ", " + part
+    return out
+
+
+def language_demands(job: dict, requirements: list[dict] | None = None) -> list[tuple[frozenset, str]]:
+    """What the ad asks for in languages: [(alternatives, level)], level required, optional or mentioned.
+
+    `alternatives` is the set of languages of which one is enough ("German or
+    English"). A must-have language requirement is required, any other
+    importance optional (the extraction says which). The ad's own clauses are
+    read as well: a language next to words that ask for it is required unless
+    the clause calls it a plus; a bare mention is only "mentioned" and
+    settles nothing. Required wins over optional wins over mentioned.
+    """
+    demands: dict[frozenset, str] = {}
+
+    def add(group, level):
+        group = frozenset(group)
+        rank = (MENTIONED, OPTIONAL, REQUIRED)
+        if group and rank.index(level) >= rank.index(demands.get(group, MENTIONED)):
+            demands[group] = level
+
     for req in requirements or []:
-        if req.get("kind") == "language" and req.get("importance") == "must":
-            found |= _languages_in(normalize_text(f"{req.get('text') or ''} {req.get('postingQuote') or ''}"))
-    for clause in _clauses(job.get("description") or ""):
-        if _OPTIONAL.search(clause):
-            continue
+        if req.get("kind") == "language":
+            named = _languages_in(normalize_text(f"{req.get('text') or ''} {req.get('postingQuote') or ''}"))
+            if named:
+                level = REQUIRED if req.get("importance") == "must" else OPTIONAL
+                alt = _ALTERNATIVE.search(normalize_text(f"{req.get('text') or ''} {req.get('postingQuote') or ''}"))
+                for group in ([named] if alt else [{lang} for lang in named]):
+                    add(group, level)
+    extracted = set().union(*demands) if demands else set()
+    for clause in (part for c in _clauses(job.get("description") or "") for part in _split_by_marker(c)):
+        optional = bool(_OPTIONAL.search(clause))
+        asked = set()
         for lang, name in _NAME.items():
             for match in name.finditer(clause):
                 before = clause[max(0, match.start() - 40):match.start()]
                 after = clause[match.end():match.end() + 40]
                 if re.search(_ASK_BEFORE, before) or re.search(_ASK_AFTER, after):
-                    found.add(lang)
-    return found
+                    asked.add(lang)
+        # The extraction already says how the ad treats a language it extracted; the clause is not read again.
+        named = _languages_in(clause) - extracted
+        asked &= named
+        if len(named) > 1 and _ALTERNATIVE.search(clause) and asked:
+            add(named, OPTIONAL if optional else REQUIRED)
+            continue
+        for lang in named:
+            add({lang}, OPTIONAL if optional else (REQUIRED if lang in asked else MENTIONED))
+    # An extracted requirement already says how the ad treats a language: drop its bare mentions.
+    settled = set().union(*(g for g, level in demands.items() if level != MENTIONED)) if demands else set()
+    return [(g, level) for g, level in demands.items() if level != MENTIONED or not (g <= settled)]
+
+
+def required_languages(job: dict, requirements: list[dict] | None = None) -> set[str]:
+    """Every language some required demand names (alternatives included)."""
+    return set().union(*(g for g, level in language_demands(job, requirements) if level == REQUIRED), set())
+
+
+# Languages that count as one for the candidate: speaking any member covers all of them, and
+# `also` are covered too. Small on purpose; an entry is an owner decision (ENGINE_CONTRACT.md).
+LANGUAGE_COVERAGE = (
+    {"members": frozenset({"Serbian", "Croatian", "Bosnian", "Montenegrin", "Serbo-Croatian"}),
+     "also": frozenset({"Macedonian"})},  # the owner states he understands Macedonian
+)
+
+
+def covered_languages(spoken: set[str]) -> set[str]:
+    """The languages the list covers: those it names, plus a spoken one's close relatives."""
+    covered = set(spoken)
+    for group in LANGUAGE_COVERAGE:
+        if spoken & group["members"]:
+            covered |= group["members"] | group["also"]
+    return covered
 
 
 # Where a language requirement settled in code points for its evidence: the
@@ -153,42 +232,46 @@ def _spoken(gates: dict) -> dict[str, str]:
     return spoken
 
 
-def _not_spoken(gates: dict) -> set[str]:
-    """Languages the candidate explicitly confirmed they do not speak (gates.languagesNotSpoken)."""
-    return _languages_in(normalize_text(" ".join(gates.get("languagesNotSpoken") or [])))
-
-
 def settle_language(req: dict, candidate: dict) -> dict | None:
     """A kind-language requirement resolved in code, or None to leave it to the matcher.
 
-    The language name only, not the level, by the language gate's own
-    matching. MET when the candidate lists every language the requirement
-    names, credited as their own statement (CONFIRMED_FACT_STRENGTH); MISSING
-    only when one of them is in languagesNotSpoken, which the owner confirmed;
-    UNKNOWN when a language is simply not listed (a short list is not a
-    statement that the rest is not spoken) or the candidate lists none at all.
-    A requirement that names no language the table knows, or one the evidence
-    mentions but the list lacks, goes to the matcher as before.
+    The spoken-languages list is closed: a language is covered when it is on
+    the list or a close relative of a listed one (covered_languages). The
+    language name only, not the level. MET when the requirement is covered
+    (every language it names, or any one of them when they are alternatives),
+    credited as the candidate's own statement (CONFIRMED_FACT_STRENGTH).
+    Not covered: MISSING, whatever the importance; a CV item that mentions
+    the language hands an optional requirement to the matcher as before, and
+    for a must-have it is a conflict (the gate fails the ad) that is reported
+    in `conflict`, not decided. UNKNOWN when the candidate lists no languages
+    at all. A requirement that names no language the table knows goes to the
+    matcher.
     """
     if req.get("kind") != "language":
         return None
-    named = _languages_in(normalize_text(f"{req.get('text') or ''} {req.get('postingQuote') or ''}"))
+    text = normalize_text(f"{req.get('text') or ''} {req.get('postingQuote') or ''}")
+    named = _languages_in(text)
     if not named:
         return None
     gates = candidate.get("gates") or {}
-    spoken = _spoken(gates)
-    if named & (_not_spoken(gates) - set(spoken)):
-        return _resolved(req, "MISSING", None, None, False, 0)
     if not gates.get("languages"):
         return _resolved(req, "UNKNOWN", None, None, False, 0)
-    lacking = named - set(spoken)
-    if not lacking:
-        quote = "; ".join(sorted({spoken[lang] for lang in named}))
-        return _resolved(req, "MET", LANGUAGES_EVIDENCE_ID, quote, True, CONFIRMED_FACT_STRENGTH)
+    spoken = _spoken(gates)
+    covered = covered_languages(set(spoken))
+    ok = bool(named & covered) if _ALTERNATIVE.search(text) else named <= covered
+    if ok:
+        entries = {spoken[lang] for lang in spoken if named & covered_languages({lang})}
+        return _resolved(req, "MET", LANGUAGES_EVIDENCE_ID, "; ".join(sorted(entries)), True, CONFIRMED_FACT_STRENGTH)
+    lacking = named - covered
     mentioned = set().union(*(_languages_in(normalize_text(e.get("text") or "")) for e in candidate.get("evidence") or []))
     if lacking & mentioned:
-        return None
-    return _resolved(req, "UNKNOWN", None, None, False, 0)
+        if req.get("importance") != "must":
+            return None
+        missing = _resolved(req, "MISSING", None, None, False, 0)
+        missing["conflict"] = (f"language requirement {req.get('id')!r} is must-have and not covered by the profile's "
+                               f"languages, but a CV item mentions {', '.join(sorted(lacking & mentioned))}")
+        return missing
+    return _resolved(req, "MISSING", None, None, False, 0)
 
 
 def _prefs(gates: dict) -> dict:
@@ -235,21 +318,22 @@ def _commute_places(prefs: dict) -> list[str]:
 
 
 def language_result(job: dict, gates: dict, requirements: list[dict] | None = None) -> str:
-    """Unknown when the ad states no language or the candidate lists none; fail only on a language they confirmed they do not speak.
+    """Fail on a required language the closed list does not cover; unknown when nothing is settled.
 
-    A required language that is merely not listed is unknown, a question: the
-    list can be short. Only the language is compared, not the level: a stated
-    level is read neither from the ad nor from "English (fluent)".
+    Required means the extraction marks it must-have or the ad's clause asks
+    for it ("fluent", "required", "native"). Covered means on the candidate's
+    list or a close relative of a listed language (covered_languages); of
+    alternatives ("German or English") one is enough. A preferred or plus
+    language never fails, and a bare mention settles nothing. Unknown also
+    when the candidate lists no languages. Only the language is compared,
+    not the level.
     """
-    required = required_languages(job, requirements)
     spoken = set(_spoken(gates))
-    if not required:
+    required = [alternatives for alternatives, level in language_demands(job, requirements) if level == REQUIRED]
+    if not required or not spoken:
         return UNKNOWN
-    if (required & _not_spoken(gates)) - spoken:
-        return FAIL
-    if not spoken:
-        return UNKNOWN
-    return PASS if required <= spoken else UNKNOWN
+    covered = covered_languages(spoken)
+    return PASS if all(group & covered for group in required) else FAIL
 
 
 def salary_floor_result(job: dict, gates: dict) -> str:
