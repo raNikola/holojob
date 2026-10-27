@@ -191,7 +191,7 @@ def test_a_confirmed_fail_is_excluded_and_the_next_ad_takes_its_place(tmp_path):
     jobs = [german("a", 90), job("b", 80), job("c", 70)]
     eng = judged(tmp_path, NO_DE_CAND, limit=2)
     assert eng.plan(jobs) == {"b", "c"}
-    assert eng.excluded == {"language": 1, "work_authorization": 0, "role_family": 0}
+    assert eng.excluded == {"language": 1, "work_authorization": 0, "location": 0, "role_family": 0}
     out = eng.apply(jobs)
     assert "engineShadow" not in out[0] and eng.counts["excluded"] == 1 and eng.counts["matched"] == 2
 
@@ -218,3 +218,22 @@ def test_a_role_family_fail_with_evidence_is_excluded(tmp_path):
     eng = judged(tmp_path, CANDIDATE, limit=2)
     assert eng.plan([off, guess, job("b", 80)]) == {"g", "b"}
     assert eng.excluded["role_family"] == 1
+
+
+# --- location before the top-N cut -----------------------------------------------------
+
+LOC_CAND = {**CANDIDATE, "gates": {"allowedLocations": ["REMOTE", "EU", "RS"], "relocation": "none", "country": "Serbia",
+                                   "workAuthorization": {"holds": [{"jurisdiction": "RS"}]}}}
+
+
+def remote_job(job_id, score, text):
+    return job(job_id, score, description=DESCRIPTION + "\n" + text, isRemote=True)
+
+
+def test_a_confirmed_geographic_restriction_is_excluded_and_unknown_is_not_boosted(tmp_path):
+    jobs = [remote_job("uk", 90, "Remote, UK only."), remote_job("unk", 80, "Remote."), job("low", 70, isRemote=True)]
+    eng = judged(tmp_path, LOC_CAND, limit=2)
+    send = eng.plan(jobs)
+    assert send == {"unk", "low"} and eng.excluded["location"] == 1
+    # No boost: the unknown-location ad is ordered by its own matchScore like any other.
+    assert [j["jobId"] for j in sorted(jobs, key=lambda j: -j["matchScore"]) if j["jobId"] in send] == ["unk", "low"]

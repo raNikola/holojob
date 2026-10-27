@@ -145,6 +145,9 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         reasons.extend([f"Red flag: {f}" for f in red_flags])
     if authorization_cap is not None:
         reasons.append(f"Capped: {authorization['reason']}")
+    elif (authorization.get("location") or {}).get("flag"):
+        # Remote or open to a region, but the ad never says Serbia is included: a flag, not a cost.
+        reasons.append(f"{authorization['location']['flag']}: {authorization['location']['reason']}")
     elif authorization["status"] in (wa.SPONSORED, wa.UNKNOWN):
         reasons.append(f"Work authorization: {authorization['reason']}")
 

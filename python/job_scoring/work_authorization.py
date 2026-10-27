@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dimensions.location_match import is_remote_job
 from geography import REMOTE, WORLDWIDE, covers, resolve_countries
+from location_text import VERIFY_FLAG, read_location
 
 AUTHORIZED = "authorized"
 SPONSORED = "sponsored"
@@ -62,6 +63,9 @@ def outside_allowed_before_enrichment(job: dict, prefs: dict) -> bool:
     if not allowed:
         return False
     bare = {k: v for k, v in job.items() if k != "llmFacts"}
+    # An ad whose own words are remote or open to a region is read by scoring (location_text).
+    if read_location(bare, allowed, is_remote_job(bare)):
+        return False
     remote, places = job_places(bare)
     restricted = [p for p in places if p != WORLDWIDE]
     if remote or not restricted:
@@ -73,16 +77,27 @@ def authorization_status(job: dict, prefs: dict) -> dict:
     """{"status", "place", "reason"} for one job against the candidate's rights."""
     facts = job.get("llmFacts") or {}
     remote, places = job_places(job)
+    # The candidate's own location set, only when they chose to set one.
+    allowed = [str(a).upper() for a in prefs.get("allowedLocations") or [] if a]
+    location = read_location(job, allowed, remote) if allowed else None
+    if location and location["state"] in ("pass", "unknown") and not remote:
+        # Remote by the ad's own words: the board's office city is not where the work is done.
+        remote, places = True, []
     restricted = [p for p in places if p != WORLDWIDE]
     shown = "/".join(restricted[:3]) + (f" +{len(restricted) - 3} more" if len(restricted) > 3 else "")
     place = "remote" if remote and not restricted else shown or "unknown"
 
     def result(status: str, reason: str) -> dict:
-        return {"status": status, "place": place, "reason": reason}
+        found = {"status": status, "place": place, "reason": reason}
+        if location:
+            found["location"] = {k: location[k] for k in ("state", "flag", "quote", "reason")}
+        return found
 
-    # The candidate's own location set, only when they chose to set one.
-    allowed = [str(a).upper() for a in prefs.get("allowedLocations") or [] if a]
     if allowed:
+        if location and location["state"] == "fail":
+            # The ad's stated geography is outside the places taken. A refused visa is stricter and stays.
+            refused = _visa_result(facts, prefs, restricted, result, place)
+            return refused if refused and refused["status"] == NEEDS_VISA_REFUSED else result(OUTSIDE_ALLOWED, location["reason"])
         if remote:
             inside = REMOTE in allowed
         elif restricted:
@@ -97,12 +112,22 @@ def authorization_status(job: dict, prefs: dict) -> dict:
         return result(UNKNOWN, "work authorization is not set in the profile, so the visa was not checked")
     if not restricted:
         if remote:
+            if location and location["state"] == "unknown":
+                return result(AUTHORIZED, f"{VERIFY_FLAG}: {location['reason']}")
             return result(AUTHORIZED, "remote with no restriction on where you live")
         return result(UNKNOWN, "the job's country is not known, so the visa was not checked")
     if any(covers(right, p) for right in holds for p in restricted):
         where = next(p for p in restricted if any(covers(right, p) for right in holds))
         return result(AUTHORIZED, f"you can work in {where}")
 
+    return _visa_result(facts, prefs, restricted, result, place)
+
+
+def _visa_result(facts, prefs, restricted, result, place="unknown"):
+    """The status once a work permit is needed for every restricted place, or None when one is held."""
+    holds = _holds(prefs)
+    if not holds or not restricted or any(covers(right, p) for right in holds for p in restricted):
+        return None
     sponsorship = facts.get("visaSponsorship") or "not_mentioned"
     open_to_sponsorship = bool((prefs.get("workAuthorization") or {}).get("openToSponsorship"))
     if sponsorship == "offered":

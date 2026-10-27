@@ -209,9 +209,16 @@ def work_authorization_result(job: dict, gates: dict) -> str:
 
 
 def location_result(job: dict, gates: dict) -> str:
+    """Fail outside the allowed places; unknown when a remote ad does not say Serbia is included; pass when it does."""
     prefs = _prefs(gates)
-    if wa.authorization_status(job, prefs)["status"] == wa.OUTSIDE_ALLOWED:
+    authorization = wa.authorization_status(job, prefs)
+    if authorization["status"] == wa.OUTSIDE_ALLOWED:
         return FAIL
+    state = (authorization.get("location") or {}).get("state")
+    if state == "unknown":
+        return UNKNOWN
+    if state == "pass":
+        return PASS
     score, _ = lm.score_location_match(job, {"jobFitPreferences": prefs})
     result = LOCATION_RESULTS[score]
     # "Elsewhere" means away from the cities the candidate named; with none
@@ -291,7 +298,7 @@ def gate_results(job: dict, candidate: dict, quotes=None, requirements: list[dic
 
 # The gates that need only what is stored with the ad (its text, llmFacts and
 # the candidate's profile): a fail here is known before any model call.
-CHEAP_GATES = ("language", "work_authorization", "role_family")
+CHEAP_GATES = ("language", "work_authorization", "location", "role_family")
 
 
 def cheap_gate_failures(job: dict, candidate: dict) -> list[str]:

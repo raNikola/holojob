@@ -9,7 +9,10 @@ const BADGES = {
 
 export function authorizationBadge(job) {
   const badge = BADGES[job?.workAuthorization?.status]
-  return badge ? { ...badge, reason: job.workAuthorization.reason || '' } : null
+  if (badge) return { ...badge, reason: job.workAuthorization.reason || '' }
+  // Remote or open to a region, but the ad never says where you may live: a flag, not a cap.
+  const location = job?.workAuthorization?.location
+  return location?.flag ? { label: location.flag, variant: 'medium', reason: location.reason || '' } : null
 }
 
 export const isCapReason = (reason) => reason.startsWith('Capped:')

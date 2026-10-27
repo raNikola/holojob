@@ -661,7 +661,13 @@ Fields that exist in the browser profile and appear in the disk mirror only afte
       "workAuthorization": {
         "status": "<string>",
         "place": "<string>",
-        "reason": "<string>"
+        "reason": "<string>",
+        "location?": {
+          "state": "pass|unknown|fail",
+          "flag": "<null>|<string>",
+          "quote": "<null>|<string>",
+          "reason": "<string>"
+        }
       },
       "salaryMonthlyEur": {
         "<one of>": [
