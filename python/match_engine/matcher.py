@@ -325,6 +325,8 @@ def match_posting(
             resolved[index] = apply_confirmed_fact(req, facts[req["id"]], evidence_by_id)
         elif (settled := settle_language(req, candidate)) is not None:
             # Settled from candidate.gates.languages, which never goes to the provider.
+            if conflict := settled.pop("conflict", None):
+                warnings.append(conflict)
             resolved[index] = settled
         else:
             asked.append((f"r{index + 1}", req))

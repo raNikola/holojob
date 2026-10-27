@@ -145,15 +145,57 @@ def test_language_pass_when_every_required_language_is_spoken():
     assert language_result(job(description="Fluent English required."), cand_gates()) == "pass"
 
 
-def test_language_unknown_on_a_language_the_candidate_does_not_list():
-    # A short list is not a statement that the rest is not spoken.
-    assert language_result(job(description="Fluent German and English required."), cand_gates()) == "unknown"
+SERBIAN = cand_gates(languages=["Serbian (native)", "English (fluent)"])
 
 
-def test_language_fail_only_on_a_language_confirmed_as_not_spoken():
-    gates = cand_gates(languagesNotSpoken=["German"])
-    assert language_result(job(description="Fluent German and English required."), gates) == "fail"
-    assert language_result(job(description="Fluent French and English required."), gates) == "unknown"
+@pytest.mark.parametrize("text,expected", [
+    ("Fluent Russian required.", "fail"),
+    ("Fluent German and English required.", "fail"),
+    ("German is a nice to have.", "unknown"),
+    ("Knowledge of German is an advantage, fluent English required.", "pass"),
+    ("Fluent German or English required.", "pass"),
+    ("Fluent English and/or Russian required.", "pass"),
+    ("Fluent German or French required.", "fail"),
+    ("Fluent Croatian required.", "pass"),
+    ("Native Macedonian required.", "pass"),
+    ("Montenegrin or Bosnian, fluent.", "pass"),
+    ("Our customers are mainly German companies.", "unknown"),
+])
+def test_language_gate_with_the_closed_list(text, expected):
+    assert language_result(job(description=text), SERBIAN) == expected
+
+
+def test_language_unknown_when_the_extraction_does_not_say_and_the_ad_only_mentions_it():
+    assert language_result(job(description="Our customers are mainly German companies."), SERBIAN) == "unknown"
+
+
+def test_language_uses_the_extractions_importance():
+    must = [{"kind": "language", "importance": "must", "text": "Russian", "postingQuote": "Russian"}]
+    nice = [{"kind": "language", "importance": "nice", "text": "Russian", "postingQuote": "Russian"}]
+    assert language_result(job(), SERBIAN, must) == "fail"
+    assert language_result(job(), SERBIAN, nice) == "unknown"
+
+
+def test_the_extraction_wins_over_the_clause_for_a_language_it_extracted():
+    # "Speak Italian" reads as an ask, but the extraction marked it preferred.
+    nice = [{"kind": "language", "importance": "preferred", "text": "Speak Italian",
+             "postingQuote": "Speak Italian (highly recommended)"}]
+    ad = job(description="Speak Italian (highly recommended for our Milan location)")
+    assert language_result(ad, SERBIAN, nice) == "unknown"
+    assert language_result(ad, SERBIAN, []) == "fail"
+
+
+def test_where_required_in_a_sentence_about_postings_is_not_a_language_requirement():
+    text = "Postings are available in English, and in Spanish, where required."
+    assert language_result(job(description=text), SERBIAN) == "unknown"
+
+
+def test_language_relatives_follow_the_spoken_list():
+    from match_engine.gates import covered_languages
+
+    assert covered_languages({"Serbian"}) >= {"Croatian", "Bosnian", "Montenegrin", "Serbo-Croatian", "Macedonian"}
+    assert covered_languages({"English"}) == {"English"}
+    assert "Macedonian" not in covered_languages({"English", "German"})
 
 
 def test_role_family_unknown_for_other_or_a_track_without_evidence():

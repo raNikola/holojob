@@ -44,16 +44,3 @@ export function formatLanguages(value) {
     entry.proficiency ? `${entry.language} (${entry.proficiency})` : entry.language,
   )
 }
-
-/**
- * Language names the owner confirmed they do not speak: basicProfile.languagesNotSpoken,
- * a list of names. Optional; missing or malformed becomes an empty list. Scoring
- * fails a required language only if it is named here, never because it is merely unlisted.
- *
- * @param {unknown} value
- * @returns {string[]}
- */
-export function normalizeLanguageNames(value) {
-  if (!Array.isArray(value)) return []
-  return value.map((name) => (typeof name === 'string' ? name.trim() : '')).filter(Boolean)
-}

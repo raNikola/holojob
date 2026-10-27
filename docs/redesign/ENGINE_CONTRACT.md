@@ -33,8 +33,7 @@ evidence); code verifies both quotes.
 | `candidate.confirmedFacts[]` | array | Answers the user gave to engine questions. `competencyId`, `has` (boolean), `note` (string, may be empty). A confirmed fact outranks inferred evidence. |
 | `candidate.gates.workAuthorization` | object | Where the candidate may work without sponsorship and whether a sponsored role is acceptable (`jobFitPreferences.workAuthorization`). |
 | `candidate.gates.allowedLocations` | string[] | Places the candidate accepts; empty gates nothing. |
-| `candidate.gates.languages` | string[] | Spoken languages with level, for example `Serbian (native)`. Empty means unstated, not "none". |
-| `candidate.gates.languagesNotSpoken` | string[] (optional) | Language names the owner confirmed they do not speak (profile `basicProfile.languagesNotSpoken`, default empty, present only when set). Only these can fail the language gate or settle a language requirement as MISSING; a required language that is merely unlisted is UNKNOWN. |
+| `candidate.gates.languages` | string[] | Spoken languages with level, for example `Serbian (native)`. A **closed list**: a language is covered when it is listed or is a close relative of a listed one (see "Language coverage"). Empty means unstated, not "none". |
 | `candidate.gates.minSalaryEur` | number or null | Monthly floor in EUR; null when unset. |
 | `candidate.gates.preferredLocations`, `remotePreference`, `relocation`, `country` | string[] / string or null | The commute and relocation preferences `location_match.py` reads; the location gate reuses that logic. |
 
@@ -112,7 +111,6 @@ anywhere else that can reach a provider.
             "workAuthorization": { "type": "object" },
             "allowedLocations": { "type": "array", "items": { "type": "string" } },
             "languages": { "type": "array", "items": { "type": "string" } },
-            "languagesNotSpoken": { "type": "array", "items": { "type": "string" } },
             "minSalaryEur": { "type": ["number", "null"], "minimum": 0 },
             "preferredLocations": { "type": "array", "items": { "type": "string" } },
             "remotePreference": { "type": ["string", "null"] },
@@ -470,3 +468,28 @@ a calibration run on `tests/fixtures/postings/` before Phase 1 code depends on i
    `kind` enum.
 5. Whether the salary floor, which is display-only in today's score, becomes a gate in the engine (principle 5
    says it does).
+
+## Language coverage (closed list)
+
+The profile's spoken-languages list is closed: the owner is not asked to list the languages he does not speak.
+`match_engine/gates.py` (`LANGUAGE_COVERAGE`, `covered_languages`) widens it with a small table, one row per family:
+
+| Members (speaking any covers all of them) | Also covered |
+|---|---|
+| Serbian, Croatian, Bosnian, Montenegrin, Serbo-Croatian (BCS / BCMS) | Macedonian (the owner states he understands it) |
+
+"BCS" alone is not read in ad text (it is the British Computer Society in UK ads); it counts only as "BCS language".
+
+Per language an ad names (`language_demands`): **required** when the extraction marks the requirement must-have or the
+clause asks for it (fluent, native, required, mandatory, essential), **optional** when the importance is not must or the
+clause calls it a plus / advantage / preferred / nice to have, **mentioned** when the ad names it with no sign of either.
+Alternatives ("German or English", "English and/or Russian") are one demand, met when any one is covered.
+
+- A required, uncovered language: language gate `fail` (the ad leaves the top-50 pick before any matcher call) and
+  `settle_language` gives MISSING.
+- An optional language never fails or excludes. `settle_language` gives MET when covered, else MISSING as for any
+  optional requirement (a CV item that mentions it still goes to the matcher).
+- A bare mention: gate `unknown` (confidence only, no exclusion).
+- No languages listed in the profile: `unknown`.
+- Conflict: a must-have language the list does not cover, which a CV item mentions. The gate fails the ad and the
+  requirement is MISSING; the matcher is not asked, and the conflict is added to `warnings` for the owner to settle.
