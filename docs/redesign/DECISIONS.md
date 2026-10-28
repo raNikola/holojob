@@ -65,3 +65,4 @@ The phase list, status and acceptance criteria live in one place: [../ROADMAP.md
   - **Migration ships.** The migration ships in S2 even if the dry run finds no tracked records, so legacy tracking in older backup exports still migrates.
   - **AI context.** `aiContextBuilder` stops sending recruiter name, e-mail and LinkedIn in S4.
   - **"Applied" is derived** from the application store. The job status `applied_manually` is removed in S4.
+- 2026-10-29 - Tracker stages are configurable (stable ids), superseding the fixed stage enum; O1-O4 decided, O5-O6 deferred.
