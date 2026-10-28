@@ -25,16 +25,18 @@ import json
 import os
 import sys
 import threading
+from datetime import date
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from job_fingerprint import job_fingerprint
+from competency_mapping import load_remap
 from llm_client import complete_json
 
 from .constants import ENGINE_VERSION
 from .evidence_select import mode_of
 from .fit import score
-from .gates import CHEAP_GATES, cheap_gate_failures, gate_results
+from .gates import CHEAP_GATES, PASS, cheap_gate_report, gate_results
 from .matcher import EVIDENCE_FIELDS, cache_key, match_posting, posting_from_job
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -71,19 +73,36 @@ def _key(job: dict):
     return job.get("jobId") or id(job)
 
 
+def local_score(job: dict) -> int:
+    """The Layer 1 score: matchScore before the fit judge's adjustment, whether or not a verdict is applied to it."""
+    judged = job.get("llmFit")
+    local = judged.get("localScore") if isinstance(judged, dict) else None
+    return local if isinstance(local, int) and not isinstance(local, bool) else (job.get("matchScore") or 0)
+
+
+def _posted(job: dict) -> int:
+    """The posting date as a day number, 0 when the board gave none or it cannot be read."""
+    try:
+        return date.fromisoformat(str(job.get("datePosted") or "")[:10]).toordinal()
+    except ValueError:
+        return 0
+
+
 class ShadowEngine:
     """Adds engineShadow to scored jobs; asks the matcher only when `judge` is True."""
 
     def __init__(self, candidate: dict, *, judge: bool, provider: str, model: str | None,
                  cache_path: Path | None = None, limit: int | None = DEFAULT_LIMIT,
                  complete=complete_json, workers: int = 4, identity: tuple[str, list[str]] | None = None,
-                 select=None, compact=None):
+                 select=None, compact=None, remap: dict[str, str] | None = None):
         self.candidate = candidate
         # redact.identity_of(profile), for the matcher's redaction; never sent.
         self.identity = identity
         self.judge = judge
         self.select = select_mode() if select is None else mode_of(select)
         self.compact = compact_enabled() if compact is None else bool(compact)
+        # prov: id -> canonical id (data/requirement-remap.json), applied to every ad's requirements when read.
+        self.remap = load_remap() if remap is None else remap
         self.provider = provider
         self.model = model
         self.cache_path = cache_path or CACHE_PATH
@@ -103,21 +122,30 @@ class ShadowEngine:
         with self._lock:
             self.counts[key] += 1
 
+    def _posting(self, job: dict) -> dict:
+        return posting_from_job(job, self.remap)
+
     def _cache_key(self, posting: dict) -> str:
-        return cache_key(job_fingerprint(posting), self.candidate["profileVersion"], self.select)
+        return cache_key(job_fingerprint(posting), self.candidate["profileVersion"], self.select,
+                         posting["facts"].get("requirements"))
 
     def plan(self, jobs: list[dict]) -> set:
-        """The jobs a judged run may send: uncached, with requirements, open, no confirmed fail on a cheap gate, the top `limit` by matchScore."""
+        """The jobs a judged run may send: uncached, with requirements, open, no confirmed fail on a cheap gate, the top `limit`.
+
+        Ranked on the local (Layer 1) score, never on a fit-judge adjustment; equal scores are
+        ordered by relevance, not by position in the list: a passed location gate before an
+        unknown one, then fewer provisional requirements, then the newer posting, then the fingerprint.
+        """
         eligible = []
         self.excluded = {g: 0 for g in CHEAP_GATES}
         self._excluded_keys = set()
-        for index, job in enumerate(jobs):
-            posting = posting_from_job(job)
+        for job in jobs:
+            posting = self._posting(job)
             if job.get("isClosed") or not posting["facts"].get("requirements"):
                 continue
             if self._cache_key(posting) in self._cache:
                 continue
-            failed = cheap_gate_failures(job, self.candidate)
+            failed, location = cheap_gate_report(job, self.candidate)
             if failed:
                 # A confirmed fail on a gate decided from the stored ad: not worth a
                 # call, and the next ad takes the place. Unknown never gets here.
@@ -125,13 +153,15 @@ class ShadowEngine:
                 for gate in failed:
                     self.excluded[gate] += 1
                 continue
-            eligible.append((-(job.get("matchScore") or 0), index, _key(job)))
+            provisional = sum(1 for r in posting["facts"]["requirements"] if r.get("provisional"))
+            eligible.append((-local_score(job), location != PASS, provisional, -_posted(job),
+                             job_fingerprint(posting), str(_key(job)), _key(job)))
         eligible.sort()
         chosen = eligible if self.limit is None else eligible[: max(0, self.limit)]
-        return {key for _, _, key in chosen}
+        return {row[-1] for row in chosen}
 
     def _one(self, job: dict, send: set) -> dict | None:
-        posting = posting_from_job(job)
+        posting = self._posting(job)
         if job.get("isClosed"):
             self._count("closed")
             return None
@@ -191,8 +221,8 @@ class ShadowEngine:
     def preview(self, jobs: list[dict]) -> dict:
         """What a judged run would send for the engine, counted without calling anything."""
         send = self.plan(jobs)
-        sendable = [j for j in jobs if not j.get("isClosed") and posting_from_job(j)["facts"].get("requirements")]
-        cached = sum(1 for j in sendable if self._cache_key(posting_from_job(j)) in self._cache)
+        sendable = [j for j in jobs if not j.get("isClosed") and self._posting(j)["facts"].get("requirements")]
+        cached = sum(1 for j in sendable if self._cache_key(self._posting(j)) in self._cache)
         return {
             "enabled": True,
             "toSend": len(send),

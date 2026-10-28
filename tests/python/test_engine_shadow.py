@@ -87,10 +87,10 @@ def test_nothing_but_engineShadow_changes(tmp_path):
 def test_the_per_run_limit_sends_the_highest_scores_first(tmp_path):
     fake = Fake()
     e = engine(tmp_path, judge=True, fake=fake, limit=2)
-    jobs = [job("low", 40), job("high", 90), job("mid", 65), job("tie", 65)]
+    jobs = [job("low", 40), job("high", 90), job("mid", 65)]
     out = {j["jobId"]: j for j in e.apply(jobs)}
-    assert fake.calls == 2 and e.counts["beyondLimit"] == 2
-    assert {k for k, j in out.items() if "engineShadow" in j} == {"high", "mid"}  # equal scores: input order
+    assert fake.calls == 2 and e.counts["beyondLimit"] == 1
+    assert {k for k, j in out.items() if "engineShadow" in j} == {"high", "mid"}  # equal scores: test_matcher_planning.py
 
 
 def test_a_cached_posting_does_not_take_a_place_under_the_limit(tmp_path):
@@ -148,6 +148,7 @@ def scoring(tmp_path, monkeypatch):
     monkeypatch.setattr(run_scoring, "FIT_CACHE_PATH", tmp_path / "llm_fit.json")
     monkeypatch.setattr(shadow, "CACHE_PATH", tmp_path / "engine.json")
     monkeypatch.setattr("confirmed_facts.load", lambda *a, **k: [])  # never the server's own file
+    monkeypatch.setattr(shadow, "load_remap", lambda: {})  # nor its remap table
     monkeypatch.setattr(sys, "argv", ["run_scoring.py", "--intelligence", str(tmp_path / "intel.json"),
                                       "--jobs", str(tmp_path / "jobs.json"), "--output", str(tmp_path / "out.json")])
 
