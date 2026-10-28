@@ -52,3 +52,16 @@ The phase list, status and acceptance criteria live in one place: [../ROADMAP.md
   - **`profileVersion` is split.** An EVIDENCE version (evidence index + role family + prompt/engine version) is the only thing that invalidates cached model verdicts. Confirmed answers and gate values are NOT in the cache key; they are applied in code on top of cached verdicts. The matcher sends all requirements of an ad to the model, and answers override statuses in code.
   - **Gate quotes move from the matcher call into extraction**, which never sees the candidate, so an ad whose requirements all resolve locally makes zero matcher calls.
   - **Accuracy gate.** Before the mapping is relied on widely, a sample of about 100 real requirements is audited for correct, wrong and legitimately provisional mappings. The acceptable wrong-merge rate is set by the owner after the first measurement.
+- 2026-10-28 - Application tracker (Phase 3, A2): the ten open questions in [TRACKER_PLAN.md](TRACKER_PLAN.md) section 9 are decided as recommended. A2 replaces the interim fix A1.
+  - **Master location.** The server file `data/applications/applications.json` is the master from the first slice. The browser keeps a read cache only (principle 15).
+  - **No deletion.** An application created by mistake is voided (`application_voided`), hidden from lists and kept on disk. A physical purge is a manual script outside the app.
+  - **Undo a void** (owner follow-up, same day). An `application_restored` event undoes a void. The full event history is kept; a restore creates no new application and no duplicate statistic, and it is refused when it would create a duplicate open attempt.
+  - **CSV `attempt` column is optional.** When present, it separates attempts at the same position. When absent, the existing dedupe rules apply unchanged (absent = 1).
+  - **Ghosted is suggested only.** Nudge N2 offers a button. The system never writes an outcome on its own.
+  - **Nudge thresholds are code constants:** 7 / 21 / 1 / 7 / 2 days for N1 / N2 / N3 / N4 / N5. Phase 5 may report them against real reply times and never tunes them automatically.
+  - **Stages.** The stage enum is fixed, with a free label per event. Custom stages are not built.
+  - **Outreach and tailored assets stay on the job record in A2.** A follow-up step after S4 moves outreach messages into application events.
+  - **Frozen copies.** Every CV and cover letter sent is copied into `data/applications/files/<appId>/`, with its sha256.
+  - **Migration ships.** The migration ships in S2 even if the dry run finds no tracked records, so legacy tracking in older backup exports still migrates.
+  - **AI context.** `aiContextBuilder` stops sending recruiter name, e-mail and LinkedIn in S4.
+  - **"Applied" is derived** from the application store. The job status `applied_manually` is removed in S4.
