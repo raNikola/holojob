@@ -20,6 +20,7 @@ posting: the caller keeps the local score, and nothing is cached.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from typing import Callable
@@ -28,6 +29,7 @@ from job_fingerprint import PROMPT_VERSION as EXTRACTION_PROMPT_VERSION
 from job_fingerprint import job_fingerprint
 from llm_client import LlmRefused, LlmUnavailable, active_provider, complete_json
 from redact import redact_cv_text
+from requirement_frames import remap_facts
 
 from .evidence_select import mode_of, select_evidence, version_of
 from .gates import GATES, settle_language
@@ -288,26 +290,51 @@ def _ask(prompt: str, complete: Callable, provider: str, model: str | None) -> t
     raise AssertionError("unreachable")
 
 
-def posting_from_job(job: dict) -> dict:
-    """The contract's posting input (section 1) from a discovered or scored job and its llmFacts."""
+def posting_from_job(job: dict, remap: dict[str, str] | None = None) -> dict:
+    """The contract's posting input (section 1) from a discovered or scored job and its llmFacts.
+
+    `remap` (competency_mapping.load_remap) is applied to the requirement ids here, the one
+    place the engine reads them, so they agree with data/cache/requirement-frames.json.
+    """
     return {
         "id": job.get("jobId") or "", "title": job.get("title") or "", "company": job.get("company") or "",
         "location": job.get("location") or "", "description": job.get("description") or "",
-        "facts": job.get("llmFacts") or {},
+        "facts": remap_facts(job.get("llmFacts") or {}, remap),
     }
 
 
-def cache_key(ad_fingerprint: str, profile_version: str, selected=None) -> str:
-    """Section 6: adFingerprint + profileVersion + promptVersion.
+# Bump when what the key covers changes: entries made under an older key are then not found.
+KEY_VERSION = "rq1"
+
+
+def requirements_hash(requirements: list[dict] | None) -> str:
+    """A stable hash of the requirements the matcher is asked about; the order of the list is not part of it.
+
+    Id and text as asked, plus the kind, importance and quote, which are sent or stored in the
+    result as well: a result is the answer to exactly this set.
+    """
+    rows = sorted(
+        json.dumps([r.get("id"), " ".join(str(r.get("text") or "").split()), r.get("kind"), r.get("importance"),
+                    " ".join(str(r.get("postingQuote") or "").split())], ensure_ascii=False)
+        for r in requirements or []
+    )
+    return hashlib.sha256("\n".join(rows).encode("utf-8")).hexdigest()[:16]
+
+
+def cache_key(ad_fingerprint: str, profile_version: str, selected=None, requirements: list[dict] | None = None) -> str:
+    """Section 6: adFingerprint + profileVersion + promptVersion + the ad's requirement set.
+
+    The requirement set is part of the key: the stored result carries its own requirements[],
+    so a result must never answer for an ad whose requirements (ids or texts) have changed since,
+    for instance after a re-extraction or a remap.
 
     With per-ad evidence selection on, the selection version is appended: a result
     made from a subset of the evidence is not reused for a full-index run or the
     other way round, and the key still carries the FULL evidence version
-    (profileVersion), so any CV change invalidates every entry. Off, the key is
-    exactly what it always was. `selected` is the flag value (True / "strict" /
-    "focused") or falsy.
+    (profileVersion), so any CV change invalidates every entry. `selected` is the
+    flag value (True / "strict" / "focused") or falsy.
     """
-    key = f"{ad_fingerprint}:{profile_version}:{PROMPT_VERSION}"
+    key = f"{ad_fingerprint}:{profile_version}:{PROMPT_VERSION}:{KEY_VERSION}-{requirements_hash(requirements)}"
     version = version_of(mode_of(selected))
     return f"{key}:{version}" if version else key
 
@@ -346,7 +373,7 @@ def match_posting(
     description = posting.get("description") or ""
     provider = (provider or active_provider()).lower()
     ad_fingerprint = job_fingerprint(posting)
-    key = cache_key(ad_fingerprint, candidate["profileVersion"], select)
+    key = cache_key(ad_fingerprint, candidate["profileVersion"], select, (posting.get("facts") or {}).get("requirements"))
     if cache is not None and key in cache:
         return MatchOutcome(posting_id, cache[key])
 

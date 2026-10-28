@@ -81,7 +81,7 @@ def run(args) -> list[dict]:
         job["llmFacts"] = facts
         posting = posting_from_job(job)
 
-        key = cache_key(job_fingerprint(posting), candidate["profileVersion"])
+        key = cache_key(job_fingerprint(posting), candidate["profileVersion"], None, posting["facts"].get("requirements"))
         output = matches.get(key)
         if output is None:
             if not args.judge:

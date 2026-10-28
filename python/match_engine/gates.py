@@ -385,11 +385,16 @@ def gate_results(job: dict, candidate: dict, quotes=None, requirements: list[dic
 CHEAP_GATES = ("language", "work_authorization", "location", "role_family")
 
 
+def cheap_gate_report(job: dict, candidate: dict) -> tuple[list[str], str]:
+    """(the CHEAP_GATES that fail for this ad, its location verdict); unknown never fails."""
+    reqs = (job.get("llmFacts") or {}).get("requirements")
+    results = {g["gate"]: g["result"] for g in gate_results(job, candidate, None, reqs)}
+    return [g for g in CHEAP_GATES if results[g] == FAIL], results["location"]
+
+
 def cheap_gate_failures(job: dict, candidate: dict) -> list[str]:
     """The CHEAP_GATES that fail for this ad, from the existing gate functions; unknown never fails."""
-    reqs = (job.get("llmFacts") or {}).get("requirements")
-    failed = {g["gate"] for g in gate_results(job, candidate, None, reqs) if g["result"] == FAIL}
-    return [g for g in CHEAP_GATES if g in failed]
+    return cheap_gate_report(job, candidate)[0]
 
 
 def bucket_for(gates: list[dict]) -> str:

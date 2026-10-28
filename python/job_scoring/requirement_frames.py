@@ -66,6 +66,25 @@ def apply_remap(frames: dict, remap: dict[str, str]) -> int:
     return changed
 
 
+def remap_requirements(requirements: list[dict], remap: dict[str, str] | None) -> list[dict]:
+    """The requirements with every `prov:` id that has gained a canonical id replaced by it.
+
+    Pure and idempotent: nothing is written, the input is not changed, and a canonical id is
+    never a key of the table, so a second pass finds nothing to do. A remapped requirement is
+    no longer provisional, as when extraction upgrades one.
+    """
+    if not remap:
+        return list(requirements)
+    return [{**r, "id": remap[r["id"]], "provisional": False} if r.get("id") in remap else r for r in requirements]
+
+
+def remap_facts(facts: dict, remap: dict[str, str] | None) -> dict:
+    """The job's llmFacts as the engine reads them: requirement ids agree with the frames (apply_remap)."""
+    if not remap or not facts.get("requirements"):
+        return facts
+    return {**facts, "requirements": remap_requirements(facts["requirements"], remap)}
+
+
 def previous_for(frames: dict, job: dict, remap: dict[str, str] | None = None) -> list[dict]:
     """The stored frame for this ad, else the requirements on the job's own llmFacts, else none.
 

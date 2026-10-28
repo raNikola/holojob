@@ -89,7 +89,7 @@ def test_every_item_is_sent_and_its_quote_verifies_with_the_format_on(item):
 def test_the_cache_key_and_versions_do_not_change_and_the_format_is_metadata_only():
     off, _ = run(False, "ev-1", "Led the migration")
     on, _ = run(True, "ev-1", "Led the migration")
-    assert off.output["cacheKey"] == on.output["cacheKey"] == cache_key(off.output["adFingerprint"], "pv1")
+    assert off.output["cacheKey"] == on.output["cacheKey"] == cache_key(off.output["adFingerprint"], "pv1", None, [REQ])
     assert off.output["promptVersion"] == on.output["promptVersion"] == PROMPT_VERSION
     assert "compact" not in off.output["cacheKey"] and off.output["payloadFormat"] == "full"
     # An entry written in one format answers a lookup in the other.
