@@ -26,6 +26,7 @@ import os
 import sys
 import threading
 from datetime import date
+from fractions import Fraction
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -134,7 +135,7 @@ class ShadowEngine:
 
         Ranked on the local (Layer 1) score, never on a fit-judge adjustment; equal scores are
         ordered by relevance, not by position in the list: a passed location gate before an
-        unknown one, then fewer provisional requirements, then the newer posting, then the fingerprint.
+        unknown one, then the smaller share of provisional requirements, then the newer posting, then the fingerprint.
         """
         eligible = []
         self.excluded = {g: 0 for g in CHEAP_GATES}
@@ -153,8 +154,10 @@ class ShadowEngine:
                 for gate in failed:
                     self.excluded[gate] += 1
                 continue
-            provisional = sum(1 for r in posting["facts"]["requirements"] if r.get("provisional"))
-            eligible.append((-local_score(job), location != PASS, provisional, -_posted(job),
+            # Only an order among equal scores: nothing here changes a score or costs an ad anything.
+            requirements = posting["facts"]["requirements"]
+            ratio = Fraction(sum(1 for r in requirements if r.get("provisional")), len(requirements))
+            eligible.append((-local_score(job), location != PASS, ratio, -_posted(job),
                              job_fingerprint(posting), str(_key(job)), _key(job)))
         eligible.sort()
         chosen = eligible if self.limit is None else eligible[: max(0, self.limit)]

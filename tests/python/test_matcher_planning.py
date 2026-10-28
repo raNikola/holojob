@@ -173,11 +173,37 @@ def engine_plan(candidate, jobs, limit):
                         complete=Fake(), workers=1, remap={}).plan(jobs)
 
 
-def test_then_fewer_provisional_requirements():
-    many = job("many", 70, requirements=(SQL, PROV, {**PROV, "id": "prov:111111111111", "text": "Roadmaps 2"}))
-    few = job("few", 70, requirements=(SQL, PROV), description=BODY + " ")
-    for jobs in ([many, few], [few, many]):
-        assert engine_plan(CANDIDATE, jobs, limit=1) == {"few"}
+def test_then_the_smaller_share_of_provisional_requirements_not_the_count():
+    PROV2 = {**PROV, "id": "prov:111111111111", "text": "Roadmaps 2"}
+    PROV3 = {**PROV, "id": "prov:222222222222", "text": "Roadmaps 3"}
+    # 2 of 8 (0.25) has more provisional requirements than 1 of 2 (0.5) but the smaller share.
+    long_ad = job("long", 70, requirements=(SQL,) * 6 + (PROV, PROV2), description=BODY + "l")
+    short_ad = job("short", 70, requirements=(SQL, PROV), description=BODY + "s")
+    all_prov = job("allprov", 70, requirements=(PROV, PROV2, PROV3), description=BODY + "a")
+    none_prov = job("none", 70, requirements=(SQL, ROADMAP), description=BODY + "n")
+    for jobs in ([short_ad, long_ad], [long_ad, short_ad]):
+        assert engine_plan(CANDIDATE, jobs, limit=1) == {"long"}
+    ordered = [none_prov, long_ad, short_ad, all_prov]
+    for jobs in (ordered, list(reversed(ordered)), shuffled(ordered)):
+        taken = []
+        for n in range(1, 5):
+            taken += list(engine_plan(CANDIDATE, jobs, limit=n) - set(taken))
+        assert taken == ["none", "long", "short", "allprov"]
+
+
+def test_an_ad_without_requirements_is_never_planned_and_does_not_divide_by_zero():
+    empty = job("empty", 99, requirements=())
+    assert engine_plan(CANDIDATE, [empty], limit=5) == set()
+    assert engine_plan(CANDIDATE, [empty, job("a", 50)], limit=5) == {"a"}
+
+
+def test_the_tie_break_changes_no_score(tmp_path):
+    jobs = [job("a", 70, requirements=(PROV, PROV), description=BODY + "a"), job("b", 70, description=BODY + "b")]
+    before = json.loads(json.dumps(jobs))
+    out = engine(tmp_path, limit=1).apply(jobs)
+    assert jobs == before
+    assert {j["jobId"]: j["matchScore"] for j in out} == {"a": 70, "b": 70}
+    assert [j["jobId"] for j in out if "engineShadow" in j] == ["b"]
 
 
 def test_then_the_newer_posting_and_an_unreadable_date_is_oldest():
