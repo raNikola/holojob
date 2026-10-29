@@ -4,7 +4,7 @@ import { installLogMasking, maskErrorField, maskSecrets } from '../../scripts/se
 const SECRETS = {
   openai: 'sk-proj-AbCdEf1234567890xyz',
   anthropic: 'sk-ant-api03-AbCdEf1234567890',
-  google: 'AIzaCcF-1pTlom01IerLPuWP-d4rKIK6nmJHMLR',
+  google: 'AIzaSy-CANARY-NOT-A-REAL-KEY-000000000',
   hex: 'a3f9c1d27b8e4f60a3f9c1d27b8e4f60',
   mixed: 'Zx81QwErTy92UiOpAs03DfGh45JkLz67',
   cookie: 'AQEDAReallyLongLiAtCookieValue123',
