@@ -52,6 +52,32 @@ def _ai_selection_in_tmp(tmp_path, monkeypatch):
     monkeypatch.delenv("HOLOJOB_LLM_PROVIDER", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _secret_store_in_tmp(tmp_path, monkeypatch):
+    """No test reads the server's data/secrets/, and no key from the host shell reaches a test."""
+    monkeypatch.setenv("HOLOJOB_SECRETS_DIR", str(tmp_path / "secrets"))
+    for name in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY", "GROQ_API_KEY", "LLM_API_KEY",
+                 "ANTHROPIC_API_KEY", "OPENAI_BASE_URL", "OPENROUTER_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    import secret_store
+
+    monkeypatch.setattr(secret_store, "_masked", set())
+
+
+def write_secret_store(tmp_path, entries, mode=0o600):
+    """Write data/secrets/ai.json the way the Node store would (directory 700, file 600 unless told otherwise)."""
+    import json
+    import os
+
+    directory = tmp_path / "secrets"
+    directory.mkdir(parents=True, exist_ok=True)
+    os.chmod(directory, 0o700)
+    path = directory / "ai.json"
+    path.write_text(json.dumps(entries))
+    os.chmod(path, mode)
+    return path
+
+
 def select_provider(tmp_path, monkeypatch, provider="openai", model="test-model", **extra):
     """Write a provider selection the way Settings would (the same file the Node path reads)."""
     import json

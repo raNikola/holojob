@@ -1,5 +1,6 @@
 /**
- * The secret store (BROWSER_STORAGE_POLICY, step 2): the only code that reads or writes data/secrets/.
+ * The secret store (BROWSER_STORAGE_POLICY, step 2): the only code that WRITES data/secrets/ and the only Node reader.
+ * Python reads ai.json, read-only, through python/llm/secret_store.py (policy section 11c); it never writes.
  *
  *   data/secrets/            mode 700
  *   data/secrets/ai.json     mode 600   { "<provider>": { "key": "...", "baseUrl": "https://...", "setAt": "ISO" } }

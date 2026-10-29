@@ -13,8 +13,10 @@ optional overrides, so a new endpoint needs no code:
 
     <PROVIDER>_API_KEY     <PROVIDER>_MODEL     <PROVIDER>_BASE_URL
 
-Keys are read from the environment only. They are never arguments, never
-logged, and never written to the jobs file.
+Keys: the selected provider's key and pinned base URL come from the server secret store (data/secrets/, read-only
+here, llm/secret_store.py; set in Settings > Privacy). Only when the store has no key for that provider does the
+environment variable (OPENAI_API_KEY, ...) apply. A key is never an argument, never copied into os.environ, never
+logged, never in an error or ledger row (exact-value masking), and never written to the jobs file.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ import re
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 _LLM_DIR = str(Path(__file__).resolve().parents[1] / "llm")
@@ -35,8 +37,21 @@ if _LLM_DIR not in sys.path:
 import ai_gate  # noqa: E402  the AI budget gate; every call below goes through it
 import ai_selection  # noqa: E402  the one provider selection, shared with the Node path
 import claude_code  # noqa: E402
+import secret_store  # noqa: E402  read-only view of data/secrets/ (the Node store is the only writer)
+from secret_store import Credential  # noqa: E402
 
 log = logging.getLogger("llm_client")
+
+
+class _MaskFilter(logging.Filter):
+    """A resolved key never reaches a log line, whatever text a caller formats into it."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg, record.args = secret_store.mask(record.getMessage()), ()
+        return True
+
+
+log.addFilter(_MaskFilter())
 
 CLI_MODEL = "haiku"
 CLI_TIMEOUT = 240
@@ -77,6 +92,10 @@ class GuardrailRefused(LlmUnavailable):
     def __init__(self, reason: str):
         super().__init__(f"AI call refused: {reason}")
         self.reason = reason
+
+
+class CredentialRefused(LlmUnavailable):
+    """The selected provider has no usable key, or the secret store file cannot be trusted. Nothing is sent."""
 
 
 @dataclass(frozen=True)
@@ -168,6 +187,39 @@ def resolve(name: str) -> Provider:
         default_model=_env(prefix, "MODEL") or base.default_model,
         json_mode=base.json_mode,
     )
+
+
+def credential_for(provider: Provider) -> Credential | None:
+    """The key for the selected provider and nothing else: the store first, then that provider's own variable.
+
+    A store file that cannot be trusted refuses; the variable is no fallback for that. No key at all refuses too,
+    and no other provider is tried. Ollama and the CLI need none.
+    """
+    if provider.name in KEYLESS:
+        return None
+    try:
+        found = secret_store.get_credential(provider.name)
+    except secret_store.SecretStoreError as exc:
+        raise CredentialRefused(str(exc)) from None
+    if found:
+        return found
+    value = (os.environ.get(provider.key_env) or "").strip()
+    if value:
+        secret_store.register(value)
+        return Credential(api_key=value, base_url=None, source="env")
+    raise CredentialRefused(
+        f"No API key for {provider.name}: set it in Settings > Privacy (or {provider.key_env} in .env). Nothing was sent."
+    )
+
+
+def resolve_call(name: str) -> tuple[Provider, Credential | None]:
+    """The provider and its credential for one call. A stored key goes only to its pinned base URL, else to the
+    provider's own address; the *_BASE_URL variable moves a key from .env, never one from the store."""
+    provider = resolve(name)
+    credential = credential_for(provider)
+    if credential is not None and credential.source == "store":
+        provider = replace(provider, base_url=(credential.base_url or PROVIDERS[name].base_url).rstrip("/"))
+    return provider, credential
 
 
 # Providers this module can run. The selection may name others (claude, gemini, mock are browser / Node only);
@@ -303,7 +355,7 @@ def _rejected_setting(error_text: str, body: dict) -> str | None:
 
 
 def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
-               usage: dict | None = None) -> dict:
+               usage: dict | None = None, credential: Credential | None = None) -> dict:
     import requests
 
     if not provider.base_url:
@@ -311,9 +363,8 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
             f"{provider.name}: no base URL -- set {provider.name.upper()}_BASE_URL"
         )
 
-    key = os.environ.get(provider.key_env)
-    if not key and provider.name not in KEYLESS:
-        raise LlmUnavailable(f"{provider.key_env} is not set in the container")
+    key = credential.api_key if credential else None
+    safe = secret_store.mask
 
     body: dict = {"model": model, "messages": [{"role": "user", "content": prompt}]}
     if schema and provider.json_mode == "schema":
@@ -341,7 +392,7 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
                 url, headers=headers, json=body, timeout=HTTP_TIMEOUT
             )
         except requests.RequestException as exc:
-            last_error = str(exc)[:200]
+            last_error = safe(str(exc))[:200]
             attempt += 1
             time.sleep(2.0 * attempt)
             continue
@@ -355,16 +406,14 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
             continue
         if response.status_code == 400:
             # A body the endpoint will not accept is our bug, not a blip.
-            raise LlmRefused(f"{provider.name} rejected the request: {response.text[:300]}")
+            raise LlmRefused(safe(f"{provider.name} rejected the request: {response.text[:300]}"))
         if response.status_code in (408, 429, 500, 502, 503, 529):
             last_error = f"HTTP {response.status_code}"
             attempt += 1
             time.sleep(2.0 * attempt)
             continue
         if not response.ok:
-            raise LlmUnavailable(
-                f"{provider.name} HTTP {response.status_code}: {response.text[:200]}"
-            )
+            raise LlmUnavailable(safe(f"{provider.name} HTTP {response.status_code}: {response.text[:200]}"))
 
         data = response.json()
         if usage is not None:
@@ -398,22 +447,34 @@ def complete_json(
     `schema` is enforced by providers that can and ignored by the rest, so
     callers pass it unconditionally and validate the result either way.
     """
-    name, model, base_url = call_target(provider, model)
+    name, model, resolved, credential = _target(provider, model)
     if name == "claude-code":
         return _gated(name, model, None, prompt, lambda usage: _cli_json(prompt, model, usage))
 
-    resolved = resolve(name)
-    return _gated(name, model, base_url, prompt,
-                  lambda usage: _http_json(resolved, prompt, schema, model, usage))
+    return _gated(name, model, resolved.base_url, prompt,
+                  lambda usage: _http_json(resolved, prompt, schema, model, usage, credential))
+
+
+def _target(provider: str | None, model: str | None) -> tuple[str, str, Provider | None, Credential | None]:
+    """One resolution per call: the gate is told the same base URL the request is sent to. A missing key or an
+    untrusted store file is a refusal: logged, a ledger row, and the call is never reserved or made."""
+    name = (provider or active_provider()).lower()
+    if name in ("claude-code", "claude", "cli"):
+        return "claude-code", model or CLI_MODEL, None, None
+    refusal = None
+    try:
+        resolved, credential = resolve_call(name)
+    except CredentialRefused as exc:
+        refusal = str(exc)
+    if refusal is not None:  # outside the except block: the refusal chains nothing
+        _refuse_selection(name, model, refusal)
+    return name, model or resolved.default_model, resolved, credential
 
 
 def call_target(provider: str | None = None, model: str | None = None) -> tuple[str, str, str | None]:
     """(provider, model, base URL) a complete_json call with these arguments would use; for the budget gate."""
-    name = (provider or active_provider()).lower()
-    if name in ("claude-code", "claude", "cli"):
-        return "claude-code", model or CLI_MODEL, None
-    resolved = resolve(name)
-    return name, model or resolved.default_model, resolved.base_url
+    name, model, resolved, _ = _target(provider, model)
+    return name, model, resolved.base_url if resolved else None
 
 
 def preflight(prompt_chars: int, provider: str | None = None, model: str | None = None):
@@ -436,7 +497,7 @@ def _gated(provider: str, model: str, base_url: str | None, prompt: str, call) -
         result = call(usage)
     except Exception as exc:
         ticket.finish(False, input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
-                      error=str(exc), attempts=usage.get("attempts"),
+                      error=secret_store.mask(str(exc)), attempts=usage.get("attempts"),
                       reported_cost_usd=usage.get("reported_cost_usd"))
         raise
     ticket.finish(True, input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
