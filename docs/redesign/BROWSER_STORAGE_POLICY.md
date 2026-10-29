@@ -270,7 +270,7 @@ Owner-triggered, one time, per secret. No automatic move.
 - Treat the old values as exposed: they sat in plain text in browser storage (readable by any extension, any XSS and any person
   with disk access to the profile) and were sent in request bodies. **Rotate the AI provider key** at the provider after the move
   (create a new key, paste it in Settings, delete the old one) and **log out of LinkedIn / re-login** to invalidate the old `li_at`.
-- Clear browser site data for the app origin (`http://<host>:3073`) once, to remove old copies, history entries and any
+- Clear browser site data for the app origin (`https://holojob.void` and `http://localhost:3073`, whichever were used) once, to remove old copies, history entries and any
   `localStorage` leftovers in other profiles.
 - Check old backup zips: the AI key was never in a backup (the export carried only profile / intelligence / jobs); a zip made
   **after** a `linkedin_session.json` existed would contain the cookie. Delete such zips.
@@ -419,7 +419,7 @@ before the pre-migration checklist (section 9) passes for the step.
 | # | Step | Status | Notes |
 |---|---|---|---|
 | 1 | **Network and API protection.** Request guard (JSON Content-Type, Origin / Host allowlist), backup export / restore guard and secret masking; published port on `127.0.0.1`; CSP and security headers (report-only first); `safeHref` for scraped links. **No Caddy `basic_auth` and no app login (Q3: accepted risk, 5.1).** | guard `cd0cf74` and bind `766bd7b` shipped; **CSP, `safeHref` open** | Add the Tailscale hostname to `HOLOJOB_ALLOWED_ORIGINS` if used. Checklist item 1 gates step 2. |
-| 2 | **AI keys to the server.** `scripts/secret-store.js`, `/api/secrets` routes, Privacy > Secrets screen (AI part), `run-ai.js` / `getAiStatus` / `getAiModels` use the store and ignore a body `apiKey` and `baseUrl`, key and base URL pinned, `redactSecrets` (exact value) on error paths, Gemini header, key field removed from `AISettingsPanel`, owner-triggered migration with the rotation checklist (section 4). Tests 6.2 and 6.4 ledger part. | open | What it touches and what it does not: section 10. |
+| 2 | **AI keys to the server.** `scripts/secret-store.js`, `/api/secrets` routes, Privacy > Secrets screen (AI part), `run-ai.js` / `getAiStatus` / `getAiModels` use the store and ignore a body `apiKey` and `baseUrl`, key and base URL pinned, `redactSecrets` (exact value) on error paths, Gemini header, key field removed from `AISettingsPanel`, owner-triggered migration with the rotation checklist (section 4). Tests 6.2 and 6.4 ledger part. | **shipped `e793fc5`** | What it touches and what it does not: section 10; as built: section 11. |
 | 3 | **`li_at` without CLI arguments.** Same store; bridge reads the store; cookie passed to the scraper in the child's environment, never `--li-at`; request-body `liAt` and the session-file source dropped; outreach panel shows set / not set; migration. Test 6.4 (argv). | open | |
 | 4 | **AI settings to the server (Q5).** Provider, model, temperature, max tokens, base URL (non-secret part), feature toggles move to `data/config/`; one source of truth for the provider (removes the `llm_client.active_provider()` duplicate); `aiSettings.js` stops using `localStorage`. | open | |
 | 5 | **Profile, intelligence and jobs migration with verification (Q1).** Storage wrapper, allowlist, ESLint rule and static test (6.1) first; then per key the preview / confirm / verified-write protocol of 2.3; then the redundant stores (AI response cache, browser usage log, chat history, AI memory, pipeline state) are removed. Jobs first (file exists, applications store is the template), profile last. | open | Large; split per key. |
@@ -492,3 +492,38 @@ key and are unaffected. A custom base URL (openrouter, a proxy) must be entered 
 browser value is no longer used for keyed providers. A failed move leaves the browser value in place (nothing is lost). Rollback: revert the commit; the browser value is still there
 until the owner confirms the move, and after it the key is in `data/secrets/ai.json` (delete the file to clear it) and should be
 treated as rotated anyway.
+
+## 11. Step 2 as built (2026-10-29, `e793fc5`)
+
+Follows section 10. Where the build made a choice the text left open:
+
+- **Key rules.** A key is 12 to 512 characters with no spaces or control characters, so the last-4 check of the move is always possible
+  (a shorter `.env` value is described as `****`). A base URL must be plain `http(s)` without credentials, query or fragment.
+- **A replace without a base URL drops the one pinned before**: the key and its URL are one record. The Settings form pre-fills the
+  current URL.
+- **One effective settings object per call** (`resolveAiSettings`): the gate, the provider, status and models all see the same key and
+  host. The gate is told the pinned URL, else the provider's own (`PROVIDER_DEFAULTS`), never the one in the request. Only `ollama`
+  takes a base URL from the request (no credential is attached).
+- **Missing key** returns "No API key configured" after redaction and before the gate: nothing is reserved. Status and models use the
+  stored key; with a key set, the Provider health card now makes the provider's own `/models` request (no tokens, not a model call).
+- **Move verification** requires `set`, `source === "store"` (a matching `.env` key does not count) and the same last 4 characters.
+  The browser provider is only a default: the owner picks which provider the key belongs to. "Remove from this browser without moving" exists.
+- **A legacy key stays in the browser until moved**: `saveAiSettings` neither takes `apiKey` from the form nor erases the stored one;
+  after the move it can never come back. The allowlist (`src/modules/browserStorage/allowlist.js`, data only) and its test land here;
+  the wrapper and ESLint rule are still step 5.
+- **Gemini** sends `x-goog-api-key`; the key is no longer in the URL (L11).
+- **Not done here:** `python/llm/secrets.py` (section 10 leaves Python alone; `llm_client` keeps reading `OPENAI_API_KEY` from the environment,
+  so rotating or removing it in `.env` affects the Python judge, matcher and enrichment); LinkedIn `li_at` (step 3); the CSP and `safeHref`.
+- `.dockerignore` gained `data/secrets` and `claude-config` (owner-approved), so a build never copies them into an image layer.
+
+### Pre-migration checklist record (section 9) for step 2
+
+| # | Item | State |
+|---|---|---|
+| 1 | No path bypasses Caddy (ports, LAN `curl`, Tailscale `serve` / `funnel`, no Vite dev server) | **Owner to run; not checked by this step. Do not click "Move to server" until it passes.** |
+| 2 | Origin / Host / Content-Type guard | `tests/js/requestGuard.test.js` passes; `secretsApi.test.js` shows a foreign Origin 403 and `text/plain` 415 on `PUT` / `DELETE /api/secrets/...`. The `.env` setting and the container recreate are the owner's. |
+| 3 | Secrets never in GET responses, logs or backups | Tests 6.2 and 6.3 and the ledger / console part of 6.4 pass with the canary (`secretsApi.test.js`, `backupSecrets.test.js`, `secretStore.test.js`). The by-hand search after the first real key is the owner's. |
+| 4 | Every AI call passes the gate | `grep -rn "provider.complete\|api.openai.com\|api.anthropic.com\|generativelanguage" scripts python src` finds one caller, `scripts/run-ai.js` (after `reserveAiCall`), and the gated Python client `llm_client.py`; the rest are provider implementations and default URL constants. `aiGate.test.js`, `aiKeyResolution.test.js` and `test_ai_gate*.py` pass. Key resolution adds no call of its own. |
+
+Ledger note: the ledger is written by `python/llm/ai_gate.py` from what Node hands it, so the test asserts on the text handed to the gate
+(`finish`, `refuse`, `reserve`); the exact-value mask runs before that.
