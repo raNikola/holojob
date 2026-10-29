@@ -1,6 +1,7 @@
 # Browser storage - audit and policy
 
-Status: PLAN, 2026-10-29. No code, no `data/` change, no AI call. Not committed.
+Status: PLAN, 2026-10-29; **owner decisions Q1-Q8 approved 2026-10-29** (section 8, DECISIONS.md log). Step 1 below is partly shipped
+(request guard `cd0cf74`, loopback bind `766bd7b`); **Q3 revised the same day: no application login and no Caddy `basic_auth`** (accepted risk, section 5.1). Docs only in this revision: no code, no `data/` change, no AI call.
 Inputs read: CLAUDE.md, DECISIONS.md (principles 13-16), SETTINGS_PLAN.md (inventory rows 4, 11, 26, 29; Privacy category),
 SOURCES_SPEC.md (ADR-0034 line), and the code: every `localStorage` / `sessionStorage` / `indexedDB` / `document.cookie` hit in
 `src/` and `scripts/`, `aiSettings.js`, `AISettingsPanel.jsx`, `aiClient.js`, `aiProviderRegistry.js`, `providers/*`,
@@ -44,7 +45,7 @@ Most urgent first.
    candidate intelligence, discovered / scored jobs (with `outreach` recruiter names, e-mails, LinkedIn links), AI chat, AI memory,
    AI response cache. These are not secrets but break the rule "nothing in the browser unless allowlisted". The profile and
    intelligence are today documented as **browser-master** (CLAUDE.md, last section; principle 15 says the move to server-master
-   comes with multi-device). Changing that is an owner decision (open question Q1).
+   comes with multi-device). The owner approved the change on 2026-10-29 (Q1, section 8).
 
 Good news, verified: no `document.cookie` and no `indexedDB` anywhere; no `innerHTML` / `dangerouslySetInnerHTML` / `eval` /
 `document.write` anywhere in `src/` or `scripts/`; **no browser code calls a provider directly** (the providers in
@@ -125,9 +126,12 @@ key not on the list, and for any value over `maxBytes`. Direct use of `localStor
 | `job-dashboard-active-view` | session | Which screen is open; lost on tab close; no content. | 64 |
 | `job-dashboard-jobs-tab` | session | Which jobs tab is open. | 64 |
 | `job-dashboard-sidebar-collapsed` | local | Layout preference, `true`/`false`. | 8 |
-| `job-dashboard-theme` | local | Light / dark choice (new; only if wanted, Q5). | 16 |
+| `job-dashboard-theme` | local | Light / dark choice. The only key added to the list by Q5. | 16 |
 | `career-os-demo-bootstrap-done` | session | Demo-mode flag; exists only in demo mode. | 8 |
-| `job-dashboard-ai-ui` *(optional, Q5)* | local | Non-secret AI UI preferences (provider id, model, temperature, max tokens, feature toggles) if the owner prefers them per browser rather than in `data/config/`. Never `apiKey`, never `baseUrl`. | 2048 |
+
+**Q5 (decided):** AI settings (provider, model, temperature, max tokens, feature toggles, base URL) are stored server-side; no AI key
+is allowlisted. The four existing UI-state keys above stay because they are harmless view state; `job-dashboard-theme` is the only new
+key. (If you meant theme as the *only* key at all, the three view-state keys go too: say so and they become React state.)
 
 Everything else in 1.1 is removed or moved. A key is a candidate for the list only if its value is a UI choice, contains no
 text from a CV, ad, e-mail or contact, and is useless to someone who copies it.
@@ -138,7 +142,7 @@ Principle 15 and the tracker decision (2026-10-28, "the server file is the maste
 the direction. This plan goes one step further for the owner's rule: **no read cache in the browser either**, because a cache is
 the same data.
 
-- **Server is the master** for: profile (3), intelligence (4), discovered / scored jobs (5), AI memory (8). Each already has, or
+- **Server is the master (Q1, decided)** for: profile (3), intelligence (4), discovered / scored jobs (5), applications (already; no browser copy), AI memory (8). The browser keeps UI state only. Each already has, or
   needs only a trivial, route: `/api/profile/save`, `/api/intelligence/save`, jobs write path, plus matching `GET`s.
 - **Removed outright** (rebuildable or duplicate): AI response cache (9), browser usage log (10), AI chat history (7, component
   state only), pipeline state (6, derive from `data/jobs/.pipeline.lock` / run output), dead constant (11).
@@ -148,10 +152,15 @@ the same data.
   (b) deletion is a separate, owner-triggered step per key; (c) nothing prunes non-allowlisted keys automatically until
   (a) has been confirmed for that key. The generic "scrub" in step 5 only ever deletes keys that are both off the allowlist and
   already migrated.
-- Principle 15 / CLAUDE.md state that the browser copy of the profile is the master. Making the server the master therefore needs
-  a DECISIONS.md log entry by the owner (Q1) and a CLAUDE.md edit in the same change. Until then the profile, intelligence and jobs
-  keys are **listed as "tolerated, scheduled for removal"** in the allowlist file with an expiry note, so the test passes today
-  and the exception is visible.
+- **Migration protocol (each of profile, intelligence, jobs; Q1):** (1) **preview**: the screen shows what is in the browser and what is on
+  the server (counts, newest `updatedAt`, a content hash of each) and says which wins; (2) **owner confirmation**, an explicit button, never
+  automatic; (3) **verified write**: the browser copy is sent to the server (when it is newer or the server has none), the server answers
+  with the hash of what it stored, and the browser compares it with its own; (4) only after the hashes match is the browser key removed
+  and a re-read confirms it is gone; (5) any mismatch or error leaves the browser copy untouched and shows the reason. The server file is
+  backed up (timestamped copy under `data/backups/`) before it is overwritten. Nothing prunes a non-allowlisted key before its own step 4.
+- The "browser copy of the profile is the master" line in CLAUDE.md and principle 15's "later" wording are **reversed** by the 2026-10-29
+  decision (DECISIONS.md log, CLAUDE.md "No hard-coded markets" section). Until step 5 ships, the profile, intelligence and jobs keys are
+  listed as "tolerated, scheduled for removal" in the allowlist file with an expiry note, so the test passes today and the exception is visible.
 
 ## 3. Secret store design
 
@@ -271,6 +280,25 @@ Owner-triggered, one time, per secret. No automatic move.
 
 ### 5.1 The server API is reachable from the LAN without auth
 
+**Status 2026-10-29:** the guard (bullets 1-2) and the loopback bind (bullet 3) are shipped. **Q3 is resolved as NO application login and NO
+Caddy `basic_auth`.** This is a conscious, owner-accepted risk:
+
+- Access stays inside the home LAN (Caddy `careeros.void` -> `127.0.0.1:3073`); remote access is only through **Tailscale**.
+- Consequence, stated plainly: anyone who can reach `careeros.void` (any device on the LAN, any device on the tailnet) can read the
+  profile and applications, change AI settings, spend the AI budget, and - once step 2 ships - replace a stored key. The Origin /
+  Host / Content-Type guard stops cross-site pages in the owner's browser and DNS rebinding; it does not stop a device that talks to the API
+  directly. Keys are never readable through the API (only `set` and the last 4 characters), which limits the damage to use and replacement.
+- **Revisit this decision if** the app is ever exposed outside the home network or Tailscale (a port forward, Tailscale Funnel, a public
+  DNS name, a shared tailnet with other people's devices) **or** a second user appears. Then add an authentication layer (Caddy
+  `basic_auth` or `forward_auth`, or an app login) before anything else.
+- **Tailscale hostname:** if the app is reached over Tailscale by a name (MagicDNS `ds9.<tailnet>.ts.net`, a `tailscale serve` URL, or a
+  Caddy site on the tailnet), that exact hostname **must be added to `CAREER_OS_ALLOWED_ORIGINS`** in `.env`, for example
+  `https://careeros.void,http://localhost:3073,https://ds9.<tailnet>.ts.net`, followed by `podman-compose up -d --force-recreate`.
+  Without it the guard answers 403 (Host not allowed / Origin not allowed). A bare tailnet IP needs the same entry. The port stays on
+  `127.0.0.1`; Tailscale must reach the app through Caddy or `tailscale serve`, never by publishing 3073 on another interface.
+
+The text below is the original finding, kept for the reasoning.
+
 - Bind: `server.listen(PORT)` with no host binds all interfaces; `docker-compose.yml` publishes `3073:5173` on all host
   interfaces (also IPv6). Anyone on the LAN can open the app and call every `/api/*` route (read profile, read applications,
   export a backup zip, change AI settings, start AI calls on the owner's account, soon read masked keys and replace them).
@@ -285,10 +313,10 @@ Owner-triggered, one time, per secret. No automatic move.
   2. **Check `Origin` (when present) and `Host` against an allowlist** from `.env` (`CAREER_OS_ALLOWED_HOSTS`, default
      `localhost:3073,127.0.0.1:3073`). Mismatch -> 403. This also stops DNS rebinding.
   3. **Bind explicitly:** `HOST` env (default `127.0.0.1`) and, in compose, `"127.0.0.1:3073:5173"` or the server's LAN IP. Which
-     one is Q2. Note that inside the container the app must bind `0.0.0.0` (podman port-forwarding); the restriction is the
+     Q2 decided: loopback behind Caddy. Note that inside the container the app must bind `0.0.0.0` (podman port-forwarding); the restriction is the
      published address on the host.
-  4. Real authentication is **out of scope** here (single user, principle 15); revisit with multi-device access (Q3). Until then
-     binding to localhost plus an SSH tunnel or a reverse proxy with auth is the safe remote path.
+  4. Authentication: **none, by decision (Q3)**; see the status note above. Remote access is only through Tailscale; revisit if the
+     app is exposed beyond the LAN and the tailnet.
 - `vite dev` (`npm run dev`) binds localhost by default (no `--host` in `package.json`); the dev API plugin shares the handlers,
   so the same checks must be applied there.
 
@@ -383,39 +411,84 @@ Ledger test: after a failing mocked provider call that throws the canary, `data/
 - The bridge test (mock `spawn`): argv never contains the cookie; the child env does.
 - Capture `console.*` during the route tests above and assert the canary is absent.
 
-## 7. Implementation steps
+## 7. Implementation steps (order approved 2026-10-29)
 
-Each is independently shippable; every step has its own tests and a rollback (revert the commit; the secret files stay on disk).
+Each is independently shippable with its own tests and rollback (revert the commit; secret files stay on disk). Steps 2-6 do not start
+before the pre-migration checklist (section 9) passes for the step.
 
-| # | Step | Size | Notes |
+| # | Step | Status | Notes |
 |---|---|---|---|
-| 1 | **Backup hardening.** Remove `outreach/linkedin_session.json` from export (explicit exclude list: `data/secrets/`, `linkedin_session.json`); restore refuses `..`, absolute paths, `data/secrets/`. Tests 6.3. | tiny | Urgent: no new storage needed, closes findings 4 and 5. |
-| 2 | **AI key to the server.** `secret-store.js`, `/api/secrets` routes, Privacy > Secrets screen (AI part), `run-ai.js` / `getAiStatus` / `getAiModels` use the store and ignore body `apiKey` and `baseUrl`, key and baseUrl pinned, `redactSecrets` on error paths, Gemini header, `AISettingsPanel` loses the key field, owner-triggered migration + scrub (section 4). Tests 6.2 and L2/L3. | medium | Closes findings 1, 6, 7, 8. Do this first among the feature steps. |
-| 3 | **LinkedIn cookie to the server.** Same store; bridge reads the store; argv -> env; drop the request-body `liAt` and the session-file source; outreach panel shows set / not set; migration. Test 6.4. | small | Closes finding 2 and L5. |
-| 4 | **Request hardening.** JSON content-type required on writes, Origin / Host allowlist, `HOST` bind + compose published address, CSP and security headers (report-only first), `safeHref`. | small-medium | Closes finding 3. Needs Q2 answered. Should land **before** or together with step 2 if the server will be left bound to the LAN, because step 2 puts keys behind unauthenticated routes. |
-| 5 | **Storage wrapper, allowlist, lint and static test.** Route every existing use through the wrapper; the tolerated-until-migrated entries keep the app working. Includes the dead constant removal (11) and the optional theme key. Tests 6.1. | medium | No behaviour change; makes the rule enforceable. |
-| 6 | **Drop redundant browser stores.** AI response cache (9), browser usage log (10, use the server ledger), chat history (7), AI memory (8, to `data/ai/memory.json` or drop), pipeline state (6). One-time clear of the old keys. | small each | Low risk: all are rebuildable or duplicate. |
-| 7 | **Server-master for profile, intelligence, jobs.** Per key: server copy verified equal, browser key cleared by an owner-triggered step, then removed from the tolerated list. Gated on the DECISIONS.md entry (Q1). | large | Do the jobs store first (the file exists, applications S2 is the template), profile last. |
+| 1 | **Network and API protection.** Request guard (JSON Content-Type, Origin / Host allowlist), backup export / restore guard and secret masking; published port on `127.0.0.1`; CSP and security headers (report-only first); `safeHref` for scraped links. **No Caddy `basic_auth` and no app login (Q3: accepted risk, 5.1).** | guard `cd0cf74` and bind `766bd7b` shipped; **CSP, `safeHref` open** | Add the Tailscale hostname to `CAREER_OS_ALLOWED_ORIGINS` if used. Checklist item 1 gates step 2. |
+| 2 | **AI keys to the server.** `scripts/secret-store.js`, `/api/secrets` routes, Privacy > Secrets screen (AI part), `run-ai.js` / `getAiStatus` / `getAiModels` use the store and ignore a body `apiKey` and `baseUrl`, key and base URL pinned, `redactSecrets` (exact value) on error paths, Gemini header, key field removed from `AISettingsPanel`, owner-triggered migration with the rotation checklist (section 4). Tests 6.2 and 6.4 ledger part. | open | What it touches and what it does not: section 10. |
+| 3 | **`li_at` without CLI arguments.** Same store; bridge reads the store; cookie passed to the scraper in the child's environment, never `--li-at`; request-body `liAt` and the session-file source dropped; outreach panel shows set / not set; migration. Test 6.4 (argv). | open | |
+| 4 | **AI settings to the server (Q5).** Provider, model, temperature, max tokens, base URL (non-secret part), feature toggles move to `data/config/`; one source of truth for the provider (removes the `llm_client.active_provider()` duplicate); `aiSettings.js` stops using `localStorage`. | open | |
+| 5 | **Profile, intelligence and jobs migration with verification (Q1).** Storage wrapper, allowlist, ESLint rule and static test (6.1) first; then per key the preview / confirm / verified-write protocol of 2.3; then the redundant stores (AI response cache, browser usage log, chat history, AI memory, pipeline state) are removed. Jobs first (file exists, applications store is the template), profile last. | open | Large; split per key. |
+| 6 | **Browser AI confirm dialog (Q8).** The nine browser AI features get the explicit confirm that shows the redacted text and the provider (principle 14), like the judge and CV analysis. | open | The next privacy task after the secrets migration (steps 2-3). |
 
-Steps 1 and 4(i) can ship the same day. Steps 2 and 3 should not wait for 5-7.
+## 8. Decisions (owner, approved 2026-10-29)
 
-## 8. Open questions for the owner
+| # | Question | Decision |
+|---|---|---|
+| Q1 | Server as master for profile, intelligence, jobs | **Approved**, and for applications (already). The browser keeps UI state only. Migration needs a preview, confirmation and a verified write before the browser copy is removed (2.3). Reverses the "browser copy is the master" line (CLAUDE.md) and principle 15's "later". |
+| Q2 | Bind address | **127.0.0.1 behind Caddy.** Shipped in `766bd7b`. Allowed origins: `https://careeros.void,http://localhost:3073`. |
+| Q3 | Authentication in front of the app | **No application login and no Caddy `basic_auth`** (revised 2026-10-29, replaces the earlier `basic_auth` decision). Access stays inside the home LAN; remote access only through Tailscale. Owner-accepted risk, revisited if the app is exposed outside the home network or Tailscale (5.1). The Tailscale hostname goes into `CAREER_OS_ALLOWED_ORIGINS`. |
+| Q4 | Trust boundary | **600 / 700 on `data/secrets/`, no extra encryption in v1.** Rootless podman maps container root to the host user; the file modes protect against other host users only. Revisit with multi-device access. |
+| Q5 | Non-secret AI settings, theme | **AI settings server-side; theme is the only allowlisted browser key added** (2.2). |
+| Q6 | Moving the key in the browser | **Yes, with a rotation checklist** (section 4), including `OPENAI_API_KEY` in `.env` if it is the same key. |
+| Q7 | `AICommandCenter` chat history | **In memory only.** No server file, no browser storage. |
+| Q8 | Confirm dialog for browser AI features | **Approved; the next privacy task after the secrets migration** (step 6). |
 
-- **Q1.** Do you approve making the **server the master** for profile, intelligence and jobs (reversing the "browser copy is the
-  master" line in CLAUDE.md and principle 15's "later" wording)? Without it step 7 cannot start and those keys stay as tolerated
-  exceptions with an expiry date.
-- **Q2.** Bind address: `127.0.0.1` only (use through SSH tunnel / reverse proxy from other devices), or a specific LAN IP
-  (reachable from your own devices, still unauthenticated)? Which hostnames should the Host / Origin allowlist contain?
-- **Q3.** Is a simple shared secret / basic auth in front of the app acceptable if you want to keep LAN access, ahead of the
-  multi-device work? (Not in this plan; it would be one more step before 4.)
-- **Q4.** Is the container's root = your host user mapping (rootless podman) acceptable as the trust boundary, with 600/700 on
-  `data/secrets/` protecting against other host users only? Or do you want secrets encrypted at rest (a passphrase typed at
-  start-up), which costs a start-up prompt?
-- **Q5.** Which non-secret AI settings (provider, model, temperature, toggles) may stay in the browser as one allowlisted key,
-  and do you want the theme remembered? Default proposed: AI settings go to the server, theme is an allowlisted key.
-- **Q6.** The AI key currently in your browser: do you want me to propose the exact migration click path to run right after
-  step 2, plus a note for rotating `OPENAI_API_KEY` in `.env` if it is the same key?
-- **Q7.** Should the client-side `AICommandCenter` chat keep history across reloads (then it needs a server file) or is
-  in-memory only fine?
-- **Q8.** Browser AI features still send redacted text without a confirm dialog (principle 14). That is out of scope here, but it
-  is the next privacy gap; schedule it after step 4?
+No open questions remain from the audit. Details the owner still picks when the step starts: the retention of the pre-overwrite backup copies (step 5).
+
+## 9. Pre-migration checklist
+
+All items must be true, and recorded in the commit message or CHANGELOG of the step, before step 2 stores a key (and again before
+step 5 moves personal data). The owner runs the commands; fish syntax.
+
+1. **No path to the API bypasses Caddy.** Caddy is the only way in (TLS, one hostname, access log); with Q3 it is not an authentication
+   point, so this item is what keeps the LAN / Tailscale boundary real.
+   - Every published port and interface: `ss -ltnp | grep -E ':(3073|5173)\b'` shows 3073 on `127.0.0.1` only and nothing on 5173
+     (the container's port is not published); `podman ps --format '{{.Names}} {{.Ports}}' | grep career-os` shows `127.0.0.1:3073->5173/tcp`;
+     `grep -n -A3 'ports:' docker-compose.yml` shows no other mapping; `/etc/caddy/Caddyfile.d/*` proxies to 3073 only from the
+     `careeros.void` site (and any Tailscale site that is intended); IPv6 (`[::]`) is absent.
+   - From another LAN device: `curl -m 5 http://192.168.50.20:3073/api/config` is refused; `curl -k https://careeros.void/api/config`
+     answers 200 (no login by decision).
+   - Tailscale: `tailscale serve status` lists only intended targets, and **`tailscale funnel status` shows nothing** (Funnel would put the
+     app on the public internet, which voids the Q3 risk acceptance). The tailnet hostname in use is in `CAREER_OS_ALLOWED_ORIGINS`.
+   - `npm run dev` (Vite) is not left running: it serves the same API on its own port without Caddy.
+2. **Host / Origin / Content-Type guard active.** `tests/js/requestGuard.test.js` passes; through Caddy a foreign `Origin` gets 403 and a
+   `text/plain` write gets 415 (commands in the step 1 report); `CAREER_OS_ALLOWED_ORIGINS` is set in `.env` and the container was recreated.
+3. **Secrets never in GET responses, logs or backups.** Tests 6.2, 6.3 and 6.4 exist and pass with the canary value. After the first real
+   key is stored, also check by hand: export a backup, unzip it in a scratch directory and search it for `secrets`, `linkedin_session` and the
+   key's last 8 characters (no hit); search `podman logs career-os` and the Caddy access log for the same 8 characters (no hit);
+   `curl -sk -u <user> https://careeros.void/api/secrets` shows `set` and `last4` only.
+4. **Every AI call passes the budget gate.** The call sites are exactly `llm_client.complete_json`, `claude_code._run` and
+   `run-ai.js` (`reserveAiCall` before `provider.complete`); `grep -rn "provider.complete\|api.openai.com\|api.anthropic.com\|generativelanguage" scripts python src`
+   shows no other caller; `tests/js/aiGate.test.js` and `tests/python/test_ai_gate*.py` pass; the new key-resolution code sits **before**
+   the gate call and adds no call of its own.
+
+## 10. Step 2: what it touches and what it does not (safety for existing data)
+
+**It will:**
+- create `data/secrets/` (700) and `data/secrets/ai.json` (600) when the owner clicks "Move to server" or sets a key;
+- add `/api/secrets` routes and the Privacy > Secrets screen;
+- change `run-ai.js`, `getAiStatus`, `getAiModels`: the key and, for keyed providers (openai, openrouter, claude, gemini), the `baseUrl`
+  come from the store, falling back to `.env` (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`); a key or base URL in the request body is ignored;
+- on the owner's click, after the server confirmed `set` and the same last 4 characters, blank the `apiKey` field of the browser key
+  `job-dashboard-ai-settings` and re-read it.
+
+**It will not touch:**
+- `data/profile/`, `data/intelligence/`, `data/jobs/`, `data/applications/`, `data/resumes/`, `data/outreach/`, `data/ai/`
+  (budget settings, pricing overrides, the usage ledger: unchanged, still append-only), `data/config/`, backups already made;
+- the rest of `job-dashboard-ai-settings` (provider, model, temperature, max tokens, toggles; they move in step 4), and every other
+  browser key (profile, intelligence, jobs, `linkedin_li_at`: step 3 and step 5);
+- `.env` and `claude-config/`: read only. Rotating `OPENAI_API_KEY` in `.env` is an owner action, never done by the app;
+- the scoring engine, the Python `llm_client` (it already reads keys from the environment only), the judge, the evidence matcher and the
+  redaction rules (`redact.py`, `ai-redact.js`); the budget gate still decides before every call.
+
+**Behaviour change to expect:** until the key is moved, keyed providers answer "No API key configured" (the body key is ignored by
+design; there is no fallback that would keep the secret on the wire). The default `claude-code` provider, `mock` and `ollama` need no
+key and are unaffected. A custom base URL (openrouter, a proxy) must be entered together with the key in Settings > Privacy, because the
+browser value is no longer used for keyed providers. A failed move leaves the browser value in place (nothing is lost). Rollback: revert the commit; the browser value is still there
+until the owner confirms the move, and after it the key is in `data/secrets/ai.json` (delete the file to clear it) and should be
+treated as rotated anyway.
