@@ -24,6 +24,8 @@ import {
   runTailor,
 } from '../../modules/jobs/pipelineRunner'
 import { describeRun } from '../../modules/jobs/pipelineSummary'
+import { gateRefusalReason } from '../../modules/ai/runQuality'
+import Badge from '../ui/Badge'
 import { useProfile } from '../../context/ProfileContext'
 import FitJudgementCard from './FitJudgementCard'
 import { searchCountry } from '../../utils/searchCountry'
@@ -242,6 +244,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
   }
 
   const scored = hasMatchScores(state.jobs)
+  const refusalReason = gateRefusalReason(state.meta)
 
   return (
     <Card title="Pipeline" className="!p-4">
@@ -253,6 +256,12 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
             </p>
           )}
           {error && <Alert variant="error" title="Pipeline error">{error}</Alert>}
+          {refusalReason && (
+            <p className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge variant="warn">Reduced quality: AI budget gate refused</Badge>
+              <span className="text-stone-600 dark:text-stone-400">{refusalReason}. Raise the budget under Settings, AI budget, and run again.</span>
+            </p>
+          )}
           {summary && <p className="text-sm text-stone-600 dark:text-stone-400">{summary}</p>}
 
           <Button onClick={handleFullPipeline} disabled={Boolean(running)} className="w-full sm:w-auto">

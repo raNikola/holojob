@@ -7,6 +7,7 @@ import AIModelSelector from './AIModelSelector'
 import AIFeatureToggles from './AIFeatureToggles'
 import AIHealthStatus from './AIHealthStatus'
 import AIUsageDashboard from './AIUsageDashboard'
+import AIBudgetPanel from './AIBudgetPanel'
 import { loadAiSettings, saveAiSettings, maskApiKey } from '../../modules/ai/aiSettings'
 import { KEYLESS_PROVIDERS } from '../../modules/ai/aiProviderRegistry'
 import { clearAiCache } from '../../modules/ai/aiResponseCache'
@@ -24,6 +25,8 @@ export default function AISettingsPanel() {
 
   return (
     <div className="space-y-6">
+      <AIBudgetPanel />
+
       <Card title="AI Provider">
         <div className="space-y-4">
           <AIProviderSelector settings={settings} onChange={setSettings} />
@@ -77,11 +80,11 @@ export default function AISettingsPanel() {
         <AIFeatureToggles settings={settings} onChange={setSettings} />
       </Card>
 
-      <Card title="Usage & cost">
+      <Card title="Usage & cost (this browser)">
         <AIUsageDashboard />
         <div className="mt-3 flex gap-2">
           <Button variant="secondary" onClick={() => clearAiCache()}>Clear cache</Button>
-          <Button variant="ghost" onClick={() => clearAiUsage()}>Clear usage log</Button>
+          <Button variant="ghost" onClick={() => clearAiUsage()}>Clear browser usage log</Button>
         </div>
       </Card>
     </div>

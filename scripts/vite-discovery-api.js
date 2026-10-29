@@ -4,6 +4,7 @@
 
 import { ensureClaudeLogin } from './claude-auth.js'
 import { handleApiRequest } from './api-handler.js'
+import { handleAiSettingsRequest } from './ai-settings-handler.js'
 
 export { getPipelineHealth } from './api-handler.js'
 
@@ -28,7 +29,7 @@ export function discoveryApiPlugin() {
         if (!url.startsWith('/api/')) {
           return next()
         }
-        const handled = await handleApiRequest(req, res)
+        const handled = (await handleAiSettingsRequest(req, res)) || (await handleApiRequest(req, res))
         if (!handled) {
           return next()
         }

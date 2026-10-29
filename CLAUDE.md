@@ -103,6 +103,13 @@ automation off); the append-only ledger is `data/ai/usage-ledger.jsonl`; prices 
 free / local / paid classes are in `src/data/aiPricing.json` (unknown = paid). Usage:
 `GET /api/ai/usage`.
 
+Settings screen > AI budget edits these through `PUT /api/ai/settings` and
+`PUT /api/ai/pricing` (`scripts/ai-settings-handler.js`; validation and the atomic write
+are in `ai_gate.py`). Raising what the gate allows (higher limit, removed call cap,
+automation on, a looser price) needs `"confirm": true`, else 409 with the list. Price
+edits are overrides in `data/ai/pricing-overrides.json`, merged over `aiPricing.json`;
+free or priced needs a source note. No route writes or deletes ledger rows.
+
 ## Résumé content rule
 
 A CV states only what the profile and the CV text state; no default for anything, a
