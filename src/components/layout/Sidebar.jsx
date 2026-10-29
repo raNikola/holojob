@@ -16,7 +16,8 @@ import {
   Users,
 } from 'lucide-react'
 import { useState } from 'react'
-import { MOBILE_NAV_ITEMS, NAV_ITEMS } from '../../modules/appNavigation'
+import { MOBILE_NAV_ITEMS } from '../../modules/appNavigation'
+import { resolveNavGroups } from '../../modules/navGroups'
 import { loadSidebarCollapsed, saveSidebarCollapsed } from '../../modules/sidebarState'
 
 const ICONS = {
@@ -33,6 +34,8 @@ const ICONS = {
   Users,
   ShieldCheck,
 }
+
+const NAV_SECTIONS = resolveNavGroups()
 
 function NavButton({ item, active, onNavigate, compact = false, collapsed = false }) {
   const Icon = ICONS[item.icon] || LayoutDashboard
@@ -96,9 +99,25 @@ export default function Sidebar({ activeView, onNavigate, onOpenMore }) {
             <ToggleIcon className="h-4 w-4" />
           </button>
         </div>
-        <nav className={`flex flex-1 flex-col gap-1 ${collapsed ? 'p-2' : 'p-3'}`}>
-          {NAV_ITEMS.map((item) => (
-            <NavButton key={item.id} item={item} active={activeView} onNavigate={onNavigate} collapsed={collapsed} />
+        <nav aria-label="Main" className={`flex flex-1 flex-col ${collapsed ? 'p-2' : 'p-3'}`}>
+          {NAV_SECTIONS.map((group, index) => (
+            <div
+              key={group.id}
+              role="group"
+              aria-label={group.title || undefined}
+              className={`flex flex-col gap-1 ${group.pinned ? 'mt-auto border-t border-stone-200 pt-3 dark:border-stone-800' : ''} ${
+                index > 0 && !group.pinned ? (collapsed ? 'mt-2 border-t border-stone-200 pt-2 dark:border-stone-800' : 'mt-5') : ''
+              }`}
+            >
+              {group.title && !collapsed && (
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">
+                  {group.title}
+                </p>
+              )}
+              {group.items.map((item) => (
+                <NavButton key={item.id} item={item} active={activeView} onNavigate={onNavigate} collapsed={collapsed} />
+              ))}
+            </div>
           ))}
         </nav>
       </aside>
