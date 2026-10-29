@@ -1,47 +1,48 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import JobDetailBody from './JobDetailBody'
 import ApplicationTrackerPanel from './ApplicationTrackerPanel'
 import { autoLoadJobs } from '../../modules/jobs/autoLoadJobs'
-import { loadJobs, saveJobs, updateJobRecord, updateJobStatus } from '../../modules/jobs/jobStorage'
+import { FILE_FIELDS, loadJobs } from '../../modules/jobs/jobStorage'
+import { addJobIfAbsent } from '../../modules/jobs/jobsStore'
 import { findRoutedJob, closeJobPage } from '../../modules/jobs/jobRoute'
 import { probePipelineApi } from '../../modules/jobs/pipelineRunner'
+import { useStoredJob } from '../../hooks/useJobs'
+import { useJobPatcher } from '../../hooks/useJobPatcher'
 
-/** The full-page Job Details at `#/jobs/<jobId>`: the drawer's body in the main column, tracking in a sidebar. */
+/**
+ * The full-page Job Details at `#/jobs/<jobId>`: the drawer's body in the main column, tracking in a sidebar.
+ * The job is the stored record (jobs store), with the fields the scored-jobs file restores laid under it; every
+ * write is a field-level patch on the latest stored record.
+ */
 export default function JobDetailsPage({ jobId }) {
-  const [state, setState] = useState(() => loadJobs())
+  const stored = useStoredJob(jobId)
+  const [fileFields, setFileFields] = useState(null)
   const [settled, setSettled] = useState(false)
-  const [touched, setTouched] = useState(false)
   const [apiAvailable, setApiAvailable] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     autoLoadJobs(loadJobs()).then(({ state: next, source }) => {
       if (cancelled) return
-      if (source !== 'local') setState(next)
+      const fromFile = source === 'local' ? null : next.jobs.find((j) => j.jobId === jobId)
+      if (fromFile) {
+        // a job the file knows and this browser does not: add it, never replace a stored record
+        addJobIfAbsent(fromFile)
+        setFileFields(Object.fromEntries(FILE_FIELDS.filter((f) => f in fromFile).map((f) => [f, fromFile[f]])))
+      }
       setSettled(true)
     })
     probePipelineApi().then((probe) => { if (!cancelled) setApiAvailable(probe.available) })
     return () => { cancelled = true }
-  }, [])
+  }, [jobId])
 
-  useEffect(() => {
-    if (touched) saveJobs(state)
-  }, [state, touched])
+  const job = useMemo(() => (stored ? { ...fileFields, ...stored } : null), [stored, fileFields])
+  const { onJobUpdated, onStatusChange } = useJobPatcher(job)
 
-  const handleStatusChange = useCallback((id, status) => {
-    setTouched(true)
-    setState((prev) => ({ ...prev, jobs: updateJobStatus(prev.jobs, id, status) }))
-  }, [])
-
-  const handleJobUpdated = useCallback((updated) => {
-    setTouched(true)
-    setState((prev) => ({ ...prev, jobs: updateJobRecord(prev.jobs, updated.jobId, updated) }))
-  }, [])
-
-  const routed = findRoutedJob(state.jobs, jobId)
+  const routed = findRoutedJob(job ? [job] : [], jobId)
   const back = (
     <Button variant="secondary" onClick={closeJobPage}><ArrowLeft className="mr-1 inline h-4 w-4" />Back</Button>
   )
@@ -57,7 +58,6 @@ export default function JobDetailsPage({ jobId }) {
     )
   }
 
-  const { job } = routed
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3">
@@ -69,10 +69,10 @@ export default function JobDetailsPage({ jobId }) {
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
         <main className="min-w-0">
-          <JobDetailBody job={job} apiAvailable={apiAvailable} onJobUpdated={handleJobUpdated} onStatusChange={handleStatusChange} includeTracker={false} />
+          <JobDetailBody job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} onStatusChange={onStatusChange} includeTracker={false} />
         </main>
         <aside className="min-w-0 self-start lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto" aria-label="Application tracking">
-          <ApplicationTrackerPanel job={job} onStatusChange={handleStatusChange} />
+          <ApplicationTrackerPanel job={job} onStatusChange={onStatusChange} />
         </aside>
       </div>
     </div>

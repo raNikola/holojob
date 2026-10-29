@@ -6,13 +6,12 @@ import SelectField from '../ui/SelectField'
 import ApplicationBoard from './ApplicationBoard'
 import ApplicationStatistics from './ApplicationStatistics'
 import JobDetailDrawer from '../jobs/JobDetailDrawer'
+import { useJobsSync } from '../../hooks/useJobs'
 import ApplicationAIInsights from '../ai/ApplicationAIInsights'
 import { computeJobStats } from '../../modules/jobs/jobStats'
 import {
   loadJobs,
   saveJobs,
-  updateJobRecord,
-  updateJobStatus,
 } from '../../modules/jobs/jobStorage'
 import { normalizeApplicationTracking } from '../../modules/jobs/applicationTracking'
 import { overlayTracking } from '../../modules/applications/trackingView'
@@ -73,6 +72,7 @@ export default function ApplicationHome() {
   useEffect(() => {
     saveJobs(state)
   }, [state])
+  useJobsSync(setState)
 
   const applications = useApplications()
   // Tracking comes from the application store; `state.jobs` stays as saved and is what gets persisted.
@@ -107,22 +107,6 @@ export default function ApplicationHome() {
     if (job) setSelectedJob(job)
     return Boolean(job)
   }, [state.jobs])
-
-  const handleStatusChange = useCallback((jobId, status) => {
-    setState((prev) => ({
-      ...prev,
-      jobs: updateJobStatus(prev.jobs, jobId, status),
-    }))
-    setSelectedJob((prev) => (prev?.jobId === jobId ? { ...prev, status } : prev))
-  }, [])
-
-  const handleJobUpdated = useCallback((updatedJob) => {
-    setState((prev) => ({
-      ...prev,
-      jobs: updateJobRecord(prev.jobs, updatedJob.jobId, updatedJob),
-    }))
-    setSelectedJob((prev) => (prev?.jobId === updatedJob.jobId ? updatedJob : prev))
-  }, [])
 
   return (
     <div className="space-y-6">
@@ -223,8 +207,6 @@ export default function ApplicationHome() {
         job={selectedJob}
         onClose={() => setSelectedJob(null)}
         apiAvailable={pipelineApiAvailable}
-        onJobUpdated={handleJobUpdated}
-        onStatusChange={handleStatusChange}
       />
     </div>
   )

@@ -24,6 +24,7 @@ import { autoLoadJobs } from '../../modules/jobs/autoLoadJobs'
 import { derivePipelineStateFromHealth, loadPipelineState, updatePipelineState } from '../../modules/jobs/pipelineState'
 import { overlayTracking } from '../../modules/applications/trackingView'
 import { useApplications } from '../../hooks/useApplications'
+import { useJobsSync } from '../../hooks/useJobs'
 import { loadJobsTab, persistJobsTab } from '../../modules/appNavigation'
 import {
   importJobsFromFile,
@@ -64,6 +65,7 @@ export default function JobDiscoveryScreen() {
   useEffect(() => {
     saveJobs(state)
   }, [state])
+  useJobsSync(setState)
 
   useEffect(() => {
     let cancelled = false
@@ -359,8 +361,6 @@ export default function JobDiscoveryScreen() {
         job={selectedJob}
         onClose={() => setSelectedJob(null)}
         apiAvailable={pipelineApiAvailable}
-        onJobUpdated={handleJobUpdated}
-        onStatusChange={handleStatusChange}
       />
     </div>
   )

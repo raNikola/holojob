@@ -8,12 +8,12 @@ import FollowUpPanel from './FollowUpPanel'
 import ContactDetailDrawer from './ContactDetailDrawer'
 import ManualContactForm from './ManualContactForm'
 import JobDetailDrawer from '../jobs/JobDetailDrawer'
+import { useJobsSync } from '../../hooks/useJobs'
 import {
   loadJobs,
   saveJobs,
   updateJobOutreach,
   updateJobRecord,
-  updateJobStatus,
 } from '../../modules/jobs/jobStorage'
 import { overlayTracking } from '../../modules/applications/trackingView'
 import { scheduleFollowUp } from '../../modules/applications/trackerController'
@@ -40,6 +40,7 @@ export default function OutreachDashboard() {
   useEffect(() => {
     saveJobs(state)
   }, [state])
+  useJobsSync(setState)
 
   const applications = useApplications()
   // Tracking comes from the application store; `state.jobs` stays as saved and is what gets persisted.
@@ -83,13 +84,6 @@ export default function OutreachDashboard() {
     setSelectedContact(contact)
     setSelectedJob(job)
   }
-
-  const handleStatusChange = useCallback((jobId, status) => {
-    setState((prev) => ({
-      ...prev,
-      jobs: updateJobStatus(prev.jobs, jobId, status),
-    }))
-  }, [])
 
   return (
     <div className="space-y-6">
@@ -207,8 +201,6 @@ export default function OutreachDashboard() {
           job={drawerJob}
           onClose={() => setDrawerJob(null)}
           apiAvailable={pipelineApiAvailable}
-          onJobUpdated={handleJobUpdated}
-          onStatusChange={handleStatusChange}
         />
       )}
     </div>

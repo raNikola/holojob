@@ -1,16 +1,21 @@
+import { useMemo } from 'react'
 import { Maximize2, X } from 'lucide-react'
 import JobDetailBody from './JobDetailBody'
 import Button from '../ui/Button'
 import { dirtyDraftLabels, leaveDecision } from '../../modules/jobs/draftGuard'
 import { openJobPage } from '../../modules/jobs/jobRoute'
+import { mergeLive } from '../../modules/jobs/jobsStore'
+import { useStoredJob } from '../../hooks/useJobs'
+import { useJobPatcher } from '../../hooks/useJobPatcher'
 
-export default function JobDetailDrawer({
-  job,
-  onClose,
-  apiAvailable,
-  onJobUpdated,
-  onStatusChange,
-}) {
+/**
+ * The quick view. It shows the stored record on top of the row it was opened from and writes only the fields a
+ * component changed (`useJobPatcher`), so a stale row can never revert another view's change.
+ */
+export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
+  const stored = useStoredJob(row?.jobId)
+  const job = useMemo(() => (row ? mergeLive(row, stored) : null), [row, stored])
+  const { onJobUpdated, onStatusChange } = useJobPatcher(job)
   if (!job) return null
 
   // The drawer stays open when the owner declines, so nothing typed is lost.
