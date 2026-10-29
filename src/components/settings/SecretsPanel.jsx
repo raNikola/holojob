@@ -15,6 +15,7 @@ import {
   putAiSecret,
   putLinkedInSecret,
 } from '../../modules/ai/secretsClient'
+import { linkedInRiskConfirmed } from '../../modules/outreach/linkedinConsent'
 import { clearLegacyLinkedInCookie, moveLegacyLinkedInToServer, readLegacyLinkedInCookie } from '../../modules/outreach/linkedinCookie'
 
 /** claude and gemini use fixed endpoints in their providers, so a base URL would do nothing for them. */
@@ -43,6 +44,8 @@ export default function SecretsPanel() {
   const [legacy, setLegacy] = useState(() => readLegacyAiKey())
   const [linkedin, setLinkedin] = useState(null)
   const [editingLinkedIn, setEditingLinkedIn] = useState(null) // the typed cookie, or null when the form is closed
+  const [riskAccepted, setRiskAccepted] = useState(false)
+  const [riskTyped, setRiskTyped] = useState('')
   const [legacyLinkedIn, setLegacyLinkedIn] = useState(() => readLegacyLinkedInCookie())
   const [moveTo, setMoveTo] = useState(() => legacyDefaults(readLegacyAiKey()))
 
@@ -126,6 +129,7 @@ export default function SecretsPanel() {
   }
 
   const handleSaveLinkedIn = async () => {
+    if (!linkedInRiskConfirmed({ accepted: riskAccepted, typed: riskTyped })) return
     setBusy(true)
     setError(null)
     const result = await putLinkedInSecret(editingLinkedIn)
@@ -135,6 +139,8 @@ export default function SecretsPanel() {
       return
     }
     setEditingLinkedIn(null) // the typed cookie is dropped with the form state
+    setRiskAccepted(false)
+    setRiskTyped('')
     setMessage('LinkedIn: cookie saved on the server.')
     refresh()
   }
@@ -308,7 +314,7 @@ export default function SecretsPanel() {
                 <p className="text-xs text-stone-500">{linkedin.set ? `set …${linkedin.last4} · source: ${linkedin.source === 'env' ? '.env' : 'Settings'}` : 'not set'}</p>
               </div>
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => { setMessage(null); setError(null); setEditingLinkedIn('') }} disabled={busy}>
+                <Button variant="secondary" onClick={() => { setMessage(null); setError(null); setRiskAccepted(false); setRiskTyped(''); setEditingLinkedIn('') }} disabled={busy}>
                   {linkedin.set ? 'Replace' : 'Set cookie'}
                 </Button>
                 {linkedin.source === 'store' && (
@@ -326,10 +332,25 @@ export default function SecretsPanel() {
             onSubmit={(e) => { e.preventDefault(); handleSaveLinkedIn() }}
           >
             <p className="text-sm font-medium text-stone-800 dark:text-stone-100">LinkedIn</p>
+            <p className="text-xs text-stone-700 dark:text-stone-300">
+              Deep mode automates linkedin.com with your session cookie. This may violate LinkedIn&apos;s User Agreement and can
+              result in <strong>permanent account suspension</strong>. Default search mode does not log in.
+            </p>
+            <label className="flex items-start gap-2 text-xs text-stone-700 dark:text-stone-300">
+              <input type="checkbox" checked={riskAccepted} onChange={(e) => setRiskAccepted(e.target.checked)} className="mt-0.5" />
+              <span>I understand this may violate LinkedIn&apos;s Terms of Service and could ban my account.</span>
+            </label>
+            <Input
+              label='Type "I understand" to confirm'
+              value={riskTyped}
+              onChange={(e) => setRiskTyped(e.target.value)}
+              autoComplete="off"
+            />
             <Input
               label="li_at cookie"
               type="password"
               value={editingLinkedIn}
+              disabled={!linkedInRiskConfirmed({ accepted: riskAccepted, typed: riskTyped })}
               onChange={(e) => setEditingLinkedIn(e.target.value)}
               autoComplete="off"
               spellCheck={false}
@@ -339,7 +360,7 @@ export default function SecretsPanel() {
               It is sent once and kept on the server.
             </p>
             <div className="flex gap-2">
-              <Button type="submit" disabled={busy || !editingLinkedIn}>Save on server</Button>
+              <Button type="submit" disabled={busy || !editingLinkedIn || !linkedInRiskConfirmed({ accepted: riskAccepted, typed: riskTyped })}>Save on server</Button>
               <Button type="button" variant="ghost" onClick={() => setEditingLinkedIn(null)} disabled={busy}>Cancel</Button>
             </div>
           </form>
