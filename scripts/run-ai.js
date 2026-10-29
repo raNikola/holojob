@@ -9,7 +9,8 @@ import { buildMessages, parseAiResponse } from '../src/modules/ai/aiPromptLibrar
 import { getProvider, PROVIDER_NAMES, KEYLESS_PROVIDERS, checkProviderHealth, listProviderModels } from '../src/modules/ai/aiProviderRegistry.js'
 import { initSseResponse, sseWrite } from './stream-spawn.js'
 import { UNGATED_PROVIDERS, finishAiCall, readAiSelection, recordAiRefusal, reserveAiCall } from './ai-gate.js'
-import { assertClean, redactContext } from './ai-redact.js'
+import { assertClean, findLeaks, redactContext } from './ai-redact.js'
+import { PROMPT_VERSIONS, appendFinding, buildCacheKey, jobEntityKey, lookupFinding, usesFindings } from './ai-findings-store.js'
 import { maskSecrets } from './secret-mask.js'
 import { getAiCredential } from './secret-store.js'
 import { PROVIDER_DEFAULTS } from '../src/modules/ai/aiSettings.js'
@@ -98,7 +99,7 @@ export function resolveAiSettings(settings) {
   return { ...effective, apiKey: credential?.apiKey, baseUrl: credential?.baseUrl || PROVIDER_DEFAULTS[provider]?.baseUrl, needsKey: true }
 }
 
-export async function runAiFeatureStream(res, { feature, context }) {
+export async function runAiFeatureStream(res, { feature, context, refresh = false }) {
   initSseResponse(res)
   const selection = (await readAiSelection()).selection
   const providerName = selection?.provider || 'none'
@@ -114,7 +115,7 @@ export async function runAiFeatureStream(res, { feature, context }) {
     sseWrite(res, { type: 'log', stream: 'stdout', line: 'Waiting for model response…' })
   }
 
-  return runAiFeature({ feature, context })
+  return runAiFeature({ feature, context, refresh })
     .then((result) => {
       if (!result.ok) {
         sseWrite(res, { type: 'error', message: result.error || 'AI request failed' })
@@ -150,7 +151,7 @@ function measuredTokens(usage) {
  * them (a `settings` field in the request is not read). With no usable selection, or one this server cannot run, the
  * call refuses and is logged: no other provider is tried.
  */
-export async function runAiFeature({ feature, context }) {
+export async function runAiFeature({ feature, context, refresh = false }) {
   const chosen = await readAiSelection()
   const selection = chosen.selection
   if (!selection || !PROVIDER_NAMES.includes(selection.provider)) {
@@ -165,8 +166,9 @@ export async function runAiFeature({ feature, context }) {
   const provider = getProvider(providerName)
   // Redaction comes first and fails closed: no identifier of the owner or a recruiter may reach the provider.
   let messages
+  let redacted
   try {
-    const redacted = redactContext(context)
+    redacted = redactContext(context)
     messages = buildMessages(feature, redacted.context)
     assertClean(messages, redacted.ids)
   } catch (e) {
@@ -175,6 +177,20 @@ export async function runAiFeature({ feature, context }) {
       await recordAiRefusal({ provider: providerName, model: settings?.model, feature, jobId: context?.job?.jobId, baseUrl: settings?.baseUrl, reason })
     }
     return { ok: false, refused: true, error: reason }
+  }
+  // A stored finding answers before anything is reserved: a hit is not a model call, so the gate is not asked, no ledger
+  // row is written and no key is needed. A miss (new input, model or prompt version, stale, or `refresh`) goes on to the gate.
+  const stored = usesFindings(feature) && !UNGATED_PROVIDERS.has(providerName) ? jobEntityKey(context?.job?.jobId) : null
+  let lookupKey = null
+  if (stored) {
+    lookupKey = { entityKey: stored, ...buildCacheKey({ feature, model: settings?.model, messages, context: redacted.context }) }
+    if (!refresh) {
+      const found = lookupFinding({ feature, entityKey: stored, cacheKey: lookupKey.cacheKey })
+      if (found.hit) {
+        console.info(`AI findings: hit ${feature} ${found.finding.id}, no call made`)
+        return { ok: true, data: found.finding.finding, usage: null, diskPath: null, cached: true, findingId: found.finding.id, foundAt: found.finding.at }
+      }
+    }
   }
   // No key, no call: nothing to reserve in the budget either.
   if (settings.needsKey && !settings.apiKey) return { ok: false, error: NO_KEY_MESSAGE }
@@ -221,12 +237,20 @@ export async function runAiFeature({ feature, context }) {
       diskPath = writeSkillGap(data)
     }
 
-    return {
-      ok: true,
-      data,
-      usage: result.usage,
-      diskPath,
+    const response = { ok: true, data, usage: result.usage, diskPath }
+    if (lookupKey) {
+      // An identifier echoed by the model keeps the answer off disk; the caller still gets it this once.
+      const leaks = findLeaks(JSON.stringify(data), redacted.ids)
+      const saved = leaks.length
+        ? { stored: false, reason: `identifier in the answer (${leaks.join(', ')})` }
+        : appendFinding({
+          feature, entityKey: lookupKey.entityKey, provider: providerName, model: settings?.model, promptVersion: PROMPT_VERSIONS[feature],
+          inputHash: lookupKey.inputHash, cacheKey: lookupKey.cacheKey, prompt: messages, result: data,
+        })
+      if (saved.stored) response.findingId = saved.finding.id
+      else response.warning = `answer not stored: ${saved.reason}`
     }
+    return response
   } catch (e) {
     return { ok: false, error: sanitizeKey(e.message) }
   }
