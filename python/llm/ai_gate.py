@@ -51,6 +51,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import secret_store  # exact-value mask for a resolved API key; read-only, never reads the store here
+
 ROOT = Path(__file__).resolve().parents[2]
 
 LEDGER_VERSION = 1
@@ -285,7 +287,8 @@ def _locked():
 
 
 def _append(row: dict) -> None:
-    """Append one line; the ledger is never rewritten or truncated."""
+    """Append one line; the ledger is never rewritten or truncated. A resolved API key is masked first (secret_store)."""
+    row = {k: secret_store.mask(v) if isinstance(v, str) else v for k, v in row.items()}
     with open(ledger_path(), "a", encoding="utf-8") as handle:
         handle.write(json.dumps(row, ensure_ascii=False) + "\n")
         handle.flush()
@@ -543,7 +546,7 @@ _SECRET = re.compile(r"(sk-[A-Za-z0-9_-]{8,}|AIza[0-9A-Za-z_-]{20,}|Bearer\s+\S+
 
 
 def _mask(value):
-    return _SECRET.sub("[hidden]", value) if isinstance(value, str) else value
+    return _SECRET.sub("[hidden]", secret_store.mask(value)) if isinstance(value, str) else value
 
 
 def recent_rows(limit: int = RECENT_ROWS) -> list[dict]:

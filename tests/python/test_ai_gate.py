@@ -138,9 +138,10 @@ def test_a_selected_provider_without_its_key_fails_and_does_not_fall_back(tmp_pa
     monkeypatch.setenv("DEEPSEEK_API_KEY", "k")  # another provider is usable; it must not be tried
     ran = []
     monkeypatch.setattr(llm_client.subprocess, "run", lambda *a, **k: ran.append(a))
-    with pytest.raises(llm_client.LlmUnavailable, match="OPENAI_API_KEY is not set"):
+    with pytest.raises(llm_client.LlmUnavailable, match="No API key for openai"):
         llm_client.complete_json("prompt")
     assert posts == [] and ran == []
+    assert [r["decision"] for r in calls()] == ["refused"]  # logged, and refused before the gate reserved anything
 
 
 def test_budget_0_refuses_the_cli_bridge_used_by_tailoring_import_and_scans(monkeypatch):
@@ -167,6 +168,7 @@ def test_the_cli_availability_check_sends_no_prompt(monkeypatch, tmp_path):
 
 def test_unknown_provider_is_treated_as_paid(monkeypatch, tmp_path, posts, no_keys):
     monkeypatch.setenv("LLM_BASE_URL", "http://10.0.0.5:8000/v1")
+    monkeypatch.setenv("LLM_API_KEY", "k")
     with pytest.raises(llm_client.GuardrailRefused):
         llm_client.complete_json("prompt", provider="custom")
     assert calls()[0]["class"] == "unknown"
