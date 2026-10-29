@@ -18,6 +18,7 @@ import QualityDashboard from './components/quality/QualityDashboard'
 import {
   VIEWS,
   isOnboardingComplete,
+  OPEN_SETTINGS_EVENT,
   loadDemoInitialView,
   persistView,
 } from './modules/appNavigation'
@@ -31,6 +32,12 @@ function AppContent() {
     setViewState(next)
     persistView(next)
   }, [])
+
+  useEffect(() => {
+    const open = () => setView(VIEWS.SETTINGS)
+    window.addEventListener(OPEN_SETTINGS_EVENT, open)
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, open)
+  }, [setView])
 
   const handleOnboardingComplete = useCallback(() => {
     setView(demoMode ? VIEWS.JOBS : VIEWS.DASHBOARD)

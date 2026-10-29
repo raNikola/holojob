@@ -26,6 +26,7 @@ import {
 import { useApplications } from '../../hooks/useApplications'
 import { useProfile } from '../../context/ProfileContext'
 import ApplicationTimeline from './ApplicationTimeline'
+import SettingsLink from '../settings/SettingsLink'
 
 const SELECT_CLASS = 'w-full rounded-lg border border-stone-300 px-3 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-50'
 const LABEL_CLASS = 'mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300'
@@ -249,7 +250,7 @@ export default function ApplicationTrackerPanel({ job, onStatusChange }) {
   } else if (mode.mode === 'migrate-first') {
     body = (
       <Alert variant="info">
-        Run the migration first (Settings → Application tracking migration). This job still has tracking saved in the
+        Run the migration first (<SettingsLink section="application-migration">Settings → Application tracking migration</SettingsLink>). This job still has tracking saved in the
         old format{mode.reason ? `, and it cannot be migrated: ${mode.reason}` : ''}, so a new entry is not allowed until it is moved into the tracker.
       </Alert>
     )
