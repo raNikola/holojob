@@ -43,7 +43,7 @@ export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
         </div>
 
         <div className="p-4">
-          <JobDetailBody job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} onStatusChange={onStatusChange} />
+          <JobDetailBody job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} onStatusChange={onStatusChange} includeAiTools={false} includeContacts={false} />
         </div>
       </aside>
     </div>
