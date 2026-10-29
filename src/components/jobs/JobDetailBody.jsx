@@ -1,6 +1,7 @@
 import { ExternalLink } from 'lucide-react'
 import Badge from '../ui/Badge'
-import { ApplyBadge, MatchScoreBadge, PriorityBadge } from './JobScoreBadge'
+import { ApplyBadge, PriorityBadge } from './JobScoreBadge'
+import FitScore from './FitScore'
 import JobTailorActions from './JobTailorActions'
 import ApplicationTrackerPanel from './ApplicationTrackerPanel'
 import JobAIToolsPanel from '../ai/JobAIToolsPanel'
@@ -102,7 +103,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
       {showScores && (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <MatchScoreBadge job={job} />
+            <FitScore score={job.matchScore} label={job.matchLabel} size="lg" />
             <PriorityBadge priority={job.priority} />
             <ApplyBadge recommendation={job.applyRecommendation} />
             <EngineShadowBadge shadow={job.engineShadow} />

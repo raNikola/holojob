@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ExternalLink, FileText } from 'lucide-react'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
-import { MatchScoreBadge } from '../jobs/JobScoreBadge'
+import FitScore from '../jobs/FitScore'
 import { loadJobs } from '../../modules/jobs/jobStorage'
 import { getTailoredFilenames, resumeDownloadUrl } from '../../modules/jobs/pipelineRunner'
 import { JOBS_TAB_STORAGE_KEY, VIEWS } from '../../modules/appNavigation'
@@ -73,7 +73,7 @@ export default function ResumeLibrary({ onNavigate }) {
                 <p className="font-medium text-stone-900 dark:text-stone-100">{job.company}</p>
                 <p className="text-sm text-stone-600 dark:text-stone-400">{job.title}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {typeof job.matchScore === 'number' && <MatchScoreBadge score={job.matchScore} />}
+                  {typeof job.matchScore === 'number' && <FitScore score={job.matchScore} label={job.matchLabel} />}
                   <span className="text-xs text-stone-500">Generated {formatDate(generatedAt)}</span>
                 </div>
               </div>
