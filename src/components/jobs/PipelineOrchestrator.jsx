@@ -29,6 +29,7 @@ import Badge from '../ui/Badge'
 import { useProfile } from '../../context/ProfileContext'
 import FitJudgementCard from './FitJudgementCard'
 import { searchCountry } from '../../utils/searchCountry'
+import SettingsLink from '../settings/SettingsLink'
 
 const PROVIDER_OPTIONS = ['ats', 'remote', 'startup', 'serbia', 'all', 'jobspy']
 const TAILOR_MODES = [
@@ -259,7 +260,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
           {refusalReason && (
             <p className="flex flex-wrap items-center gap-2 text-sm">
               <Badge variant="warn">Reduced quality: AI budget gate refused</Badge>
-              <span className="text-stone-600 dark:text-stone-400">{refusalReason}. Raise the budget under Settings, AI budget, and run again.</span>
+              <span className="text-stone-600 dark:text-stone-400">{refusalReason}. Raise the budget under <SettingsLink section="ai-budget">Settings, AI budget</SettingsLink>, and run again.</span>
             </p>
           )}
           {summary && <p className="text-sm text-stone-600 dark:text-stone-400">{summary}</p>}

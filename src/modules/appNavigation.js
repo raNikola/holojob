@@ -1,3 +1,5 @@
+import { DEFAULT_SETTINGS_CATEGORY, findSection, isCategoryId } from './settings/settingsRegistry'
+
 export const VIEWS = {
   ONBOARDING: 'onboarding',
   DASHBOARD: 'dashboard',
@@ -17,6 +19,8 @@ export const VIEWS = {
 
 export const VIEW_STORAGE_KEY = 'job-dashboard-active-view'
 export const JOBS_TAB_STORAGE_KEY = 'job-dashboard-jobs-tab'
+export const SETTINGS_CATEGORY_STORAGE_KEY = 'job-dashboard-settings-category'
+export const OPEN_SETTINGS_EVENT = 'holojob:open-settings'
 
 const SHELL_VIEWS = new Set([
   VIEWS.DASHBOARD,
@@ -106,6 +110,43 @@ export function loadJobsTab() {
     /* ignore */
   }
   return 'jobs'
+}
+
+export function persistSettingsCategory(categoryId) {
+  try {
+    if (isCategoryId(categoryId)) sessionStorage.setItem(SETTINGS_CATEGORY_STORAGE_KEY, categoryId)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadSettingsCategory() {
+  try {
+    const saved = sessionStorage.getItem(SETTINGS_CATEGORY_STORAGE_KEY)
+    if (isCategoryId(saved)) return saved
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_SETTINGS_CATEGORY
+}
+
+let pendingSettingsSection = null
+
+/** The section `openSettings` asked for, once: SettingsHome calls it on mount and when the event reaches it. */
+export function takePendingSettingsSection() {
+  const id = pendingSettingsSection
+  pendingSettingsSection = null
+  return id
+}
+
+/** Opens Settings on the category of `sectionId` and scrolls to it. App switches the view; SettingsHome selects and scrolls. */
+export function openSettings(sectionId) {
+  const section = findSection(sectionId)
+  if (section) {
+    persistSettingsCategory(section.category)
+    pendingSettingsSection = section.id
+  }
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { sectionId } }))
 }
 
 export const NAV_ITEMS = [

@@ -3,6 +3,7 @@ import Alert from '../ui/Alert'
 import { moveApplication } from '../../modules/applications/applicationsClient'
 import { boardFootnote, buildBoard, moveChoices } from '../../modules/applications/boardModel'
 import { useApplications } from '../../hooks/useApplications'
+import SettingsLink from '../settings/SettingsLink'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -47,7 +48,7 @@ export default function ApplicationBoard({ onOpenJob }) {
   if (applications.status === 'error') return <Alert variant="error" title="The application tracker could not be loaded">{applications.error}</Alert>
   if (!board) return <p className="text-sm text-stone-500">Loading the application tracker…</p>
   if (applications.settings.trackingEnabled === false) {
-    return <Alert variant="info" title="Application tracking is off">Switch it on in Settings → Applications. Nothing was deleted.</Alert>
+    return <Alert variant="info" title="Application tracking is off">Switch it on in <SettingsLink section="application-tracking">Settings → Applications</SettingsLink>. Nothing was deleted.</Alert>
   }
 
   const handleMove = async (card, toStage) => {

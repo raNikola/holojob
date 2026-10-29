@@ -1,8 +1,12 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SETTINGS_CATEGORY, SETTINGS_CATEGORIES, SETTINGS_SECTIONS, findSection, isCategoryId, searchSettings, sectionsOf,
 } from '../../src/modules/settings/settingsRegistry.js'
 
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const categoryOf = (query) => searchSettings(query).map((s) => s.category)
 
 describe('settings registry', () => {
@@ -46,4 +50,10 @@ describe('settings registry', () => {
     expect(findSection('clear-local-data').risky).toBe('delete')
   })
 
+  it('SettingsHome renders every registered section, and nothing else', () => {
+    const source = fs.readFileSync(path.join(ROOT, 'src/components/settings/SettingsHome.jsx'), 'utf-8')
+    const block = source.slice(source.indexOf('const RENDERERS'))
+    const keys = [...block.matchAll(/^\s{2}'([a-z-]+)':/gm)].map((m) => m[1])
+    expect(keys.sort()).toEqual(SETTINGS_SECTIONS.map((s) => s.id).sort())
+  })
 })

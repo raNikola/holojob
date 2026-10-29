@@ -11,6 +11,7 @@
 export const BROWSER_STORAGE_ALLOWLIST = [
   { key: 'job-dashboard-active-view', store: 'session', maxBytes: 64, reason: 'Which screen is open; lost on tab close; no content.' },
   { key: 'job-dashboard-jobs-tab', store: 'session', maxBytes: 64, reason: 'Which jobs tab is open.' },
+  { key: 'job-dashboard-settings-category', store: 'session', maxBytes: 32, reason: 'Which Settings category is open; no content.' },
   { key: 'job-dashboard-sidebar-collapsed', store: 'local', maxBytes: 8, reason: 'Layout preference, true or false.' },
   { key: 'job-dashboard-theme', store: 'local', maxBytes: 16, reason: 'Light or dark choice (not persisted yet).' },
   { key: 'career-os-demo-bootstrap-done', store: 'session', maxBytes: 8, reason: 'Demo-mode flag; exists only in demo mode.' },
