@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ExternalLink } from 'lucide-react'
+import { Bookmark, CircleDot, ExternalLink, SquareCheckBig, X } from 'lucide-react'
 import Badge from '../ui/Badge'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
@@ -57,14 +57,6 @@ function HistoryBadges({ job }) {
   )
 }
 
-const PROVIDER_VARIANT = {
-  jobspy: 'medium',
-  greenhouse: 'high',
-  lever: 'high',
-  ashby: 'medium',
-  wellfound: 'low',
-}
-
 function LocationText({ job }) {
   if (!job.location) return <span>—</span>
   return <span className="line-clamp-2" title={job.location}>{displayLocation(job.location) || job.location}</span>
@@ -73,23 +65,35 @@ function LocationText({ job }) {
 function ProviderBadge({ job }) {
   const provider = getJobProvider(job)
   if (!provider) return <span>—</span>
-  return <Badge variant={PROVIDER_VARIANT[provider] || 'default'}>{provider}</Badge>
+  return <span className="rounded bg-stone-50 px-1.5 py-0.5 text-[11px] text-stone-500 dark:bg-stone-900 dark:text-stone-500">{provider}</span>
+}
+
+const ACTION_ICON = {
+  new: { Icon: CircleDot, label: 'Mark as new' },
+  saved: { Icon: Bookmark, label: 'Save' },
+  rejected: { Icon: X, label: 'Reject' },
+  applied_manually: { Icon: SquareCheckBig, label: 'Mark as applied' },
 }
 
 function JobActions({ job, onStatusChange }) {
   const others = JOB_STATUSES.filter((s) => s !== job.status)
   return (
-    <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
-      {others.map((status) => (
-        <button
-          key={status}
-          type="button"
-          onClick={() => onStatusChange(job.jobId, status)}
-          className="rounded-md px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800"
-        >
-          {status === 'applied_manually' ? 'Applied' : status.charAt(0).toUpperCase() + status.slice(1)}
-        </button>
-      ))}
+    <div className="flex gap-0.5" onClick={(e) => e.stopPropagation()}>
+      {others.map((status) => {
+        const { Icon, label } = ACTION_ICON[status]
+        return (
+          <button
+            key={status}
+            type="button"
+            title={label}
+            aria-label={label}
+            onClick={() => onStatusChange(job.jobId, status)}
+            className="rounded-md p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100"
+          >
+            <Icon className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -185,20 +189,20 @@ export default function JobTable({
   return (
     <>
       <div className="hidden overflow-x-auto rounded-xl border border-stone-200 dark:border-stone-800 md:block">
-        <table className="w-full min-w-[1150px] text-left text-sm">
+        <table className="w-full min-w-[960px] text-left text-sm">
           <thead className="border-b border-stone-200 bg-stone-50 text-xs uppercase tracking-wide text-stone-500 dark:border-stone-800 dark:bg-stone-900">
             <tr>
-              <th className="px-4 py-3">
+              <th className="px-3 py-2">
                 <input type="checkbox" checked={allSelected} onChange={onToggleSelectAll} className="rounded border-stone-300 text-teal-600" />
               </th>
-              {showScores && <SortableTh label="Score" sortKey="score" sort={sort} onSort={onSort} className="px-4 py-3" />}
-              <SortableTh label="Title" sortKey="title" sort={sort} onSort={onSort} className="px-4 py-3" />
-              <SortableTh label="Company" sortKey="company" sort={sort} onSort={onSort} className="px-4 py-3" />
-              <SortableTh label="Location" sortKey="location" sort={sort} onSort={onSort} className="px-4 py-3" />
-              {showProvider && <SortableTh label="Provider" sortKey="provider" sort={sort} onSort={onSort} className="px-4 py-3" />}
-              {showScores && <SortableTh label="Priority" sortKey="priority" sort={sort} onSort={onSort} className="px-4 py-3" />}
-              <SortableTh label="Status" sortKey="status" sort={sort} onSort={onSort} className="px-4 py-3" />
-              <th className="px-4 py-3">Actions</th>
+              {showScores && <SortableTh label="Score" sortKey="score" sort={sort} onSort={onSort} className="px-3 py-2" />}
+              <SortableTh label="Title" sortKey="title" sort={sort} onSort={onSort} className="px-3 py-2" />
+              <SortableTh label="Company" sortKey="company" sort={sort} onSort={onSort} className="px-3 py-2" />
+              <SortableTh label="Location" sortKey="location" sort={sort} onSort={onSort} className="px-3 py-2" />
+              {showProvider && <SortableTh label="Provider" sortKey="provider" sort={sort} onSort={onSort} className="px-3 py-2" />}
+              {showScores && <SortableTh label="Priority" sortKey="priority" sort={sort} onSort={onSort} className="px-3 py-2" />}
+              <SortableTh label="Status" sortKey="status" sort={sort} onSort={onSort} className="px-3 py-2" />
+              <th className="px-3 py-2">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
@@ -208,7 +212,7 @@ export default function JobTable({
                 className="cursor-pointer bg-white hover:bg-stone-50 dark:bg-stone-950 dark:hover:bg-stone-900"
                 onClick={() => onJobSelect?.(job)}
               >
-                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                <td className="px-3 py-2 align-top" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={selectedJobIds.includes(job.jobId)}
@@ -217,24 +221,24 @@ export default function JobTable({
                   />
                 </td>
                 {showScores && (
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2 align-top">
                     <FitScore score={job.matchScore} label={job.matchLabel} inline />
                     {job.engineShadow && <div className="mt-1"><EngineShadowBadge shadow={job.engineShadow} /></div>}
                   </td>
                 )}
-                <td className="px-4 py-3 font-medium text-stone-900 dark:text-stone-100">
+                <td className="w-full px-3 py-2 align-top font-medium text-stone-900 dark:text-stone-100">
                   <div>{job.title}</div>
                   <div className="mt-1 flex flex-wrap gap-1"><HistoryBadges job={job} /><FollowUpBadge job={job} /></div>
                 </td>
-                <td className="px-4 py-3 text-stone-600 dark:text-stone-400">{job.company}</td>
-                <td className="px-4 py-3 text-stone-600 dark:text-stone-400">
+                <td className="max-w-[12rem] px-3 py-2 align-top text-stone-600 dark:text-stone-400">{job.company}</td>
+                <td className="max-w-[14rem] px-3 py-2 align-top text-stone-600 dark:text-stone-400">
                   <LocationText job={job} />
                   <AuthorizationBadge job={job} />
                 </td>
-                {showProvider && <td className="px-4 py-3"><ProviderBadge job={job} /></td>}
-                {showScores && <td className="px-4 py-3"><PriorityBadge priority={job.priority} /></td>}
-                <td className="px-4 py-3"><StatusBadge status={job.status} /></td>
-                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                {showProvider && <td className="px-3 py-2 align-top"><ProviderBadge job={job} /></td>}
+                {showScores && <td className="px-3 py-2 align-top"><PriorityBadge priority={job.priority} /></td>}
+                <td className="px-3 py-2 align-top"><StatusBadge status={job.status} /></td>
+                <td className="px-3 py-2 align-top" onClick={(e) => e.stopPropagation()}>
                   <JobActions job={job} onStatusChange={onStatusChange} />
                 </td>
               </tr>
