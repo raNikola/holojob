@@ -117,7 +117,7 @@ export default function ApplicationBoard({ onOpenJob }) {
             }}
             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && overColumn === column.key) setOverColumn(null) }}
             onDrop={(e) => handleDrop(e, column)}
-            className={`w-64 shrink-0 rounded-xl border p-3 ${overColumn === column.key
+            className={`min-w-[16rem] flex-1 rounded-xl border p-3 ${overColumn === column.key
               ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-300 dark:border-teal-500 dark:bg-teal-950/30 dark:ring-teal-700'
               : 'border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-950/40'}`}
           >

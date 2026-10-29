@@ -29,7 +29,7 @@ export default function AppShell({ activeView, onNavigate, children }) {
         )}
         <TopBar title={title} />
         <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 sm:px-6 md:pb-6">
-          <div className="mx-auto max-w-6xl">
+          <div className="w-full min-w-0">
             {children}
           </div>
         </main>

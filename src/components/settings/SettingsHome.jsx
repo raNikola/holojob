@@ -158,7 +158,7 @@ export default function SettingsHome() {
     <div className="space-y-4">
       {status && <p className="text-xs text-teal-700 dark:text-teal-300">{status}</p>}
 
-      <div className="relative">
+      <div className="relative max-w-2xl">
         <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-stone-400" />
         <input
           type="search"
@@ -216,7 +216,7 @@ export default function SettingsHome() {
           {SETTINGS_CATEGORIES.map((c) => {
             const sections = sectionsOf(c.id)
             return (
-              <div key={c.id} data-settings-category={c.id} className={c.id === category ? 'space-y-6' : 'hidden'}>
+              <div key={c.id} data-settings-category={c.id} className={c.id === category ? 'max-w-4xl space-y-6' : 'hidden'}>
                 <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">{c.title}</h2>
                 {sections.length === 0 && c.empty && <p className="text-sm text-stone-600 dark:text-stone-400">{c.empty}</p>}
                 {sections.map((section) => (
