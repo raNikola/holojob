@@ -1,15 +1,21 @@
 import { useMemo, useState } from 'react'
 import Alert from '../ui/Alert'
 import { moveApplication } from '../../modules/applications/applicationsClient'
-import { boardFootnote, buildBoard, moveChoices } from '../../modules/applications/boardModel'
+import { boardFootnote, buildBoard, dropDecision, moveChoices } from '../../modules/applications/boardModel'
 import { useApplications } from '../../hooks/useApplications'
 import SettingsLink from '../settings/SettingsLink'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-function Card({ card, settings, busy, error, onOpen, onMove }) {
+function Card({ card, settings, busy, error, onOpen, onMove, onDragStart, onDragEnd }) {
   return (
-    <li className="rounded-lg border border-stone-200 bg-white p-3 text-sm shadow-sm dark:border-stone-700 dark:bg-stone-900">
+    <li
+      draggable={!busy}
+      aria-busy={busy || undefined}
+      onDragStart={(e) => onDragStart(e, card)}
+      onDragEnd={onDragEnd}
+      className={`rounded-lg border border-stone-200 bg-white p-3 text-sm shadow-sm dark:border-stone-700 dark:bg-stone-900 ${busy ? 'opacity-60' : 'cursor-grab'}`}
+    >
       <button type="button" onClick={() => onOpen(card)} className="block w-full text-left">
         <span className="block font-medium text-stone-900 dark:text-stone-100">{card.company || '—'}</span>
         <span className="block text-stone-600 dark:text-stone-400">{card.title || '—'}</span>
@@ -39,6 +45,8 @@ export default function ApplicationBoard({ onOpenJob }) {
   const [busy, setBusy] = useState({})
   const [errors, setErrors] = useState({})
   const [notice, setNotice] = useState(null)
+  const [dragging, setDragging] = useState(null)
+  const [overColumn, setOverColumn] = useState(null)
 
   const board = useMemo(
     () => (applications.status === 'ready' ? buildBoard(applications.store, applications.settings, today()) : null),
@@ -64,6 +72,28 @@ export default function ApplicationBoard({ onOpenJob }) {
     }
   }
 
+  const trackingOn = applications.settings.trackingEnabled !== false
+  const decide = (column) => dragging && dropDecision(applications.settings, dragging, column.key, { busy: Boolean(busy[dragging.appId]), trackingEnabled: trackingOn })
+
+  const handleDragStart = (e, card) => {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', card.appId)
+    setDragging(card)
+  }
+
+  const endDrag = () => {
+    setDragging(null)
+    setOverColumn(null)
+  }
+
+  const handleDrop = (e, column) => {
+    e.preventDefault()
+    const decision = decide(column)
+    const card = dragging
+    endDrag()
+    if (decision?.action === 'move') handleMove(card, decision.toStage)
+  }
+
   const handleOpen = (card) => {
     const opened = card.jobId ? onOpenJob(card.jobId) : false
     setNotice(opened ? null : `"${card.company || card.title}" is no longer in the Jobs list, so its details cannot be opened yet.`)
@@ -76,14 +106,28 @@ export default function ApplicationBoard({ onOpenJob }) {
       {notice && <Alert variant="info">{notice}</Alert>}
       <div className="flex gap-3 overflow-x-auto pb-2">
         {board.columns.map((column) => (
-          <section key={column.key} aria-label={column.label} className="w-64 shrink-0 rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-stone-800 dark:bg-stone-950/40">
+          <section
+            key={column.key}
+            aria-label={column.label}
+            onDragOver={(e) => {
+              if (decide(column)?.action !== 'move') return
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              if (overColumn !== column.key) setOverColumn(column.key)
+            }}
+            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && overColumn === column.key) setOverColumn(null) }}
+            onDrop={(e) => handleDrop(e, column)}
+            className={`w-64 shrink-0 rounded-xl border p-3 ${overColumn === column.key
+              ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-300 dark:border-teal-500 dark:bg-teal-950/30 dark:ring-teal-700'
+              : 'border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-950/40'}`}
+          >
             <h3 className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-stone-600 dark:text-stone-400">
               {column.label}
               <span className="rounded-full bg-stone-200 px-2 py-0.5 text-stone-700 dark:bg-stone-800 dark:text-stone-300">{column.cards.length}</span>
             </h3>
             <ul className="space-y-2">
               {column.cards.map((card) => (
-                <Card key={card.appId} card={card} settings={applications.settings} busy={Boolean(busy[card.appId])} error={errors[card.appId]} onOpen={handleOpen} onMove={handleMove} />
+                <Card key={card.appId} card={card} settings={applications.settings} busy={Boolean(busy[card.appId])} error={errors[card.appId]} onOpen={handleOpen} onMove={handleMove} onDragStart={handleDragStart} onDragEnd={endDrag} />
               ))}
             </ul>
           </section>
