@@ -110,7 +110,8 @@ def scan_repo(repo: Path, source: str, use_llm: bool) -> dict:
         "analyzedBy": "git-stats",
     }
     if use_llm:
-        analysis, err = claude_code.analyze_repo(str(repo), ANALYSIS_PROMPT)
+        with claude_code.ai_gate.context(feature="project-scan"):
+            analysis, err = claude_code.analyze_repo(str(repo), ANALYSIS_PROMPT)
         if analysis:
             entry.update({k: v for k, v in analysis.items() if k != "name"})
             entry["name"] = analysis.get("name") or repo.name

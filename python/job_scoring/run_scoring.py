@@ -90,6 +90,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--judge-provider", default=None, help="HOLOJOB_LLM_PROVIDER when unset")
     p.add_argument("--judge-model", default=None, help="<PROVIDER>_JUDGE_MODEL when unset")
     p.add_argument("--workers", type=int, default=8, help="parallel judge calls")
+    p.add_argument(
+        "--reduced-quality",
+        default=None,
+        metavar="REASON",
+        help="run_pipeline.py: the ads were not (all) read by the model, and why; recorded in the meta",
+    )
     return p.parse_args()
 
 
@@ -157,7 +163,8 @@ def main() -> int:
         elif engine:
             scored = engine.apply(scored)
             engine.save()
-            engine_summary = {"enabled": True, **engine.counts, "limit": engine.limit if args.judge else None}
+            engine_summary = {"enabled": True, **engine.counts, "refusal": engine.refusal,
+                              "limit": engine.limit if args.judge else None}
             n = engine.counts
             print(f"engine (shadow): {n['matched']} new calls, {n['cached']} from cache; without output: "
                   f"{n['uncached']} not matched yet (needs a judged run), {n['beyondLimit']} beyond the "
@@ -192,6 +199,8 @@ def main() -> int:
         "belowThreshold": c["skipped"],
         "closed": c["closed"],
         "failed": c["failed"],
+        "refused": c["refused"],
+        "refusal": enhancer.refusal,
         "limit": limit if args.judge else None,
         "threshold": args.judge_threshold,
     }
@@ -202,11 +211,20 @@ def main() -> int:
             f"({c['judged']} new calls, {c['cached']} from cache); "
             f"{c['beyond_limit']} more at or above {args.judge_threshold} left at their local score "
             f"beyond the top {limit or 'all'}; {c['skipped']} below the threshold; {c['failed']} failed"
+            + (f"; {c['refused']} refused by the AI gate ({enhancer.refusal})" if c["refused"] else "")
         )
     elif c["cached"]:
         print(f"judge: re-applied {c['cached']} cached judgements (no calls made)")
     if args.min_score > 0:
         scored = [j for j in scored if j.get("matchScore", 0) >= args.min_score]
+
+    # A job scored without the ad facts (enrichment refused by the AI gate, skipped,
+    # failed, or the ad lies outside the allowed places) is marked, never hidden:
+    # its role-track and visa caps could not be checked against the ad.
+    for job in scored:
+        if not (job.get("llmFacts") or {}).get("_fingerprint"):
+            job["aiEnrichment"] = "missing"
+    without_facts = sum(1 for j in scored if j.get("aiEnrichment") == "missing")
 
     labels = Counter(j.get("matchLabel") for j in scored)
     weights = resolve_weights(intelligence.get("scoringWeights"))
@@ -221,6 +239,9 @@ def main() -> int:
             "weights": weights,
             "judge": judge_summary,
             "engineShadow": engine_summary or {"enabled": False},
+            "aiEnrichment": {"jobsWithoutFacts": without_facts, "jobs": len(scored)},
+            "quality": {"reduced": True, "reason": args.reduced_quality} if args.reduced_quality
+            else {"reduced": False},
             "jobCount": len(scored),
             "summary": {
                 "excellent": labels.get("Excellent", 0),

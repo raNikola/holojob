@@ -15,6 +15,7 @@ import { checkClaudeAuth, ensureClaudeLogin } from './claude-auth.js'
 import { saveProfileToDisk, PROFILE_PATH } from './save-profile.js'
 import { saveIntelligenceToDisk, INTELLIGENCE_PATH } from './save-intelligence.js'
 import { runAiFeature, runAiFeatureStream, runAiChat, getAiStatus, getAiModels } from './run-ai.js'
+import { readAiUsage } from './ai-gate.js'
 import {
   runOutreachDiscover,
   runOutreachGenerate,
@@ -624,6 +625,16 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/pipeline/health' && req.method === 'GET') {
     sendJson(res, 200, getPipelineHealth())
+    return true
+  }
+
+  // AI budget gate: effective settings and today's / this month's usage (python/llm/ai_gate.py).
+  if (url === '/api/ai/usage' && req.method === 'GET') {
+    try {
+      sendJson(res, 200, await readAiUsage())
+    } catch (e) {
+      sendJson(res, 500, { error: e.message })
+    }
     return true
   }
 

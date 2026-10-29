@@ -12,5 +12,7 @@ export function describeRun(summary, jobCount) {
     parts.push(`P1 ${p.P1 || 0} · P2 ${p.P2 || 0}`)
     if (sc.hardCapped) parts.push(`${sc.hardCapped} capped by a hard rule`)
   }
+  // The AI budget gate refused enrichment (or it was skipped): the scores stand, read without the ad facts.
+  if (summary.quality?.reduced) parts.push(`REDUCED QUALITY (${summary.quality.reason})`)
   return `Pipeline complete: ${parts.join(', ')}; resumes generated`
 }

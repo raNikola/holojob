@@ -6,7 +6,8 @@ Two modes:
   walk the code and git history itself.
 
 Every caller must handle (None, reason) gracefully — the pipeline falls back to
-rule-based generation when Claude Code is missing or not logged in.
+rule-based generation when Claude Code is missing, not logged in, or refused by
+the AI budget gate (ai_gate.py; the CLI is a paid provider).
 """
 
 from __future__ import annotations
@@ -16,6 +17,9 @@ import logging
 import re
 import shutil
 import subprocess
+from pathlib import Path
+
+import ai_gate
 
 logger = logging.getLogger(__name__)
 
@@ -30,27 +34,20 @@ _availability: dict | None = None
 
 
 def availability() -> dict:
-    """{'available': bool, 'reason': str} — cached for the process lifetime."""
+    """{'available': bool, 'reason': str} — cached for the process lifetime.
+
+    Checks the install and the login file only. It used to send a test prompt,
+    which is a paid model call; the first real call now finds out the rest.
+    """
     global _availability
     if _availability is not None:
         return _availability
     if not shutil.which("claude"):
         _availability = {"available": False, "reason": "claude CLI not installed (npm i -g @anthropic-ai/claude-code)"}
-        return _availability
-    try:
-        proc = subprocess.run(
-            ["claude", "-p", "--output-format", "json"],
-            input="Reply with exactly: OK",
-            capture_output=True, text=True, timeout=60,
-        )
-        data = json.loads(proc.stdout or "{}")
-        if data.get("is_error"):
-            reason = data.get("result") or "Claude Code returned an error"
-            _availability = {"available": False, "reason": reason}
-        else:
-            _availability = {"available": True, "reason": ""}
-    except Exception as exc:
-        _availability = {"available": False, "reason": str(exc)}
+    elif not (Path.home() / ".claude" / ".credentials.json").exists():
+        _availability = {"available": False, "reason": "Claude Code is not logged in — run `claude /login` once"}
+    else:
+        _availability = {"available": True, "reason": ""}
     if not _availability["available"]:
         logger.warning("Claude Code unavailable: %s", _availability["reason"])
     return _availability
@@ -62,21 +59,50 @@ def is_available() -> bool:
 
 def _run(args: list[str], prompt: str, timeout: int, cwd: str | None = None) -> tuple[str | None, str]:
     try:
+        ticket = ai_gate.reserve("claude-code", _model_of(args), len(prompt))
+    except ai_gate.AiRefused as exc:
+        return None, str(exc)
+    text, err, usage = _call(args, prompt, timeout, cwd)
+    ticket.finish(text is not None, input_tokens=usage.get("input_tokens"),
+                  output_tokens=usage.get("output_tokens"), error=err or None,
+                  reported_cost_usd=usage.get("reported_cost_usd"))
+    return text, err
+
+
+def _model_of(args: list[str]) -> str | None:
+    return args[args.index("--model") + 1] if "--model" in args[:-1] else None
+
+
+def usage_of(data: dict) -> dict:
+    """Token counts (and the CLI's own cost figure) from `claude -p --output-format json`."""
+    raw = data.get("usage") or {}
+    out: dict = {}
+    if isinstance(raw.get("input_tokens"), int) and isinstance(raw.get("output_tokens"), int):
+        out["input_tokens"] = raw["input_tokens"] + int(raw.get("cache_read_input_tokens") or 0) \
+            + int(raw.get("cache_creation_input_tokens") or 0)
+        out["output_tokens"] = raw["output_tokens"]
+    if isinstance(data.get("total_cost_usd"), (int, float)):
+        out["reported_cost_usd"] = data["total_cost_usd"]
+    return out
+
+
+def _call(args: list[str], prompt: str, timeout: int, cwd: str | None) -> tuple[str | None, str, dict]:
+    try:
         proc = subprocess.run(
             ["claude", "-p", "--output-format", "json", *args],
             input=prompt, capture_output=True, text=True, timeout=timeout, cwd=cwd,
         )
     except subprocess.TimeoutExpired:
-        return None, f"Claude Code timed out after {timeout}s"
+        return None, f"Claude Code timed out after {timeout}s", {}
     except Exception as exc:
-        return None, str(exc)
+        return None, str(exc), {}
     try:
         data = json.loads(proc.stdout or "{}")
     except json.JSONDecodeError:
-        return None, f"Unparseable Claude Code output: {proc.stdout[:200]}"
+        return None, f"Unparseable Claude Code output: {proc.stdout[:200]}", {}
     if data.get("is_error"):
-        return None, data.get("result") or "Claude Code error"
-    return data.get("result") or "", ""
+        return None, data.get("result") or "Claude Code error", usage_of(data)
+    return data.get("result") or "", "", usage_of(data)
 
 
 def complete(prompt: str, *, timeout: int = 240) -> tuple[str | None, str]:

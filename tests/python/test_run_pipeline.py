@@ -30,7 +30,7 @@ def env(tmp_path, monkeypatch):
     return tmp_path
 
 
-def fake_steps(monkeypatch, *, enriched=10, total=10, fail=None, deduped=10, calls=None):
+def fake_steps(monkeypatch, *, enriched=10, total=10, fail=None, deduped=10, calls=None, refused=None):
     """Replace run_step: each step writes the file the real one would."""
     calls = calls if calls is not None else []
 
@@ -51,6 +51,9 @@ def fake_steps(monkeypatch, *, enriched=10, total=10, fail=None, deduped=10, cal
             for job in payload["jobs"][:enriched]:
                 job["llmFacts"] = {"_fingerprint": "x"}
             rp.DISCOVERED.write_text(json.dumps(payload))
+            if refused:
+                return (f"extracted {enriched}, cached 0 (0 from the ledger), failed 0, not read 0 (outside your "
+                        f"allowed locations), refused {total - enriched} (AI budget gate)\nai gate refused: {refused}\n")
             return f"extracted {enriched}, cached 0 (0 from the ledger), failed {total - enriched}\n"
         if name == "scoring":
             rp.SCORED.write_text(json.dumps({
@@ -98,6 +101,42 @@ def test_too_few_enriched_jobs_stops_before_scoring(env, monkeypatch, capsys):
     assert rp.main([]) == rp.EXIT_FAILED
     assert "scoring" not in calls
     assert "only 50% of jobs have facts" in capsys.readouterr().err
+
+
+def test_enrichment_refused_by_the_ai_gate_scores_anyway_and_labels_the_result_reduced(env, monkeypatch, capsys):
+    calls = fake_steps(monkeypatch, enriched=0, total=10, refused="paid call openai/m refused: AI budget is 0")
+    assert rp.main(["--json"]) == 0
+    assert calls == ["discovery", "enrichment", "scoring"]
+    record = json.loads(rp.LAST_RUN.read_text())
+    assert record["status"] == "ok"
+    assert record["quality"]["reduced"] is True and "AI budget is 0" in record["quality"]["reason"]
+    assert record["enrichment"]["refused"] == 10
+    assert "Quality   : REDUCED" in capsys.readouterr().out
+
+
+def test_skip_enrich_is_labelled_reduced(env, monkeypatch):
+    calls = fake_steps(monkeypatch)
+    assert rp.main(["--skip-enrich"]) == 0
+    assert "enrichment" not in calls
+    assert json.loads(rp.LAST_RUN.read_text())["quality"]["reduced"] is True
+
+
+def test_every_step_runs_as_an_automatic_ai_task(env, monkeypatch):
+    seen = {}
+
+    class Proc:
+        stdout = iter(())
+
+        def wait(self):
+            return 0
+
+    def popen(cmd, **kw):
+        seen["trigger"] = kw["env"].get("HOLOJOB_AI_TRIGGER")
+        return Proc()
+
+    monkeypatch.setattr(rp.subprocess, "Popen", popen)
+    rp.run_step("enrichment", ["x.py"], [])
+    assert seen["trigger"] == "automation"
 
 
 def test_min_enriched_can_be_relaxed(env, monkeypatch):

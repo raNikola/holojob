@@ -27,6 +27,9 @@ import enrich_jobs
 import evidence_index
 from match_engine import shadow
 
+# These tests cover the work around a model call, not the AI budget gate (test_ai_gate.py).
+pytestmark = pytest.mark.usefixtures("open_ai_budget")
+
 NAME = "Milica Jovanović-Stanković"
 EMAIL = "milica.jovanovic@gmail.com"
 PHONE = "+381 64 123 4567"

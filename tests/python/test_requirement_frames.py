@@ -3,11 +3,16 @@
 import json
 import sys
 
+import pytest
+
 import enrich_jobs
 import job_fingerprint
 import requirement_frames as rf
 from enrich_jobs import _previous_block, _reuse_previous, extract
 from requirement_ids import assign_id, provisional_id
+
+# These tests cover the work around a model call, not the AI budget gate (test_ai_gate.py).
+pytestmark = pytest.mark.usefixtures("open_ai_budget")
 
 AD = {"jobId": "j1", "title": "Product Manager", "company": "Acme", "location": "Remote",
       "description": "Own the roadmap. Five years of B2B SaaS product experience. SQL."}

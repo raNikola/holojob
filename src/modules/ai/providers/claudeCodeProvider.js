@@ -48,17 +48,22 @@ export class ClaudeCodeProvider extends BaseProvider {
     }
   }
 
+  /**
+   * Install and login file only. A test prompt would be a paid model call
+   * outside the AI budget gate, so none is sent.
+   */
   async healthCheck() {
     if (!isNode) return { online: false, reason: 'Checked server-side' }
-    try {
-      const result = await this.complete({
-        messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
-        timeout: 60000,
-      })
-      return { online: Boolean(result.text) }
-    } catch (e) {
-      return { online: false, reason: e.message }
+    const { spawnSync } = await import(/* @vite-ignore */ 'node:child_process')
+    const fs = await import(/* @vite-ignore */ 'node:fs')
+    const os = await import(/* @vite-ignore */ 'node:os')
+    const path = await import(/* @vite-ignore */ 'node:path')
+    const probe = spawnSync('claude', ['--version'], { timeout: 10000 })
+    if (probe.error || probe.status !== 0) return { online: false, reason: 'claude CLI not installed' }
+    if (!fs.existsSync(path.join(os.homedir(), '.claude', '.credentials.json'))) {
+      return { online: false, reason: 'Not logged in — run `claude /login` once' }
     }
+    return { online: true }
   }
 
   async listModels() {

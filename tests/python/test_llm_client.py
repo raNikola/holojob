@@ -60,7 +60,7 @@ def _ok(content='{"a": 1}'):
 
 
 @pytest.fixture
-def posts(monkeypatch):
+def posts(monkeypatch, open_ai_budget):
     import requests
 
     import llm_client

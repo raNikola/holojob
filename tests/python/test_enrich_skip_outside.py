@@ -9,6 +9,9 @@ import enrich_jobs
 import work_authorization as wa
 from scorer import score_job
 
+# These tests cover the work around a model call, not the AI budget gate (test_ai_gate.py).
+pytestmark = pytest.mark.usefixtures("open_ai_budget")
+
 ALLOWED = {"allowedLocations": ["REMOTE", "EU", "US", "RS"]}
 FACTS = {"_fingerprint": "x", "workMode": "onsite", "roleTrack": "product_management", "seniority": "senior", "yearsRequired": 5}
 

@@ -26,8 +26,16 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
+
+_LLM_DIR = str(Path(__file__).resolve().parents[1] / "llm")
+if _LLM_DIR not in sys.path:
+    sys.path.insert(0, _LLM_DIR)
+import ai_gate  # noqa: E402  the AI budget gate; every call below goes through it
+import claude_code  # noqa: E402
 
 CLI_MODEL = "haiku"
 CLI_TIMEOUT = 240
@@ -56,6 +64,18 @@ class LlmUnavailable(RuntimeError):
 
 class LlmRefused(RuntimeError):
     """The provider answered, but not with something usable."""
+
+
+class GuardrailRefused(LlmUnavailable):
+    """The AI budget gate refused the call before it was made (ai_gate.py). Recorded; never retry it.
+
+    A subclass of LlmUnavailable, so a caller that only knows "no answer" still
+    degrades instead of crashing; batch callers catch it first and stop sending.
+    """
+
+    def __init__(self, reason: str):
+        super().__init__(f"AI call refused: {reason}")
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -188,7 +208,7 @@ def describe_available() -> list[str]:
 # --- claude-code CLI -------------------------------------------------------
 
 
-def _cli_json(prompt: str, model: str) -> dict:
+def _cli_json(prompt: str, model: str, usage: dict | None = None) -> dict:
     args = ["claude", "-p", "--output-format", "json", "--tools", ""]
     if model:
         args += ["--model", model]
@@ -210,12 +230,15 @@ def _cli_json(prompt: str, model: str) -> dict:
     except json.JSONDecodeError as exc:
         raise LlmUnavailable(f"unparseable CLI output: {proc.stdout[:200]}") from exc
 
+    if usage is not None:
+        usage.update(claude_code.usage_of(payload))
     if payload.get("is_error"):
         raise LlmRefused(
             payload.get("result") or "claude CLI error -- run `claude` and /login once"
         )
 
     return _loose_json(payload.get("result") or "")
+
 
 
 def _loose_json(text: str) -> dict:
@@ -248,7 +271,8 @@ def _rejected_setting(error_text: str, body: dict) -> str | None:
     return next((k for k in DETERMINISTIC if k in body and k in named), None)
 
 
-def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str) -> dict:
+def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
+               usage: dict | None = None) -> dict:
     import requests
 
     if not provider.base_url:
@@ -279,6 +303,8 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str)
     # one of the HTTP_RETRIES, which are for transient failures.
     attempt = 0
     while attempt < HTTP_RETRIES:
+        if usage is not None:
+            usage["attempts"] = usage.get("attempts", 0) + 1
         try:
             response = requests.post(
                 url, headers=headers, json=body, timeout=HTTP_TIMEOUT
@@ -310,6 +336,10 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str)
             )
 
         data = response.json()
+        if usage is not None:
+            counted = data.get("usage") or {}
+            if isinstance(counted.get("prompt_tokens"), int) and isinstance(counted.get("completion_tokens"), int):
+                usage.update(input_tokens=counted["prompt_tokens"], output_tokens=counted["completion_tokens"])
         choice = (data.get("choices") or [{}])[0]
         if choice.get("finish_reason") == "length":
             raise LlmRefused("reply was cut off before the JSON ended")
@@ -337,10 +367,47 @@ def complete_json(
     `schema` is enforced by providers that can and ignored by the rest, so
     callers pass it unconditionally and validate the result either way.
     """
-    name = (provider or active_provider()).lower()
-
-    if name in ("claude-code", "claude", "cli"):
-        return _cli_json(prompt, model or CLI_MODEL)
+    name, model, base_url = call_target(provider, model)
+    if name == "claude-code":
+        return _gated(name, model, None, prompt, lambda usage: _cli_json(prompt, model, usage))
 
     resolved = resolve(name)
-    return _http_json(resolved, prompt, schema, model or resolved.default_model)
+    return _gated(name, model, base_url, prompt,
+                  lambda usage: _http_json(resolved, prompt, schema, model, usage))
+
+
+def call_target(provider: str | None = None, model: str | None = None) -> tuple[str, str, str | None]:
+    """(provider, model, base URL) a complete_json call with these arguments would use; for the budget gate."""
+    name = (provider or active_provider()).lower()
+    if name in ("claude-code", "claude", "cli"):
+        return "claude-code", model or CLI_MODEL, None
+    resolved = resolve(name)
+    return name, model or resolved.default_model, resolved.base_url
+
+
+def preflight(prompt_chars: int, provider: str | None = None, model: str | None = None):
+    """ai_gate.check() for a batch about to call complete_json with these arguments; records nothing."""
+    name, model, base_url = call_target(provider, model)
+    return ai_gate.check(name, model, prompt_chars, base_url=base_url)
+
+
+def _gated(provider: str, model: str, base_url: str | None, prompt: str, call) -> dict:
+    """Ask the budget gate first, then make the call once and record what it used.
+
+    The HTTP retries inside one call are one ledger entry (`attempts` counts them).
+    """
+    try:
+        ticket = ai_gate.reserve(provider, model, len(prompt), base_url=base_url)
+    except ai_gate.AiRefused as exc:
+        raise GuardrailRefused(exc.reason) from exc
+    usage: dict = {}
+    try:
+        result = call(usage)
+    except Exception as exc:
+        ticket.finish(False, input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
+                      error=str(exc), attempts=usage.get("attempts"),
+                      reported_cost_usd=usage.get("reported_cost_usd"))
+        raise
+    ticket.finish(True, input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
+                  attempts=usage.get("attempts"), reported_cost_usd=usage.get("reported_cost_usd"))
+    return result

@@ -122,6 +122,18 @@ def test_a_failed_call_is_shown_and_not_cached(tmp_path):
     assert json.loads((tmp_path / "engine.json").read_text()) == {}
 
 
+def test_a_refusal_by_the_ai_gate_stops_the_run_and_marks_no_job_failed(tmp_path):
+    from llm_client import GuardrailRefused
+
+    fake = Fake(fail=GuardrailRefused("AI budget is 0"))
+    e = engine(tmp_path, judge=True, fake=fake)
+    out = e.apply([job("a", 90), job("b", 80), job("c", 70)])
+    assert fake.calls == 1
+    assert all("engineShadow" not in j for j in out)
+    assert e.counts["refused"] == 3 and e.counts["failed"] == 0
+    assert e.refusal == "AI budget is 0"
+
+
 def test_preview_counts_without_calling(tmp_path):
     first = engine(tmp_path, judge=True)
     first.apply([job("cached", 90)])
