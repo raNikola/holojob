@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { buildMessages, parseAiResponse } from '../src/modules/ai/aiPromptLibrary.js'
 import { getProvider, PROVIDER_NAMES, KEYLESS_PROVIDERS, checkProviderHealth, listProviderModels } from '../src/modules/ai/aiProviderRegistry.js'
 import { initSseResponse, sseWrite } from './stream-spawn.js'
+import { UNGATED_PROVIDERS, finishAiCall, reserveAiCall } from './ai-gate.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -110,9 +111,32 @@ export function runAiFeatureStream(res, { feature, context, settings }) {
     })
 }
 
+/** Measured tokens, or nulls when the provider reported none (the gate then estimates). */
+function measuredTokens(usage) {
+  const input = usage?.inputTokens || usage?.prompt_tokens || 0
+  const output = usage?.outputTokens || usage?.completion_tokens || 0
+  return input || output ? { inputTokens: input, outputTokens: output } : { inputTokens: null, outputTokens: null }
+}
+
 export async function runAiFeature({ feature, context, settings }) {
-  const provider = getProvider(settings?.provider || 'mock')
+  const providerName = settings?.provider || 'mock'
+  const provider = getProvider(providerName)
   const messages = buildMessages(feature, context)
+  // The AI budget gate (python/llm/ai_gate.py) decides before every real call.
+  let ticket = null
+  if (!UNGATED_PROVIDERS.has(providerName)) {
+    ticket = await reserveAiCall({
+      provider: providerName,
+      model: settings?.model,
+      promptChars: messages.reduce((n, m) => n + String(m.content || '').length, 0),
+      baseUrl: settings?.baseUrl,
+      feature,
+      jobId: context?.job?.jobId,
+    })
+    if (!ticket.allowed) {
+      return { ok: false, refused: true, error: ticket.reason || 'AI call refused by the budget gate' }
+    }
+  }
   try {
     const result = await provider.complete({
       messages,
@@ -122,7 +146,12 @@ export async function runAiFeature({ feature, context, settings }) {
       apiKey: settings?.apiKey,
       baseUrl: settings?.baseUrl,
       featureId: feature,
+    }).catch(async (e) => {
+      if (ticket) await finishAiCall(ticket.id, { ok: false, error: sanitizeKey(e.message), baseUrl: settings?.baseUrl })
+      ticket = null
+      throw e
     })
+    if (ticket) await finishAiCall(ticket.id, { ok: true, ...measuredTokens(result.usage), baseUrl: settings?.baseUrl })
     const data = parseAiResponse(result.text, feature)
     let diskPath = null
 

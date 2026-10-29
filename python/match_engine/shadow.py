@@ -32,7 +32,8 @@ from pathlib import Path
 
 from job_fingerprint import job_fingerprint
 from competency_mapping import load_remap
-from llm_client import complete_json
+from llm_client import GuardrailRefused, complete_json
+import ai_gate  # noqa: E402 (on the path through llm_client)
 
 from .constants import ENGINE_VERSION
 from .evidence_select import mode_of
@@ -114,7 +115,9 @@ class ShadowEngine:
         self._cache: dict[str, dict] = (
             json.loads(self.cache_path.read_text(encoding="utf-8")) if self.cache_path.exists() else {})
         self.counts = {"matched": 0, "cached": 0, "uncached": 0, "beyondLimit": 0, "noRequirements": 0,
-                       "closed": 0, "failed": 0, "excluded": 0}
+                       "closed": 0, "failed": 0, "excluded": 0, "refused": 0}
+        # The AI budget gate refused a call: the rest of the run makes none (ai_gate.py).
+        self.refusal: str | None = None
         # Ads the cheap gates ruled out of the send, by gate (an ad failing two counts in both).
         self.excluded: dict[str, int] = {g: 0 for g in CHEAP_GATES}
         self._excluded_keys: set = set()
@@ -185,9 +188,20 @@ class ShadowEngine:
             if _key(job) not in send:
                 self._count("beyondLimit")
                 return None
-            outcome = match_posting(posting, self.candidate, confirmed=True, provider=self.provider,
-                                    model=self.model, complete=self._complete, identity=self.identity,
-                                    select=self.select, compact=self.compact)
+            if self.refusal:
+                self._count("refused")
+                return None
+            try:
+                outcome = match_posting(posting, self.candidate, confirmed=True, provider=self.provider,
+                                        model=self.model, complete=self._complete, identity=self.identity,
+                                        select=self.select, compact=self.compact)
+            except GuardrailRefused as exc:
+                with self._lock:
+                    if self.refusal is None:
+                        self.refusal = exc.reason
+                        print(f"engine (shadow) stopped by the AI gate: {exc.reason}", file=sys.stderr, flush=True)
+                self._count("refused")
+                return None
             if outcome.output is None:
                 print(f"engine (shadow) failed: {(job.get('title') or '?')[:45]}: {outcome.error}",
                       file=sys.stderr)
@@ -197,6 +211,8 @@ class ShadowEngine:
             with self._lock:
                 self._cache[key] = output
         self._count("cached" if from_cache else "matched")
+        if from_cache and self.judge:
+            ai_gate.record_cache_hit(self.provider, self.model, feature="evidence-matcher", job_id=_key(job))
         gates = gate_results(job, self.candidate, output["gates"], output["requirements"])
         return {
             "engineVersion": ENGINE_VERSION,

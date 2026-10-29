@@ -10,6 +10,9 @@ import job_history as jh
 from dedupe_jobs import _crosspost_key
 from job_fingerprint import job_fingerprint
 
+# These tests cover the work around a model call, not the AI budget gate (test_ai_gate.py).
+pytestmark = pytest.mark.usefixtures("open_ai_budget")
+
 KEY = "search-a"
 T0 = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
 

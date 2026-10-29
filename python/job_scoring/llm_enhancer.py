@@ -30,7 +30,8 @@ from typing import Protocol
 
 from enrich_jobs import MAX_DESCRIPTION_CHARS
 from labels import apply_recommendation, match_label, priority
-from llm_client import LlmRefused, LlmUnavailable, complete_json
+from llm_client import GuardrailRefused, LlmRefused, LlmUnavailable, complete_json
+import ai_gate  # noqa: E402 (on the path through llm_client)
 
 _CV_ANALYSIS = Path(__file__).resolve().parents[1] / "cv_analysis"
 if str(_CV_ANALYSIS) not in sys.path:
@@ -326,8 +327,10 @@ class LlmFitEnhancer:
             self._cache = json.loads(cache_path.read_text(encoding="utf-8"))
         self.counts = {
             "judged": 0, "cached": 0, "skipped": 0, "failed": 0, "uncached": 0, "beyond_limit": 0,
-            "closed": 0,
+            "closed": 0, "refused": 0,
         }
+        # The AI budget gate refused a call: the rest of the run makes none (ai_gate.py).
+        self.refusal: str | None = None
 
     def _count(self, key: str) -> None:
         with self._lock:
@@ -366,6 +369,8 @@ class LlmFitEnhancer:
             cached = self._cache.get(fingerprint)
         if cached is not None:
             self._count("cached")
+            if not self.cache_only:
+                ai_gate.record_cache_hit(self.provider, self.model, feature="fit-judge", job_id=job.get("jobId"))
             return cached, fingerprint, True
         if self._selected is not None and self._key(job) not in self._selected:
             self._count("beyond_limit")
@@ -373,10 +378,22 @@ class LlmFitEnhancer:
         if self.cache_only:
             self._count("uncached")
             raise NotCached(fingerprint)
+        if self.refusal:
+            self._count("refused")
+            raise NotCached(fingerprint)
 
-        judged = _coerce_fit(
-            self._complete(prompt, schema=FIT_SCHEMA, model=self.model, provider=self.provider)
-        )
+        try:
+            with ai_gate.context(feature="fit-judge", job_id=job.get("jobId")):
+                raw = self._complete(prompt, schema=FIT_SCHEMA, model=self.model, provider=self.provider)
+        except GuardrailRefused as exc:
+            # Recorded by the gate; the job keeps its local score and nothing is retried.
+            with self._lock:
+                if self.refusal is None:
+                    self.refusal = exc.reason
+                    print(f"judge stopped by the AI gate: {exc.reason}", file=sys.stderr, flush=True)
+            self._count("refused")
+            raise NotCached(fingerprint) from exc
+        judged = _coerce_fit(raw)
         with self._lock:
             self._cache[fingerprint] = judged
         self._count("judged")

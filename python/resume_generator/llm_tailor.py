@@ -140,7 +140,8 @@ def generate_llm_content(parsed: dict, intelligence: dict, job: dict) -> tuple[d
         project_intel=json.dumps(project_slim, ensure_ascii=False, indent=1) if isinstance(project_slim, dict) else project_slim,
     )
 
-    data, err = claude_code.complete_json(prompt, timeout=300)
+    with claude_code.ai_gate.context(feature="tailoring", job_id=job.get("jobId")):
+        data, err = claude_code.complete_json(prompt, timeout=300)
     if data is None:
         return None, err
     issues = _validate(data, parsed)

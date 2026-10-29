@@ -11,6 +11,12 @@ the lock (cron can retry later).
 
 Never judges: the fit judgement sends data off this server and has its own,
 confirmed action (run_scoring.py --judge).
+
+Every step runs as an automatic AI task (CAREER_OS_AI_TRIGGER=automation), so the
+AI budget gate (python/llm/ai_gate.py) lets a model call through only when
+automation is enabled in data/ai/settings.json and the budget allows it. When the
+gate refuses enrichment, or --skip-enrich is given, the run does not stop: it
+scores without the ad facts and labels the result reduced quality.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import os
 import re
 import subprocess
 import sys
@@ -57,7 +64,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--providers", default="serbia", help="provider names or group (default: serbia)")
     p.add_argument("--country", help="overrides the country in the candidate intelligence")
     p.add_argument("--skip-discovery", action="store_true", help="reuse discovered_jobs.json as it is")
-    p.add_argument("--skip-enrich", action="store_true", help="score without reading the ads (not recommended)")
+    p.add_argument("--skip-enrich", action="store_true",
+                   help="score without reading the ads; the result is labelled reduced quality")
     p.add_argument("--min-enriched", type=float, default=DEFAULT_MIN_ENRICHED,
                    help="stop before scoring if fewer than this share of jobs has facts (default 0.8)")
     p.add_argument("--tailor", action="store_true", help="tailor documents for Apply jobs after scoring")
@@ -77,6 +85,8 @@ def run_step(name: str, cmd: list[str], steps: list[dict]) -> str:
     proc = subprocess.Popen(
         [sys.executable, *cmd], cwd=ROOT, text=True, encoding="utf-8",
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        # Every model call in a pipeline step is an automatic AI task (ai_gate.py).
+        env={**os.environ, "CAREER_OS_AI_TRIGGER": "automation"},
     )
     lines = []
     for line in proc.stdout:
@@ -115,11 +125,15 @@ def enriched_share(jobs: list[dict], prefs: dict | None = None) -> float:
     return sum(1 for j in open_jobs if (j.get("llmFacts") or {}).get("_fingerprint")) / max(1, len(open_jobs))
 
 
-def check_enrichment(minimum: float) -> float:
+def check_enrichment(minimum: float, refusal: str | None = None) -> float:
+    """The enriched share. Too low stops the run, unless the AI budget gate is why: then scoring goes on, reduced."""
     jobs = read_json(DISCOVERED).get("jobs") or []
     prefs = (read_json(INTELLIGENCE).get("jobFitPreferences") or {}) if INTELLIGENCE.exists() else {}
     share = enriched_share(jobs, prefs)
-    if share < minimum:
+    if share < minimum and refusal:
+        print(f"Enrichment reduced: only {share:.0%} of jobs have facts because the AI gate refused calls "
+              f"({refusal}). Scoring continues; results are labelled reduced quality.", flush=True)
+    elif share < minimum:
         raise StepFailed(
             "enrichment",
             f"only {share:.0%} of jobs have facts (minimum {minimum:.0%}): is the LLM provider reachable? "
@@ -128,7 +142,8 @@ def check_enrichment(minimum: float) -> float:
     return share
 
 
-def summarize(args, steps: list[dict], enrich_line: str | None, share: float | None) -> dict:
+def summarize(args, steps: list[dict], enrich_line: str | None, share: float | None,
+              reduced: str | None = None) -> dict:
     summary: dict = {"steps": steps}
     if DISCOVERED.exists():
         meta = read_json(DISCOVERED).get("meta") or {}
@@ -138,10 +153,19 @@ def summarize(args, steps: list[dict], enrich_line: str | None, share: float | N
             "history": meta.get("history") or {},
         }
     if enrich_line is not None:
-        m = re.search(r"extracted (\d+), cached (\d+) \((\d+) from the ledger\), failed (\d+)(?:, not read (\d+))?", enrich_line)
+        m = re.search(r"extracted (\d+), cached (\d+) \((\d+) from the ledger\), failed (\d+)"
+                      r"(?:, not read (\d+)[^,]*)?(?:, refused (\d+))?", enrich_line)
         summary["enrichment"] = {
             "enrichedShare": None if share is None else round(share, 3),
-            **({"extracted": int(m[1]), "cached": int(m[2]), "failed": int(m[4]), "notRead": int(m[5] or 0)} if m else {}),
+            **({"extracted": int(m[1]), "cached": int(m[2]), "failed": int(m[4]), "notRead": int(m[5] or 0),
+                "refused": int(m[6] or 0)} if m else {}),
+        }
+    if reduced:
+        summary["quality"] = {
+            "reduced": True,
+            "reason": reduced,
+            "note": "scored without AI facts for some jobs: no role-track, seniority or work-mode facts, "
+                    "so the role-track and visa caps may not apply to them",
         }
     if SCORED.exists():
         scored = read_json(SCORED)
@@ -175,7 +199,11 @@ def print_summary(s: dict) -> None:
     e = s.get("enrichment")
     if e:
         print(f"Enrichment: {e.get('enrichedShare', 0):.0%} of jobs have facts"
-              + (f" ({e['extracted']} read, {e['cached']} cached, {e['failed']} failed, {e.get('notRead', 0)} outside allowed places not read)" if "extracted" in e else ""))
+              + (f" ({e['extracted']} read, {e['cached']} cached, {e['failed']} failed, {e.get('notRead', 0)} outside allowed places not read"
+                 f", {e.get('refused', 0)} refused by the AI gate)" if "extracted" in e else ""))
+    q = s.get("quality")
+    if q:
+        print(f"Quality   : REDUCED - {q['reason']}")
     sc = s.get("scoring")
     if sc:
         print(f"Scoring   : {sc['jobs']} jobs, {sc['hardCapped']} capped by a hard rule, {sc['applyNow']} open P1")
@@ -186,7 +214,7 @@ def print_summary(s: dict) -> None:
 
 def execute(args: argparse.Namespace, steps: list[dict]) -> dict:
     started_at = datetime.now(timezone.utc)
-    enrich_line = share = None
+    enrich_line = share = reduced = None
 
     if not args.skip_discovery:
         cmd = [str(PY / "job_discovery" / "run_discovery.py"), "--providers", args.providers]
@@ -200,16 +228,26 @@ def execute(args: argparse.Namespace, steps: list[dict]) -> dict:
     if not args.skip_enrich:
         out = run_step("enrichment", [str(PY / "job_scoring" / "enrich_jobs.py")], steps)
         enrich_line = next((l for l in reversed(out.splitlines()) if l.startswith("extracted ")), "")
-        share = check_enrichment(args.min_enriched)
+        refused_line = next((l for l in reversed(out.splitlines()) if l.startswith("ai gate refused: ")), None)
+        reduced = refused_line[len("ai gate refused: "):].strip() if refused_line else None
+        share = check_enrichment(args.min_enriched, reduced)
+        if reduced:
+            reduced = f"AI enrichment refused: {reduced}"
 
-    run_step("scoring", [str(PY / "job_scoring" / "run_scoring.py")], steps)
+    if args.skip_enrich and not reduced:
+        reduced = "enrichment skipped (--skip-enrich)"
+    scoring = [str(PY / "job_scoring" / "run_scoring.py")]
+    if reduced:
+        # Written into scored_jobs.json meta, where the scores are read.
+        scoring += ["--reduced-quality", reduced]
+    run_step("scoring", scoring, steps)
     if not SCORED.exists() or datetime.fromtimestamp(SCORED.stat().st_mtime, timezone.utc) < started_at:
         raise StepFailed("scoring", "scored_jobs.json was not refreshed by this run")
 
     if args.tailor:
         run_step("tailoring", [str(PY / "resume_generator" / "run_tailor.py"), "--apply-only",
                                "--limit", str(args.tailor_limit)], steps)
-    return summarize(args, steps, enrich_line, share)
+    return summarize(args, steps, enrich_line, share, reduced)
 
 
 def main(argv=None) -> int:

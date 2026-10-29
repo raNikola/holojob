@@ -93,6 +93,16 @@ keeps it only as an explanation. Do not move scoring decisions into prompts. If 
 judgement needs the model, have it return a fact, and let `scorer.py` decide what the
 fact costs. Scoring specifics: `.claude/rules/scoring.md`.
 
+## AI budget gate
+
+Every real model call goes through `python/llm/ai_gate.py` before it is made (Python:
+`llm_client.complete_json`, `claude_code._run`; Node: `scripts/ai-gate.js` from
+`run-ai.js`). A new call site uses one of those, never a provider directly. Budget,
+limits and the automation switch are in `data/ai/settings.json` (missing = budget 0,
+automation off); the append-only ledger is `data/ai/usage-ledger.jsonl`; prices and
+free / local / paid classes are in `src/data/aiPricing.json` (unknown = paid). Usage:
+`GET /api/ai/usage`.
+
 ## Résumé content rule
 
 A CV states only what the profile and the CV text state; no default for anything, a

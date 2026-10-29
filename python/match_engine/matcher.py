@@ -27,7 +27,8 @@ from typing import Callable
 
 from job_fingerprint import PROMPT_VERSION as EXTRACTION_PROMPT_VERSION
 from job_fingerprint import job_fingerprint
-from llm_client import LlmRefused, LlmUnavailable, active_provider, complete_json
+from llm_client import GuardrailRefused, LlmRefused, LlmUnavailable, active_provider, complete_json
+import ai_gate  # noqa: E402 (on the path through llm_client)
 from redact import redact_cv_text
 from requirement_frames import remap_facts
 
@@ -399,7 +400,11 @@ def match_posting(
     try:
         mode = mode_of(select)
         sent = select_evidence(evidence, [r for _, r in asked], focused=mode == "focused")[0] if mode else evidence
-        proposals, gate_quotes = _ask(build_prompt(description, asked, sent, identity, compact), complete, provider, model)
+        with ai_gate.context(feature="evidence-matcher", job_id=posting_id or None):
+            proposals, gate_quotes = _ask(build_prompt(description, asked, sent, identity, compact), complete,
+                                          provider, model)
+    except GuardrailRefused:
+        raise  # the caller stops its batch; a refusal is not a failed posting
     except (LlmUnavailable, LlmRefused, SchemaViolation) as exc:
         return MatchOutcome(posting_id, None, warnings, f"no engine output for this posting: {exc}")
 

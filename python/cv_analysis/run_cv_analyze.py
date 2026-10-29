@@ -23,6 +23,7 @@ for sub in ("cv_analysis", "job_scoring"):
 
 from analysis import CV_SCHEMA, PROMPT_VERSION, build_prompt, fingerprint, verify  # noqa: E402
 from llm_client import LlmRefused, LlmUnavailable, active_provider, complete_json, judge_model  # noqa: E402
+import ai_gate  # noqa: E402 (on the path through llm_client)
 from redact import redact_cv_text  # noqa: E402
 
 CACHE_PATH = ROOT / "data" / "cache" / "cv_analysis.json"
@@ -79,12 +80,14 @@ def main() -> int:
         return 0
 
     if cached:
+        ai_gate.record_cache_hit(provider, model, feature="cv-analysis")
         entry = cache[key]
         facts, rejected = entry["facts"], entry["rejected"]
         analyzed_at = entry["analyzedAt"]
     else:
         try:
-            raw = complete_json(build_prompt(redacted), schema=CV_SCHEMA, model=model, provider=provider)
+            with ai_gate.context(feature="cv-analysis"):
+                raw = complete_json(build_prompt(redacted), schema=CV_SCHEMA, model=model, provider=provider)
         except (LlmUnavailable, LlmRefused) as exc:
             print(json.dumps({"ok": False, "error": str(exc)}))
             return 1

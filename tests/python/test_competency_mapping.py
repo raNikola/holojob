@@ -12,6 +12,9 @@ import requirement_frames as rf
 from enrich_jobs import _coerce, _reuse_previous, extract, fact_schema
 from requirement_ids import assign_id, provisional_id
 
+# These tests cover the work around a model call, not the AI budget gate (test_ai_gate.py).
+pytestmark = pytest.mark.usefixtures("open_ai_budget")
+
 COMPS = [
     {"id": "kazoo-playing", "definition": "Playing the kazoo; not other wind instruments.", "kind": "skill",
      "aliases": ["kazoo playing", "plays the kazoo"]},

@@ -160,7 +160,8 @@ def extract_job(url: str, use_llm: bool) -> tuple[dict | None, str]:
 
     if _needs_llm(parsed) and use_llm:
         page_text = re.sub(r"\s+", " ", BeautifulSoup(resp.text, "html.parser").get_text(" "))[:8000]
-        llm, err = claude_code.complete_json(EXTRACT_PROMPT.format(text=page_text), timeout=180)
+        with claude_code.ai_gate.context(feature="job-import"):
+            llm, err = claude_code.complete_json(EXTRACT_PROMPT.format(text=page_text), timeout=180)
         if llm:
             for key in ("title", "company", "location", "employmentType", "salary", "description"):
                 if llm.get(key) and not parsed.get(key):

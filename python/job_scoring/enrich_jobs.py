@@ -23,7 +23,9 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -47,11 +49,14 @@ from requirement_ids import PROVISIONAL_PREFIX, REQUIREMENT_KINDS, assign_id  # 
 import requirement_frames  # noqa: E402
 import competency_mapping  # noqa: E402
 from llm_client import (  # noqa: E402
+    GuardrailRefused,
     LlmRefused,
     LlmUnavailable,
     active_provider,
     complete_json,
+    preflight,
 )
+import ai_gate  # noqa: E402 (on the path through llm_client)
 
 JOBS_PATH = ROOT / "data" / "jobs" / "discovered_jobs.json"
 INTELLIGENCE_PATH = ROOT / "data" / "intelligence" / "candidate-intelligence.json"
@@ -418,9 +423,10 @@ def extract(
     competencies and asks for a competencyId per requirement.
     """
     prompt = build_prompt(job, previous, mapper)
-    facts = _coerce(
-        complete_json(prompt, schema=fact_schema(bool(mapper)), model=model, provider=provider)
-    )
+    with ai_gate.context(feature="enrichment", job_id=job.get("jobId")):
+        facts = _coerce(
+            complete_json(prompt, schema=fact_schema(bool(mapper)), model=model, provider=provider)
+        )
     # Ids are code's job, not the model's (ENGINE_CONTRACT.md section 2, step 2).
     facts["requirements"] = _reuse_previous(facts["requirements"], previous, mapper)
     facts["_fingerprint"] = _fingerprint(job)
@@ -447,6 +453,10 @@ def _dry_run(args, jobs, pending, skipped, from_ledger, outside, frames, remap, 
     return 0
 
 
+class _Skipped(Exception):
+    """A job not sent because the AI gate already refused an earlier one in this run."""
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Extract job facts with an LLM.")
     p.add_argument("--jobs", type=Path, default=JOBS_PATH)
@@ -460,6 +470,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--force", action="store_true", help="re-read cached jobs")
     p.add_argument("--workers", type=int, default=8, help="parallel calls")
     p.add_argument("--dry-run", action="store_true", help="count the ads and calls and estimate the prompt size; send nothing")
+    p.add_argument(
+        "--manual",
+        action="store_true",
+        help="the owner runs this by hand; without it enrichment is an automatic AI task, "
+             "which runs only when data/ai/settings.json automation.enabled is true",
+    )
     p.add_argument(
         "--intelligence",
         type=Path,
@@ -482,6 +498,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    # Unconfirmed batch work: automatic unless the owner says otherwise (ai_gate.py).
+    os.environ[ai_gate.TRIGGER_ENV] = ai_gate.MANUAL if args.manual else ai_gate.AUTOMATION
     print(f"provider: {args.provider or active_provider()}", flush=True)
 
     if not args.jobs.exists():
@@ -528,14 +546,35 @@ def main() -> int:
     remapped = requirement_frames.apply_remap(frames, remap)
     if args.dry_run:
         return _dry_run(args, jobs, pending, skipped, from_ledger, outside, frames, remap, mapper)
-    done = failed = 0
+    done = failed = refused = 0
+    refusal = None
+    if pending:
+        # One check before the batch: a run the gate would refuse sends nothing and logs one refusal.
+        with ai_gate.context(feature="enrichment"):
+            decision = preflight(len(build_prompt(pending[0][1], None, mapper)), args.provider, args.model)
+        if not decision.allowed:
+            ai_gate.record_refused(decision, skipped=len(pending))
+            refused, refusal = len(pending), decision.reason
+            pending = []
     # Every call waits on a network round trip or a subprocess, so a small
     # pool turns a sequential pass into a parallel one. Each worker handles
     # its own job dict, so nothing is shared between threads.
+    stop = threading.Event()
+
+    def one(job, *rest, **kw):
+        # After the first refusal no worker asks again; the rest are skipped, not refused one by one.
+        if stop.is_set():
+            raise _Skipped
+        try:
+            return extract(job, *rest, **kw)
+        except GuardrailRefused:
+            stop.set()
+            raise
+
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         futures = {
             pool.submit(
-                extract, job, args.model, args.provider, requirement_frames.previous_for(frames, job, remap),
+                one, job, args.model, args.provider, requirement_frames.previous_for(frames, job, remap),
                 **({"mapper": mapper} if mapper else {}),
             ): (index, job)
             for index, job in pending
@@ -545,6 +584,16 @@ def main() -> int:
             title = (job.get("title") or "?")[:45]
             try:
                 job["llmFacts"] = future.result()
+            except _Skipped:
+                refused += 1
+                continue
+            except GuardrailRefused as exc:
+                # A limit was reached mid-run: stop sending, keep what is done, never retry.
+                refused += 1
+                if refusal is None:
+                    refusal = exc.reason
+                    print(f"AI gate stopped enrichment: {exc.reason}", file=sys.stderr, flush=True)
+                continue
             except (LlmUnavailable, LlmRefused) as exc:
                 print(
                     f"[{index}/{len(jobs)}] {title}\n    failed: {exc}",
@@ -574,10 +623,13 @@ def main() -> int:
     if any(stored):
         job_history.save(ledger_file, ledger)
     print(f"\nextracted {done}, cached {skipped} ({from_ledger} from the ledger), failed {failed}"
-          f", not read {outside} (outside your allowed locations)")
+          f", not read {outside} (outside your allowed locations), refused {refused} (AI budget gate)")
+    if refusal:
+        # run_pipeline.py reads this line: refused work degrades the run, it does not stop it.
+        print(f"ai gate refused: {refusal}")
     # Every call failing means the provider is down: say so rather than let a
-    # pipeline carry on with jobs nobody read.
-    if pending and done == 0:
+    # pipeline carry on with jobs nobody read. Refused calls are not failures.
+    if pending and done == 0 and not refused:
         print("every enrichment call failed; is the LLM provider reachable?", file=sys.stderr)
         return 1
     return 0

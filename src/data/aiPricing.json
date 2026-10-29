@@ -1,0 +1,48 @@
+{
+  "_comment": [
+    "Price and cost class of each AI provider / model, read by python/llm/ai_gate.py (the AI budget gate).",
+    "class: free | local | paid | unknown. A provider or model missing here is unknown, and unknown is treated as paid.",
+    "inputPerMTok / outputPerMTok: price per million tokens in `currency`. null means the price is unknown:",
+    "a paid call with an unknown price is refused whenever the budget is not 0 too, because its cost cannot be checked.",
+    "Fill a price only from the provider's own price page, and record that page in `source` and the day in `checkedAt`.",
+    "model \"*\" matches every model of the provider; an exact model entry wins over \"*\".",
+    "A local entry counts as local only while its base URL points at this machine or a private network."
+  ],
+  "currency": "USD",
+  "entries": [
+    {
+      "provider": "ollama",
+      "model": "*",
+      "class": "local",
+      "inputPerMTok": 0,
+      "outputPerMTok": 0,
+      "source": "Runs on this server; no per-token bill",
+      "checkedAt": "2026-10-29"
+    },
+    {
+      "provider": "mock",
+      "model": "*",
+      "class": "free",
+      "inputPerMTok": 0,
+      "outputPerMTok": 0,
+      "source": "Built-in canned answers; no model is called",
+      "checkedAt": "2026-10-29"
+    },
+    {
+      "provider": "claude-code",
+      "model": "*",
+      "class": "paid",
+      "inputPerMTok": null,
+      "outputPerMTok": null,
+      "source": null,
+      "checkedAt": null,
+      "note": "Claude Code CLI on the owner's subscription; usage counts against a paid plan"
+    },
+    { "provider": "openai", "model": "*", "class": "paid", "inputPerMTok": null, "outputPerMTok": null, "source": null, "checkedAt": null },
+    { "provider": "deepseek", "model": "*", "class": "paid", "inputPerMTok": null, "outputPerMTok": null, "source": null, "checkedAt": null },
+    { "provider": "openrouter", "model": "*", "class": "paid", "inputPerMTok": null, "outputPerMTok": null, "source": null, "checkedAt": null },
+    { "provider": "groq", "model": "*", "class": "paid", "inputPerMTok": null, "outputPerMTok": null, "source": null, "checkedAt": null },
+    { "provider": "claude", "model": "*", "class": "paid", "inputPerMTok": null, "outputPerMTok": null, "source": null, "checkedAt": null },
+    { "provider": "gemini", "model": "*", "class": "paid", "inputPerMTok": null, "outputPerMTok": null, "source": null, "checkedAt": null }
+  ]
+}
