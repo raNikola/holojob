@@ -1,21 +1,25 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { runAiFeature } from '../../scripts/run-ai.js'
+import { runAiFeature as runAi } from '../../scripts/run-ai.js'
 import { reserveAiCall, setGateRunner } from '../../scripts/ai-gate.js'
 import { setIdentitySource } from '../../scripts/ai-redact.js'
 import { getProvider } from '../../src/modules/ai/aiProviderRegistry.js'
 import { describeRun } from '../../src/modules/jobs/pipelineSummary.js'
 import { setAiSecret } from '../../scripts/secret-store.js'
 import { CANARY, useTempSecretStore } from './helpers/secretTestStore.js'
+import { selectProvider, withSelection } from './helpers/selectionStub.js'
+
+// A request's `settings` are not read by the server; the selection is what it stores.
+const runAiFeature = (args) => { selectProvider(args.settings); return runAi(args) }
 
 const JOB = { jobId: 'j1', title: 'Product Manager', company: 'Acme', description: 'Own the roadmap.' }
 
 function gate(decision) {
   const seen = []
-  setGateRunner(async (command, input) => {
+  setGateRunner(withSelection(async (command, input) => {
     seen.push({ command, input })
     if (command === 'reserve') return decision
     return { ok: true }
-  })
+  }))
   return seen
 }
 

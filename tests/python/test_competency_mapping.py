@@ -7,6 +7,7 @@ import pytest
 
 import competency_mapping as cm
 import enrich_jobs
+from conftest import select_provider
 import job_fingerprint
 import requirement_frames as rf
 from enrich_jobs import _coerce, _reuse_previous, extract, fact_schema
@@ -277,6 +278,7 @@ def _run_main(tmp_path, monkeypatch, family, extra=()):
     intel.write_text(json.dumps({"roleFamily": family}), encoding="utf-8")
     monkeypatch.setattr(sys, "argv", ["enrich_jobs.py", "--jobs", str(jobs), "--workers", "1",
                                       "--intelligence", str(intel), "--ledger", str(tmp_path / "ledger.json"), *extra])
+    select_provider(tmp_path, monkeypatch, "claude-code")
     return enrich_jobs.main()
 
 
@@ -430,6 +432,7 @@ def test_dry_run_counts_the_calls_and_sends_and_writes_nothing(tmp_path, monkeyp
     frames_before = rf.FRAMES_PATH.read_bytes()
     monkeypatch.setattr(sys, "argv", ["enrich_jobs.py", "--jobs", str(jobs), "--intelligence", str(intel),
                                       "--ledger", str(tmp_path / "ledger.json"), "--dry-run"])
+    select_provider(tmp_path, monkeypatch, "claude-code")
     assert enrich_jobs.main() == 0
     out = capsys.readouterr().out
     assert prompts == [], "no model call"

@@ -500,7 +500,11 @@ def main() -> int:
     args = parse_args()
     # Unconfirmed batch work: automatic unless the owner says otherwise (ai_gate.py).
     os.environ[ai_gate.TRIGGER_ENV] = ai_gate.MANUAL if args.manual else ai_gate.AUTOMATION
-    print(f"provider: {args.provider or active_provider()}", flush=True)
+    try:
+        print(f"provider: {args.provider or active_provider()}", flush=True)
+    except LlmUnavailable as exc:
+        print(f"enrichment: {exc}", file=sys.stderr)
+        return 1
 
     if not args.jobs.exists():
         print(f"Missing jobs file: {args.jobs}", file=sys.stderr)

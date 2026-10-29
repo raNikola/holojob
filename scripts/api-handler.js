@@ -683,7 +683,6 @@ export async function handleApiRequest(req, res) {
       const body = await readBody(req)
       const result = await runAiChat({
         context: body.context,
-        settings: body.settings,
         message: body.message || body.context?.message,
       })
       sendJson(res, result.ok ? 200 : 500, result)
@@ -701,14 +700,12 @@ export async function handleApiRequest(req, res) {
         await runAiFeatureStream(res, {
           feature,
           context: body.context,
-          settings: body.settings,
         })
         return true
       }
       const result = await runAiFeature({
         feature,
         context: body.context,
-        settings: body.settings,
       })
       sendJson(res, result.ok ? 200 : 500, result)
     } catch (e) {
@@ -747,7 +744,6 @@ export async function handleApiRequest(req, res) {
         job: body.job,
         contact: body.contact,
         messageType: body.messageType,
-        settings: body.settings,
       })
       sendJson(res, result.ok ? 200 : 500, result)
     } catch (e) {

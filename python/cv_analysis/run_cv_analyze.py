@@ -57,7 +57,11 @@ def main() -> int:
         return 1
 
     redacted, removed = redact_cv_text(raw_text, payload.get("fullName") or "", payload.get("links") or [])
-    provider = active_provider()
+    try:
+        provider = active_provider()
+    except LlmUnavailable as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}))
+        return 1
     model = judge_model(provider)
     key = fingerprint(redacted, provider, model)
     cache = _load_cache()

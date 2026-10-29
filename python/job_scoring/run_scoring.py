@@ -19,7 +19,7 @@ if str(SCRIPT_DIR) not in sys.path:
 if str(ROOT / "python") not in sys.path:
     sys.path.append(str(ROOT / "python"))
 
-from llm_client import active_provider, judge_model  # noqa: E402
+from llm_client import LlmUnavailable, active_provider, judge_model, peek_provider  # noqa: E402
 from llm_enhancer import (  # noqa: E402
     DEFAULT_JUDGE_LIMIT,
     DEFAULT_THRESHOLD,
@@ -87,7 +87,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_JUDGE_LIMIT,
         help="send at most this many jobs to the judge, the highest by local score (0 = no limit)",
     )
-    p.add_argument("--judge-provider", default=None, help="HOLOJOB_LLM_PROVIDER when unset")
+    p.add_argument("--judge-provider", default=None, help="the provider selected in Settings when unset")
     p.add_argument("--judge-model", default=None, help="<PROVIDER>_JUDGE_MODEL when unset")
     p.add_argument("--workers", type=int, default=8, help="parallel judge calls")
     p.add_argument(
@@ -123,8 +123,14 @@ def main() -> int:
     # Every enhancer gets it, so a cache-only run builds the same prompts and
     # finds the judgements a judged run stored.
     identity = identity_of(profile)
-    provider = args.judge_provider or active_provider()
-    model = args.judge_model or judge_model(provider)
+    # A judged run (or its preview) needs the selected provider and refuses without one. A local re-score makes no
+    # call and only re-applies cached judgements, so it never fails for want of a selection.
+    try:
+        provider = args.judge_provider or (active_provider() if args.judge or args.judge_preview else peek_provider())
+    except LlmUnavailable as exc:
+        print(f"judge: {exc}", file=sys.stderr)
+        return 1
+    model = args.judge_model or (judge_model(provider) if provider else None)
     limit = args.judge_limit if args.judge_limit > 0 else None
     if args.judge or args.judge_preview:
         # A preview reads the cache and counts what a judged run would send,

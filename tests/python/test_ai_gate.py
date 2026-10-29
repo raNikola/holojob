@@ -19,7 +19,7 @@ import ai_gate
 import claude_code
 import enrich_jobs
 import llm_client
-from conftest import permissive_ai_budget
+from conftest import permissive_ai_budget, select_provider
 from llm_enhancer import LlmFitEnhancer
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -93,14 +93,54 @@ def test_budget_0_refuses_a_paid_http_call_before_anything_is_sent(monkeypatch, 
     assert row["decision"] == "refused" and row["provider"] == "openai" and row["class"] == "paid"
 
 
-def test_budget_0_refuses_the_cli_fallback(monkeypatch, no_keys):
+def test_budget_0_refuses_the_selected_cli(tmp_path, monkeypatch, no_keys):
     ran = []
     monkeypatch.setattr(llm_client.subprocess, "run", lambda *a, **k: ran.append(a))
-    assert llm_client.active_provider() == "claude-code"  # no key: the CLI is the fallback
+    select_provider(tmp_path, monkeypatch, "claude-code", "sonnet")
+    assert llm_client.active_provider() == "claude-code"
     with pytest.raises(llm_client.GuardrailRefused):
         llm_client.complete_json("prompt")
     assert ran == []
     assert calls("refused")[0]["provider"] == "claude-code"
+
+
+def test_with_nothing_selected_a_call_refuses_and_no_provider_is_picked(monkeypatch, no_keys, caplog):
+    # Keys in the environment, the CLI on the path: neither may choose a provider.
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.setenv("HOLOJOB_LLM_PROVIDER", "openai")
+    ran = []
+    monkeypatch.setattr(llm_client.subprocess, "run", lambda *a, **k: ran.append(a))
+    with pytest.raises(llm_client.NoProviderSelected, match="No AI provider selected"):
+        llm_client.active_provider()
+    with pytest.raises(llm_client.NoProviderSelected):
+        llm_client.complete_json("prompt")
+    assert ran == []
+    assert "AI call refused: No AI provider selected" in caplog.text
+    rows = calls("refused")
+    assert rows and all(r["reason"].startswith("No AI provider selected") for r in rows)
+    assert llm_client.peek_provider() == ""
+
+
+def test_a_provider_the_python_pipeline_cannot_run_is_refused_not_swapped(tmp_path, monkeypatch, no_keys, caplog):
+    monkeypatch.setenv("OPENAI_API_KEY", "k")  # a working key for another provider must not be used instead
+    select_provider(tmp_path, monkeypatch, "gemini", "gemini-2.0-flash")
+    with pytest.raises(llm_client.NoProviderSelected, match="gemini is selected but the Python pipeline cannot run it"):
+        llm_client.active_provider()
+    with pytest.raises(llm_client.NoProviderSelected):
+        llm_client.complete_json("prompt")
+    assert "gemini is selected" in caplog.text
+    assert calls("refused")[0]["provider"] == "gemini"
+
+
+def test_a_selected_provider_without_its_key_fails_and_does_not_fall_back(tmp_path, monkeypatch, posts, no_keys):
+    permissive_ai_budget(tmp_path, monkeypatch)
+    select_provider(tmp_path, monkeypatch, "openai")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")  # another provider is usable; it must not be tried
+    ran = []
+    monkeypatch.setattr(llm_client.subprocess, "run", lambda *a, **k: ran.append(a))
+    with pytest.raises(llm_client.LlmUnavailable, match="OPENAI_API_KEY is not set"):
+        llm_client.complete_json("prompt")
+    assert posts == [] and ran == []
 
 
 def test_budget_0_refuses_the_cli_bridge_used_by_tailoring_import_and_scans(monkeypatch):
@@ -354,7 +394,7 @@ def _enrich(tmp_path, monkeypatch, jobs, *extra):
 
 def test_refused_enrichment_sends_nothing_logs_one_refusal_and_exits_0(tmp_path, monkeypatch, posts, capsys):
     monkeypatch.setenv("OPENAI_API_KEY", "k")
-    monkeypatch.setenv("HOLOJOB_LLM_PROVIDER", "openai")
+    select_provider(tmp_path, monkeypatch, "openai")
     jobs = _jobs_file(tmp_path, 4)
     assert _enrich(tmp_path, monkeypatch, jobs, "--manual") == 0
     out = capsys.readouterr().out
@@ -366,7 +406,7 @@ def test_refused_enrichment_sends_nothing_logs_one_refusal_and_exits_0(tmp_path,
 
 def test_enrichment_is_an_automatic_task_unless_run_with_manual(tmp_path, monkeypatch, posts, capsys):
     jobs = _jobs_file(tmp_path, 2)
-    monkeypatch.setenv("HOLOJOB_LLM_PROVIDER", "ollama")
+    select_provider(tmp_path, monkeypatch, "ollama")
     assert _enrich(tmp_path, monkeypatch, jobs) == 0
     assert "automatic AI tasks are off" in capsys.readouterr().out and posts == []
     assert _enrich(tmp_path, monkeypatch, jobs, "--manual") == 0
@@ -378,7 +418,7 @@ def test_a_limit_reached_mid_run_stops_the_batch(tmp_path, monkeypatch, capsys):
 
     permissive_ai_budget(tmp_path, monkeypatch, maxCallsDaily=2)
     monkeypatch.setenv("OPENAI_API_KEY", "k")
-    monkeypatch.setenv("HOLOJOB_LLM_PROVIDER", "openai")
+    select_provider(tmp_path, monkeypatch, "openai")
     facts = json.dumps({"workMode": "remote", "roleTrack": "product_management", "seniority": "senior",
                         "yearsRequired": 5, "requirements": []})
     sent = []
@@ -433,10 +473,12 @@ def test_the_pipeline_runs_end_to_end_with_zero_ai_calls(tmp_path, automation):
     ai.mkdir()
     (ai / "settings.json").write_text(json.dumps({"automation": {"enabled": automation}}))
     env = {k: v for k, v in os.environ.items() if not k.endswith(("_API_KEY", "_BASE_URL"))}
+    selection = tmp_path / "ai-settings.json"
+    selection.write_text(json.dumps({"provider": "openai", "model": "test-model"}))
     env.update({
-        "HOLOJOB_AI_DIR": str(ai),
+        "HOLOJOB_AI_DIR": str(ai), "HOLOJOB_AI_SELECTION": str(selection),
         # A paid provider at a closed port: if anything got past the gate, it would fail loudly here.
-        "HOLOJOB_LLM_PROVIDER": "openai", "OPENAI_API_KEY": "test", "OPENAI_BASE_URL": "http://127.0.0.1:9/v1",
+        "OPENAI_API_KEY": "test", "OPENAI_BASE_URL": "http://127.0.0.1:9/v1",
         "PATH": "/nonexistent",  # no claude CLI either
     })
     env.pop("HOLOJOB_AI_TRIGGER", None)

@@ -5,7 +5,7 @@ import Button from '../ui/Button'
 import Input from '../ui/Input'
 import Alert from '../ui/Alert'
 import SelectField from '../ui/SelectField'
-import { PROVIDER_DEFAULTS, loadAiSettings, maskApiKey, readLegacyAiKey, clearLegacyAiKey } from '../../modules/ai/aiSettings'
+import { PROVIDER_DEFAULTS, maskApiKey, readLegacyAiKey, clearLegacyAiKey } from '../../modules/ai/aiSettings'
 import {
   KEYED_AI_PROVIDERS,
   deleteAiSecret,
@@ -15,6 +15,7 @@ import {
   putAiSecret,
   putLinkedInSecret,
 } from '../../modules/ai/secretsClient'
+import { fetchAiSelection } from '../../modules/ai/aiSelectionClient'
 import { linkedInRiskConfirmed } from '../../modules/outreach/linkedinConsent'
 import { clearLegacyLinkedInCookie, moveLegacyLinkedInToServer, readLegacyLinkedInCookie } from '../../modules/outreach/linkedinCookie'
 
@@ -42,6 +43,7 @@ export default function SecretsPanel() {
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
   const [legacy, setLegacy] = useState(() => readLegacyAiKey())
+  const [selectedProvider, setSelectedProvider] = useState(null) // the server's AI provider selection, for display and as the move's default
   const [linkedin, setLinkedin] = useState(null)
   const [editingLinkedIn, setEditingLinkedIn] = useState(null) // the typed cookie, or null when the form is closed
   const [riskAccepted, setRiskAccepted] = useState(false)
@@ -61,6 +63,15 @@ export default function SecretsPanel() {
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
+
+  useEffect(() => {
+    fetchAiSelection().then((r) => {
+      const provider = r.ok ? r.data.selection?.provider ?? null : null
+      setSelectedProvider(provider)
+      // The settings move may already have removed the provider from the browser copy of the key.
+      if (KEYED_AI_PROVIDERS.includes(provider)) setMoveTo((m) => (m.provider ? m : { ...m, provider }))
+    })
+  }, [])
 
   const startEdit = (provider) => {
     setMessage(null)
@@ -367,7 +378,7 @@ export default function SecretsPanel() {
         )}
 
         <p className="text-xs text-stone-500">
-          The active provider is chosen in AI Provider ({loadAiSettings().provider}). A key from <code>.env</code> is used only
+          The active provider is chosen in AI Provider ({selectedProvider || 'none selected'}). A key from <code>.env</code> is used only
           when no key is stored here.
         </p>
       </div>

@@ -6,6 +6,7 @@ import sys
 import pytest
 
 import enrich_jobs
+from conftest import select_provider
 import job_fingerprint
 import requirement_frames as rf
 from enrich_jobs import _previous_block, _reuse_previous, extract
@@ -135,6 +136,7 @@ def test_enrichment_passes_the_stored_frame_and_stores_the_new_one(tmp_path, mon
     monkeypatch.setattr(enrich_jobs, "extract", fake)
     monkeypatch.setattr(sys, "argv", ["enrich_jobs.py", "--jobs", str(jobs_file), "--workers", "1",
                                       "--intelligence", str(tmp_path / "none.json")])
+    select_provider(tmp_path, monkeypatch, "claude-code")
     assert enrich_jobs.main() == 0
     assert seen == [PREVIOUS]
     assert rf.load() == {rf.frame_key(AD): [PREVIOUS[1]]}

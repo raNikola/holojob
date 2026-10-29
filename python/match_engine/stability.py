@@ -286,7 +286,7 @@ def main() -> int:
     p.add_argument("--judge", action="store_true",
                    help="call the provider: sends each ad, and with it the redacted evidence index, to it")
     p.add_argument("--env-file", type=Path, default=None, help="read provider keys from this file (e.g. .env)")
-    p.add_argument("--provider", default=None, help="HOLOJOB_LLM_PROVIDER when unset")
+    p.add_argument("--provider", default=None, help="the provider selected in Settings when unset")
     p.add_argument("--model", default=None, help="matcher model; <PROVIDER>_JUDGE_MODEL when unset")
     p.add_argument("--matcher-only", action="store_true",
                    help="reuse calibrate.py's cached extraction in all runs; measures the matcher alone")

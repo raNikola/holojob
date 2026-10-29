@@ -6,6 +6,7 @@ import sys
 import pytest
 
 import enrich_jobs
+from conftest import select_provider
 import work_authorization as wa
 from scorer import score_job
 
@@ -70,6 +71,7 @@ def _run_enrich(tmp_path, monkeypatch, jobs, intelligence, extra=()):
     read = []
     monkeypatch.setattr(enrich_jobs, "extract", lambda j, model, provider, previous=None: read.append(j["jobId"]) or FACTS)
     monkeypatch.setattr(sys, "argv", ["enrich_jobs.py", "--jobs", str(jobs_file), "--intelligence", str(intel_file), *extra])
+    select_provider(tmp_path, monkeypatch, "claude-code")
     assert enrich_jobs.main() == 0
     return read
 
@@ -101,5 +103,6 @@ def test_no_intelligence_file_means_nothing_is_skipped(tmp_path, monkeypatch):
     read = []
     monkeypatch.setattr(enrich_jobs, "extract", lambda j, m, p, previous=None: read.append(1) or FACTS)
     monkeypatch.setattr(sys, "argv", ["enrich_jobs.py", "--jobs", str(jobs_file), "--intelligence", str(tmp_path / "missing.json")])
+    select_provider(tmp_path, monkeypatch, "claude-code")
     assert enrich_jobs.main() == 0
     assert read == [1]

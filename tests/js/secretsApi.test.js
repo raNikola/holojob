@@ -8,6 +8,7 @@ import { setIdentitySource } from '../../scripts/ai-redact.js'
 import { getProvider } from '../../src/modules/ai/aiProviderRegistry.js'
 import { setAiSecret } from '../../scripts/secret-store.js'
 import { CANARY, useTempSecretStore } from './helpers/secretTestStore.js'
+import { selectProvider, withSelection } from './helpers/selectionStub.js'
 
 const realFetch = globalThis.fetch
 const store = useTempSecretStore()
@@ -22,12 +23,12 @@ beforeEach(async () => {
   logged = []
   for (const level of LEVELS) vi.spyOn(console, level).mockImplementation((...args) => { logged.push(args.map(String).join(' ')) })
   gateCalls = []
-  setGateRunner(async (command, input) => {
+  setGateRunner(withSelection(async (command, input) => {
     gateCalls.push({ command, input })
     if (command === 'reserve') return { allowed: true, id: 'c1' }
     if (command === 'usage') return { settings: {}, today: {}, month: {} }
     return { ok: true }
-  })
+  }))
   setIdentitySource(() => ({ names: [], emails: [], phones: [], links: [] }))
   // The providers must never reach a network, and the Claude Code health check must not start the CLI.
   vi.spyOn(getProvider('claude-code'), 'healthCheck').mockResolvedValue({ online: false, reason: 'stubbed' })
@@ -157,6 +158,7 @@ describe('no response, log or ledger text contains the key', () => {
   it('a provider error that quotes the key is masked in the HTTP error, the gate record and the console', async () => {
     setAiSecret('openai', { key: CANARY })
     stubProviders(() => ({ ok: false, status: 401, json: async () => ({ error: { message: `Incorrect API key provided: ${CANARY}` } }) }))
+    selectProvider({ provider: 'openai', model: 'gpt-4o' })
     const res = await call('POST', '/api/ai/job-analysis', { context: { job: { jobId: 'j1', title: 'PM', description: 'Own it.' } }, settings: { provider: 'openai', model: 'gpt-4o' } })
     expect(res.status).toBe(500)
     expect(await text(res)).not.toContain(CANARY)
@@ -169,6 +171,7 @@ describe('no response, log or ledger text contains the key', () => {
   it('a Gemini error is masked, and the key travels in a header, not in the URL', async () => {
     setAiSecret('gemini', { key: CANARY })
     const seen = stubProviders(() => ({ ok: false, status: 400, json: async () => ({ error: { message: `API key not valid: ${CANARY}` } }) }))
+    selectProvider({ provider: 'gemini' })
     const res = await call('POST', '/api/ai/skill-gap', { context: {}, settings: { provider: 'gemini' } })
     expect(await text(res)).not.toContain(CANARY)
     const [url, init] = seen.mock.calls[0]
@@ -180,6 +183,7 @@ describe('no response, log or ledger text contains the key', () => {
 
   it('a request that still carries an apiKey is ignored, not stored, not logged, not answered', async () => {
     const seen = stubProviders(() => ok())
+    selectProvider({ provider: 'openai' })
     const res = await call('POST', '/api/ai/job-analysis', {
       context: { job: { jobId: 'j1', title: 'PM', description: 'Own it.' } },
       settings: { provider: 'openai', apiKey: 'sk-from-the-browser-0123456789', baseUrl: 'https://evil.example/v1' },

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { buildMessages, parseAiResponse } from '../src/modules/ai/aiPromptLibrary.js'
 import { getProvider, PROVIDER_NAMES, KEYLESS_PROVIDERS, checkProviderHealth, listProviderModels } from '../src/modules/ai/aiProviderRegistry.js'
 import { initSseResponse, sseWrite } from './stream-spawn.js'
-import { UNGATED_PROVIDERS, finishAiCall, recordAiRefusal, reserveAiCall } from './ai-gate.js'
+import { UNGATED_PROVIDERS, finishAiCall, readAiSelection, recordAiRefusal, reserveAiCall } from './ai-gate.js'
 import { assertClean, redactContext } from './ai-redact.js'
 import { maskSecrets } from './secret-mask.js'
 import { getAiCredential } from './secret-store.js'
@@ -77,10 +77,12 @@ const FEATURE_LABELS = {
 }
 
 export const NO_KEY_MESSAGE = 'No API key configured'
+export const NO_PROVIDER_MESSAGE = 'No AI provider selected (Settings > AI Provider). Nothing was sent.'
 
 /**
  * The one effective settings object of a call: used for the gate, the provider, status and models.
- * Only provider, model, temperature and maxTokens come from the request. A keyed provider takes its key and
+ * For a call, `settings` is the stored selection (data/config/ai-settings.json, the file the Python pipeline reads too);
+ * a request never supplies it. A keyed provider takes its key and
  * base URL from the secret store (then .env); an apiKey or baseUrl in the request is ignored, so the key
  * cannot be redirected to another host nor the gate be told a different target. Ollama takes the request's
  * base URL because no credential is attached to it. Never log the result: it holds the key.
@@ -96,10 +98,11 @@ export function resolveAiSettings(settings) {
   return { ...effective, apiKey: credential?.apiKey, baseUrl: credential?.baseUrl || PROVIDER_DEFAULTS[provider]?.baseUrl, needsKey: true }
 }
 
-export function runAiFeatureStream(res, { feature, context, settings }) {
+export async function runAiFeatureStream(res, { feature, context }) {
   initSseResponse(res)
-  const providerName = settings?.provider || 'mock'
-  const model = settings?.model || ''
+  const selection = (await readAiSelection()).selection
+  const providerName = selection?.provider || 'none'
+  const model = selection?.model || ''
   const label = FEATURE_LABELS[feature] || feature
   sseWrite(res, { type: 'log', stream: 'stdout', line: `AI: ${label}` })
   sseWrite(res, { type: 'log', stream: 'stdout', line: `Provider: ${providerName}${model ? ` · ${model}` : ''}` })
@@ -107,11 +110,11 @@ export function runAiFeatureStream(res, { feature, context, settings }) {
     sseWrite(res, { type: 'log', stream: 'stdout', line: 'Claude Code is thinking — usually 30–90 seconds…' })
   } else if (providerName === 'mock') {
     sseWrite(res, { type: 'log', stream: 'stdout', line: 'Using mock provider (instant)' })
-  } else {
+  } else if (selection) {
     sseWrite(res, { type: 'log', stream: 'stdout', line: 'Waiting for model response…' })
   }
 
-  runAiFeature({ feature, context, settings })
+  return runAiFeature({ feature, context })
     .then((result) => {
       if (!result.ok) {
         sseWrite(res, { type: 'error', message: result.error || 'AI request failed' })
@@ -142,8 +145,22 @@ function measuredTokens(usage) {
   return input || output ? { inputTokens: input, outputTokens: output } : { inputTokens: null, outputTokens: null }
 }
 
-export async function runAiFeature({ feature, context, settings: requested }) {
-  const settings = resolveAiSettings(requested)
+/**
+ * One feature call. The provider, model, temperature and token limit are the stored selection; a request cannot name
+ * them (a `settings` field in the request is not read). With no usable selection, or one this server cannot run, the
+ * call refuses and is logged: no other provider is tried.
+ */
+export async function runAiFeature({ feature, context }) {
+  const chosen = await readAiSelection()
+  const selection = chosen.selection
+  if (!selection || !PROVIDER_NAMES.includes(selection.provider)) {
+    const reason = !selection
+      ? (chosen.error ? `${chosen.error}. Nothing was sent.` : NO_PROVIDER_MESSAGE)
+      : `${selection.provider} is selected but the browser AI features cannot run it; select another provider in Settings. Nothing was sent.`
+    await recordAiRefusal({ provider: selection?.provider || '', model: selection?.model, feature, jobId: context?.job?.jobId, reason: sanitizeKey(reason) })
+    return { ok: false, refused: true, error: sanitizeKey(reason) }
+  }
+  const settings = resolveAiSettings({ ...selection, baseUrl: selection.baseUrl || undefined })
   const providerName = settings.provider
   const provider = getProvider(providerName)
   // Redaction comes first and fails closed: no identifier of the owner or a recruiter may reach the provider.
@@ -215,11 +232,10 @@ export async function runAiFeature({ feature, context, settings: requested }) {
   }
 }
 
-export async function runAiChat({ context, settings, message }) {
+export async function runAiChat({ context, message }) {
   return runAiFeature({
     feature: 'chat',
     context: { ...context, message },
-    settings,
   })
 }
 

@@ -262,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--jobs", type=Path, default=enrich_jobs.JOBS_PATH)
     p.add_argument("--yes", action="store_true", help="make the calls; without it only the cost note is printed")
     p.add_argument("--env-file", type=Path, default=None, help="read provider keys from this file (e.g. .env)")
-    p.add_argument("--provider", default=None, help="HOLOJOB_LLM_PROVIDER when unset")
+    p.add_argument("--provider", default=None, help="the provider selected in Settings when unset")
     p.add_argument("--model", default=None)
     p.add_argument("--workers", type=int, default=4)
     args = p.parse_args(argv)

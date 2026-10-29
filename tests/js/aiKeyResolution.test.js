@@ -5,6 +5,7 @@ import { setIdentitySource } from '../../scripts/ai-redact.js'
 import { getProvider } from '../../src/modules/ai/aiProviderRegistry.js'
 import { setAiSecret } from '../../scripts/secret-store.js'
 import { CANARY, useTempSecretStore } from './helpers/secretTestStore.js'
+import { selectProvider, withSelection } from './helpers/selectionStub.js'
 
 const JOB = {
   jobId: 'j1', title: 'Product Manager', company: 'Acme',
@@ -20,10 +21,10 @@ let gateDecision
 beforeEach(() => {
   gateCalls = []
   gateDecision = { allowed: true, id: 'c1' }
-  setGateRunner(async (command, input) => {
+  setGateRunner(withSelection(async (command, input) => {
     gateCalls.push({ command, input })
     return command === 'reserve' ? gateDecision : { ok: true }
-  })
+  }))
   setIdentitySource(() => ({ names: ['Zlatan Qwerty'], emails: [OWNER_EMAIL], phones: [], links: [] }))
 })
 
@@ -40,7 +41,11 @@ function stubFetch(reply = { choices: [{ message: { content: '{"answer":"ok"}' }
   vi.stubGlobal('fetch', fetch)
   return fetch
 }
-const run = (settings, context = { job: JOB, message: `from ${OWNER_EMAIL}` }, feature = 'jobAnalysis') => runAiFeature({ feature, context, settings })
+// `settings` is what a request body might carry; the server ignores it. The selection is what the server stores.
+const run = (settings, context = { job: JOB, message: `from ${OWNER_EMAIL}` }, feature = 'jobAnalysis') => {
+  selectProvider(settings)
+  return runAiFeature({ feature, context, settings })
+}
 const reserve = () => gateCalls.find((c) => c.command === 'reserve')?.input
 
 describe('the key and base URL come from the store', () => {

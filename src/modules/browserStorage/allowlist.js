@@ -17,7 +17,7 @@ export const BROWSER_STORAGE_ALLOWLIST = [
 ]
 
 export const TOLERATED_UNTIL_MIGRATED = [
-  { key: 'job-dashboard-ai-settings', store: 'local', until: 'step 4', reason: 'Provider, model, toggles move to the server; apiKey left in step 2 (only a legacy value waiting for the move may remain).' },
+  { key: 'job-dashboard-ai-settings', store: 'local', until: 'step 5', reason: 'Settings left in step 4 and the key in step 2; read once and removed (aiSettings.js), never written. Only a legacy value waiting for its move may remain; the entry goes with the generic scrub.' },
   { key: 'linkedin_li_at', store: 'local', until: 'step 5', reason: 'LinkedIn cookie left in step 3; only a legacy value waiting for the move may remain. It is read and removed (outreach/linkedinCookie.js), never written; the entry goes with the generic scrub.' },
   { key: 'job-dashboard-candidate-profile', store: 'local', until: 'step 5', reason: 'Server becomes the master (Q1).' },
   { key: 'job-dashboard-candidate-intelligence', store: 'local', until: 'step 5', reason: 'Server becomes the master (Q1).' },

@@ -6,13 +6,10 @@ Code CLI speaks the OpenAI chat-completions shape, so a provider is a table
 row (address, key variable, default model, how it enforces JSON) rather than
 a code path.
 
-Choosing one:
-
-    HOLOJOB_LLM_PROVIDER=deepseek
-
-Without it, the first provider whose key is present wins, and the CLI is the
-fallback. Every provider reads three optional overrides, so a new endpoint
-needs no code:
+Choosing one: Settings > AI Provider. The choice is stored once, in data/config/ai-settings.json, and the
+browser path reads the same file (llm/ai_selection.py). Nothing else picks a provider: no environment key, no
+HOLOJOB_LLM_PROVIDER, no CLI fallback. With no usable selection a call refuses. Every provider reads three
+optional overrides, so a new endpoint needs no code:
 
     <PROVIDER>_API_KEY     <PROVIDER>_MODEL     <PROVIDER>_BASE_URL
 
@@ -23,6 +20,7 @@ logged, and never written to the jobs file.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -35,7 +33,10 @@ _LLM_DIR = str(Path(__file__).resolve().parents[1] / "llm")
 if _LLM_DIR not in sys.path:
     sys.path.insert(0, _LLM_DIR)
 import ai_gate  # noqa: E402  the AI budget gate; every call below goes through it
+import ai_selection  # noqa: E402  the one provider selection, shared with the Node path
 import claude_code  # noqa: E402
+
+log = logging.getLogger("llm_client")
 
 CLI_MODEL = "haiku"
 CLI_TIMEOUT = 240
@@ -149,10 +150,6 @@ JUDGE_MODELS = {
 
 KEYLESS = {"ollama", "claude-code"}
 
-# Order used when nothing is configured: cheapest capable first.
-PREFERENCE = ("deepseek", "openrouter", "groq", "openai", "ollama")
-
-
 def _env(provider: str, suffix: str) -> str | None:
     return os.environ.get(f"{provider.upper().replace('-', '_')}_{suffix}")
 
@@ -173,16 +170,50 @@ def resolve(name: str) -> Provider:
     )
 
 
+# Providers this module can run. The selection may name others (claude, gemini, mock are browser / Node only);
+# those are refused here, never swapped for one that works.
+RUNNABLE = set(PROVIDERS) | {"claude-code"}
+
+
+class NoProviderSelected(LlmUnavailable):
+    """Nothing is selected, the selection is unusable, or this path cannot run the selected provider."""
+
+
 def active_provider() -> str:
-    chosen = (os.environ.get("HOLOJOB_LLM_PROVIDER") or "").strip().lower()
-    if chosen:
-        return chosen
-    for name in PREFERENCE:
-        if name in KEYLESS:
-            continue
-        if os.environ.get(PROVIDERS[name].key_env):
-            return name
-    return "claude-code"
+    """The provider the owner selected in Settings (data/config/ai-settings.json); the same file the browser path reads.
+
+    No environment key, no HOLOJOB_LLM_PROVIDER and no claude-code fallback picks one. When there is no usable
+    selection, or this pipeline cannot run the selected provider, the refusal is logged and written to the ledger
+    and NoProviderSelected is raised.
+    """
+    try:
+        selected = ai_selection.require()
+    except ai_selection.SelectionError as exc:
+        _refuse_selection("", None, str(exc))
+    name = selected["provider"]
+    if name not in RUNNABLE:
+        _refuse_selection(name, selected["model"],
+                          f"{name} is selected but the Python pipeline cannot run it; select another provider in Settings. "
+                          "Nothing was sent.")
+    return name
+
+
+def peek_provider() -> str:
+    """The selected provider, or "" when there is none. Never raises, logs or records: for work that makes no call
+    (a local re-score re-applies cached judgements keyed by provider)."""
+    try:
+        return ai_selection.require()["provider"]
+    except ai_selection.SelectionError:
+        return ""
+
+
+def _refuse_selection(provider: str, model: str | None, reason: str):
+    log.error("AI call refused: %s", reason)
+    try:
+        ai_gate.refuse(provider, model, reason)
+    except OSError as exc:  # the ledger is unwritable; the refusal still stands
+        log.error("could not record the refusal: %s", exc)
+    raise NoProviderSelected(reason)
 
 
 def judge_model(provider: str) -> str | None:
