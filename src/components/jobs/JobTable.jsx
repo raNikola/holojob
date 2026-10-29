@@ -4,12 +4,13 @@ import Badge from '../ui/Badge'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
-import { authorizationBadge } from '../../modules/jobs/workAuthorization'
+import { displayLocation } from '../../modules/jobs/locationDisplay'
 import { historyBadges } from '../../modules/jobs/jobHistory'
 import { salaryBadges } from '../../modules/jobs/jobSalary'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
 import { ApplyBadge, PriorityBadge } from './JobScoreBadge'
 import FitScore from './FitScore'
+import AuthorizationBadge from './AuthorizationBadge'
 import JobTailorActions from './JobTailorActions'
 import { EngineShadowBadge } from './EngineShadowSection'
 import SortableTh, { useTableSort } from '../ui/SortableTh'
@@ -56,18 +57,17 @@ function HistoryBadges({ job }) {
   )
 }
 
-function AuthorizationBadge({ job }) {
-  const badge = authorizationBadge(job)
-  if (!badge) return null
-  return <span title={badge.reason}><Badge variant={badge.variant}>{badge.label}</Badge></span>
-}
-
 const PROVIDER_VARIANT = {
   jobspy: 'medium',
   greenhouse: 'high',
   lever: 'high',
   ashby: 'medium',
   wellfound: 'low',
+}
+
+function LocationText({ job }) {
+  if (!job.location) return <span>—</span>
+  return <span className="line-clamp-2" title={job.location}>{displayLocation(job.location) || job.location}</span>
 }
 
 function ProviderBadge({ job }) {
@@ -125,7 +125,6 @@ function JobCard({
           <div className="flex flex-col items-end gap-1">
             {showScores && <FitScore score={job.matchScore} label={job.matchLabel} />}
             {showScores && <EngineShadowBadge shadow={job.engineShadow} />}
-            {showScores && <AuthorizationBadge job={job} />}
             <StatusBadge status={job.status} />
             <HistoryBadges job={job} />
             <FollowUpBadge job={job} />
@@ -139,7 +138,7 @@ function JobCard({
         </div>
       )}
       <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-stone-600 dark:text-stone-400">
-        <div><dt className="font-medium text-stone-500">Location</dt><dd>{job.location || '—'}</dd></div>
+        <div><dt className="font-medium text-stone-500">Location</dt><dd><LocationText job={job} /><AuthorizationBadge job={job} /></dd></div>
         <div><dt className="font-medium text-stone-500">Provider</dt><dd><ProviderBadge job={job} /></dd></div>
       </dl>
       <div className="mt-3 flex items-start justify-between gap-2" onClick={(e) => e.stopPropagation()}>
@@ -219,9 +218,8 @@ export default function JobTable({
                 </td>
                 {showScores && (
                   <td className="px-4 py-3">
-                    <FitScore score={job.matchScore} label={job.matchLabel} />
+                    <FitScore score={job.matchScore} label={job.matchLabel} inline />
                     {job.engineShadow && <div className="mt-1"><EngineShadowBadge shadow={job.engineShadow} /></div>}
-                    <div className="mt-1"><AuthorizationBadge job={job} /></div>
                   </td>
                 )}
                 <td className="px-4 py-3 font-medium text-stone-900 dark:text-stone-100">
@@ -229,7 +227,10 @@ export default function JobTable({
                   <div className="mt-1 flex flex-wrap gap-1"><HistoryBadges job={job} /><FollowUpBadge job={job} /></div>
                 </td>
                 <td className="px-4 py-3 text-stone-600 dark:text-stone-400">{job.company}</td>
-                <td className="px-4 py-3 text-stone-600 dark:text-stone-400">{job.location || '—'}</td>
+                <td className="px-4 py-3 text-stone-600 dark:text-stone-400">
+                  <LocationText job={job} />
+                  <AuthorizationBadge job={job} />
+                </td>
                 {showProvider && <td className="px-4 py-3"><ProviderBadge job={job} /></td>}
                 {showScores && <td className="px-4 py-3"><PriorityBadge priority={job.priority} /></td>}
                 <td className="px-4 py-3"><StatusBadge status={job.status} /></td>
