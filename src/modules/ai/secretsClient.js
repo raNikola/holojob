@@ -21,7 +21,7 @@ async function request(method, path, body, fetchImpl) {
   return { ok: true, data }
 }
 
-/** { ok, data: { ai: { <provider>: { set, source, last4, baseUrl, setAt } } } }. The server never returns a key. */
+/** { ok, data: { ai: { <provider>: { set, source, last4, baseUrl, setAt } }, linkedin: { set, source, last4, setAt } } }. The server never returns a key. */
 export function fetchSecretsStatus(fetchImpl = globalThis.fetch) {
   return request('GET', '/api/secrets', null, fetchImpl)
 }
@@ -58,4 +58,12 @@ export async function moveLegacyKeyToServer({ provider, baseUrl }, { storage, fe
     return { ok: false, error: 'The key is on the server, but it could not be removed from this browser. Remove it by hand.', onServer: true }
   }
   return { ok: true }
+}
+
+export function putLinkedInSecret(liAt, fetchImpl = globalThis.fetch) {
+  return request('PUT', '/api/secrets/linkedin', { li_at: liAt }, fetchImpl)
+}
+
+export function deleteLinkedInSecret(fetchImpl = globalThis.fetch) {
+  return request('DELETE', '/api/secrets/linkedin', null, fetchImpl)
 }

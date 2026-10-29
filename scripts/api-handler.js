@@ -730,7 +730,7 @@ export async function handleApiRequest(req, res) {
         job: body.job,
         fetchPages: body.fetchPages !== false,
         deep: body.deep === true,
-        liAt: body.liAt || '',
+        // The cookie is never read from the request: runOutreachDiscover takes it from the secret store.
         acceptTosRisk: body.acceptTosRisk === true,
       })
       sendJson(res, result.ok ? 200 : 500, result)

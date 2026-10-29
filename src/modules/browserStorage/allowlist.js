@@ -5,7 +5,7 @@
  *
  * ALLOWED: UI state, useless to anyone who copies it.
  * TOLERATED: keys that exist today and leave the browser in the named step; none may be added to this list.
- * Secrets (an API key, li_at) are never allowed: the AI key left in step 2, li_at leaves in step 3.
+ * Secrets (an API key, li_at) are never allowed: the AI key left in step 2, li_at in step 3.
  */
 
 export const BROWSER_STORAGE_ALLOWLIST = [
@@ -18,7 +18,7 @@ export const BROWSER_STORAGE_ALLOWLIST = [
 
 export const TOLERATED_UNTIL_MIGRATED = [
   { key: 'job-dashboard-ai-settings', store: 'local', until: 'step 4', reason: 'Provider, model, toggles move to the server; apiKey left in step 2 (only a legacy value waiting for the move may remain).' },
-  { key: 'linkedin_li_at', store: 'local', until: 'step 3', reason: 'LinkedIn cookie moves to the secret store.' },
+  { key: 'linkedin_li_at', store: 'local', until: 'step 5', reason: 'LinkedIn cookie left in step 3; only a legacy value waiting for the move may remain. It is read and removed (outreach/linkedinCookie.js), never written; the entry goes with the generic scrub.' },
   { key: 'job-dashboard-candidate-profile', store: 'local', until: 'step 5', reason: 'Server becomes the master (Q1).' },
   { key: 'job-dashboard-candidate-intelligence', store: 'local', until: 'step 5', reason: 'Server becomes the master (Q1).' },
   { key: 'job-dashboard-discovered-jobs', store: 'local', until: 'step 5', reason: 'Server becomes the master (Q1).' },
@@ -34,7 +34,6 @@ export const TOLERATED_UNTIL_MIGRATED = [
 export const STORAGE_API_USERS = [
   'src/components/ai/AICommandCenter.jsx',
   'src/components/dashboard/DashboardHome.jsx',
-  'src/components/outreach/RelatedContactsPanel.jsx',
   'src/components/resumes/ResumeLibrary.jsx',
   'src/components/settings/SettingsHome.jsx',
   'src/context/ProfileContext.jsx',
@@ -47,6 +46,7 @@ export const STORAGE_API_USERS = [
   'src/modules/intelligence/intelligenceExport.js',
   'src/modules/jobs/jobStorage.js',
   'src/modules/jobs/pipelineState.js',
+  'src/modules/outreach/linkedinCookie.js',
   'src/modules/sidebarState.js',
   'src/utils/storage.js',
 ]

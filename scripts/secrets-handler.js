@@ -2,15 +2,17 @@
  * Routes of the secret store (BROWSER_STORAGE_POLICY, step 2). They sit behind the request guard
  * (JSON Content-Type, Origin / Host) like every /api route.
  *
- *   GET    /api/secrets                  -> { ai: { <provider>: { set, source, last4, baseUrl, setAt } } }
+ *   GET    /api/secrets                  -> { ai: { <provider>: { set, source, last4, baseUrl, setAt } }, linkedin: { set, source, last4, setAt } }
  *   PUT    /api/secrets/ai/<provider>    { key, baseUrl? }  store or replace; answers the same entry, never the key
  *   DELETE /api/secrets/ai/<provider>    remove the stored key
+ *   PUT    /api/secrets/linkedin         { li_at }  store or replace the LinkedIn cookie; answers set / last 4, never the value
+ *   DELETE /api/secrets/linkedin         remove the stored cookie
  *
  * No route returns a secret value, and no answer quotes the request body or the store's file path: errors are fixed
  * text. A replace without baseUrl drops a base URL pinned earlier (the key and its URL are one record).
  */
 
-import { SecretStoreError, clearAiSecret, describeSecrets, setAiSecret } from './secret-store.js'
+import { SecretStoreError, clearAiSecret, clearLinkedInSecret, describeSecrets, setAiSecret, setLinkedInSecret } from './secret-store.js'
 import { maskErrorField } from './secret-mask.js'
 
 const MAX_BODY = 8 * 1024
@@ -66,6 +68,27 @@ export async function handleSecretsRequest(req, res) {
         return true
       }
       send(res, 200, describeSecrets())
+      return true
+    }
+
+    if (url === '/api/secrets/linkedin') {
+      if (req.method === 'DELETE') {
+        send(res, 200, { ok: true, secret: clearLinkedInSecret() })
+        return true
+      }
+      if (req.method !== 'PUT') {
+        res.setHeader('Allow', 'PUT, DELETE')
+        send(res, 405, { error: 'Use PUT or DELETE' })
+        return true
+      }
+      let body
+      try {
+        body = await readJson(req)
+      } catch (e) {
+        send(res, 400, { error: e.message })
+        return true
+      }
+      send(res, 200, { ok: true, secret: setLinkedInSecret({ li_at: body.li_at }) })
       return true
     }
 

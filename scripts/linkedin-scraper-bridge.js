@@ -6,41 +6,52 @@
  *   - "search" (default): public DuckDuckGo snippets, no LinkedIn login.
  *   - "deep": authenticated people-search using the user's li_at cookie.
  *
- * The li_at cookie is read (in priority order) from the explicit `liAt` arg,
- * the LINKEDIN_LI_AT env var, or data/outreach/linkedin_session.json. It is
- * never written to discovery output.
+ * The li_at cookie comes from the secret store (data/secrets/linkedin.json), then the
+ * LINKEDIN_LI_AT variable of .env (scripts/secret-store.js). It is handed to the scraper
+ * only in the child's own environment (LINKEDIN_LI_AT), never as an argument: argv is
+ * readable by every local process. It is never written to discovery output, and
+ * the scraper's text is masked before it leaves this module.
  */
 
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { getLinkedInCookie } from './secret-store.js'
+import { maskSecrets } from './secret-mask.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const VENV_PYTHON = process.platform === 'win32' ? path.join(ROOT, '.venv/Scripts/python.exe') : path.join(ROOT, '.venv/bin/python')
 const SCRAPER = path.join(ROOT, 'python/outreach_scraper/scrape_linkedin_contacts.py')
-const SESSION_FILE = path.join(ROOT, 'data/outreach/linkedin_session.json')
+const COOKIE_ENV = 'LINKEDIN_LI_AT'
 
-export function resolveLiAt(explicit) {
-  if (explicit && explicit.trim()) return explicit.trim()
-  if (process.env.LINKEDIN_LI_AT) return process.env.LINKEDIN_LI_AT.trim()
-  try {
-    const raw = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf-8'))
-    if (raw.li_at) return String(raw.li_at).trim()
-  } catch {
-    /* no session file — that's fine */
-  }
-  return ''
+// Test seam: the real spawn and the interpreter check can be replaced, so a test never starts the scraper.
+let runtime = { spawn, pythonExists: () => fs.existsSync(VENV_PYTHON) }
+export function setBridgeRuntime(overrides) {
+  runtime = overrides ? { ...runtime, ...overrides } : { spawn, pythonExists: () => fs.existsSync(VENV_PYTHON) }
 }
 
-function runPython(args, { timeoutMs }) {
+/** The stored (else .env) cookie, or ''. A cookie in a request is never accepted. */
+export function resolveLiAt() {
+  return getLinkedInCookie() || ''
+}
+
+/** The child's environment: never the cookie, except `liAt` in deep mode. */
+function childEnv(liAt) {
+  const env = { ...process.env, PYTHONIOENCODING: 'utf-8' }
+  delete env[COOKIE_ENV]
+  if (liAt) env[COOKIE_ENV] = liAt
+  return env
+}
+
+function runPython(args, { timeoutMs, liAt = '' }) {
   return new Promise((resolve) => {
-    if (!fs.existsSync(VENV_PYTHON)) {
+    if (!runtime.pythonExists()) {
       resolve({ contacts: [], queriesRun: 0, error: 'Python venv not found (run npm run setup:jobs)' })
       return
     }
-    const child = spawn(VENV_PYTHON, [SCRAPER, ...args], { cwd: ROOT, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
+    const child = runtime.spawn(VENV_PYTHON, [SCRAPER, ...args], { cwd: ROOT, env: childEnv(liAt) })
     let stdout = ''
     let stderr = ''
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
@@ -50,9 +61,11 @@ function runPython(args, { timeoutMs }) {
       clearTimeout(timer)
       const line = stdout.trim().split('\n').filter(Boolean).pop()
       try {
-        resolve(JSON.parse(line))
+        const result = JSON.parse(line)
+        for (const field of ['error', 'status']) if (typeof result[field] === 'string') result[field] = maskSecrets(result[field])
+        resolve(result)
       } catch {
-        resolve({ contacts: [], queriesRun: 0, error: stderr.trim() || 'scraper produced no JSON' })
+        resolve({ contacts: [], queriesRun: 0, error: maskSecrets(stderr.trim()) || 'scraper produced no JSON' })
       }
     })
   })
@@ -60,7 +73,7 @@ function runPython(args, { timeoutMs }) {
 
 /**
  * @param {object} job - must have `company`
- * @param {object} opts - { mode: 'search'|'deep', liAt, maxContacts }
+ * @param {object} opts - { mode: 'search'|'deep', acceptTosRisk, maxContacts }
  */
 export async function scrapeLinkedInContacts(job, opts = {}) {
   const company = (job?.company || '').trim()
@@ -68,6 +81,7 @@ export async function scrapeLinkedInContacts(job, opts = {}) {
 
   const mode = opts.mode === 'deep' ? 'deep' : 'search'
   const maxContacts = opts.maxContacts || 10
+  let liAt = ''
   const args = ['--company', company, '--mode', mode, '--max', String(maxContacts)]
 
   if (mode === 'deep') {
@@ -79,14 +93,14 @@ export async function scrapeLinkedInContacts(job, opts = {}) {
         error: 'deep mode requires acceptTosRisk: true (LinkedIn ToS violation and account ban risk)',
       }
     }
-    const liAt = resolveLiAt(opts.liAt)
+    liAt = resolveLiAt()
     if (!liAt) {
-      return { contacts: [], queriesRun: 0, mode, error: 'deep mode requires a LinkedIn li_at cookie' }
+      return { contacts: [], queriesRun: 0, mode, error: 'deep mode requires a LinkedIn li_at cookie (set it in Settings > Privacy)' }
     }
-    args.push('--i-accept-tos-risk', '--li-at', liAt)
+    args.push('--i-accept-tos-risk')
   }
 
   // deep mode is slower (human-like delays + multiple pages)
   const timeoutMs = mode === 'deep' ? 180000 : 90000
-  return runPython(args, { timeoutMs })
+  return runPython(args, { timeoutMs, liAt })
 }

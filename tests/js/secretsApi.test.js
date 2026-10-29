@@ -92,7 +92,7 @@ describe('the secret routes', () => {
     expect((await call('POST', '/api/secrets/ai/openai', { key: CANARY })).status).toBe(405)
     expect((await call('GET', '/api/secrets/ai/openai')).status).toBe(405)
     expect((await call('PUT', '/api/secrets', { key: CANARY })).status).toBe(405)
-    expect((await call('GET', '/api/secrets/linkedin')).status).toBe(404)
+    expect((await call('GET', '/api/secrets/linkedin')).status).toBe(405)
     expect(fs.existsSync(store.dir)).toBe(false)
   })
 
