@@ -5,7 +5,6 @@ export const DEFAULT_AI_SETTINGS = {
   model: 'sonnet',
   temperature: 0.3,
   maxTokens: 2000,
-  apiKey: '',
   baseUrl: '',
   features: {
     jobAnalysis: true,
@@ -35,33 +34,66 @@ export function maskApiKey(key) {
   return `${key.slice(0, 3)}****${key.slice(-4)}`
 }
 
-export function loadAiSettings() {
+function readStored(storage = globalThis.localStorage) {
   try {
-    const raw = localStorage.getItem(AI_SETTINGS_KEY)
-    if (!raw) return { ...DEFAULT_AI_SETTINGS }
-    return { ...DEFAULT_AI_SETTINGS, ...JSON.parse(raw), features: { ...DEFAULT_AI_SETTINGS.features, ...JSON.parse(raw).features } }
+    const raw = storage?.getItem(AI_SETTINGS_KEY)
+    const parsed = raw ? JSON.parse(raw) : null
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
   } catch {
-    return { ...DEFAULT_AI_SETTINGS }
+    return null
   }
+}
+
+/** The saved settings. A key left in the browser by an older build is never part of them (see the legacy helpers below). */
+export function loadAiSettings() {
+  const stored = readStored()
+  if (!stored) return { ...DEFAULT_AI_SETTINGS }
+  const { apiKey: _legacyKey, ...rest } = stored
+  return { ...DEFAULT_AI_SETTINGS, ...rest, features: { ...DEFAULT_AI_SETTINGS.features, ...rest.features } }
 }
 
 export function saveAiSettings(settings) {
+  const { apiKey: _ignored, ...clean } = settings
   const merged = {
     ...DEFAULT_AI_SETTINGS,
-    ...settings,
+    ...clean,
     features: { ...DEFAULT_AI_SETTINGS.features, ...settings.features },
   }
-  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(merged))
+  // Never written from here. A key an older build stored stays exactly as it is until the owner moves it
+  // to the server (BROWSER_STORAGE_POLICY, section 4); saving other settings must not erase the only copy.
+  const legacy = readStored()?.apiKey
+  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(legacy ? { ...merged, apiKey: legacy } : merged))
   return merged
 }
 
+/** What goes to the server. No key: the server holds it. A base URL only where no credential is attached. */
 export function settingsForApi(settings) {
   return {
     provider: settings.provider,
     model: settings.model,
     temperature: settings.temperature,
     maxTokens: settings.maxTokens,
-    apiKey: settings.apiKey,
-    baseUrl: settings.baseUrl,
+    ...(settings.provider === 'ollama' ? { baseUrl: settings.baseUrl } : {}),
   }
+}
+
+/** The key an older build stored in this browser, with the provider and base URL saved beside it; null when there is none. */
+export function readLegacyAiKey(storage = globalThis.localStorage) {
+  const stored = readStored(storage)
+  const apiKey = typeof stored?.apiKey === 'string' ? stored.apiKey : ''
+  return apiKey ? { apiKey, provider: stored.provider || '', baseUrl: stored.baseUrl || '' } : null
+}
+
+/** Remove the legacy key from the browser copy, then read it back. True only when it is really gone. */
+export function clearLegacyAiKey(storage = globalThis.localStorage) {
+  try {
+    const stored = readStored(storage)
+    if (stored && 'apiKey' in stored) {
+      const { apiKey: _removed, ...rest } = stored
+      storage.setItem(AI_SETTINGS_KEY, JSON.stringify(rest))
+    }
+  } catch {
+    return false
+  }
+  return readLegacyAiKey(storage) === null
 }

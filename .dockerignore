@@ -13,3 +13,5 @@ data/interviews
 .git
 .env
 .env.local
+data/secrets
+claude-config

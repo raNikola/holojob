@@ -15,6 +15,11 @@ export default [
     rules: js.configs.recommended.rules,
   },
   {
+    // The secret store never logs (BROWSER_STORAGE_POLICY 3.5).
+    files: ['scripts/secret-store.js'],
+    rules: { 'no-console': 'error' },
+  },
+  {
     files: ['src/**/*.{js,jsx}'],
     languageOptions: {
       ecmaVersion: 2022,

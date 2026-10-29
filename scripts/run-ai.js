@@ -11,6 +11,8 @@ import { initSseResponse, sseWrite } from './stream-spawn.js'
 import { UNGATED_PROVIDERS, finishAiCall, recordAiRefusal, reserveAiCall } from './ai-gate.js'
 import { assertClean, redactContext } from './ai-redact.js'
 import { maskSecrets } from './secret-mask.js'
+import { getAiCredential } from './secret-store.js'
+import { PROVIDER_DEFAULTS } from '../src/modules/ai/aiSettings.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -74,6 +76,26 @@ const FEATURE_LABELS = {
   chat: 'chat response',
 }
 
+export const NO_KEY_MESSAGE = 'No API key configured'
+
+/**
+ * The one effective settings object of a call: used for the gate, the provider, status and models.
+ * Only provider, model, temperature and maxTokens come from the request. A keyed provider takes its key and
+ * base URL from the secret store (then .env); an apiKey or baseUrl in the request is ignored, so the key
+ * cannot be redirected to another host nor the gate be told a different target. Ollama takes the request's
+ * base URL because no credential is attached to it. Never log the result: it holds the key.
+ */
+export function resolveAiSettings(settings) {
+  const provider = settings?.provider || 'mock'
+  const effective = { provider, model: settings?.model, temperature: settings?.temperature, maxTokens: settings?.maxTokens }
+  if (KEYLESS_PROVIDERS.has(provider)) {
+    return { ...effective, baseUrl: provider === 'ollama' ? settings?.baseUrl : undefined, needsKey: false }
+  }
+  const credential = getAiCredential(provider)
+  // The gate is told the host the key really goes to: the pinned URL, else the provider's own.
+  return { ...effective, apiKey: credential?.apiKey, baseUrl: credential?.baseUrl || PROVIDER_DEFAULTS[provider]?.baseUrl, needsKey: true }
+}
+
 export function runAiFeatureStream(res, { feature, context, settings }) {
   initSseResponse(res)
   const providerName = settings?.provider || 'mock'
@@ -120,8 +142,9 @@ function measuredTokens(usage) {
   return input || output ? { inputTokens: input, outputTokens: output } : { inputTokens: null, outputTokens: null }
 }
 
-export async function runAiFeature({ feature, context, settings }) {
-  const providerName = settings?.provider || 'mock'
+export async function runAiFeature({ feature, context, settings: requested }) {
+  const settings = resolveAiSettings(requested)
+  const providerName = settings.provider
   const provider = getProvider(providerName)
   // Redaction comes first and fails closed: no identifier of the owner or a recruiter may reach the provider.
   let messages
@@ -136,6 +159,8 @@ export async function runAiFeature({ feature, context, settings }) {
     }
     return { ok: false, refused: true, error: reason }
   }
+  // No key, no call: nothing to reserve in the budget either.
+  if (settings.needsKey && !settings.apiKey) return { ok: false, error: NO_KEY_MESSAGE }
   // The AI budget gate (python/llm/ai_gate.py) decides before every real call.
   let ticket = null
   if (!UNGATED_PROVIDERS.has(providerName)) {
@@ -157,8 +182,8 @@ export async function runAiFeature({ feature, context, settings }) {
       model: settings?.model,
       temperature: settings?.temperature,
       maxTokens: settings?.maxTokens,
-      apiKey: settings?.apiKey,
-      baseUrl: settings?.baseUrl,
+      apiKey: settings.apiKey,
+      baseUrl: settings.baseUrl,
       featureId: feature,
     }).catch(async (e) => {
       if (ticket) await finishAiCall(ticket.id, { ok: false, error: sanitizeKey(e.message), baseUrl: settings?.baseUrl })
@@ -198,20 +223,25 @@ export async function runAiChat({ context, settings, message }) {
   })
 }
 
-export async function getAiStatus(settings) {
+/** Provider health. Keyed providers use the stored key; a request cannot supply one. */
+export async function getAiStatus() {
   const results = {}
   for (const name of PROVIDER_NAMES) {
-    const s = { ...settings, provider: name }
-    if (!KEYLESS_PROVIDERS.has(name) && !settings?.apiKey) {
-      results[name] = { online: false, reason: 'No API key configured' }
+    const effective = resolveAiSettings({ provider: name })
+    if (effective.needsKey && !effective.apiKey) {
+      results[name] = { online: false, reason: NO_KEY_MESSAGE }
       continue
     }
-    results[name] = await checkProviderHealth(s)
+    try {
+      results[name] = await checkProviderHealth(effective)
+    } catch (e) {
+      results[name] = { online: false, reason: sanitizeKey(e.message) }
+    }
   }
   return { available: true, providers: results }
 }
 
 export async function getAiModels(settings) {
-  const models = await listProviderModels(settings)
+  const models = await listProviderModels(resolveAiSettings(settings))
   return { models }
 }

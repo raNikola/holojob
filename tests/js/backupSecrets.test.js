@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createBackupStream, importBackupZip } from '../../scripts/backup-handler.js'
 import { isSecretPath, safeRelativePath } from '../../scripts/secret-paths.js'
+import { setAiSecret, setSecretsRoot } from '../../scripts/secret-store.js'
 
 const require = createRequire(import.meta.url)
 const AdmZip = require('adm-zip')
@@ -131,5 +132,30 @@ describe('backup restore', () => {
     expect(result.restored).toEqual(['data/config/sources.json'])
     expect(fs.existsSync(path.join(root, 'data/secrets'))).toBe(false)
     expect(fs.existsSync(path.join(root, 'data/outreach'))).toBe(false)
+  })
+})
+
+describe('the secret store and backups', () => {
+  it('exports nothing from a real store file, and a restore cannot write or replace it', async () => {
+    const dir = path.join(root, 'data/secrets')
+    setSecretsRoot(dir)
+    try {
+      setAiSecret('openai', { key: CANARY, baseUrl: 'https://proxy.example/v1' })
+      write('data/profile/candidate-profile.json', '{"name":"x"}')
+      const zip = await exportZip({ profile: { name: 'x' } })
+      const names = zip.getEntries().map((e) => e.entryName)
+      expect(names).toContain('data/profile/candidate-profile.json')
+      expect(names.filter((n) => n.includes('secrets') || n.endsWith('ai.json'))).toEqual([])
+      for (const entry of zip.getEntries()) expect(entry.getData().toString('utf-8')).not.toContain(CANARY)
+
+      const before = fs.readFileSync(path.join(dir, 'ai.json'), 'utf-8')
+      const result = await importBackupZip(root, zipOf({ 'data/secrets/ai.json': '{"openai":{"key":"attacker-key-0123456789"}}', 'data/secrets/new.json': 'x' }))
+      expect(result.refused.sort()).toEqual(['data/secrets/ai.json', 'data/secrets/new.json'])
+      expect(result.restored).toEqual([])
+      expect(fs.readFileSync(path.join(dir, 'ai.json'), 'utf-8')).toBe(before)
+      expect(fs.existsSync(path.join(dir, 'new.json'))).toBe(false)
+    } finally {
+      setSecretsRoot()
+    }
   })
 })

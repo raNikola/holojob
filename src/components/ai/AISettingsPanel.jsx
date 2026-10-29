@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
 import Input from '../ui/Input'
@@ -8,7 +8,8 @@ import AIFeatureToggles from './AIFeatureToggles'
 import AIHealthStatus from './AIHealthStatus'
 import AIUsageDashboard from './AIUsageDashboard'
 import AIBudgetPanel from './AIBudgetPanel'
-import { loadAiSettings, saveAiSettings, maskApiKey } from '../../modules/ai/aiSettings'
+import { loadAiSettings, saveAiSettings } from '../../modules/ai/aiSettings'
+import { fetchSecretsStatus } from '../../modules/ai/secretsClient'
 import { KEYLESS_PROVIDERS } from '../../modules/ai/aiProviderRegistry'
 import { clearAiCache } from '../../modules/ai/aiResponseCache'
 import { clearAiUsage } from '../../modules/ai/aiUsageTracker'
@@ -16,6 +17,15 @@ import { clearAiUsage } from '../../modules/ai/aiUsageTracker'
 export default function AISettingsPanel() {
   const [settings, setSettings] = useState(() => loadAiSettings())
   const [saved, setSaved] = useState(false)
+  const [keyEntry, setKeyEntry] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchSecretsStatus().then((result) => {
+      if (!cancelled) setKeyEntry(result.ok ? result.data.ai?.[settings.provider] ?? null : null)
+    })
+    return () => { cancelled = true }
+  }, [settings.provider])
 
   const handleSave = () => {
     saveAiSettings(settings)
@@ -32,13 +42,10 @@ export default function AISettingsPanel() {
           <AIProviderSelector settings={settings} onChange={setSettings} />
           <AIModelSelector settings={settings} onChange={setSettings} />
           {!KEYLESS_PROVIDERS.has(settings.provider) && (
-            <Input
-              label="API Key"
-              type="password"
-              value={settings.apiKey}
-              onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
-              placeholder={settings.apiKey ? maskApiKey(settings.apiKey) : 'Enter API key'}
-            />
+            <p className="text-sm text-stone-600 dark:text-stone-400">
+              API key: {keyEntry?.set ? `set on the server (…${keyEntry.last4})` : 'not set'}. It is entered and replaced in
+              Privacy: secrets and keys, below.
+            </p>
           )}
           {settings.provider === 'claude-code' && (
             <p className="text-xs text-stone-500">

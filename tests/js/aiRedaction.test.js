@@ -4,6 +4,8 @@ import { setGateRunner } from '../../scripts/ai-gate.js'
 import { RedactionError, assertClean, redactText, setIdentitySource } from '../../scripts/ai-redact.js'
 import { getProvider } from '../../src/modules/ai/aiProviderRegistry.js'
 import { buildAiContext, buildAiRedactionHints } from '../../src/modules/ai/aiContextBuilder.js'
+import { setAiSecret } from '../../scripts/secret-store.js'
+import { CANARY, useTempSecretStore } from './helpers/secretTestStore.js'
 
 // Fake people: nothing here is real.
 const OWNER = {
@@ -75,7 +77,11 @@ function browserContext(featureId) {
 let sent
 let gateCalls
 
+// The key comes from the server's secret store; the apiKey: 'k' these calls still carry must be ignored.
+useTempSecretStore()
+
 beforeEach(() => {
+  setAiSecret('openai', { key: CANARY })
   installStorage()
   sent = []
   gateCalls = []
