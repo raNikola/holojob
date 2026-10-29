@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findRoutedJob, jobHash, parseJobHash } from '../../src/modules/jobs/jobRoute'
+import { closeMode, findRoutedJob, jobHash, parseJobHash } from '../../src/modules/jobs/jobRoute'
 
 describe('job route hash', () => {
   it('reads the job id from #/jobs/<id>', () => {
@@ -34,5 +34,17 @@ describe('findRoutedJob', () => {
   it('reports missing for an empty or absent list', () => {
     expect(findRoutedJob([], 'a').status).toBe('missing')
     expect(findRoutedJob(undefined, 'a').status).toBe('missing')
+  })
+})
+
+describe('closeMode', () => {
+  it('goes back when the entry was pushed by openJobPage, and survives a reload (history.state is kept)', () => {
+    expect(closeMode({ holojobJob: true })).toBe('back')
+  })
+
+  it('replaces the hash for a deep link or an edited hash, where the entry carries no state', () => {
+    expect(closeMode(null)).toBe('replace')
+    expect(closeMode(undefined)).toBe('replace')
+    expect(closeMode({})).toBe('replace')
   })
 })
