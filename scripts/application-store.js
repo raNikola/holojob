@@ -37,6 +37,14 @@ import {
   settingsProblem,
   withChange,
 } from '../src/modules/applications/stageRegistry.js'
+import {
+  LEGACY_CLOSED_STAGES,
+  hasLegacyValue,
+  legacyDay,
+  legacyStageEvent,
+  legacyTrackingOf,
+  unmappedLegacyKeys,
+} from '../src/modules/applications/legacyTracking.js'
 import { isCvId } from './cv-store.js'
 
 const STORE_REL = 'data/applications'
@@ -341,7 +349,11 @@ function buildPosting(root, body, capturedAt) {
     if (!body.posting || typeof body.posting !== 'object') throw new StoreError(400, 'A jobId or a posting is required')
     source = { job: body.posting, capturedFrom: 'manual' }
   }
-  const job = source.job
+  return postingFromJob(source.job, jobId, source.capturedFrom, capturedAt, false)
+}
+
+/** The frozen posting record of a job record; throws when it has no title or company. */
+function postingFromJob(job, jobId, capturedFrom, capturedAt, capturedAfterApply) {
   const description = str(job.description)
   const posting = {
     jobId,
@@ -359,9 +371,9 @@ function buildPosting(root, body, capturedAt) {
     isRemote: typeof job.isRemote === 'boolean' ? job.isRemote : null,
     description,
     descriptionMissing: !description.trim(),
-    capturedFrom: source.capturedFrom,
+    capturedFrom,
     capturedAt,
-    capturedAfterApply: false,
+    capturedAfterApply,
   }
   if (!posting.title || !posting.company) throw new StoreError(400, 'The posting needs a title and a company')
   posting.postingKey = postingKeyFor(posting)
@@ -1085,6 +1097,288 @@ export function mergeFromBackup(root, entries, { now = () => new Date() } = {}) 
   })
 }
 
+// --- migration from applicationTracking (2, 6d) ----------------------------------------------
+
+const MIGRATION_LOG = 'migration.json'
+const MAX_MIGRATION_RUNS = 50
+const EPOCH = '1970-01-01T00:00:00.000Z'
+const LEGACY_JOB_ID = /^[0-9a-f]{16}$/
+
+/** The hash a preview and its apply must agree on: the job list, whatever else the body carries. */
+export function previewShaOf(jobs) {
+  return sha256(canonicalJson(jobs))
+}
+
+function readMigrationLog(root) {
+  const file = path.join(storePaths(root).dir, MIGRATION_LOG)
+  if (!fs.existsSync(file)) return { version: 1, runs: [] }
+  try {
+    const log = JSON.parse(fs.readFileSync(file, 'utf-8'))
+    if (log?.version !== 1 || !Array.isArray(log.runs)) throw new Error('unknown shape')
+    return log
+  } catch (e) {
+    throw new StoreError(500, `${MIGRATION_LOG} is unreadable, refusing to touch it: ${e.message}`)
+  }
+}
+
+/** Where the snapshot comes from (2.2 order): scored jobs, the ledger, then the browser record. */
+function snapshotSources(job, jobId, { scored, ledger }) {
+  const list = Array.isArray(scored?.jobs) ? scored.jobs : []
+  return [
+    { job: list.find((j) => j?.jobId === jobId), capturedFrom: 'scored_jobs' },
+    { job: ledger?.jobs?.[jobId]?.job, capturedFrom: 'job_history' },
+    { job, capturedFrom: 'browser' },
+  ].filter((s) => s.job && typeof s.job === 'object' && str(s.job.title).trim() && str(s.job.company).trim())
+}
+
+/** The events one legacy record becomes. Order: applied, contact, note, follow-up, stage or outcome. */
+function legacyEvents(appId, L, { at, day, appliedDay }) {
+  const events = []
+  const push = (type, date, data) => events.push({
+    id: `${appId}:${events.length + 1}`, seq: events.length + 1, type, at, date, source: 'migration', data,
+  })
+  push('applied', appliedDay, {})
+  if ([L.recruiterName, L.recruiterEmail, L.recruiterLinkedIn].some((v) => str(v))) {
+    push('contact_added', day, {
+      contactId: 'c1', role: 'recruiter', name: str(L.recruiterName), email: str(L.recruiterEmail), linkedin: str(L.recruiterLinkedIn),
+    })
+  }
+  if (str(L.notes)) push('note_added', day, { text: str(L.notes) })
+  const followUp = str(L.followUpDate)
+  if (followUp && legacyDay(followUp).day === followUp) push('follow_up_set', day, { dueDate: followUp })
+  const { event } = legacyStageEvent(L.interviewStage)
+  if (event) push(event.type, day, event.data)
+  return events
+}
+
+/**
+ * Plan the migration without writing anything. `jobs` is the browser job list as posted, `store`
+ * the current store, and `scored` / `ledger` the server's job files (null when absent). Pure.
+ * Returns { counts, entries, applications } where `applications` are the records to add.
+ */
+export function planMigration(jobs, { store, settings, scored = null, ledger = null, now }) {
+  const createdAt = now.toISOString()
+  const board = new Set(selectableStageKeys(settings))
+  const counts = { scanned: jobs.length, ignored: 0, candidates: 0, created: 0, alreadyMigrated: 0, alreadyTracked: 0, unmappable: 0 }
+  const entries = []
+  const applications = {}
+  const seen = new Set()
+
+  for (const job of jobs) {
+    const L = legacyTrackingOf(job)
+    const marked = job?.status === 'applied_manually'
+    const notAnObject = Boolean(job?.applicationTracking) && !L
+    if (!marked && !notAnObject && !(L && hasLegacyValue(L))) {
+      counts.ignored += 1
+      continue
+    }
+    counts.candidates += 1
+    const base = { jobId: typeof job.jobId === 'string' ? job.jobId : null, title: str(job.title), company: str(job.company) }
+    const refuse = (reason) => {
+      counts.unmappable += 1
+      entries.push({ ...base, action: 'unmappable', reason, warnings: [] })
+    }
+
+    if (!LEGACY_JOB_ID.test(base.jobId ?? '')) { refuse('jobId is not 16 hex characters'); continue }
+    if (seen.has(base.jobId)) { refuse('jobId appears twice in the payload'); continue }
+    seen.add(base.jobId)
+    if (notAnObject) { refuse('applicationTracking is not an object'); continue }
+
+    const appId = `mig-${base.jobId}`
+    if (store.applications[appId]) {
+      counts.alreadyMigrated += 1
+      entries.push({ ...base, action: 'alreadyMigrated', appId, warnings: [] })
+      continue
+    }
+    const source = snapshotSources(job, base.jobId, { scored, ledger })[0]
+    if (!source) { refuse('no source has a title and a company for this job'); continue }
+    const posting = postingFromJob(source.job, base.jobId, source.capturedFrom, createdAt, true)
+
+    const tracking = L ?? {}
+    const warnings = []
+    const applied = legacyDay(tracking.appliedDate)
+    if (applied.bad) warnings.push(`appliedDate "${applied.bad}" is not a date; left empty (kept in legacy)`)
+    else if (!applied.day) warnings.push('no applied date')
+    if (!(tracking.applied === true || marked)) warnings.push('tracked but not marked applied')
+    const followUp = str(tracking.followUpDate)
+    if (followUp && legacyDay(followUp).day !== followUp) warnings.push(`followUpDate "${followUp}" is not YYYY-MM-DD; no follow-up event (kept in legacy)`)
+    const unmapped = unmappedLegacyKeys(tracking)
+    if (unmapped.length) warnings.push(`unmapped keys kept only in legacy: ${unmapped.join(', ')}`)
+    const stage = legacyStageEvent(tracking.interviewStage)
+    if (stage.unknown) warnings.push(`unknown interviewStage "${tracking.interviewStage}"; no stage event (kept in legacy)`)
+    if (stage.event?.type === 'stage_changed' && !board.has(stage.event.data.stage)) {
+      warnings.push(`target stage "${stage.event.data.stage}" is not on the board; the application shows under Unfiled`)
+    }
+    if (posting.descriptionMissing) warnings.push('the snapshot has no description')
+
+    const updated = Date.parse(str(tracking.lastUpdated))
+    const lastUpdated = Number.isNaN(updated) ? null : new Date(updated).toISOString()
+    const at = lastUpdated ?? (applied.day ? `${applied.day}T00:00:00.000Z` : EPOCH)
+    const day = lastUpdated ? localDay(new Date(lastUpdated)) : applied.day
+    const events = legacyEvents(appId, tracking, { at, day, appliedDay: applied.day })
+
+    const application = {
+      id: appId,
+      createdAt,
+      origin: 'migration',
+      posting,
+      attempt: {
+        channel: 'other',
+        channelDetail: '',
+        applicationUrl: str(tracking.applicationUrl),
+        appliedDate: applied.day,
+        cv: { kind: 'unknown', cvLibraryId: null, label: '', fileName: null, sha256: null },
+        coverLetter: { fileName: null, sha256: null },
+        previousApplicationId: null,
+        distinctReason: null,
+      },
+      legacy: L,
+      events,
+    }
+
+    const legacyOpen = !LEGACY_CLOSED_STAGES.includes(tracking.interviewStage)
+    const twin = legacyOpen && Object.values(store.applications).find((app) => app.origin !== 'migration'
+      && app.posting.postingKey === posting.postingKey && isActive(app) && !foldApplication(app).outcome)
+    if (twin) {
+      counts.alreadyTracked += 1
+      entries.push({ ...base, action: 'alreadyTracked', appId: twin.id, warnings })
+      continue
+    }
+
+    counts.created += 1
+    applications[appId] = application
+    entries.push({
+      ...base, action: 'create', appId, warnings,
+      capturedFrom: posting.capturedFrom, events: events.map((e) => e.type),
+    })
+  }
+  return { counts, entries, applications }
+}
+
+/**
+ * The field-level check of 6d for the records one run creates: every legacy value is in the new
+ * record, and nothing else was added. Returns the problems found, [] when the migration is faithful.
+ * Narrower than 6d's wording (every `mig-` record) on purpose: a record migrated earlier may
+ * have gained user events since, which this check must not count against it.
+ */
+export function verifyMigration(jobs, plan, next, before) {
+  const problems = []
+  const byId = new Map(jobs.filter((j) => LEGACY_JOB_ID.test(j?.jobId ?? '')).map((j) => [j.jobId, j]))
+  const { counts } = plan
+  if (counts.candidates !== counts.created + counts.alreadyMigrated + counts.alreadyTracked + counts.unmappable) {
+    problems.push('counts do not balance')
+  }
+  if (counts.scanned !== counts.ignored + counts.candidates) problems.push('ignored + candidates != scanned')
+  const migrated = (store) => Object.values(store.applications).filter((a) => a.origin === 'migration').length
+  if (migrated(next) !== migrated(before) + counts.created) problems.push('the number of migrated records is wrong')
+
+  for (const entry of plan.entries.filter((e) => e.action === 'create')) {
+    const fail = (what) => problems.push(`${entry.appId}: ${what}`)
+    const app = next.applications[entry.appId]
+    const job = byId.get(entry.jobId)
+    if (!app || !job) { fail('missing'); continue }
+    if (!wellFormed(entry.appId, app)) fail('malformed record')
+    const L = legacyTrackingOf(job)
+    const T = L ?? {}
+    const ofType = (type) => app.events.filter((e) => e.type === type)
+    if (!sameJson(app.legacy ?? null, L ?? null)) fail('legacy differs from the original')
+    if (ofType('applied').length !== 1) fail('not exactly one applied event')
+    const applied = legacyDay(T.appliedDate).day
+    if (app.attempt.appliedDate !== applied) fail('appliedDate differs')
+    if (app.events[0].date !== applied) fail('applied event date differs')
+    if (app.attempt.applicationUrl !== str(T.applicationUrl)) fail('applicationUrl differs')
+
+    const contacts = ofType('contact_added')
+    const hasContact = [T.recruiterName, T.recruiterEmail, T.recruiterLinkedIn].some((v) => str(v))
+    if (contacts.length !== (hasContact ? 1 : 0)) fail('recruiter contact count differs')
+    if (hasContact && (contacts[0].data.role !== 'recruiter' || contacts[0].data.name !== str(T.recruiterName)
+      || contacts[0].data.email !== str(T.recruiterEmail) || contacts[0].data.linkedin !== str(T.recruiterLinkedIn))) {
+      fail('recruiter contact differs')
+    }
+    const notes = ofType('note_added')
+    if (notes.length !== (str(T.notes) ? 1 : 0) || (notes[0] && notes[0].data.text !== str(T.notes))) fail('notes differ')
+    const followUps = ofType('follow_up_set')
+    const wantFollowUp = str(T.followUpDate) && legacyDay(T.followUpDate).day === str(T.followUpDate)
+    if (followUps.length !== (wantFollowUp ? 1 : 0) || (followUps[0] && followUps[0].data.dueDate !== str(T.followUpDate))) {
+      fail('follow-up differs')
+    }
+    const stageEvents = app.events.filter((e) => e.type === 'stage_changed' || e.type === 'outcome_set')
+    const { event } = legacyStageEvent(T.interviewStage)
+    if (stageEvents.length !== (event ? 1 : 0) || (event && !sameJson({ type: stageEvents[0].type, data: stageEvents[0].data }, event))) {
+      fail('interviewStage differs')
+    }
+    if (app.events.some((e) => e.source !== 'migration' || e.at !== app.events[0].at)) fail('event source or time differs')
+    if (app.events.length !== 1 + contacts.length + notes.length + followUps.length + stageEvents.length) fail('unexpected events')
+  }
+  return problems
+}
+
+async function loadMigrationInput(root, body) {
+  if (!body || typeof body !== 'object' || !Array.isArray(body.jobs)
+    || body.jobs.some((j) => !j || typeof j !== 'object' || Array.isArray(j))) {
+    throw new StoreError(400, 'Body must be { jobs: [ ... ] }, the browser job list')
+  }
+  const paths = storePaths(root)
+  return {
+    jobs: body.jobs,
+    store: loadStore(root),
+    settings: loadSettings(root),
+    scored: readJson(paths.scored),
+    ledger: readJson(paths.ledger),
+  }
+}
+
+const planView = (plan, previewSha) => ({ previewSha, counts: plan.counts, entries: plan.entries })
+
+/** Dry run: the plan and the hash that apply needs. Writes nothing. */
+export function previewMigration(root, body, { now = () => new Date() } = {}) {
+  return withLock(root, async () => {
+    const input = await loadMigrationInput(root, body)
+    const plan = planMigration(input.jobs, { ...input, now: now() })
+    return { status: 200, dryRun: true, toCreate: plan.counts.created, ...planView(plan, previewShaOf(input.jobs)) }
+  })
+}
+
+/**
+ * Apply: refused (409) without `confirm: true` and the `previewSha` of the same job list. Order:
+ * backup, plan, verify, write the store, write migration.json. A failure at any step before the
+ * store write leaves the store as it was.
+ */
+export function migrateApplications(root, body, { now = () => new Date() } = {}) {
+  return withLock(root, async () => {
+    const input = await loadMigrationInput(root, body)
+    if (body.confirm !== true) throw new StoreError(409, 'Run the dry run first and confirm it: send "confirm": true')
+    const previewSha = previewShaOf(input.jobs)
+    if (body.previewSha !== previewSha) {
+      throw new StoreError(409, 'previewSha does not match this job list; run the dry run again', { previewSha })
+    }
+    const at = now()
+    const log = readMigrationLog(root)
+    const plan = planMigration(input.jobs, { ...input, now: at })
+
+    const paths = storePaths(root)
+    const dir = uniqueDir(path.join(paths.backups, `applications-${backupStamp(at)}`))
+    try {
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'legacy-jobs.json'), `${JSON.stringify(input.jobs, null, 2)}\n`)
+      if (fs.existsSync(paths.store)) fs.copyFileSync(paths.store, path.join(dir, 'applications.json'), fs.constants.COPYFILE_EXCL)
+    } catch (e) {
+      throw new StoreError(500, `Backup failed, nothing was migrated: ${e.message}`)
+    }
+    const backupPath = path.relative(root, dir)
+
+    const next = { ...input.store, applications: { ...input.store.applications, ...plan.applications } }
+    if (plan.counts.created) next.updatedAt = at.toISOString()
+    const problems = verifyMigration(input.jobs, plan, next, input.store)
+    if (problems.length) throw new StoreError(500, `Migration check failed, nothing was migrated: ${problems.join('; ')}`)
+
+    if (plan.counts.created) saveStore(root, input.store, next)
+    const run = { ranAt: at.toISOString(), previewSha, counts: plan.counts, backupPath, unmappable: plan.entries.filter((e) => e.action === 'unmappable') }
+    writeFileAtomic(path.join(paths.dir, MIGRATION_LOG), `${JSON.stringify({ version: 1, runs: [...log.runs, run].slice(-MAX_MIGRATION_RUNS) }, null, 2)}\n`)
+    return { status: 200, dryRun: false, verified: true, backupPath, ...planView(plan, previewSha) }
+  })
+}
+
 // --- routes (3.1) ----------------------------------------------------------------------------
 
 function sendJson(res, status, data) {
@@ -1145,6 +1439,22 @@ export const APPLICATION_ROUTES = [
     pattern: /^\/api\/applications\/([^/]+)\/move$/,
     handle: async (req, res, [, id], ctx) => {
       const { status, ...result } = await moveApplication(ctx.root, id, await readJsonBody(req), ctx)
+      sendJson(res, status, result)
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/applications\/migrate\/preview$/,
+    handle: async (req, res, _m, ctx) => {
+      const { status, ...result } = await previewMigration(ctx.root, await readJsonBody(req), ctx)
+      sendJson(res, status, result)
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/applications\/migrate$/,
+    handle: async (req, res, _m, ctx) => {
+      const { status, ...result } = await migrateApplications(ctx.root, await readJsonBody(req), ctx)
       sendJson(res, status, result)
     },
   },

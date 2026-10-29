@@ -3,6 +3,7 @@ import { Copy, Download, Loader2, Trash2, Upload } from 'lucide-react'
 import Card from '../ui/Card'
 import AISettingsPanel from '../ai/AISettingsPanel'
 import ScoringWeightsPanel from './ScoringWeightsPanel'
+import ApplicationMigrationPanel from './ApplicationMigrationPanel'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
@@ -144,6 +145,8 @@ export default function SettingsHome() {
       <AISettingsPanel />
 
       <ScoringWeightsPanel />
+
+      <ApplicationMigrationPanel />
 
       <Card title="Backup / restore">
         <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">

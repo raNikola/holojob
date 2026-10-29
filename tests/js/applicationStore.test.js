@@ -251,8 +251,9 @@ describe('data integrity', () => {
       'APPLICATION_ROUTES', 'StoreError', 'appendEvent', 'applicationFilePath', 'assertAppendOnly',
       'assertStoreAppendOnly', 'changeSettings', 'changeStageRegistry', 'createApplication', 'emptyStore',
       'handleApplicationsRequest', 'isAppId', 'isStoreBackupEntry', 'loadSettings', 'loadStore', 'localDay',
-      'mergeFromBackup', 'moveApplication', 'norm', 'normalizeUrl', 'postingKeyFor', 'readSettings',
-      'snapshotSha', 'stageCounts', 'storePaths', 'writeFileAtomic',
+      'mergeFromBackup', 'migrateApplications', 'moveApplication', 'norm', 'normalizeUrl', 'planMigration',
+      'postingKeyFor', 'previewMigration', 'previewShaOf', 'readSettings', 'snapshotSha', 'stageCounts',
+      'storePaths', 'verifyMigration', 'writeFileAtomic',
     ])
     expect(names.filter((n) => /^(update|delete|set)/i.test(n))).toEqual([])
     expect([...new Set(store.APPLICATION_ROUTES.map((r) => r.method))].sort()).toEqual(['GET', 'POST'])

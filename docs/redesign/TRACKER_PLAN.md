@@ -600,6 +600,36 @@ Other fields on migrated records:
 - **Job records:** `applicationTracking` is deleted from them in S4. This happens only after `migration.json`
   exists and a re-run of the dry run reports `toCreate: 0`.
 
+### 2.4 As built in S2 (2026-10-29)
+
+The migration core is built as 2.1 to 2.2 describe it: `planMigration`, `verifyMigration`,
+`POST /api/applications/migrate/preview` and `/migrate` in `scripts/application-store.js`, the mapping in
+`src/modules/applications/legacyTracking.js`, and a Settings panel (`ApplicationMigrationPanel`) with a dry run and a
+confirm button. Where the build differs from, or narrows, the text above:
+- **Unmappable is a fifth bucket.** `candidates = created + alreadyMigrated + alreadyTracked + unmappable`. A candidate
+  is unmappable when its `jobId` is not 16 hex characters, appears twice in the payload, no source has a title and a
+  company, or `applicationTracking` is not an object. The run goes on with the others; the cases are listed in the
+  dry run and in `migration.json`. The S4 removal of the legacy field must wait until `unmappable` is 0.
+- **Bad dates do not make a record unmappable.** An `appliedDate` that is not a date (or an ISO timestamp, whose
+  date part is used) leaves `attempt.appliedDate` empty; a bad `followUpDate` writes no `follow_up_set`. Both stay
+  in `legacy` and are warned about.
+- **Candidate rule:** `lastUpdated` does not count as a non-default value, so a record that was opened and saved
+  empty is ignored.
+- **Event dates:** `date` of every event but `applied` is the Belgrade day of `lastUpdated`, else the applied date.
+- **`previewSha`** is the sha256 of the canonical JSON of `jobs`, not of the whole body. `legacy-jobs.json` is
+  `jobs` re-serialised, so it is equal as JSON, not as bytes, to the request body (which also carries `confirm`).
+- **Verification covers the records one run creates**, not every `mig-` record, because an older one may have gained
+  user events since. Records from earlier runs are checked by the append-only guard instead.
+- **`migration.json`** keeps a list of runs, not one entry, so a re-run does not erase the first run's counts.
+- **Tracking switch:** the migration is not refused while tracking is off (1.7 lists only create, `/events`, `/move`
+  and `settings/stages`).
+- **`mergeStatusOnImport` is unchanged in S2**, as 2.3 says. The legacy field stays a second copy until S4.
+- **Not built yet:** the "run the migration first" guard in `ApplicationTrackerPanel`, the writers and readers going
+  through the store (`trackingFromApplication`), and so A1 is **not** closed by this commit. Until then an edit made
+  in the old panel after the migration changes only the legacy field, and a re-run reports that job as
+  `alreadyMigrated`, so the edit would be lost when S4 deletes the field. S4's gate must not rely on `toCreate: 0`
+  alone.
+
 ## 3. API and UI surface
 
 ### 3.1 Server (`scripts/api-handler.js` → `scripts/application-store.js`)

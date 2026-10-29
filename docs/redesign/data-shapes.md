@@ -1277,7 +1277,20 @@ or unknown key. A closed application keeps the stage it reached.
 event), `POST /api/applications/:id/move` (`{ toStage, date? }`, the server writes `stage_changed`, or
 `outcome_set` / `outcome_cleared`, in one save; moving to the current column writes nothing),
 `GET /api/applications/:id/files/:name`, `GET` and `POST /api/applications/settings`,
-`POST /api/applications/settings/stages`. There is no PUT, PATCH or DELETE.
+`POST /api/applications/settings/stages`, and the migration: `POST /api/applications/migrate/preview` and
+`POST /api/applications/migrate` (below). There is no PUT, PATCH or DELETE.
+
+### migration.json
+
+`data/applications/migration.json`, written by every `POST /api/applications/migrate`, including a run that creates
+nothing: `{ "version": 1, "runs": [ { "ranAt", "previewSha", "counts", "backupPath", "unmappable": [ ... ] } ] }`, the
+last 50 runs. `counts` is `{ scanned, ignored, candidates, created, alreadyMigrated, alreadyTracked, unmappable }`,
+with `candidates = created + alreadyMigrated + alreadyTracked + unmappable` and `scanned = ignored + candidates`.
+Body of both routes: `{ jobs: [ <browser job records> ] }`; the apply adds `"confirm": true` and the `previewSha`
+the dry run returned (sha256 of the canonical JSON of `jobs`). The backup is
+`data/backups/applications-<YYYYMMDD-HHMMSS>/` with `legacy-jobs.json` (the posted `jobs`, re-serialised) and, when a
+store existed, its `applications.json`. Migrated records have `origin: "migration"`, id `mig-<jobId>`, the original
+`applicationTracking` object in `legacy`, and events with `source: "migration"`.
 
 ## Examples and fixtures (tracked)
 
