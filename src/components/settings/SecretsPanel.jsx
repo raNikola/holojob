@@ -14,6 +14,9 @@ import {
   putAiSecret,
 } from '../../modules/ai/secretsClient'
 
+/** claude and gemini use fixed endpoints in their providers, so a base URL would do nothing for them. */
+const TAKES_BASE_URL = new Set(['openai', 'openrouter'])
+
 function describeRow(entry) {
   if (!entry?.set) return 'not set'
   const where = entry.source === 'env' ? '.env' : 'Settings'
@@ -80,6 +83,16 @@ export default function SecretsPanel() {
   }
 
   const handleMove = async () => {
+    // Another browser profile may hold an older key than the one now on the server (after a rotation).
+    const onServer = status?.[moveTo.provider]
+    if (onServer?.source === 'store') {
+      const here = legacy.apiKey.trim().slice(-4)
+      if (onServer.last4 === here) {
+        setError(`The server already holds this key (…${here}). Use "Remove from this browser without moving".`)
+        return
+      }
+      if (!window.confirm(`The server already holds a ${moveTo.provider} key ending …${onServer.last4}. This browser's key ends …${here}. Replace the server's key with this browser's?`)) return
+    }
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -128,13 +141,13 @@ export default function SecretsPanel() {
                 onChange={(provider) => setMoveTo({ ...moveTo, provider })}
                 options={KEYED_AI_PROVIDERS}
               />
-              <Input
+              {TAKES_BASE_URL.has(moveTo.provider) && <Input
                 label="Base URL (only if not the provider's own)"
                 value={moveTo.baseUrl}
                 onChange={(e) => setMoveTo({ ...moveTo, baseUrl: e.target.value })}
                 placeholder={PROVIDER_DEFAULTS[moveTo.provider]?.baseUrl || ''}
                 autoComplete="off"
-              />
+              />}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button onClick={handleMove} disabled={busy || !moveTo.provider}>
@@ -189,13 +202,15 @@ export default function SecretsPanel() {
               autoComplete="off"
               spellCheck={false}
             />
-            <Input
-              label="Base URL (optional; the key is sent only there)"
-              value={editing.baseUrl}
-              onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })}
-              placeholder={PROVIDER_DEFAULTS[editing.provider]?.baseUrl || ''}
-              autoComplete="off"
-            />
+            {TAKES_BASE_URL.has(editing.provider) && (
+              <Input
+                label="Base URL (optional; the key is sent only there)"
+                value={editing.baseUrl}
+                onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })}
+                placeholder={PROVIDER_DEFAULTS[editing.provider]?.baseUrl || ''}
+                autoComplete="off"
+              />
+            )}
             <div className="flex gap-2">
               <Button type="submit" disabled={busy || !editing.key}>Save on server</Button>
               <Button type="button" variant="ghost" onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>

@@ -461,7 +461,7 @@ step 5 moves personal data). The owner runs the commands; fish syntax.
 3. **Secrets never in GET responses, logs or backups.** Tests 6.2, 6.3 and 6.4 exist and pass with the canary value. After the first real
    key is stored, also check by hand: export a backup, unzip it in a scratch directory and search it for `secrets`, `linkedin_session` and the
    key's last 8 characters (no hit); search `podman logs holojob` and the Caddy access log for the same 8 characters (no hit);
-   `curl -sk -u <user> https://holojob.void/api/secrets` shows `set` and `last4` only.
+   `curl -sk https://holojob.void/api/secrets` shows `set` and `last4` only (no login since Q3).
 4. **Every AI call passes the budget gate.** The call sites are exactly `llm_client.complete_json`, `claude_code._run` and
    `run-ai.js` (`reserveAiCall` before `provider.complete`); `grep -rn "provider.complete\|api.openai.com\|api.anthropic.com\|generativelanguage" scripts python src`
    shows no other caller; `tests/js/aiGate.test.js` and `tests/python/test_ai_gate*.py` pass; the new key-resolution code sits **before**
@@ -508,6 +508,9 @@ Follows section 10. Where the build made a choice the text left open:
   stored key; with a key set, the Provider health card now makes the provider's own `/models` request (no tokens, not a model call).
 - **Move verification** requires `set`, `source === "store"` (a matching `.env` key does not count) and the same last 4 characters.
   The browser provider is only a default: the owner picks which provider the key belongs to. "Remove from this browser without moving" exists.
+  If the server already holds a key for that provider (a rotated one, with an older key still in another browser profile), Move asks first
+  and shows both last-4 values, and refuses when they are the same. The base URL field is shown for openai and openrouter only; claude and
+  gemini use fixed endpoints.
 - **A legacy key stays in the browser until moved**: `saveAiSettings` neither takes `apiKey` from the form nor erases the stored one;
   after the move it can never come back. The allowlist (`src/modules/browserStorage/allowlist.js`, data only) and its test land here;
   the wrapper and ESLint rule are still step 5.
