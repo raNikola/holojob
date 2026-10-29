@@ -680,6 +680,22 @@ shows `toCreate: 0` and `legacyChanged: 0`.
 
 ## 3. API and UI surface
 
+### 2.5 As built in S3, first slice (2026-10-29)
+
+Job Details gained the CV and the history; the rest of S3 is still open.
+- **CV picker** (`CvPicker`, `cvOptions`, `defaultCvOption` in `trackerController.js`): tailored for this job (bare name of
+  `job.tailoredAssets.resumePdf`), each library CV that has a stored file (16-hex id and `filePath`), "a CV outside the
+  app" (kind `external`, typed name) and "Not recorded yet" (`unknown`). Preselect: tailored, else the default library CV,
+  else not recorded. A library CV with no stored file is not offered, because the store freezes a copy and refuses what
+  it cannot read.
+- **CV used on a tracked application:** a link to the frozen copy (`GET /api/applications/:id/files/:name`, which already
+  served only names recorded on the application; no server change), "Record the CV" when none, "Correct the CV" with a
+  reason otherwise (`cv_recorded`), earlier copies listed. The correction picker has no "tailored" option yet.
+- **History:** a read-only list of every event, newest first (`ApplicationTimeline`).
+- **Not in this slice:** snapshot view, several contacts, a full attempt switcher, cover letter attach, the 409 dialog
+  beyond the existing button, component tests (tests cover the controller and the routes). Not run in a browser.
+- **AI context:** unchanged; `safeTracking` already passes stage and dates only. `tests/js/trackerCv.test.js` asserts it.
+
 ### 3.1 Server (`scripts/api-handler.js` → `scripts/application-store.js`)
 
 | Route | Purpose |
