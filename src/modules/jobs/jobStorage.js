@@ -50,7 +50,7 @@ export function loadJobs() {
 
 // Read again from the scored-jobs file on every load while the API is up; the
 // browser alone holds status, tracking, assets, outreach and filters, never these.
-const FILE_FIELDS = ['description', 'llmFacts', 'engineShadow']
+export const FILE_FIELDS = ['description', 'llmFacts', 'engineShadow']
 
 /** The job without the fields the scored-jobs file carries in full. */
 export function slimJob(job) {

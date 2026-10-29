@@ -33,7 +33,8 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
       )
       const updated = result.payload?.jobs?.find((j) => j.jobId === job.jobId)
       if (updated) {
-        onJobUpdated?.(updated)
+        // The tailor run adds only `tailoredAssets`; the rest of its copy (status, outreach) may be older than this one.
+        onJobUpdated?.({ ...job, tailoredAssets: updated.tailoredAssets })
         log.append('Saved to job record.')
       } else {
         throw new Error('Job not found in tailor output')
