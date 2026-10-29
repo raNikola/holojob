@@ -1,9 +1,13 @@
-# Stage 1: Build frontend
+# Stage 1: Build frontend (only what vite build reads: vite.config.js imports scripts/, src imports data/examples)
 FROM node:20-bookworm AS frontend
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY . .
+COPY index.html vite.config.js ./
+COPY public ./public
+COPY scripts ./scripts
+COPY data/examples ./data/examples
+COPY src ./src
 RUN npm run build
 
 # Stage 2: Runtime with Python + Node
@@ -29,18 +33,20 @@ RUN npm ci --omit=dev
 
 RUN npm install -g @anthropic-ai/claude-code && claude --version
 
-COPY python ./python
-COPY scripts ./scripts
-COPY companies ./companies
-COPY data/examples ./data/examples
+# Dependencies first: this layer (pip + Playwright browsers) reruns only when requirements.txt
+# or the setup script changes, not on a code edit.
 COPY requirements.txt ./
-
+COPY scripts/setup-job-discovery.sh ./scripts/
 RUN bash scripts/setup-job-discovery.sh
 
 # Put the venv first so bare `python` (e.g. `podman exec holojob python ...`)
 # sees the same dependencies as the app, which runs .venv/bin/python.
 ENV PATH="/app/.venv/bin:${PATH}"
 
+COPY python ./python
+COPY scripts ./scripts
+COPY companies ./companies
+COPY data/examples ./data/examples
 COPY --from=frontend /app/dist ./dist
 COPY src ./src
 
