@@ -245,7 +245,7 @@ export async function runAiFeature({ feature, context, refresh = false }) {
         ? { stored: false, reason: `identifier in the answer (${leaks.join(', ')})` }
         : appendFinding({
           feature, entityKey: lookupKey.entityKey, provider: providerName, model: settings?.model, promptVersion: PROMPT_VERSIONS[feature],
-          inputHash: lookupKey.inputHash, cacheKey: lookupKey.cacheKey, prompt: messages, result: data,
+          inputHash: lookupKey.inputHash, cacheKey: lookupKey.cacheKey, result: data,
         })
       if (saved.stored) response.findingId = saved.finding.id
       else response.warning = `answer not stored: ${saved.reason}`
