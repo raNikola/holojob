@@ -169,6 +169,20 @@ automation on, a looser price) needs `"confirm": true`, else 409 with the list. 
 edits are overrides in `data/ai/pricing-overrides.json`, merged over `aiPricing.json`;
 free or priced needs a source note. No route writes or deletes ledger rows.
 
+## AI provider selection
+
+One file, `data/config/ai-settings.json` (git-ignored, not in backups), holds the provider, model, temperature, max tokens, the ollama
+base URL and the nine feature toggles; never a key. `python/llm/ai_selection.py` validates (unknown keys rejected, bounded numbers, fixed
+provider list) and writes it atomically. `GET` / `PUT /api/ai/selection` (`ai-settings-handler.js`) go through the gate CLI
+(`ai_gate.py selection-get` / `selection-put`), so the Node server and `llm_client.active_provider()` read the same file. Selecting a paid or
+unknown-class provider (a change of provider, model or base URL) needs `"confirm": true`, else 409.
+
+- **There is no default.** Nothing selected, an unreadable file, or a provider that side cannot run (`claude`, `gemini`, `mock` in Python;
+  `deepseek`, `groq` in Node) refuses the call, logs it and writes a ledger refusal. No env key, `CAREER_OS_LLM_PROVIDER` or CLI fallback picks one.
+  `run-ai.js` does not read a provider, model or limit from the request.
+- Not covered: the features hard-wired to the Claude Code CLI (`llm_tailor.py`, job import, project scan) still call it directly through the gate.
+- The browser holds no AI setting; an older `job-dashboard-ai-settings` is moved once from Settings > AI Provider (read back from the server before it is removed).
+
 ## Résumé content rule
 
 A CV states only what the profile and the CV text state; no default for anything, a

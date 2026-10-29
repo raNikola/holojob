@@ -90,7 +90,7 @@ Lever, Ashby. Data flows `data/jobs/discovered_jobs.json` -> `data/jobs/scored_j
 
 | Variable | Purpose |
 |---|---|
-| `CAREER_OS_LLM_PROVIDER` | Server-side AI provider: `openai`, `deepseek`, `openrouter`, `groq`, `ollama`, `custom` or `claude-code` (keyless fallback) |
+| `CAREER_OS_LLM_PROVIDER` | **No longer read.** The provider is chosen once in Settings > AI Provider (`data/config/ai-settings.json`); with none selected every AI call refuses. Remove it from `.env` |
 | `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `LLM_API_KEY` (custom) | Key for the chosen provider; keys are read from the environment only |
 | `<PROVIDER>_MODEL`, `<PROVIDER>_JUDGE_MODEL` | Model overrides for enrichment and judgement |
 | `PORT` | Server port inside the container (default 5173) |
@@ -113,8 +113,9 @@ Browser AI features (copilot, interview coach) keep their own provider settings 
 - **Sensitive files.** Never commit `data/profile/*.json`, `data/resumes/`, `data/cache/repos/`, `.env` or
   `data/outreach/linkedin_session.json` (no longer read). If one is committed by mistake, rotate the credentials and remove it
   from history before pushing anywhere.
-- **API keys** are read from the environment on the server; browser AI features keep their keys in the
-  browser's localStorage (Settings) and send them only to the provider you choose.
+- **API keys** live on the server only: the secret store (`data/secrets/`, set in Settings > Privacy: secrets and keys) first,
+  then `.env` (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). The browser stores no key and no AI setting; it holds UI state only
+  (the profile, intelligence and jobs follow in step 5 of [the storage policy](docs/redesign/BROWSER_STORAGE_POLICY.md)).
 - **LinkedIn deep mode.** Outreach has an optional deep mode that automates linkedin.com with your `li_at`
   cookie, kept in the server's secret store (Settings > Privacy: secrets and keys; `LINKEDIN_LI_AT` in `.env` is
   the fallback). The cookie is never in the browser and never on a command line. This may violate LinkedIn's Terms of
