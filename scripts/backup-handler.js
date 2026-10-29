@@ -8,13 +8,13 @@ import { PassThrough } from 'node:stream'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const archiver = require('archiver')
+const { ZipArchive } = require('archiver')
 const AdmZip = require('adm-zip')
 
 const DATA_DIRS = ['profile', 'intelligence', 'jobs', 'resumes', 'outreach', 'audits', 'cache']
 
 export function createBackupStream(root, clientPayload = {}) {
-  const archive = archiver('zip', { zlib: { level: 9 } })
+  const archive = new ZipArchive({ zlib: { level: 9 } })
   const stream = new PassThrough()
   archive.pipe(stream)
 
