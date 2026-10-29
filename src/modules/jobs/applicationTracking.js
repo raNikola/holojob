@@ -11,7 +11,7 @@ export const INTERVIEW_STAGES = [
   'Withdrawn',
 ]
 
-export const TERMINAL_STAGES = new Set(['Offer', 'Rejected', 'Withdrawn'])
+export const TERMINAL_STAGES = new Set(['Offer', 'Rejected', 'Withdrawn', 'Ghosted', 'Position closed', 'Offer declined'])
 
 export function getDefaultApplicationTracking() {
   return {
@@ -33,16 +33,4 @@ export function normalizeApplicationTracking(job) {
     ...getDefaultApplicationTracking(),
     ...(job.applicationTracking || {}),
   }
-}
-
-export function updateApplicationTracking(jobs, jobId, patch) {
-  return jobs.map((job) => {
-    if (job.jobId !== jobId) return job
-    const tracking = {
-      ...normalizeApplicationTracking(job),
-      ...patch,
-      lastUpdated: new Date().toISOString(),
-    }
-    return { ...job, applicationTracking: tracking }
-  })
 }

@@ -21,7 +21,8 @@ import { downloadJobsCsv, downloadJobsJson } from '../../modules/jobs/jobExport'
 import { usePipelineAutoRefresh } from '../../modules/jobs/usePipelineAutoRefresh'
 import { autoLoadJobs } from '../../modules/jobs/autoLoadJobs'
 import { derivePipelineStateFromHealth, loadPipelineState, updatePipelineState } from '../../modules/jobs/pipelineState'
-import { updateApplicationTracking } from '../../modules/jobs/applicationTracking'
+import { overlayTracking } from '../../modules/applications/trackingView'
+import { useApplications } from '../../hooks/useApplications'
 import { loadJobsTab, persistJobsTab } from '../../modules/appNavigation'
 import {
   importJobsFromFile,
@@ -89,15 +90,21 @@ export default function JobDiscoveryScreen() {
     onImport: setState,
   })
 
-  const stats = useMemo(() => computeJobStats(state.jobs), [state.jobs])
+  const applications = useApplications()
+  // Tracking comes from the application store; `state.jobs` stays as saved and is what gets persisted.
+  const viewJobs = useMemo(
+    () => overlayTracking(state.jobs, applications.status === 'ready' ? applications.store : null, applications.settings),
+    [state.jobs, applications.status, applications.store, applications.settings],
+  )
+  const stats = useMemo(() => computeJobStats(viewJobs), [viewJobs])
   const sites = useMemo(() => getUniqueSites(state.jobs), [state.jobs])
   const providers = useMemo(() => getUniqueProviders(state.jobs), [state.jobs])
   const effectiveFilters = useMemo(() => withProfileSalaryDefaults(state.filters, profile?.basicProfile), [state.filters, profile?.basicProfile])
   const filteredJobs = useMemo(() => {
-    let filtered = filterJobs(state.jobs, effectiveFilters)
+    let filtered = filterJobs(viewJobs, effectiveFilters)
     if (showP1Only) filtered = filtered.filter((j) => isActionable(j) && (j.priority === 'P1' || j.priority === 'P2'))
     return filtered
-  }, [state.jobs, effectiveFilters, showP1Only])
+  }, [viewJobs, effectiveFilters, showP1Only])
 
   const p1Count = useMemo(() => state.jobs.filter((j) => isActionable(j) && j.priority === 'P1').length, [state.jobs])
   const p2Count = useMemo(() => state.jobs.filter((j) => isActionable(j) && j.priority === 'P2').length, [state.jobs])
@@ -179,16 +186,6 @@ export default function JobDiscoveryScreen() {
       jobs: updateJobRecord(prev.jobs, updatedJob.jobId, updatedJob),
     }))
     setSelectedJob((prev) => (prev?.jobId === updatedJob.jobId ? updatedJob : prev))
-  }, [])
-
-  const handleApplicationSave = useCallback((jobId, tracking) => {
-    setState((prev) => ({
-      ...prev,
-      jobs: updateApplicationTracking(prev.jobs, jobId, tracking),
-    }))
-    setSelectedJob((prev) => (
-      prev?.jobId === jobId ? { ...prev, applicationTracking: tracking } : prev
-    ))
   }, [])
 
   const handleToggleSelect = useCallback((jobId) => {
@@ -361,7 +358,6 @@ export default function JobDiscoveryScreen() {
         apiAvailable={pipelineApiAvailable}
         onJobUpdated={handleJobUpdated}
         onStatusChange={handleStatusChange}
-        onApplicationSave={handleApplicationSave}
       />
     </div>
   )

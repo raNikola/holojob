@@ -1283,9 +1283,11 @@ event), `POST /api/applications/:id/move` (`{ toStage, date? }`, the server writ
 ### migration.json
 
 `data/applications/migration.json`, written by every `POST /api/applications/migrate`, including a run that creates
-nothing: `{ "version": 1, "runs": [ { "ranAt", "previewSha", "counts", "backupPath", "unmappable": [ ... ] } ] }`, the
+nothing: `{ "version": 1, "runs": [ { "ranAt", "previewSha", "counts", "backupPath", "unmappable": [ ... ], "legacyChanged": [ { "jobId", "appId", "fields" } ] } ] }`, the
 last 50 runs. `counts` is `{ scanned, ignored, candidates, created, alreadyMigrated, alreadyTracked, unmappable }`,
 with `candidates = created + alreadyMigrated + alreadyTracked + unmappable` and `scanned = ignored + candidates`.
+The response also carries `legacyChanged`, the number of `alreadyMigrated` jobs whose old `applicationTracking` differs
+from the migrated one (each such entry lists the fields and has a warning). It is not part of `counts`.
 Body of both routes: `{ jobs: [ <browser job records> ] }`; the apply adds `"confirm": true` and the `previewSha`
 the dry run returned (sha256 of the canonical JSON of `jobs`). The backup is
 `data/backups/applications-<YYYYMMDD-HHMMSS>/` with `legacy-jobs.json` (the posted `jobs`, re-serialised) and, when a

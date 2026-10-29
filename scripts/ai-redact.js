@@ -25,6 +25,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { knownContactIdentity } from './application-store.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PROFILE_PATH = path.join(ROOT, 'data/profile/candidate-profile.json')
@@ -41,6 +42,12 @@ const emptyIdentity = () => ({ names: [], emails: [], phones: [], links: [] })
 const strings = (v, max = 200) => (Array.isArray(v) ? v : [v]).filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim().slice(0, 500)).slice(0, max)
 
 let identitySource = readOwnerIdentity
+let contactSource = () => knownContactIdentity(ROOT)
+
+/** Tests replace the application-store reader; pass nothing to restore it. */
+export function setContactSource(fn) {
+  contactSource = fn || (() => knownContactIdentity(ROOT))
+}
 
 /** Tests replace the profile reader; pass nothing to restore it. */
 export function setIdentitySource(fn) {
@@ -205,6 +212,20 @@ function walk(value, fn) {
   return value
 }
 
+/** Contacts recorded in the application store. Fails closed: an unreadable store means nothing can be trusted. */
+function storedContacts() {
+  try {
+    const found = contactSource() || emptyIdentity()
+    return { names: strings(found.names), emails: strings(found.emails), phones: strings(found.phones), links: strings(found.links) }
+  } catch (e) {
+    throw new RedactionError(`application store unreadable: cannot tell which contacts to redact (${e.constructor.name})`)
+  }
+}
+
+const mergeIdentity = (a, b) => ({
+  names: [...a.names, ...b.names], emails: [...a.emails, ...b.emails], phones: [...a.phones, ...b.phones], links: [...a.links, ...b.links],
+})
+
 /**
  * The context a provider may see, and the identifiers used. Throws RedactionError.
  * Strings are redacted value by value, so JSON structure and ids are never mangled.
@@ -219,7 +240,7 @@ export function redactContext(context) {
         names: [...hints.owner.names, ...strings(disk.names)], emails: [...hints.owner.emails, ...strings(disk.emails)],
         phones: [...hints.owner.phones, ...strings(disk.phones)], links: [...hints.owner.links, ...strings(disk.links)],
       },
-      contacts: hints.contacts,
+      contacts: mergeIdentity(hints.contacts, storedContacts()),
     }
     return { context: walk(rest, (s) => redactText(s, ids)), ids }
   } catch (e) {

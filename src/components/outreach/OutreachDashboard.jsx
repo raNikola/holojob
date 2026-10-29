@@ -15,7 +15,9 @@ import {
   updateJobRecord,
   updateJobStatus,
 } from '../../modules/jobs/jobStorage'
-import { updateApplicationTracking } from '../../modules/jobs/applicationTracking'
+import { overlayTracking } from '../../modules/applications/trackingView'
+import { scheduleFollowUp } from '../../modules/applications/trackerController'
+import { useApplications } from '../../hooks/useApplications'
 import { computeOutreachMetrics, aggregateAllContacts } from '../../modules/outreach/outreachMetrics'
 import { downloadContactsCsv, downloadOutreachJson } from '../../modules/outreach/outreachExport'
 import { addOutreachContact } from '../../modules/outreach/outreachStorage'
@@ -39,12 +41,19 @@ export default function OutreachDashboard() {
     saveJobs(state)
   }, [state])
 
-  const metrics = useMemo(() => computeOutreachMetrics(state.jobs), [state.jobs])
-  const contacts = useMemo(() => aggregateAllContacts(state.jobs), [state.jobs])
+  const applications = useApplications()
+  // Tracking comes from the application store; `state.jobs` stays as saved and is what gets persisted.
+  const viewJobs = useMemo(
+    () => overlayTracking(state.jobs, applications.status === 'ready' ? applications.store : null, applications.settings),
+    [state.jobs, applications.status, applications.store, applications.settings],
+  )
+
+  const metrics = useMemo(() => computeOutreachMetrics(viewJobs), [viewJobs])
+  const contacts = useMemo(() => aggregateAllContacts(viewJobs), [viewJobs])
 
   const appliedJobs = useMemo(
-    () => state.jobs.filter((j) => j.status === 'applied_manually' || j.applicationTracking?.applied),
-    [state.jobs],
+    () => viewJobs.filter((j) => j.status === 'applied_manually' || j.applicationTracking?.applied),
+    [viewJobs],
   )
 
   const handleJobUpdated = useCallback((updatedJob) => {
@@ -57,10 +66,7 @@ export default function OutreachDashboard() {
   }, [])
 
   const handleScheduleFollowUp = useCallback((jobId, date) => {
-    setState((prev) => ({
-      ...prev,
-      jobs: updateApplicationTracking(prev.jobs, jobId, { followUpDate: date }),
-    }))
+    scheduleFollowUp(jobId, date).catch((e) => window.alert(e.message))
   }, [])
 
   const handleAddContact = useCallback((form) => {
@@ -82,13 +88,6 @@ export default function OutreachDashboard() {
     setState((prev) => ({
       ...prev,
       jobs: updateJobStatus(prev.jobs, jobId, status),
-    }))
-  }, [])
-
-  const handleApplicationSave = useCallback((jobId, tracking) => {
-    setState((prev) => ({
-      ...prev,
-      jobs: updateApplicationTracking(prev.jobs, jobId, tracking),
     }))
   }, [])
 
@@ -135,7 +134,7 @@ export default function OutreachDashboard() {
 
       <Card title="Follow-ups due">
         <FollowUpPanel
-          jobs={state.jobs}
+          jobs={viewJobs}
           onSelectJob={(job) => {
             const contact = job.outreach?.contacts?.[0]
             if (contact) handleSelectContact(contact, job)
@@ -187,7 +186,7 @@ export default function OutreachDashboard() {
         ) : (
           <ContactList
             contacts={contacts}
-            jobs={state.jobs}
+            jobs={viewJobs}
             onSelectContact={handleSelectContact}
           />
         )}
@@ -210,7 +209,6 @@ export default function OutreachDashboard() {
           apiAvailable={pipelineApiAvailable}
           onJobUpdated={handleJobUpdated}
           onStatusChange={handleStatusChange}
-          onApplicationSave={handleApplicationSave}
         />
       )}
     </div>

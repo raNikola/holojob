@@ -624,11 +624,59 @@ confirm button. Where the build differs from, or narrows, the text above:
 - **Tracking switch:** the migration is not refused while tracking is off (1.7 lists only create, `/events`, `/move`
   and `settings/stages`).
 - **`mergeStatusOnImport` is unchanged in S2**, as 2.3 says. The legacy field stays a second copy until S4.
-- **Not built yet:** the "run the migration first" guard in `ApplicationTrackerPanel`, the writers and readers going
-  through the store (`trackingFromApplication`), and so A1 is **not** closed by this commit. Until then an edit made
-  in the old panel after the migration changes only the legacy field, and a re-run reports that job as
-  `alreadyMigrated`, so the edit would be lost when S4 deletes the field. S4's gate must not rely on `toCreate: 0`
-  alone.
+
+**The panel and its writers, as built (S2 second half, 2026-10-29).** The tracker panel and the three screens that wrote
+the legacy field now work through the application store:
+- **`ApplicationTrackerPanel`** reads and writes only through `applicationsClient.js` (the cache, `useApplications()`)
+  and `trackerController.js` (the decisions, testable without a browser). Nothing writes `job.applicationTracking`
+  any more; `updateApplicationTracking` is deleted and `updateJobRecord` ignores an `applicationTracking` in its patch,
+  so a row carrying tracking derived from the store cannot be saved into the job.
+- **Which mode the panel is in** (`panelMode`): `loading` or `error` show no form (an empty cache would make every
+  old job look new); `migrate-first` for a job with old tracking and no application at all, with a "Run the migration
+  first (Settings)" block and no way to create (`markApplied` refuses before any request); `new`; `tracked`. The
+  test for "old tracking" is `legacyKind` in `legacyTracking.js`, the same function `planMigration` uses, so the panel
+  never blocks a job the migration ignores and never lets through a job the migration would create a record for.
+  A job whose old tracking cannot be mapped (a `jobId` that is not 16 hex) stays blocked and says why.
+- **Writes:** create (`POST /api/applications`, with a `requestId` made when the form opens), stage through `/move`,
+  the applied date as `applied_date_corrected`, the follow-up date as `follow_up_set` or `follow_up_done`, the recruiter
+  as `contact_added` / `contact_updated`, a note as `note_added`, void and restore as their events. A save sends only
+  the difference from the application as the server last returned it, so a save that failed half way and is repeated
+  does not repeat what landed. Notes are an "add a note" box, never a text area that is posted again.
+- **Several attempts:** the panel lists every attempt of the job and shows the latest one that is not voided. A
+  second application is refused (409) while one is open, unless the user says it is a separate attempt through
+  another channel; after a close, "Apply to this job again" creates a `reapply_after_outcome` attempt.
+- **Readers:** `trackingView.js` derives the old `applicationTracking` shape from the latest non-voided application
+  (`trackingFromApplication`). `ApplicationHome`, `JobDiscoveryScreen` and `OutreachDashboard` use it for display
+  and statistics only (`overlayTracking`); `state.jobs` is what gets saved and never holds the derived value. The
+  closed outcomes show as `Rejected`, `Withdrawn`, `Ghosted`, `Position closed`, `Offer` and `Offer declined`
+  (`TERMINAL_STAGES` gained the last three). `buildApplicationContext` also reads the overlay.
+- **Dry run:** an `alreadyMigrated` job whose old object now differs from the one that was migrated gets
+  `legacyChanged` (the fields) and a warning; the response has a top-level `legacyChanged` count and each
+  `migration.json` run lists them. `lastUpdated` alone is not a change, and a job that arrives without the object
+  (an import dropped it) is not a change. `counts` is unchanged.
+- **Privacy:** `ai-redact.js` now also removes every recruiter name, e-mail and LinkedIn link recorded in the store
+  (`knownContactIdentity`, voided applications and earlier values included), so a contact entered after the
+  migration is still a known identifier. It fails closed when the store is unreadable.
+
+Deviations and limits of this part:
+- **`channel` and `applicationUrl` are read-only after creation.** They are part of the frozen attempt and the plan
+  has no correction event for them. The panel shows them; an edit needs a new event type, which is a plan change.
+- **The other outcomes** (withdrawn, position closed, offer accepted, offer declined) can be set only on an open
+  application, with one `outcome_set`. Changing between them, or from them to Rejected or Ghosted, is a reopen
+  (`/move`). `/move` does not take them, and two separate POSTs would run the reopen check for an application that
+  never reopens.
+- **No attempt switcher beyond a select, no CV picker, no timeline, no snapshot view:** those are S3.
+- **`status: applied_manually`** is still set on the job when an application is created, because several readers use
+  it until S4.
+- **Statistics still count jobs, not attempts**, through the overlay, until S4.
+- **An application whose job has left the browser list** is safe in the store but appears on no screen until the S4 board.
+- **Still reading the old field:** `contactRanking.js` and the single-job `safeTracking` in `aiContextBuilder.js`.
+  The first only ranks contacts; the second sends nothing identifying (the AI redaction step runs after it).
+- **Nothing here was run in a browser**: the panel, the screens and the Settings panel are covered by lint, the
+  build and tests of the logic they call.
+
+The legacy field is deleted from the job records in S4, after `migration.json` shows `unmappable: 0` and the dry run
+shows `toCreate: 0` and `legacyChanged: 0`.
 
 ## 3. API and UI surface
 

@@ -63,7 +63,6 @@ export default function JobDetailDrawer({
   apiAvailable,
   onJobUpdated,
   onStatusChange,
-  onApplicationSave,
 }) {
   if (!job) return null
 
@@ -173,11 +172,7 @@ export default function JobDetailDrawer({
 
           <RelatedContactsPanel job={job} onJobUpdated={onJobUpdated} />
 
-          <ApplicationTrackerPanel
-            job={job}
-            onSave={(tracking) => onApplicationSave?.(job.jobId, tracking)}
-            onStatusChange={onStatusChange}
-          />
+          <ApplicationTrackerPanel job={job} onStatusChange={onStatusChange} />
         </div>
       </aside>
     </div>

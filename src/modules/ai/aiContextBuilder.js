@@ -5,6 +5,8 @@ import { computeJobStats } from '../jobs/jobStats.js'
 import { isActionable } from '../jobs/jobHistory.js'
 import { loadAiMemory } from './aiMemory.js'
 import { buildRedactionHints } from './redactionHints.js'
+import { getApplicationsState } from '../applications/applicationsClient.js'
+import { overlayTracking } from '../applications/trackingView.js'
 
 function truncate(str, max = 4000) {
   if (!str) return ''
@@ -81,7 +83,9 @@ export function buildSkillGapContext() {
 }
 
 export function buildApplicationContext() {
-  const jobs = loadJobs().jobs.filter((j) => j.applicationTracking?.applied || j.applicationTracking?.interviewStage)
+  const cache = getApplicationsState()
+  const jobs = overlayTracking(loadJobs().jobs, cache.status === 'ready' ? cache.store : null, cache.settings)
+    .filter((j) => j.applicationTracking?.applied || j.applicationTracking?.interviewStage)
   return {
     applied: jobs.filter((j) => j.applicationTracking?.applied).map(summarizeJob),
     rejected: jobs.filter((j) => j.applicationTracking?.interviewStage === 'Rejected').map(summarizeJob),
