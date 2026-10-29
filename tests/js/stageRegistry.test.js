@@ -9,6 +9,9 @@ import {
   labelFor,
   mergeBackupSettings,
   moveTargets,
+  reorderDecision,
+  retiredStages,
+  activeStages,
   selectableStageKeys,
   settingsProblem,
   withChange,
@@ -103,5 +106,51 @@ describe('stage registry (pure)', () => {
     expect(settings.stages.work.slice(0, 4)).toEqual(current.stages.work)
     expect(settings.stages.work[4]).toEqual({ key: 'x', label: 'X', retired: true, interview: true })
     expect(mergeBackupSettings(settings, backup, 'later').added).toEqual([])
+  })
+})
+
+describe('reorderDecision (dragging work columns in Settings)', () => {
+  const settings = defaultSettings()
+  const keys = activeStages(settings).map((s) => s.key)
+
+  /** Replays the ops through the same function the route runs, as the server would. */
+  const replay = (start, ops) => ops.reduce((cur, op) => applyStageOperation(cur, op).settings, start)
+
+  it('the same position is a no-op', () => {
+    expect(reorderDecision(settings, keys[1], keys[1])).toEqual({ action: 'none', reason: 'same-position' })
+  })
+
+  it('refuses a fixed column or an unknown key, as source or target', () => {
+    for (const fixed of ['applied', 'rejected', 'ghosted', 'no-such-stage']) {
+      expect(reorderDecision(settings, fixed, keys[0]).reason).toBe('fixed')
+      expect(reorderDecision(settings, keys[0], fixed).reason).toBe('fixed')
+    }
+  })
+
+  it('refuses while a request is in flight or tracking is off', () => {
+    expect(reorderDecision(settings, keys[0], keys[1], { busy: true }).reason).toBe('busy')
+    expect(reorderDecision(settings, keys[0], keys[1], { trackingEnabled: false }).reason).toBe('tracking-off')
+  })
+
+  it('sends one single-step move per place passed, and the existing route produces the dropped order', () => {
+    const last = keys.length - 1
+    const down = reorderDecision(settings, keys[0], keys[last])
+    expect(down.ops).toHaveLength(last)
+    expect(down.ops.every((o) => o.op === 'move' && o.dir === 'down' && o.key === keys[0])).toBe(true)
+    expect(activeStages(replay(settings, down.ops)).map((s) => s.key)).toEqual([...keys.slice(1), keys[0]])
+
+    const up = reorderDecision(settings, keys[last], keys[0])
+    expect(up.ops.every((o) => o.dir === 'up')).toBe(true)
+    expect(activeStages(replay(settings, up.ops)).map((s) => s.key)).toEqual([keys[last], ...keys.slice(0, last)])
+  })
+
+  it('counts only active stages, so a retired one in between does not add a step', () => {
+    const withRetired = applyStageOperation(settings, { op: 'retire', key: keys[1] }).settings
+    const active = activeStages(withRetired).map((s) => s.key)
+    const decision = reorderDecision(withRetired, active[0], active[1])
+    expect(decision.ops).toHaveLength(1)
+    expect(activeStages(replay(withRetired, decision.ops)).map((s) => s.key)).toEqual([active[1], active[0], ...active.slice(2)])
+    expect(retiredStages(withRetired).map((s) => s.key)).toEqual([keys[1]])
+    expect(reorderDecision(withRetired, active[0], keys[1]).reason).toBe('fixed')
   })
 })
