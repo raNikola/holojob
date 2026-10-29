@@ -1,9 +1,10 @@
 /**
- * The AI findings store (STEP5_SERVER_MASTER_PLAN section 2.8, step 2b), first slice: entity type `job`, feature `jobAnalysis`.
+ * The AI findings store (STEP5_SERVER_MASTER_PLAN section 2.8, step 2b): entity `job` (feature `jobAnalysis`) and entity
+ * `company` (feature `companyIntelligence`).
  * Written and read only by the Node server, called from run-ai.js.
  *
  *   data/ai/findings/                       mode 700
- *   data/ai/findings/job/<entityKey>.json   mode 600   { version, entity, findings: [ ... ] }
+ *   data/ai/findings/<job|company>/<entityKey>.json   mode 600   { version, entity, findings: [ ... ] }
  *
  * Findings are only ever appended; an existing finding is never edited or removed, and a file that cannot be read is never
  * overwritten. Expiry (a feature's freshness window, if it has one) only turns a hit into a miss. A finding holds the parsed result, the cache
@@ -24,16 +25,17 @@ const DEFAULT_ROOT = path.resolve(__dirname, '../data/ai/findings')
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /** Bumped by hand when a feature's prompt or output schema changes; part of the cache key. */
-export const PROMPT_VERSIONS = { jobAnalysis: '1' }
+export const PROMPT_VERSIONS = { jobAnalysis: '1', companyIntelligence: '1' }
 
 /**
  * Built-in freshness window per feature, in days, or null for no expiry; only features listed here use the store. A
- * job analysis does not age: it stays valid until a cache key input changes. A feature that does age gets a number
- * (the owner's override file, data/config/ai-findings.json, is a later step).
+ * job analysis does not age: it stays valid until a cache key input changes. What is known about a company does age,
+ * so its findings are fresh for 30 days (a later call appends; nothing is deleted). The owner's override file,
+ * data/config/ai-findings.json, is a later step.
  */
-export const DEFAULT_FRESHNESS_DAYS = { jobAnalysis: null }
+export const DEFAULT_FRESHNESS_DAYS = { jobAnalysis: null, companyIntelligence: 30 }
 
-export const FINDINGS_ENTITY = { jobAnalysis: 'job' }
+export const FINDINGS_ENTITY = { jobAnalysis: 'job', companyIntelligence: 'company' }
 
 export function usesFindings(feature) {
   return Object.hasOwn(FINDINGS_ENTITY, feature)
@@ -70,6 +72,37 @@ export function jobEntityKey(jobId) {
   return jobId ? sha256(String(jobId)).slice(0, 16) : null
 }
 
+/** Legal-form words that do not tell two companies apart ("Acme d.o.o." and "ACME" are one company). */
+const LEGAL_FORMS = new Set(['doo', 'ltd', 'limited', 'llc', 'inc', 'incorporated', 'corp', 'corporation', 'co', 'gmbh', 'ag', 'sa', 'plc', 'srl', 'bv', 'nv', 'oy', 'ab', 'as', 'se', 'sro', 'kft', 'spa', 'llp', 'lp'])
+
+/**
+ * A company name reduced to what identifies it: Unicode NFKC, lower case, diacritics removed, dotted abbreviations
+ * joined ("d.o.o." -> "doo"), every other run of non-letters/digits one space, and trailing legal-form words dropped.
+ * "Acme d.o.o.", "ACME Ltd", "  Acme " and "Ačme GmbH" are all "acme". Empty when nothing is left (then no entity).
+ */
+export function normalizeCompanyName(name) {
+  let text = String(name ?? '').normalize('NFKC').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
+  text = text.replace(/\b(?:[a-z]\.){2,}/g, (m) => m.replaceAll('.', '')) // d.o.o. -> doo, s.r.l. -> srl
+  const words = text.replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean)
+  while (words.length > 1 && LEGAL_FORMS.has(words[words.length - 1])) words.pop()
+  return words.join(' ')
+}
+
+/** Opaque entity key of a company: the first 16 hex of sha256 of its normalized name. The name itself is not stored. */
+export function companyEntityKey(name) {
+  const normalized = normalizeCompanyName(name)
+  return normalized ? sha256(normalized).slice(0, 16) : null
+}
+
+/**
+ * The entity key of a call, or null when the call has no entity (then nothing is looked up or stored). A job is keyed by
+ * its id from the request; a company by the company name of the redacted context.
+ */
+export function entityKeyFor(feature, { context, redacted }) {
+  if (FINDINGS_ENTITY[feature] === 'company') return companyEntityKey(redacted?.job?.company)
+  return jobEntityKey(context?.job?.jobId)
+}
+
 /** The job fields that make up the posting itself. */
 const POSTING_FIELDS = ['title', 'company', 'location', 'description']
 /** The job fields that make up its scores. */
@@ -93,9 +126,19 @@ function jobAnalysisManifest(context) {
   }
 }
 
-/** The cache key `model|promptVersion|inputHash`; the input hash covers the manifest above. A prompt change is a PROMPT_VERSIONS bump. */
+/**
+ * What the company research depends on: the normalized company name, nothing else. A new posting at the same company,
+ * another job's scores or a profile edit do not change what is known about the company, so they do not invalidate it.
+ */
+function companyIntelligenceManifest(context) {
+  return { company: hashOf(normalizeCompanyName(context?.job?.company)) }
+}
+
+const MANIFESTS = { jobAnalysis: jobAnalysisManifest, companyIntelligence: companyIntelligenceManifest }
+
+/** The cache key `model|promptVersion|inputHash`; the input hash covers the feature's manifest. A prompt change is a PROMPT_VERSIONS bump. */
 export function buildCacheKey({ feature, model, context }) {
-  const inputHash = hashOf(jobAnalysisManifest(context))
+  const inputHash = hashOf(MANIFESTS[feature](context))
   const promptVersion = PROMPT_VERSIONS[feature]
   return { inputHash, promptVersion, cacheKey: `${model || ''}|${promptVersion}|${inputHash}` }
 }

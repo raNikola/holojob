@@ -10,7 +10,7 @@ import { getProvider, PROVIDER_NAMES, KEYLESS_PROVIDERS, checkProviderHealth, li
 import { initSseResponse, sseWrite } from './stream-spawn.js'
 import { UNGATED_PROVIDERS, finishAiCall, readAiSelection, recordAiRefusal, reserveAiCall } from './ai-gate.js'
 import { assertClean, findLeaks, redactContext } from './ai-redact.js'
-import { PROMPT_VERSIONS, appendFinding, buildCacheKey, jobEntityKey, lookupFinding, usesFindings } from './ai-findings-store.js'
+import { PROMPT_VERSIONS, appendFinding, buildCacheKey, entityKeyFor, lookupFinding, usesFindings } from './ai-findings-store.js'
 import { maskSecrets } from './secret-mask.js'
 import { getAiCredential } from './secret-store.js'
 import { PROVIDER_DEFAULTS } from '../src/modules/ai/aiSettings.js'
@@ -149,11 +149,11 @@ export async function checkAiFinding({ feature, context }) {
   if (!usesFindings(feature)) return none
   const selection = (await readAiSelection()).selection
   if (!selection || !PROVIDER_NAMES.includes(selection.provider) || UNGATED_PROVIDERS.has(selection.provider)) return none
-  const entityKey = jobEntityKey(context?.job?.jobId)
-  if (!entityKey) return none
   try {
     const redacted = redactContext(context)
     assertClean(buildMessages(feature, redacted.context), redacted.ids)
+    const entityKey = entityKeyFor(feature, { context, redacted: redacted.context })
+    if (!entityKey) return none
     const { cacheKey } = buildCacheKey({ feature, model: selection.model, context: redacted.context })
     const found = lookupFinding({ feature, entityKey, cacheKey })
     return found.hit ? { fresh: true, at: found.finding.at, model: found.finding.model } : none
@@ -203,7 +203,7 @@ export async function runAiFeature({ feature, context, refresh = false }) {
   }
   // A stored finding answers before anything is reserved: a hit is not a model call, so the gate is not asked, no ledger
   // row is written and no key is needed. A miss (new input, model or prompt version, stale, or `refresh`) goes on to the gate.
-  const stored = usesFindings(feature) && !UNGATED_PROVIDERS.has(providerName) ? jobEntityKey(context?.job?.jobId) : null
+  const stored = usesFindings(feature) && !UNGATED_PROVIDERS.has(providerName) ? entityKeyFor(feature, { context, redacted: redacted.context }) : null
   let lookupKey = null
   if (stored) {
     lookupKey = { entityKey: stored, ...buildCacheKey({ feature, model: settings?.model, context: redacted.context }) }
