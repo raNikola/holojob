@@ -46,6 +46,24 @@ def _ai_gate_in_tmp(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _ai_selection_in_tmp(tmp_path, monkeypatch):
+    """No test reads the server's data/config/ai-settings.json. By default nothing is selected, so a call refuses."""
+    monkeypatch.setenv("CAREER_OS_AI_SELECTION", str(tmp_path / "config" / "ai-settings.json"))
+    monkeypatch.delenv("CAREER_OS_LLM_PROVIDER", raising=False)
+
+
+def select_provider(tmp_path, monkeypatch, provider="openai", model="test-model", **extra):
+    """Write a provider selection the way Settings would (the same file the Node path reads)."""
+    import json
+
+    path = tmp_path / "config" / "ai-settings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"provider": provider, "model": model, **extra}))
+    monkeypatch.setenv("CAREER_OS_AI_SELECTION", str(path))
+    return path
+
+
+@pytest.fixture(autouse=True)
 def _no_real_model_call(monkeypatch):
     """Tripwire: a test that reaches a real provider or the claude CLI fails, unless it patched the call itself."""
     import subprocess

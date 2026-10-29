@@ -87,6 +87,25 @@ export function saveAiPricing(entries, confirm) {
   return runner('pricing-put', { entries, confirm: confirm === true })
 }
 
+/**
+ * The one provider selection (data/config/ai-settings.json), read through python/llm/ai_selection.py so the Python
+ * pipeline and this server cannot disagree. Resolves { selection, providers, class?, error? }; selection is null when
+ * nothing is selected or the file is unusable. Fails closed: when it cannot be read, nothing is selected.
+ */
+export async function readAiSelection() {
+  try {
+    const result = await runner('selection-get', null)
+    return { ...result, selection: result?.selection && typeof result.selection === 'object' ? result.selection : null }
+  } catch (e) {
+    return { selection: null, providers: [], error: `AI selection unavailable: ${e.message}` }
+  }
+}
+
+/** Validate and write the selection. Resolves ai_selection.save's result (ok | errors | needsConfirm). */
+export function saveAiSelection(settings, confirm) {
+  return runner('selection-put', { settings, confirm: confirm === true })
+}
+
 /** Record a call the app refused before it reached the gate (e.g. redaction failed). Never rejects. */
 export async function recordAiRefusal({ provider, model, feature, jobId, baseUrl, reason }) {
   try {

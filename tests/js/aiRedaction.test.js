@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runAiFeature } from '../../scripts/run-ai.js'
+import { runAiFeature as runAi } from '../../scripts/run-ai.js'
 import { setGateRunner } from '../../scripts/ai-gate.js'
 import { RedactionError, assertClean, redactText, setIdentitySource } from '../../scripts/ai-redact.js'
 import { getProvider } from '../../src/modules/ai/aiProviderRegistry.js'
 import { buildAiContext, buildAiRedactionHints } from '../../src/modules/ai/aiContextBuilder.js'
 import { setAiSecret } from '../../scripts/secret-store.js'
 import { CANARY, useTempSecretStore } from './helpers/secretTestStore.js'
+import { selectProvider, withSelection } from './helpers/selectionStub.js'
+
+// A request's `settings` are not read by the server; the selection is what it stores.
+const runAiFeature = (args) => { selectProvider(args.settings); return runAi(args) }
 
 // Fake people: nothing here is real.
 const OWNER = {
@@ -85,10 +89,10 @@ beforeEach(() => {
   installStorage()
   sent = []
   gateCalls = []
-  setGateRunner(async (command, input) => {
+  setGateRunner(withSelection(async (command, input) => {
     gateCalls.push({ command, input })
     return command === 'reserve' ? { allowed: true, id: 'c1' } : { ok: true }
-  })
+  }))
   for (const name of ['openai', 'mock']) {
     vi.spyOn(getProvider(name), 'complete').mockImplementation(async ({ messages }) => {
       sent.push(messages)

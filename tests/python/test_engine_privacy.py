@@ -23,6 +23,7 @@ import unicodedata
 
 import pytest
 
+from conftest import select_provider
 import enrich_jobs
 import evidence_index
 from match_engine import shadow
@@ -167,7 +168,7 @@ def pipeline(tmp_path, monkeypatch):
         return Response(_reply(json))
 
     monkeypatch.setattr(requests, "post", post)
-    monkeypatch.setenv("CAREER_OS_LLM_PROVIDER", "openai")
+    select_provider(tmp_path, monkeypatch, "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv(shadow.SHADOW_ENV, "1")
 

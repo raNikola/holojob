@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { handleApiRoutes } from '../../scripts/api-handler.js'
 import { setAiSecret } from '../../scripts/secret-store.js'
 import {
-  AI_SETTINGS_KEY, clearLegacyAiKey, loadAiSettings, readLegacyAiKey, saveAiSettings, settingsForApi,
+  AI_SETTINGS_KEY, clearLegacyAiKey, readLegacyAiKey,
 } from '../../src/modules/ai/aiSettings.js'
 import { moveLegacyKeyToServer } from '../../src/modules/ai/secretsClient.js'
 import { CANARY, useTempSecretStore } from './helpers/secretTestStore.js'
@@ -131,36 +131,15 @@ describe('moving the browser key to the server', () => {
   })
 })
 
-describe('browser settings after step 2', () => {
-  it('a legacy key is not part of the loaded settings, and a save neither erases nor rewrites it', () => {
-    seedBrowser()
-    const loaded = loadAiSettings()
-    expect(loaded).not.toHaveProperty('apiKey')
-    const saved = saveAiSettings({ ...loaded, apiKey: 'attempt-to-write-a-new-key', temperature: 0.9 })
-    expect(saved).not.toHaveProperty('apiKey')
-    expect(stored()).toMatchObject({ apiKey: CANARY, temperature: 0.9 })
+describe('the legacy key after step 4', () => {
+  it('"remove from this browser without moving" removes the whole entry once nothing else is in it', () => {
+    data.set(AI_SETTINGS_KEY, JSON.stringify({ apiKey: CANARY }))
+    expect(clearLegacyAiKey(storage)).toBe(true)
+    expect(data.has(AI_SETTINGS_KEY)).toBe(false)
   })
 
-  it('after the move a save does not bring a key back, and a fresh browser never gets one', () => {
-    seedBrowser()
-    clearLegacyAiKey(storage)
-    saveAiSettings({ ...loadAiSettings(), apiKey: 'stale-state-from-the-form-1234' })
-    expect(stored()).not.toHaveProperty('apiKey')
-    data.clear()
-    saveAiSettings({ ...loadAiSettings(), apiKey: 'typed-by-an-old-form-1234567' })
-    expect(JSON.stringify(stored())).not.toContain('typed-by-an-old-form')
-  })
-
-  it('requests carry no key, and a base URL only for ollama', () => {
-    const settings = { provider: 'openai', model: 'm', temperature: 0.3, maxTokens: 10, apiKey: CANARY, baseUrl: 'https://x.example' }
-    expect(settingsForApi(settings)).toEqual({ provider: 'openai', model: 'm', temperature: 0.3, maxTokens: 10 })
-    expect(settingsForApi({ ...settings, provider: 'ollama', baseUrl: 'http://localhost:11434' }).baseUrl).toBe('http://localhost:11434')
-    expect(JSON.stringify(settingsForApi(settings))).not.toContain(CANARY)
-  })
-
-  it('the store is untouched by loading and saving settings', () => {
+  it('the store is untouched by reading the legacy key', () => {
     setAiSecret('openai', { key: CANARY })
-    saveAiSettings(loadAiSettings())
     expect(readLegacyAiKey(storage)).toBeNull()
   })
 })

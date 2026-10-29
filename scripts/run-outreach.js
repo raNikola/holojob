@@ -101,7 +101,7 @@ export async function runOutreachDiscover({ job, fetchPages = true, deep = false
   return { ok: true, ...discovery, diskPath: contactsPath }
 }
 
-export async function runOutreachGenerate({ job, contact, messageType, settings }) {
+export async function runOutreachGenerate({ job, contact, messageType }) {
   if (!job) throw new Error('job is required')
 
   const context = buildAiContext({
@@ -110,7 +110,7 @@ export async function runOutreachGenerate({ job, contact, messageType, settings 
     extra: { contact, messageType, outreach: job.outreach },
   })
 
-  const result = await runAiFeature({ feature: 'outreach', context, settings })
+  const result = await runAiFeature({ feature: 'outreach', context })
   if (!result.ok) return result
 
   const drafts = result.data || {}

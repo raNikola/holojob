@@ -1,6 +1,6 @@
 import { consumeSsePost } from '../operations/streamClient.js'
 import { ensureApiAvailable, isApiAvailable } from '../../utils/apiAvailability.js'
-import { loadAiSettings, settingsForApi } from './aiSettings.js'
+import { fetchAiSelection } from './aiSelectionClient.js'
 import { getFeature, isFeatureEnabled } from './aiFeatureRegistry.js'
 import { buildMessages, parseAiResponse } from './aiPromptLibrary.js'
 import { buildAiContext, buildAiRedactionHints } from './aiContextBuilder.js'
@@ -8,8 +8,16 @@ import { buildCacheKey, getCachedResponse, setCachedResponse } from './aiRespons
 import { trackAiUsage } from './aiUsageTracker.js'
 import { mergeFeatureIntoMemory } from './aiMemory.js'
 
+/** The selection on the server. The browser keeps no copy; with none selected, nothing is sent. */
+export async function loadAiSelection() {
+  const result = await fetchAiSelection()
+  if (!result.ok) throw new Error(result.error)
+  if (!result.data.selection) throw new Error(result.data.error || 'No AI provider selected (Settings > AI Provider)')
+  return result.data.selection
+}
+
 export async function runAiFeature(featureId, { job, message, extra, skipCache = false, onLog } = {}) {
-  const settings = loadAiSettings()
+  const settings = await loadAiSelection()
   const feature = getFeature(featureId)
   if (!feature) throw new Error(`Unknown AI feature: ${featureId}`)
   if (!isFeatureEnabled(settings, featureId)) {
@@ -50,7 +58,6 @@ export async function runAiFeature(featureId, { job, message, extra, skipCache =
     feature: featureId,
     // The hints name what the server must strip; it removes them before the prompt is built.
     context: { ...context, redactionHints: buildAiRedactionHints({ job, extra }) },
-    settings: settingsForApi(settings),
     stream: Boolean(onLog),
   }
 
@@ -110,7 +117,7 @@ export async function fetchAiModels(settings) {
   const res = await fetch(`/api/ai/models?provider=${settings.provider}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: settingsForApi(settings) }),
+    body: JSON.stringify({ settings: { provider: settings.provider, ...(settings.provider === 'ollama' ? { baseUrl: settings.baseUrl } : {}) } }),
   })
   const data = await res.json()
   return data.models || []

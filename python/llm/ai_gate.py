@@ -451,6 +451,13 @@ def check(provider: str, model: str | None, prompt_chars: int, *, base_url: str 
     return Decision(reason is None, reason, row)
 
 
+def refuse(provider: str, model: str | None, reason, *, base_url: str | None = None, feature: str | None = None,
+           job_id: str | None = None) -> None:
+    """Record a call the app stopped itself before it reached the gate (no selection, a provider it cannot run)."""
+    row, _ = _call_row(provider or "", model, 0, base_url, feature, job_id, None, 0, load_settings(), None)
+    record_refused(Decision(False, str(reason)[:300], row))
+
+
 def record_refused(decision: Decision, skipped: int = 1) -> None:
     """Record a refusal found by check(); `skipped` is how many calls the caller then did not make."""
     row = {**decision.row, "decision": "refused", "reason": decision.reason, "skipped": skipped}
@@ -794,7 +801,7 @@ def save_pricing_overrides(entries, confirm: bool = False) -> dict:
 
 
 def _cli(argv: list[str]) -> int:
-    """`reserve`, `finish`, `cache-hit`, `usage`, `refuse`, `settings-put`, `pricing-put`: JSON on stdin, one JSON object on stdout."""
+    """`reserve`, `finish`, `cache-hit`, `usage`, `refuse`, `settings-put`, `pricing-put`, `selection-get`, `selection-put`: JSON on stdin, one JSON object on stdout."""
     command = argv[0] if argv else ""
     raw = sys.stdin.read() if command != "usage" else ""
     args = json.loads(raw) if raw.strip() else {}
@@ -836,11 +843,17 @@ def _cli(argv: list[str]) -> int:
         return 0
     if command == "refuse":
         # A call the app stopped itself (redaction failed): recorded as a refusal, no budget involved.
-        settings = load_settings()
-        row, _ = _call_row(args.get("provider") or "", args.get("model"), 0, args.get("baseUrl"),
-                           args.get("feature"), args.get("jobId"), None, 0, settings, None)
-        record_refused(Decision(False, str(args.get("reason") or "refused before the call")[:300], row))
+        refuse(args.get("provider") or "", args.get("model"), args.get("reason") or "refused before the call",
+               base_url=args.get("baseUrl"), feature=args.get("feature"), job_id=args.get("jobId"))
         print(json.dumps({"ok": True}))
+        return 0
+    if command == "selection-get":
+        import ai_selection
+        print(json.dumps(ai_selection.get()))
+        return 0
+    if command == "selection-put":
+        import ai_selection
+        print(json.dumps(ai_selection.save(args.get("settings"), confirm=args.get("confirm") is True)))
         return 0
     if command == "settings-put":
         print(json.dumps(save_settings(args.get("settings"), confirm=args.get("confirm") is True)))
@@ -848,7 +861,7 @@ def _cli(argv: list[str]) -> int:
     if command == "pricing-put":
         print(json.dumps(save_pricing_overrides(args.get("entries"), confirm=args.get("confirm") is True)))
         return 0
-    print("usage: ai_gate.py reserve|finish|cache-hit|usage|refuse|settings-put|pricing-put  (JSON on stdin)", file=sys.stderr)
+    print("usage: ai_gate.py reserve|finish|cache-hit|usage|refuse|settings-put|pricing-put|selection-get|selection-put  (JSON on stdin)", file=sys.stderr)
     return 2
 
 

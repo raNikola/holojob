@@ -119,7 +119,7 @@ def main() -> int:
     p.add_argument("--judge", action="store_true",
                    help="call the provider: sends each ad, and with it the redacted evidence index, to it")
     p.add_argument("--env-file", type=Path, default=None, help="read provider keys from this file (e.g. .env)")
-    p.add_argument("--provider", default=None, help="CAREER_OS_LLM_PROVIDER when unset")
+    p.add_argument("--provider", default=None, help="the provider selected in Settings when unset")
     p.add_argument("--model", default=None, help="matcher model; <PROVIDER>_JUDGE_MODEL when unset")
     p.add_argument("--snapshot", type=Path, default=None, help="write the test snapshot here")
     p.add_argument("--json", action="store_true", help="print every row as JSON")
