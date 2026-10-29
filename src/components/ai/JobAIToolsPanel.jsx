@@ -27,6 +27,12 @@ const FEATURE_MAP = {
   cover: 'coverLetter',
 }
 
+/** Tabs whose answer is kept as a finding on the server and can be checked without a call. */
+const FINDING_TABS = {
+  analysis: { feature: 'jobAnalysis', verb: 'analysed' },
+  company: { feature: 'companyIntelligence', verb: 'researched' },
+}
+
 function InsightBlock({ data, fields }) {
   if (!data) return null
   return (
@@ -56,14 +62,15 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
 
   const insights = job.aiInsights || {}
 
-  // Is the job analysis still valid on the server? Asked again whenever the job, the tab or a run changes.
-  const [analysisStatus, setAnalysisStatus] = useState(null)
+  // Is the answer of this tab still valid on the server? Asked again whenever the job, the tab or a run changes.
+  const [findingStatus, setFindingStatus] = useState(null)
+  const findingTab = FINDING_TABS[tab]
   useEffect(() => {
-    if (tab !== 'analysis' || loading || !isApiAvailable()) return undefined
+    if (!findingTab || loading || !isApiAvailable()) return undefined
     let current = true
-    fetchFindingStatus('jobAnalysis', { job }).then((status) => { if (current) setAnalysisStatus({ ...status, jobId: job.jobId }) })
+    fetchFindingStatus(findingTab.feature, { job }).then((status) => { if (current) setFindingStatus({ ...status, jobId: job.jobId, tab }) })
     return () => { current = false }
-  }, [tab, job, loading])
+  }, [tab, findingTab, job, loading])
 
   const persist = (featureKey, data, meta) => {
     const patch = {
@@ -209,17 +216,17 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
     cover: 'Generate Cover Letters',
   }
 
-  const analysisFresh = tab === 'analysis' && analysisStatus?.jobId === job.jobId ? analysisStatus : null
-  const regenerate = regenerateDecision({ status: analysisFresh, loading })
+  const currentStatus = findingTab && findingStatus?.jobId === job.jobId && findingStatus.tab === tab ? findingStatus : null
+  const regenerate = regenerateDecision({ status: currentStatus, loading })
   const onRegenerate = () => {
-    const { action } = regenerateDecision({ status: analysisFresh, loading, inFlight: inFlight.current })
+    const { action } = regenerateDecision({ status: currentStatus, loading, inFlight: inFlight.current })
     if (action === 'ignore') return
     if (action === 'confirm' && !window.confirm(REGENERATE_CONFIRM)) return
     run(tab, true)
   }
 
-  const primary = tab === 'analysis'
-    ? analysisButtonState({ status: analysisStatus?.jobId === job.jobId ? analysisStatus : null, hasAnalysis: Boolean(insights.jobAnalysis), loading })
+  const primary = findingTab
+    ? analysisButtonState({ status: currentStatus, hasAnalysis: Boolean(insights[findingTab.feature]), loading, verb: findingTab.verb })
     : { disabled: loading, title: '' }
 
   return (

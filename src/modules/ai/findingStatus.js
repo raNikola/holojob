@@ -27,11 +27,11 @@ export async function fetchFindingStatus(featureId, { job } = {}) {
  * result is on screen. With a valid finding but nothing on screen the button stays enabled: a click is answered from
  * the stored finding and costs nothing. Regenerate is a separate control and is not decided here.
  */
-export function analysisButtonState({ status, hasAnalysis, loading }) {
+export function analysisButtonState({ status, hasAnalysis, loading, verb = 'analysed' }) {
   if (loading) return { disabled: true, title: '' }
   if (status?.fresh && hasAnalysis) {
     const date = status.at ? new Date(status.at).toLocaleDateString() : 'an earlier date'
-    return { disabled: true, title: `Already analysed on ${date} with ${status.model || 'the selected model'}; nothing has changed` }
+    return { disabled: true, title: `Already ${verb} on ${date} with ${status.model || 'the selected model'}; nothing has changed` }
   }
   return { disabled: false, title: '' }
 }
