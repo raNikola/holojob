@@ -7,16 +7,23 @@ import { CHANNELS } from '../../modules/applications/applicationEnums'
 import { foldApplication } from '../../modules/applications/foldApplication'
 import { labelFor } from '../../modules/applications/stageRegistry'
 import {
+  EXTERNAL_CV,
+  cvOptions,
+  defaultCvOption,
   draftFrom,
   markApplied,
   newRequestId,
   panelMode,
+  recordCv,
   restoreApplication,
   saveDraft,
   stageOptions,
   voidApplication,
+  frozenFileUrl,
 } from '../../modules/applications/trackerController'
 import { useApplications } from '../../hooks/useApplications'
+import { useProfile } from '../../context/ProfileContext'
+import ApplicationTimeline from './ApplicationTimeline'
 
 const SELECT_CLASS = 'w-full rounded-lg border border-stone-300 px-3 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-50'
 const LABEL_CLASS = 'mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300'
@@ -27,9 +34,25 @@ function messageOf(error) {
   return error.message
 }
 
+/** Which CV was sent: tailored for the job, a library CV, a CV outside the app, or not recorded. */
+function CvPicker({ id, options, value, label, onPick, onLabel }) {
+  return (
+    <div className="space-y-2">
+      <label className={LABEL_CLASS} htmlFor={id}>CV used</label>
+      <select id={id} className={SELECT_CLASS} value={value.key} onChange={(e) => onPick(options.find((o) => o.key === e.target.value))}>
+        {options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+      </select>
+      {value.key === EXTERNAL_CV.key && <Input label="Name of that CV" value={label} onChange={(e) => onLabel(e.target.value)} />}
+    </div>
+  )
+}
+
 function NewApplicationForm({ job, cache, onStatusChange }) {
+  const { profile } = useProfile()
+  const options = cvOptions(job, profile)
+  const [cvLabel, setCvLabel] = useState('')
   const [form, setForm] = useState(() => ({
-    requestId: newRequestId(), channel: 'company_site', appliedDate: new Date().toISOString().slice(0, 10), applicationUrl: '', separateAttempt: null,
+    cv: defaultCvOption(job, profile), requestId: newRequestId(), channel: 'company_site', appliedDate: new Date().toISOString().slice(0, 10), applicationUrl: '', separateAttempt: null,
   }))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -38,7 +61,7 @@ function NewApplicationForm({ job, cache, onStatusChange }) {
     setBusy(true)
     setError(null)
     try {
-      await markApplied(job, cache, next)
+      await markApplied(job, cache, { ...next, cvLabel })
       onStatusChange?.(job.jobId, 'applied_manually')
       setForm({ ...next, requestId: newRequestId(), separateAttempt: null })
     } catch (e) {
@@ -60,6 +83,7 @@ function NewApplicationForm({ job, cache, onStatusChange }) {
         <Input label="Applied date" type="date" value={form.appliedDate} onChange={(e) => setForm({ ...form, appliedDate: e.target.value })} />
         <Input label="Application URL" value={form.applicationUrl} onChange={(e) => setForm({ ...form, applicationUrl: e.target.value })} />
       </div>
+      <CvPicker id="tracker-cv" options={options} value={form.cv} label={cvLabel} onPick={(cv) => setForm({ ...form, cv })} onLabel={setCvLabel} />
       {error && (
         <Alert variant="error">
           {messageOf(error)}
@@ -71,6 +95,63 @@ function NewApplicationForm({ job, cache, onStatusChange }) {
         </Alert>
       )}
       <Button variant="secondary" onClick={() => submit()} disabled={busy}>Mark as applied</Button>
+    </div>
+  )
+}
+
+/** The recorded CV as a link to its frozen copy, with "record" (none yet) or "correct" (needs a reason). */
+function CvUsed({ app, folded }) {
+  const { profile } = useProfile()
+  const [open, setOpen] = useState(false)
+  const [pick, setPick] = useState(null)
+  const [label, setLabel] = useState('')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const cv = folded.cv
+  const recorded = cv && cv.kind !== 'unknown'
+  const options = cvOptions({}, profile).filter((o) => o.key !== 'unknown')
+  const earlier = (app.events ?? []).filter((e) => e.type === 'cv_recorded' && e.data.fileName && e.data.fileName !== cv?.fileName)
+  const chosen = pick ?? options[0]
+
+  const submit = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await recordCv(app.id, chosen, { label, reason })
+      setOpen(false)
+    } catch (e) {
+      setError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2 text-sm">
+      <span className={LABEL_CLASS}>CV used</span>
+      <p className="text-stone-700 dark:text-stone-300">
+        {!recorded && 'Not recorded.'}
+        {recorded && cv.fileName && <a className="text-teal-700 underline dark:text-teal-400" href={frozenFileUrl(app.id, cv.fileName)} download>{cv.label || cv.fileName}</a>}
+        {recorded && !cv.fileName && (cv.label || 'A CV outside the app')}
+      </p>
+      {earlier.length > 0 && (
+        <p className="text-xs text-stone-500">
+          Earlier: {earlier.map((e) => <a key={e.id} className="mr-2 underline" href={frozenFileUrl(app.id, e.data.fileName)} download>{e.data.label || e.data.fileName}</a>)}
+        </p>
+      )}
+      {!open && <Button variant="secondary" onClick={() => setOpen(true)}>{recorded ? 'Correct the CV' : 'Record the CV'}</Button>}
+      {open && (
+        <div className="space-y-2">
+          <CvPicker id="tracker-cv-record" options={options} value={chosen} label={label} onPick={setPick} onLabel={setLabel} />
+          {recorded && <Input label="Why is it being corrected?" value={reason} onChange={(e) => setReason(e.target.value)} />}
+          {error && <Alert variant="error">{error.message}</Alert>}
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={submit} disabled={busy}>Save CV</Button>
+            <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -116,6 +197,7 @@ function TrackedForm({ app, settings, onVoid }) {
         <Input label="Recruiter email" value={draft.recruiterEmail} onChange={set('recruiterEmail')} />
         <Input label="Recruiter LinkedIn" value={draft.recruiterLinkedIn} onChange={set('recruiterLinkedIn')} />
       </div>
+      <CvUsed app={app} folded={folded} />
       {folded.notes.length > 0 && (
         <ul className="space-y-1 text-sm text-stone-700 dark:text-stone-300">
           {folded.notes.map((n) => <li key={n.eventId}><span className="text-xs text-stone-500">{n.date}</span> {n.text}</li>)}
@@ -127,6 +209,7 @@ function TrackedForm({ app, settings, onVoid }) {
         <Button variant="secondary" onClick={save} disabled={busy}>Save application</Button>
         <Button variant="secondary" onClick={onVoid} disabled={busy}>Void (entered by mistake)</Button>
       </div>
+      <ApplicationTimeline app={app} settings={settings} />
     </div>
   )
 }
