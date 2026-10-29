@@ -188,7 +188,7 @@ Replaces the browser AI response cache and goes further: it is a **persistent re
 **First slice shipped (2026-10-29, commit "AI findings store, first slice").** Only entity `job` and feature `jobAnalysis`; everything else in this section is still to do. Differences from the text below, all small:
 - The job entity key is `sha256(jobId)` first 16 hex: the context carries `jobId`, not the `url:` / `tcl:` match key. A job without a `jobId` is not stored.
 - A finding stores the cache key and the input hash, never the prompt text (as in the plan above). Identifier check and credential check run on the answer before it is stored.
-- Freshness: `DEFAULT_FRESHNESS_DAYS.jobAnalysis = 7`, the TTL of the browser cache it replaces; no override file yet. `PROMPT_VERSIONS.jobAnalysis = "1"`.
+- Freshness: `DEFAULT_FRESHNESS_DAYS.jobAnalysis = null`, no expiry: a job analysis stays valid until a cache key input changes. The window mechanism stays for features that age (a number of days; `lookupFinding` takes it); no override file yet. `PROMPT_VERSIONS.jobAnalysis = "1"`.
 - The manifest is taken from the redacted context: job posting, job scores, job stage, profile summary, AI memory. The jobAnalysis context carries no user-confirmed facts yet.
 - Not done: the `mock` provider is never stored; `refresh: true` (request body, sent by "Regenerate" as `skipCache`) skips the lookup; the browser cache is still in front of the server; no `GET /api/ai/findings`, no backup rules, no other features or entities, no `atomic-store.js` (step 1 is not in the tree, so the store has its own atomic write; appends are synchronous in one process).
 

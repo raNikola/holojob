@@ -6,7 +6,7 @@
  *   data/ai/findings/job/<entityKey>.json   mode 600   { version, entity, findings: [ ... ] }
  *
  * Findings are only ever appended; an existing finding is never edited or removed, and a file that cannot be read is never
- * overwritten. Expiry (the freshness window) only turns a hit into a miss. A finding holds the parsed result, the cache
+ * overwritten. Expiry (a feature's freshness window, if it has one) only turns a hit into a miss. A finding holds the parsed result, the cache
  * key and the input hash; the prompt itself is never stored. It holds no key, base URL, cookie or identifier (the caller checks the result
  * for identifiers first, and this module refuses text that looks like a credential). Reads and writes are synchronous,
  * so appends in one process cannot interleave; the server is the only writer.
@@ -27,10 +27,11 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export const PROMPT_VERSIONS = { jobAnalysis: '1' }
 
 /**
- * Built-in freshness window per feature, in days; only features listed here use the store. The window equals the
- * 7-day TTL of the browser cache it replaces; the owner's override file (data/config/ai-findings.json) is a later step.
+ * Built-in freshness window per feature, in days, or null for no expiry; only features listed here use the store. A
+ * job analysis does not age: it stays valid until a cache key input changes. A feature that does age gets a number
+ * (the owner's override file, data/config/ai-findings.json, is a later step).
  */
-export const DEFAULT_FRESHNESS_DAYS = { jobAnalysis: 7 }
+export const DEFAULT_FRESHNESS_DAYS = { jobAnalysis: null }
 
 export const FINDINGS_ENTITY = { jobAnalysis: 'job' }
 
@@ -155,14 +156,13 @@ export function assertAppendOnly(prev, next) {
  * Looks for a fresh finding with this cache key. { hit: true, finding } or { hit: false, reason }, reason one of
  * none | stale | unreadable. Never throws, never writes, never deletes.
  */
-export function lookupFinding({ feature, entityKey, cacheKey, now = Date.now() }) {
+export function lookupFinding({ feature, entityKey, cacheKey, now = Date.now(), freshnessDays = DEFAULT_FRESHNESS_DAYS[feature] }) {
   try {
     const read = readRecord(entityFile(FINDINGS_ENTITY[feature], entityKey))
     if (read.unreadable) return { hit: false, reason: 'unreadable' }
     const matching = (read.record?.findings || []).filter((f) => f.cacheKey === cacheKey)
     if (!matching.length) return { hit: false, reason: 'none' }
-    const window = DEFAULT_FRESHNESS_DAYS[feature] * DAY_MS
-    const fresh = matching.filter((f) => now - Date.parse(f.at) <= window)
+    const fresh = freshnessDays == null ? matching : matching.filter((f) => now - Date.parse(f.at) <= freshnessDays * DAY_MS)
     return fresh.length ? { hit: true, finding: fresh[fresh.length - 1] } : { hit: false, reason: 'stale' }
   } catch {
     return { hit: false, reason: 'unreadable' }

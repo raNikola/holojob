@@ -132,16 +132,28 @@ describe('findings store in front of the budget gate', () => {
     expect(record.findings.map((f) => f.seq)).toEqual([1, 2])
   })
 
-  it('a stale finding is a miss and stays on disk', async () => {
+  it('jobAnalysis has no expiry: a very old finding is still a hit', async () => {
+    expect(DEFAULT_FRESHNESS_DAYS.jobAnalysis).toBeNull()
     await run()
     const file = path.join(findingsDir(), `${jobEntityKey(JOB.jobId)}.json`)
     const record = JSON.parse(fs.readFileSync(file, 'utf-8'))
-    record.findings[0].at = new Date(Date.now() - (DEFAULT_FRESHNESS_DAYS.jobAnalysis + 1) * 86400000).toISOString()
+    record.findings[0].at = '2020-01-01T00:00:00.000Z'
     fs.writeFileSync(file, JSON.stringify(record))
-    const result = await run()
-    expect(result.cached).toBeUndefined()
-    expect(reserves()).toHaveLength(2)
-    expect(JSON.parse(fs.readFileSync(file, 'utf-8')).findings).toHaveLength(2)
+    expect(await run()).toMatchObject({ ok: true, cached: true, foundAt: '2020-01-01T00:00:00.000Z' })
+    expect(reserves()).toHaveLength(1)
+  })
+
+  it('a feature with a freshness window: older than it is a miss and stays on disk, newer is a hit', async () => {
+    await run()
+    const entityKey = jobEntityKey(JOB.jobId)
+    const file = path.join(findingsDir(), `${entityKey}.json`)
+    const { cacheKey, at } = JSON.parse(fs.readFileSync(file, 'utf-8')).findings[0]
+    const later = (days) => Date.parse(at) + days * 86400000
+    const look = (days, freshnessDays) => lookupFinding({ feature: 'jobAnalysis', entityKey, cacheKey, now: later(days), freshnessDays })
+    expect(look(6, 7).hit).toBe(true)
+    expect(look(8, 7)).toEqual({ hit: false, reason: 'stale' })
+    expect(look(8, null).hit).toBe(true)
+    expect(JSON.parse(fs.readFileSync(file, 'utf-8')).findings).toHaveLength(1)
   })
 
   it('a refused budget still refuses on a miss and stores nothing', async () => {
