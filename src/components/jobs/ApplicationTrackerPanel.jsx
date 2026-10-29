@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Input from '../ui/Input'
 import Textarea from '../ui/Textarea'
 import Button from '../ui/Button'
@@ -10,10 +10,12 @@ import {
   EXTERNAL_CV,
   cvOptions,
   defaultCvOption,
+  describeError,
   draftFrom,
   markApplied,
   newRequestId,
   panelMode,
+  rebaseDraft,
   recordCv,
   restoreApplication,
   saveDraft,
@@ -29,10 +31,7 @@ const SELECT_CLASS = 'w-full rounded-lg border border-stone-300 px-3 py-2.5 text
 const LABEL_CLASS = 'mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300'
 const titleCase = (value) => value.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
 
-function messageOf(error) {
-  if (error.extra?.code === 'tracking_disabled') return 'Application tracking is switched off in the tracker settings.'
-  return error.message
-}
+const messageOf = describeError
 
 /** Which CV was sent: tailored for the job, a library CV, a CV outside the app, or not recorded. */
 function CvPicker({ id, options, value, label, onPick, onLabel }) {
@@ -145,7 +144,7 @@ function CvUsed({ app, folded }) {
         <div className="space-y-2">
           <CvPicker id="tracker-cv-record" options={options} value={chosen} label={label} onPick={setPick} onLabel={setLabel} />
           {recorded && <Input label="Why is it being corrected?" value={reason} onChange={(e) => setReason(e.target.value)} />}
-          {error && <Alert variant="error">{error.message}</Alert>}
+          {error && <Alert variant="error">{messageOf(error)}</Alert>}
           <div className="flex gap-2">
             <Button variant="secondary" onClick={submit} disabled={busy}>Save CV</Button>
             <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
@@ -161,14 +160,26 @@ function TrackedForm({ app, settings, onVoid }) {
   const [draft, setDraft] = useState(() => draftFrom(app))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [notice, setNotice] = useState(null)
+  // The form stays mounted across events (it is keyed by application only), so an event written elsewhere on the
+  // panel (a recorded CV, a stage move) must not wipe what is typed: untouched fields follow the server, edited ones stay.
+  const base = useRef(draftFrom(app))
+  useEffect(() => {
+    const nextBase = draftFrom(app)
+    setDraft((prev) => rebaseDraft(base.current, prev, nextBase))
+    base.current = nextBase
+  }, [app])
   const set = (field) => (e) => setDraft((prev) => ({ ...prev, [field]: e.target.value }))
   const stageLabel = (value) => (value.startsWith('outcome:') ? titleCase(value.slice(8)) : labelFor(value, settings))
 
   const save = async () => {
     setBusy(true)
     setError(null)
+    setNotice(null)
     try {
-      await saveDraft(app.id, draft)
+      const made = await saveDraft(app.id, draft)
+      if (made === 0) setNotice('Nothing to save: no field differs from the saved application.')
+      else setDraft((prev) => ({ ...prev, newNote: '' }))
     } catch (e) {
       setError(e)
     } finally {
@@ -204,7 +215,8 @@ function TrackedForm({ app, settings, onVoid }) {
         </ul>
       )}
       <Textarea label="Add a note" value={draft.newNote} onChange={set('newNote')} rows={2} />
-      {error && <Alert variant="error">{error.extra?.code === 'tracking_disabled' ? messageOf(error) : error.message}</Alert>}
+      {error && <Alert variant="error">{messageOf(error)}</Alert>}
+      {notice && <Alert variant="info">{notice}</Alert>}
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={save} disabled={busy}>Save application</Button>
         <Button variant="secondary" onClick={onVoid} disabled={busy}>Void (entered by mistake)</Button>
@@ -261,7 +273,7 @@ export default function ApplicationTrackerPanel({ job, onStatusChange }) {
             </select>
           </div>
         )}
-        {error && <Alert variant="error">{error.message}</Alert>}
+        {error && <Alert variant="error">{messageOf(error)}</Alert>}
         {voided ? (
           <Alert variant="info">
             This application was voided. It stays in the history and counts nowhere.
@@ -269,7 +281,7 @@ export default function ApplicationTrackerPanel({ job, onStatusChange }) {
           </Alert>
         ) : (
           <TrackedForm
-            key={`${shown.id}:${shown.events.length}`}
+            key={shown.id}
             app={shown}
             settings={cache.settings}
             onVoid={() => window.confirm('Void this application? It stays in the history but is removed from every list.')
