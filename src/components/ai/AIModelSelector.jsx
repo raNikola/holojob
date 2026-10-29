@@ -15,7 +15,7 @@ export default function AIModelSelector({ settings, onChange }) {
       })
     })
     return () => { cancelled = true }
-  }, [settings.provider, settings.apiKey, settings.baseUrl])
+  }, [settings.provider, settings.baseUrl])
 
   return (
     <SelectField

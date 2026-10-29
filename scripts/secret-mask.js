@@ -1,6 +1,6 @@
 /**
  * Masks credentials in text that leaves the server: error bodies, SSE errors, ledger reasons, console output.
- * Pattern based, so it is a second layer; the secret store (BROWSER_STORAGE_POLICY step 2) adds exact-value masking.
+ * The secret store's exact values are masked first (setExactSecretSource); the patterns below are the second layer.
  */
 
 const MASK = '[secret]'
@@ -25,9 +25,27 @@ const RULES = [
   [/\b(?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{32,}\b/g, MASK],
 ]
 
-export function maskSecrets(text) {
+let exactSource = () => []
+
+/** The secret store registers itself here, so the exact values it holds are masked (no import cycle). */
+export function setExactSecretSource(fn) {
+  exactSource = typeof fn === 'function' ? fn : () => []
+}
+
+/** Replace each listed value, literally (not as a pattern), longest first. */
+export function maskExactValues(text, values) {
   if (text === null || text === undefined) return text
   let out = String(text)
+  for (const value of [...values].sort((a, b) => b.length - a.length)) {
+    if (value) out = out.split(value).join(MASK)
+  }
+  return out
+}
+
+export function maskSecrets(text) {
+  if (text === null || text === undefined) return text
+  // Exact values first: a pattern rule could otherwise mask only part of a stored key.
+  let out = maskExactValues(text, exactSource())
   for (const [re, replacement] of RULES) out = out.replace(re, replacement)
   return out
 }

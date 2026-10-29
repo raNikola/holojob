@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Copy, Download, Loader2, Trash2, Upload } from 'lucide-react'
 import Card from '../ui/Card'
 import AISettingsPanel from '../ai/AISettingsPanel'
+import SecretsPanel from './SecretsPanel'
 import ScoringWeightsPanel from './ScoringWeightsPanel'
 import ApplicationMigrationPanel from './ApplicationMigrationPanel'
 import Button from '../ui/Button'
@@ -143,6 +144,8 @@ export default function SettingsHome() {
       </Card>
 
       <AISettingsPanel />
+
+      <SecretsPanel />
 
       <ScoringWeightsPanel />
 

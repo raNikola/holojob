@@ -22,7 +22,7 @@ export default function AIProviderSelector({ settings, onChange }) {
         onChange={handleProviderChange}
         options={PROVIDER_NAMES}
       />
-      {(settings.provider === 'ollama' || settings.provider === 'openrouter') && (
+      {settings.provider === 'ollama' && (
         <Input
           label="Base URL"
           value={settings.baseUrl}

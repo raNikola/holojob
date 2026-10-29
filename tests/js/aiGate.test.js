@@ -4,6 +4,8 @@ import { reserveAiCall, setGateRunner } from '../../scripts/ai-gate.js'
 import { setIdentitySource } from '../../scripts/ai-redact.js'
 import { getProvider } from '../../src/modules/ai/aiProviderRegistry.js'
 import { describeRun } from '../../src/modules/jobs/pipelineSummary.js'
+import { setAiSecret } from '../../scripts/secret-store.js'
+import { CANARY, useTempSecretStore } from './helpers/secretTestStore.js'
 
 const JOB = { jobId: 'j1', title: 'Product Manager', company: 'Acme', description: 'Own the roadmap.' }
 
@@ -20,6 +22,8 @@ function gate(decision) {
 // No test reads the server's real profile mirror.
 setIdentitySource(() => ({ names: [], emails: [], phones: [], links: [] }))
 
+useTempSecretStore()
+
 afterEach(() => {
   setGateRunner()
   vi.restoreAllMocks()
@@ -27,6 +31,7 @@ afterEach(() => {
 
 describe('AI budget gate on the Node side', () => {
   it('asks the gate before a real call and makes none when refused', async () => {
+    setAiSecret('openai', { key: CANARY })
     const seen = gate({ allowed: false, id: 'c1', reason: 'paid call openai refused: AI budget is 0' })
     const complete = vi.spyOn(getProvider('openai'), 'complete')
     const result = await runAiFeature({ feature: 'jobAnalysis', context: { job: JOB }, settings: { provider: 'openai', apiKey: 'k' } })

@@ -29,6 +29,7 @@ import {
 } from './run-quality-audit.js'
 import { importLinkedInText } from './run-linkedin-import.js'
 import { handleAiSettingsRequest } from './ai-settings-handler.js'
+import { handleSecretsRequest } from './secrets-handler.js'
 import { guardApiRequest } from './request-guard.js'
 import { maskErrorField } from './secret-mask.js'
 import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
@@ -221,7 +222,7 @@ function serveResumeFile(res, jobId, filename) {
  */
 export async function handleApiRoutes(req, res) {
   if (guardApiRequest(req, res)) return true
-  return (await handleAiSettingsRequest(req, res)) || (await handleApiRequest(req, res))
+  return (await handleAiSettingsRequest(req, res)) || (await handleSecretsRequest(req, res)) || (await handleApiRequest(req, res))
 }
 
 /**
@@ -658,7 +659,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/ai/status' && req.method === 'GET') {
     try {
-      const status = await getAiStatus({})
+      const status = await getAiStatus()
       sendJson(res, 200, { available: true, ...status })
     } catch (e) {
       sendJson(res, 500, { error: e.message })

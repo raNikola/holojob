@@ -7,14 +7,14 @@ export class GeminiProvider extends BaseProvider {
 
   async complete({ messages, model, temperature, maxTokens, apiKey }) {
     const modelId = model || 'gemini-2.0-flash'
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`
     const contents = messages
       .filter((m) => m.role !== 'system')
       .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
     const system = messages.find((m) => m.role === 'system')?.content
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         systemInstruction: system ? { parts: [{ text: system }] } : undefined,
         contents,
