@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import * as store from '../../scripts/application-store.js'
 import { createBackupStream, importBackupZip } from '../../scripts/backup-handler.js'
 import { deleteCvFile } from '../../scripts/cv-store.js'
-import { daysBetween, daysInStage, foldApplication, isActive } from '../../src/modules/applications/foldApplication.js'
+import { daysBetween, daysInCurrentStage, daysInStage, foldApplication, isActive } from '../../src/modules/applications/foldApplication.js'
 import { boardColumn, labelFor } from '../../src/modules/applications/stageRegistry.js'
 
 const require = createRequire(import.meta.url)
@@ -1328,6 +1328,59 @@ describe('fold: stage history and corrections', () => {
     expect(daysBetween(null, '2026-11-30')).toBeNull()
   })
 
+  describe('time in stage comes from the newest stageHistory entry, not from stageSince', () => {
+    const at = (day) => { clock = new Date(`${day}T10:00:00.000Z`) }
+    async function tracked() {
+      const id = (await create({ attempt: { appliedDate: '2026-11-01' } })).json.application.id
+      at('2026-11-05'); await move(id, { toStage: 'screen' })
+      at('2026-11-10'); await move(id, { toStage: 'tech' })
+      return id
+    }
+
+    it('reopening into the same stage restarts the count; stageSince keeps the old date', async () => {
+      const id = await tracked()
+      at('2026-11-20'); await move(id, { toStage: 'rejected' })
+      expect(daysInCurrentStage(await foldedOf(id), '2026-11-30')).toBe(10) // closed: ends on the day it closed
+      at('2026-11-25'); await move(id, { toStage: 'tech' })
+      const folded = await foldedOf(id)
+      expect(folded.stageSince).toBe('2026-11-10')
+      expect(daysInCurrentStage(folded, '2026-11-30')).toBe(5)
+    })
+
+    it('reopening into a different stage counts from the reopen day', async () => {
+      const id = await tracked()
+      at('2026-11-20'); await move(id, { toStage: 'ghosted' })
+      at('2026-11-25'); await move(id, { toStage: 'onsite' })
+      const folded = await foldedOf(id)
+      expect(folded.stage).toBe('onsite')
+      expect(folded.stageSince).toBe('2026-11-25')
+      expect(daysInCurrentStage(folded, '2026-11-30')).toBe(5)
+      expect(folded.stageHistory.at(-1)).toEqual({ stage: 'onsite', from: '2026-11-25', to: null })
+    })
+
+    it('moving back to an earlier stage counts from the move', async () => {
+      const id = await tracked()
+      at('2026-11-18'); await move(id, { toStage: 'screen' })
+      const folded = await foldedOf(id)
+      expect(folded.stageSince).toBe('2026-11-18')
+      expect(daysInCurrentStage(folded, '2026-11-30')).toBe(12)
+      expect(folded.stageHistory.map((h) => h.stage)).toEqual(['applied', 'screen', 'tech', 'screen'])
+    })
+
+    it('stage_changed after a reopen through /events starts a new count', async () => {
+      const id = await tracked()
+      at('2026-11-20'); await addEvent(id, { type: 'outcome_set', data: { outcome: 'rejected' } })
+      at('2026-11-25')
+      expect((await addEvent(id, { type: 'outcome_cleared', data: { reason: 'they wrote back' } })).status).toBe(201)
+      expect(daysInCurrentStage(await foldedOf(id), '2026-11-30')).toBe(5) // reopened in tech on 11-25
+      at('2026-11-27')
+      expect((await addEvent(id, { type: 'stage_changed', data: { stage: 'onsite' } })).status).toBe(201)
+      const folded = await foldedOf(id)
+      expect(folded.stageSince).toBe('2026-11-27')
+      expect(daysInCurrentStage(folded, '2026-11-30')).toBe(3)
+    })
+  })
+
   it('a voided stage change leaves no trace in the history', async () => {
     const id = (await create({ attempt: { appliedDate: '2026-11-01' } })).json.application.id
     await move(id, { toStage: 'tech' })
@@ -1354,6 +1407,48 @@ describe('fold: stage history and corrections', () => {
     }
     await addEvent(id, { type: 'event_voided', data: { eventId: `${id}:2`, reason: 'wrong day' } })
     expect((await foldedOf(id)).appliedDate).toBe('2026-11-03')
+  })
+})
+
+describe('outcomes set through /events', () => {
+  const column = async (id) => boardColumn(await foldedOf(id), (await getSettings()).settings)
+
+  for (const outcome of ['rejected', 'ghosted']) {
+    it(`${outcome} closes the application: out of the open columns, refusing stage and outcome until reopened`, async () => {
+      const id = (await create()).json.application.id
+      await move(id, { toStage: 'tech' })
+      expect((await getSettings()).counts).toMatchObject({ tech: 1, [outcome]: 0 })
+      expect((await addEvent(id, { type: 'outcome_set', data: { outcome } })).status).toBe(201)
+
+      const folded = await foldedOf(id)
+      expect(folded).toMatchObject({ outcome, stage: 'tech', voided: false })
+      expect(await column(id)).toBe(outcome)
+      expect((await getSettings()).counts).toMatchObject({ applied: 0, tech: 0, [outcome]: 1 })
+      // open-only checks ignore it: the occupied column can be retired
+      expect((await call('POST', '/api/applications/settings/stages', { op: 'retire', key: 'tech' })).status).toBe(200)
+
+      const before = storeBytes()
+      expect((await addEvent(id, { type: 'stage_changed', data: { stage: 'screen' } })).status).toBe(400)
+      expect((await addEvent(id, { type: 'outcome_set', data: { outcome: outcome === 'rejected' ? 'ghosted' : 'rejected' } })).status).toBe(400)
+      expect((await addEvent(id, { type: 'outcome_set', data: { outcome } })).status).toBe(400)
+      expect(storeBytes()).toEqual(before)
+
+      expect((await addEvent(id, { type: 'outcome_cleared', data: { reason: 'reply' } })).status).toBe(201)
+      expect((await foldedOf(id)).outcome).toBeNull()
+      expect((await addEvent(id, { type: 'stage_changed', data: { stage: 'screen' } })).status).toBe(201)
+    })
+  }
+
+  it('a voided application with an outcome stays out of the statistics', async () => {
+    const kept = (await create()).json.application.id
+    const mistake = (await create({ jobId: OTHER_BOARD_JOB.jobId })).json.application.id
+    await addEvent(kept, { type: 'outcome_set', data: { outcome: 'rejected' } })
+    const alone = stats([(await getStore()).applications[kept]])
+    await addEvent(mistake, { type: 'outcome_set', data: { outcome: 'offer_accepted' } })
+    await addEvent(mistake, { type: 'application_voided', data: { reason: 'wrong job' } })
+    expect(stats(Object.values((await getStore()).applications))).toEqual(alone)
+    expect(await column(mistake)).toBeNull()
+    expect((await getSettings()).counts).toMatchObject({ rejected: 1, closed: 0 })
   })
 })
 

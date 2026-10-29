@@ -132,6 +132,16 @@ export function daysInStage(entry, today) {
   return daysBetween(entry.from, entry.to ?? today)
 }
 
+/**
+ * Days in the stage the application is in now: from the newest stageHistory entry, which is the last
+ * real entry into the stage (a reopen starts one, `stageSince` does not follow it). For a closed
+ * application the entry ends on the day it closed.
+ */
+export function daysInCurrentStage(folded, today) {
+  const entry = folded.stageHistory[folded.stageHistory.length - 1]
+  return entry ? daysInStage(entry, today) : null
+}
+
 /** The one filter every list, count, nudge and duplicate check reads through (6e). */
 export function isActive(app) {
   return !foldApplication(app).voided
