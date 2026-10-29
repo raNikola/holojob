@@ -128,6 +128,15 @@ section, and every category kept mounted (hidden with CSS) so drafts survive swi
 `openSettings(sectionId)` / `SettingsLink`. Section titles stay verbatim (for example "AI budget", "Privacy: secrets and
 keys"). Plan and as-built note: `docs/redesign/SETTINGS_PLAN.md`.
 
+## Job Details page
+
+The drawer (`JobDetailDrawer.jsx`) stays the quick view on the Jobs list, Board, Statistics and Outreach. Its "Open full details" button
+goes to `#/jobs/<jobId>` (`JobDetailsPage.jsx`): the drawer body (`JobDetailBody.jsx`) in the main column and `ApplicationTrackerPanel` as a
+sticky sidebar. There is no router: `modules/jobs/jobRoute.js` pushes the hash, `useJobRoute` (in `App.jsx`) reads it, so the hash wins over the saved
+view on load and Back returns to the previous view. The page reads and writes jobs with `loadJobs()` / `updateJobRecord()`, like the other screens.
+An unknown id shows "Job not found". Unsaved input: forms that call `useDraftDirty` (the tracker's three forms) make the button ask first
+(`modules/jobs/draftGuard.js`); other drafts (AI tools, contacts) are not covered yet. Not built: more tabs, AI spent, "Is it real?".
+
 ## Request guard (`/api`)
 
 Every `/api` request passes `scripts/request-guard.js` first (`handleApiRoutes` in `api-handler.js`, used by the
