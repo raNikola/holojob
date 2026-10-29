@@ -68,3 +68,33 @@ export function legacyDay(value) {
   if (real && (text.length === 10 || /^\d{4}-\d{2}-\d{2}[T ]/.test(text))) return { day: head, bad: null }
   return { day: null, bad: text }
 }
+
+/** What kind of legacy job this is. The migration and the tracker panel both decide through this. */
+export function legacyKind(job) {
+  const tracking = legacyTrackingOf(job)
+  if (job?.status === 'applied_manually') return 'candidate'
+  if (job?.applicationTracking && !tracking) return 'candidate'
+  return tracking && hasLegacyValue(tracking) ? 'candidate' : 'none'
+}
+
+/** Why a legacy candidate cannot be migrated, or null. (A duplicate id or a missing title are payload-level.) */
+export function legacyProblem(job) {
+  if (!/^[0-9a-f]{16}$/.test(typeof job?.jobId === 'string' ? job.jobId : '')) return 'jobId is not 16 hex characters'
+  if (job.applicationTracking && !legacyTrackingOf(job)) return 'applicationTracking is not an object'
+  return null
+}
+
+const sameValue = (a, b) => JSON.stringify(a ?? '') === JSON.stringify(b ?? '')
+
+/**
+ * The fields on which the legacy object a job carries now differs from the one that was migrated.
+ * `lastUpdated` is bookkeeping and not compared. An incoming job with no object says nothing
+ * (an import may have dropped it), so it gives no changes.
+ */
+export function legacyChanges(incoming, migrated) {
+  if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return []
+  const before = migrated && typeof migrated === 'object' ? migrated : {}
+  const keys = new Set([...Object.keys(incoming), ...Object.keys(before)])
+  keys.delete('lastUpdated')
+  return [...keys].filter((key) => !sameValue(incoming[key], before[key])).sort()
+}

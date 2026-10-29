@@ -10,7 +10,9 @@ import {
   updateJobRecord,
   updateJobStatus,
 } from '../../modules/jobs/jobStorage'
-import { updateApplicationTracking, normalizeApplicationTracking } from '../../modules/jobs/applicationTracking'
+import { normalizeApplicationTracking } from '../../modules/jobs/applicationTracking'
+import { overlayTracking } from '../../modules/applications/trackingView'
+import { useApplications } from '../../hooks/useApplications'
 import { probePipelineApi } from '../../modules/jobs/pipelineRunner'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
 import { isOutreachFollowUpDue } from '../../modules/outreach/followUpEngine'
@@ -61,13 +63,20 @@ export default function ApplicationHome() {
     saveJobs(state)
   }, [state])
 
-  const stats = useMemo(() => computeJobStats(state.jobs), [state.jobs])
-  const outreachMetrics = useMemo(() => computeOutreachMetrics(state.jobs), [state.jobs])
+  const applications = useApplications()
+  // Tracking comes from the application store; `state.jobs` stays as saved and is what gets persisted.
+  const viewJobs = useMemo(
+    () => overlayTracking(state.jobs, applications.status === 'ready' ? applications.store : null, applications.settings),
+    [state.jobs, applications.status, applications.store, applications.settings],
+  )
+
+  const stats = useMemo(() => computeJobStats(viewJobs), [viewJobs])
+  const outreachMetrics = useMemo(() => computeOutreachMetrics(viewJobs), [viewJobs])
 
   const [trackerSort, onTrackerSort] = useTableSort(TRACKER_DEFAULT_SORT, TRACKER_COLUMNS)
   const trackedJobs = useMemo(
-    () => sortRows(state.jobs.filter(hasTrackingData), trackerSort, TRACKER_COLUMNS),
-    [state.jobs, trackerSort],
+    () => sortRows(viewJobs.filter(hasTrackingData), trackerSort, TRACKER_COLUMNS),
+    [viewJobs, trackerSort],
   )
 
   const handleStatusChange = useCallback((jobId, status) => {
@@ -84,16 +93,6 @@ export default function ApplicationHome() {
       jobs: updateJobRecord(prev.jobs, updatedJob.jobId, updatedJob),
     }))
     setSelectedJob((prev) => (prev?.jobId === updatedJob.jobId ? updatedJob : prev))
-  }, [])
-
-  const handleApplicationSave = useCallback((jobId, tracking) => {
-    setState((prev) => ({
-      ...prev,
-      jobs: updateApplicationTracking(prev.jobs, jobId, tracking),
-    }))
-    setSelectedJob((prev) => (
-      prev?.jobId === jobId ? { ...prev, applicationTracking: tracking } : prev
-    ))
   }, [])
 
   return (
@@ -140,7 +139,7 @@ export default function ApplicationHome() {
                     <tr
                       key={job.jobId}
                       className="cursor-pointer border-b border-stone-100 hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900/50"
-                      onClick={() => setSelectedJob(job)}
+                      onClick={() => setSelectedJob(state.jobs.find((j) => j.jobId === job.jobId) ?? job)}
                     >
                       <td className="py-3 pr-4 font-medium text-stone-900 dark:text-stone-100">
                         {job.company || '—'}
@@ -176,7 +175,6 @@ export default function ApplicationHome() {
         apiAvailable={pipelineApiAvailable}
         onJobUpdated={handleJobUpdated}
         onStatusChange={handleStatusChange}
-        onApplicationSave={handleApplicationSave}
       />
     </div>
   )

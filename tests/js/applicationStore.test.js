@@ -250,7 +250,7 @@ describe('data integrity', () => {
     expect(names).toEqual([
       'APPLICATION_ROUTES', 'StoreError', 'appendEvent', 'applicationFilePath', 'assertAppendOnly',
       'assertStoreAppendOnly', 'changeSettings', 'changeStageRegistry', 'createApplication', 'emptyStore',
-      'handleApplicationsRequest', 'isAppId', 'isStoreBackupEntry', 'loadSettings', 'loadStore', 'localDay',
+      'handleApplicationsRequest', 'isAppId', 'isStoreBackupEntry', 'knownContactIdentity', 'loadSettings', 'loadStore', 'localDay',
       'mergeFromBackup', 'migrateApplications', 'moveApplication', 'norm', 'normalizeUrl', 'planMigration',
       'postingKeyFor', 'previewMigration', 'previewShaOf', 'readSettings', 'snapshotSha', 'stageCounts',
       'storePaths', 'verifyMigration', 'writeFileAtomic',

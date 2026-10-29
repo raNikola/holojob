@@ -86,7 +86,8 @@ provider, each behind an explicit confirm; the browser AI features send redacted
   LinkedIn links, notes and activity text (left out where the context is built, `aiContextBuilder.js`; the
   outreach contact's name is the placeholder `[CONTACT NAME]`). One central step, `scripts/ai-redact.js`, runs
   on every context before the prompt is built and before the budget gate: it removes the owner's and the known
-  contacts' identifiers (profile mirror plus `redactionHints` from the browser), every e-mail address (a company's
+  contacts' identifiers (profile mirror, `redactionHints` from the browser, and every contact recorded in the
+  application store, read server-side), every e-mail address (a company's
   too), phone-like numbers and profile-site links (LinkedIn, GitHub, ...); company sites stay. It fails closed:
   if it cannot run, or a final check still finds an identifier, the call is refused and logged
   (`ai_gate.py refuse`). No confirm dialog yet for these features (principle 14 asks for one).

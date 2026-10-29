@@ -39,8 +39,10 @@ import {
 } from '../src/modules/applications/stageRegistry.js'
 import {
   LEGACY_CLOSED_STAGES,
-  hasLegacyValue,
+  legacyChanges,
   legacyDay,
+  legacyKind,
+  legacyProblem,
   legacyStageEvent,
   legacyTrackingOf,
   unmappedLegacyKeys,
@@ -1102,7 +1104,6 @@ export function mergeFromBackup(root, entries, { now = () => new Date() } = {}) 
 const MIGRATION_LOG = 'migration.json'
 const MAX_MIGRATION_RUNS = 50
 const EPOCH = '1970-01-01T00:00:00.000Z'
-const LEGACY_JOB_ID = /^[0-9a-f]{16}$/
 
 /** The hash a preview and its apply must agree on: the job list, whatever else the body carries. */
 export function previewShaOf(jobs) {
@@ -1167,8 +1168,7 @@ export function planMigration(jobs, { store, settings, scored = null, ledger = n
   for (const [index, job] of jobs.entries()) {
     const L = legacyTrackingOf(job)
     const marked = job?.status === 'applied_manually'
-    const notAnObject = Boolean(job?.applicationTracking) && !L
-    if (!marked && !notAnObject && !(L && hasLegacyValue(L))) {
+    if (legacyKind(job) === 'none') {
       counts.ignored += 1
       continue
     }
@@ -1179,15 +1179,21 @@ export function planMigration(jobs, { store, settings, scored = null, ledger = n
       entries.push({ ...base, action: 'unmappable', reason, warnings: [] })
     }
 
-    if (!LEGACY_JOB_ID.test(base.jobId ?? '')) { refuse('jobId is not 16 hex characters'); continue }
+    const problem = legacyProblem(job)
+    if (problem === 'jobId is not 16 hex characters') { refuse(problem); continue }
     if (seen.has(base.jobId)) { refuse('jobId appears twice in the payload'); continue }
     seen.add(base.jobId)
-    if (notAnObject) { refuse('applicationTracking is not an object'); continue }
+    if (problem) { refuse(problem); continue }
 
     const appId = `mig-${base.jobId}`
     if (store.applications[appId]) {
       counts.alreadyMigrated += 1
-      entries.push({ ...base, action: 'alreadyMigrated', appId, warnings: [] })
+      // Anything written to the old field after the migration is not in the store; say so.
+      const changed = L ? legacyChanges(L, store.applications[appId].legacy) : []
+      entries.push({
+        ...base, action: 'alreadyMigrated', appId, legacyChanged: changed,
+        warnings: changed.length ? [`legacy data changed since it was migrated (${changed.join(', ')}); the change is not in the store`] : [],
+      })
       continue
     }
     const source = snapshotSources(job, base.jobId, { scored, ledger })[0]
@@ -1327,7 +1333,10 @@ async function loadMigrationInput(root, body) {
   }
 }
 
-const planView = (plan, previewSha) => ({ previewSha, counts: plan.counts, entries: plan.entries })
+const legacyChangedOf = (plan) => plan.entries.filter((e) => e.legacyChanged?.length)
+const planView = (plan, previewSha) => ({
+  previewSha, counts: plan.counts, legacyChanged: legacyChangedOf(plan).length, entries: plan.entries,
+})
 
 /** Dry run: the plan and the hash that apply needs. Writes nothing. */
 export function previewMigration(root, body, { now = () => new Date() } = {}) {
@@ -1372,10 +1381,35 @@ export function migrateApplications(root, body, { now = () => new Date() } = {})
     if (problems.length) throw new StoreError(500, `Migration check failed, nothing was migrated: ${problems.join('; ')}`)
 
     if (plan.counts.created) saveStore(root, input.store, next)
-    const run = { ranAt: at.toISOString(), previewSha, counts: plan.counts, backupPath, unmappable: plan.entries.filter((e) => e.action === 'unmappable') }
+    const run = { ranAt: at.toISOString(), previewSha, counts: plan.counts, backupPath, unmappable: plan.entries.filter((e) => e.action === 'unmappable'),
+      legacyChanged: legacyChangedOf(plan).map((e) => ({ jobId: e.jobId, appId: e.appId, fields: e.legacyChanged })) }
     writeFileAtomic(path.join(paths.dir, MIGRATION_LOG), `${JSON.stringify({ version: 1, runs: [...log.runs, run].slice(-MAX_MIGRATION_RUNS) }, null, 2)}\n`)
     return { status: 200, dryRun: false, verified: true, backupPath, ...planView(plan, previewSha) }
   })
+}
+
+// --- identity hints for AI redaction ---------------------------------------------------------
+
+/**
+ * Every recruiter / contact name, e-mail and link ever recorded in the store, voided applications
+ * and superseded values included (more identifiers is the safe side). ai-redact.js adds these to
+ * the hints the browser sends, so a contact entered after the migration is still removed.
+ * A missing store is empty; an unreadable one throws.
+ */
+export function knownContactIdentity(root) {
+  const identity = { names: [], emails: [], phones: [], links: [] }
+  const add = (list, value) => {
+    if (typeof value === 'string' && value.trim() && !list.includes(value.trim())) list.push(value.trim())
+  }
+  for (const app of Object.values(loadStore(root).applications)) {
+    for (const event of app.events) {
+      if (event.type !== 'contact_added' && event.type !== 'contact_updated') continue
+      add(identity.names, event.data?.name)
+      add(identity.emails, event.data?.email)
+      add(identity.links, event.data?.linkedin)
+    }
+  }
+  return identity
 }
 
 // --- routes (3.1) ----------------------------------------------------------------------------

@@ -142,8 +142,14 @@ export function updateJobStatus(jobs, jobId, status) {
   return jobs.map((job) => (job.jobId === jobId ? { ...job, status } : job))
 }
 
+/**
+ * Merge `patch` into one job. `applicationTracking` in the patch is ignored: since the application
+ * store took over (TRACKER_PLAN S2) the legacy field is never written, and a screen that hands
+ * back a row with tracking derived from the store must not save it into the job.
+ */
 export function updateJobRecord(jobs, jobId, patch) {
-  return jobs.map((job) => (job.jobId === jobId ? { ...job, ...patch } : job))
+  const { applicationTracking: _derived, ...rest } = patch
+  return jobs.map((job) => (job.jobId === jobId ? { ...job, ...rest } : job))
 }
 
 export function updateJobAiInsights(jobs, jobId, insightsPatch) {
