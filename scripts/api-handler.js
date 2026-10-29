@@ -700,12 +700,14 @@ export async function handleApiRequest(req, res) {
         await runAiFeatureStream(res, {
           feature,
           context: body.context,
+          refresh: body.refresh === true,
         })
         return true
       }
       const result = await runAiFeature({
         feature,
         context: body.context,
+        refresh: body.refresh === true,
       })
       sendJson(res, result.ok ? 200 : 500, result)
     } catch (e) {

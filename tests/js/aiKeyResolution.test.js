@@ -44,7 +44,8 @@ function stubFetch(reply = { choices: [{ message: { content: '{"answer":"ok"}' }
 // `settings` is what a request body might carry; the server ignores it. The selection is what the server stores.
 const run = (settings, context = { job: JOB, message: `from ${OWNER_EMAIL}` }, feature = 'jobAnalysis') => {
   selectProvider(settings)
-  return runAiFeature({ feature, context, settings })
+  // These tests are about the key and the gate, so every call must reach the provider: `refresh` skips the findings store.
+  return runAiFeature({ feature, context, settings, refresh: true })
 }
 const reserve = () => gateCalls.find((c) => c.command === 'reserve')?.input
 

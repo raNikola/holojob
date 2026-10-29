@@ -59,6 +59,8 @@ export async function runAiFeature(featureId, { job, message, extra, skipCache =
     // The hints name what the server must strip; it removes them before the prompt is built.
     context: { ...context, redactionHints: buildAiRedactionHints({ job, extra }) },
     stream: Boolean(onLog),
+    // "Regenerate" asks the server for a fresh answer instead of a stored finding.
+    refresh: skipCache,
   }
 
   let payload
