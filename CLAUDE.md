@@ -41,6 +41,13 @@ Area rules load only when matching files are touched: `.claude/rules/scoring.md`
 - Bare `python` in the container is the venv (`/app/.venv`, via `ENV PATH` in the
   Dockerfile); images built before that line need a rebuild.
 - The image carries no tests (`tests/` is not copied, no `pytest`). Run the suite on the host.
+- **Builds:** dependencies are layered before code, so a code-only `podman-compose build` takes about 10 s; pip and the
+  Playwright browsers rerun only when `requirements.txt` or `scripts/setup-job-discovery.sh` changes. `.dockerignore`
+  allows only `data/examples` from `data/`. Never remove those lines.
+- **Fast deploy (fish), lost on recreate unless the image is rebuilt:** frontend: build `dist` in a throwaway
+  `node:20-bookworm` container (`--security-opt label=disable`), `podman exec holojob rm -rf /app/dist`,
+  `podman cp dist holojob:/app/dist`. Python: `tar --exclude=__pycache__ -C python -cf - . | podman cp - holojob:/app/python`.
+  Node `scripts/` or `src/`: the same with tar, then `podman restart holojob`. Exact commands in `docs/ARCHITECTURE.md`.
 
 Detail: `docs/ARCHITECTURE.md` (Container gotchas).
 

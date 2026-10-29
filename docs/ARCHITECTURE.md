@@ -301,6 +301,34 @@ Carried over from the former "Next, in order" list (nothing else from it is stil
   `.venv/bin/python` directly. Images built before that ENV line need a rebuild.
 - **The image carries no tests.** The Dockerfile does not copy `tests/`, and a
   bare `pytest` is not on the runtime PATH. Run the suite on the host instead.
+- **Build layers and the build context.** Dependencies come before code: `npm ci`, the global Claude Code
+  install and `scripts/setup-job-discovery.sh` (pip plus the Playwright browsers, about 75 s and a 1.5 GB layer)
+  rerun only when `package*.json`, `requirements.txt` or that script changes. A change to `python/`, `scripts/` or
+  `src/` rebuilds only the `COPY` layers and, for `src/` or `scripts/`, the frontend stage (measured 2026-10-29:
+  about 10 s, against about 90 s before). The frontend stage copies only what `vite build` reads (`index.html`,
+  `vite.config.js`, `public`, `scripts`, `data/examples`, `src`). `.dockerignore` is an allow-list for `data/`
+  (`data/*` except `data/examples`) and also drops `.env*`, `.claude`, `claude-config`, `docs`, `tests`, `fixtures`,
+  so no private path enters any layer. Old intermediate frontend layers from earlier builds still hold
+  `data/applications`, `data/ai` and so on; `podman image prune` removes them.
+- **Fast deploy without a rebuild (fish).** For quick iteration, copy into the running container. It is lost on
+  `podman-compose up -d --force-recreate`, on an `up` after a rebuild and on `podman rm`, so run
+  `podman-compose build` before any recreate; `cp` also never deletes a file removed from the repo
+  (`podman exec holojob rm <path>`). Changes to `.env`, dependencies, the Dockerfile or `requirements.txt` always
+  need the full build.
+
+      # frontend only (no restart: dist is streamed per request); Node 20 as in the Dockerfile
+      cd /srv/holojob
+      podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run build
+      podman exec holojob rm -rf /app/dist
+      podman cp dist holojob:/app/dist
+
+      # python only (spawned per call, no restart)
+      tar --exclude=__pycache__ -C python -cf - . | podman cp - holojob:/app/python
+
+      # Node scripts/ or src/ (server code): restart keeps the container filesystem
+      tar -C scripts -cf - . | podman cp - holojob:/app/scripts
+      tar -C src -cf - . | podman cp - holojob:/app/src
+      podman restart holojob
 
 ### Tests (full text)
 
