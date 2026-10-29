@@ -15,6 +15,7 @@ import {
   markApplied,
   newRequestId,
   panelMode,
+  externalConflicts,
   rebaseDraft,
   recordCv,
   restoreApplication,
@@ -35,6 +36,10 @@ const LABEL_CLASS = 'mb-1.5 block text-sm font-medium text-stone-700 dark:text-s
 const titleCase = (value) => value.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
 
 const messageOf = describeError
+const FIELD_NAMES = {
+  stage: 'stage', appliedDate: 'applied date', followUpDate: 'follow-up date',
+  recruiterName: 'recruiter name', recruiterEmail: 'recruiter email', recruiterLinkedIn: 'recruiter LinkedIn',
+}
 
 /** Which CV was sent: tailored for the job, a library CV, a CV outside the app, or not recorded. */
 function CvPicker({ id, options, value, label, onPick, onLabel }) {
@@ -172,11 +177,21 @@ function TrackedForm({ app, settings, onVoid }) {
   // The form stays mounted across events (it is keyed by application only), so an event written elsewhere on the
   // panel (a recorded CV, a stage move) must not wipe what is typed: untouched fields follow the server, edited ones stay.
   const base = useRef(draftFrom(app))
+  const latest = useRef(draft)
+  const [moved, setMoved] = useState([])
+  useEffect(() => { latest.current = draft })
   useEffect(() => {
     const nextBase = draftFrom(app)
+    // An edited field that changed elsewhere keeps what was typed; the notice offers the saved value.
+    const conflicts = externalConflicts(base.current, latest.current, nextBase)
+    if (conflicts.length) setMoved((prev) => [...new Set([...prev, ...conflicts])])
     setDraft((prev) => rebaseDraft(base.current, prev, nextBase))
     base.current = nextBase
   }, [app])
+  const reloadFields = () => {
+    setDraft(draftFrom(app))
+    setMoved([])
+  }
   useDraftDirty('tracker-edit', 'application changes', draftIsDirty(draftFrom(app), draft))
   const set = (field) => (e) => setDraft((prev) => ({ ...prev, [field]: e.target.value }))
   const stageLabel = (value) => (value.startsWith('outcome:') ? titleCase(value.slice(8)) : labelFor(value, settings))
@@ -188,7 +203,10 @@ function TrackedForm({ app, settings, onVoid }) {
     try {
       const made = await saveDraft(app.id, draft)
       if (made === 0) setNotice('Nothing to save: no field differs from the saved application.')
-      else setDraft((prev) => ({ ...prev, newNote: '' }))
+      else {
+        setDraft((prev) => ({ ...prev, newNote: '' }))
+        setMoved([])
+      }
     } catch (e) {
       setError(e)
     } finally {
@@ -224,6 +242,12 @@ function TrackedForm({ app, settings, onVoid }) {
         </ul>
       )}
       <Textarea label="Add a note" value={draft.newNote} onChange={set('newNote')} rows={2} />
+      {moved.length > 0 && (
+        <Alert variant="info">
+          Updated elsewhere: {moved.map((k) => FIELD_NAMES[k] ?? k).join(', ')}. Your unsaved input is kept.
+          <Button variant="secondary" className="mt-2" onClick={reloadFields}>Reload fields</Button>
+        </Alert>
+      )}
       {error && <Alert variant="error">{messageOf(error)}</Alert>}
       {notice && <Alert variant="info">{notice}</Alert>}
       <div className="flex flex-wrap gap-2">

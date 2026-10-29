@@ -70,6 +70,14 @@ export function invalidateJobs() {
   emit('invalidate')
 }
 
+/** Re-reads the stored list and tells the views only when it differs from what they last saw (focus, a timer). */
+export function rereadJobs() {
+  const fresh = loadJobs().jobs
+  if (snapshot && sameJson(snapshot.jobs, fresh)) return false
+  emit('reread')
+  return true
+}
+
 function withPatching(write) {
   patching = true
   try {

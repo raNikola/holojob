@@ -268,6 +268,16 @@ export function rebaseDraft(prevBase, draft, nextBase) {
   return next
 }
 
+/**
+ * The fields the owner edited (differ from the base they started from) that the application also changed elsewhere
+ * to something else: the typed value is kept, and the form says the saved one moved. `newNote` never conflicts.
+ */
+export function externalConflicts(prevBase, draft, nextBase) {
+  return Object.keys(nextBase).filter((key) => key !== 'newNote'
+    && draft[key] !== undefined && draft[key] !== prevBase[key]
+    && nextBase[key] !== prevBase[key] && nextBase[key] !== draft[key])
+}
+
 /** What an error looks like on screen: the server's message, and its status when there is one. */
 export function describeError(error) {
   if (error?.extra?.code === 'tracking_disabled') return 'Application tracking is switched off in the tracker settings.'
