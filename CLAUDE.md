@@ -133,7 +133,13 @@ keys"). Plan and as-built note: `docs/redesign/SETTINGS_PLAN.md`.
 The drawer (`JobDetailDrawer.jsx`) stays the quick view on the Jobs list, Board, Statistics and Outreach. Its "Open full details" button
 goes to `#/jobs/<jobId>` (`JobDetailsPage.jsx`): the drawer body (`JobDetailBody.jsx`) in the main column and `ApplicationTrackerPanel` as a
 sticky sidebar. There is no router: `modules/jobs/jobRoute.js` pushes the hash, `useJobRoute` (in `App.jsx`) reads it, so the hash wins over the saved
-view on load and Back returns to the previous view. The page reads and writes jobs with `loadJobs()` / `updateJobRecord()`, like the other screens.
+view on load and Back returns to the previous view. The page and the drawer read the stored record and write through the jobs store (`modules/jobs/jobsStore.js`): `patchJob(jobId, patch)`
+reads the latest stored record at write time and applies only the given fields (`useJobPatcher` diffs what a component hands back against the copy it
+rendered), so a stale copy cannot revert another view's change; `baseUpdatedAt` gives a `conflict` result instead of an overwrite, the shape for a
+later server store. `useJobs` / `useStoredJob` re-render after any write, a `storage` event covers other tabs, and `useJobsSync` lets the Jobs,
+Applications and Outreach screens take store writes in. **Still whole-object / whole-list:** those three screens save their whole list from memory
+(`saveJobs(state)` effects), and their own handlers (`handleJobUpdated` for the table's `JobTailorActions`, `ContactDetailDrawer`, `FollowUpPanel`,
+`RelatedContactsPanel` in the contact drawer, and `updateJobOutreach` / `updateJobStatus` on in-memory state) still merge whole objects. Step 2 moves them to the store.
 An unknown id shows "Job not found". Unsaved input: forms that call `useDraftDirty` (the tracker's three forms) make the button ask first
 (`modules/jobs/draftGuard.js`); other drafts (AI tools, contacts) are not covered yet. Not built: more tabs, AI spent, "Is it real?".
 
