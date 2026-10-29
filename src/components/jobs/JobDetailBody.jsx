@@ -9,6 +9,7 @@ import RelatedContactsPanel from '../outreach/RelatedContactsPanel'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { isCapReason } from '../../modules/jobs/workAuthorization'
+import AuthorizationBadge from './AuthorizationBadge'
 import JobDescription from './JobDescription'
 import { formatSeen, historyBadges } from '../../modules/jobs/jobHistory'
 import { formatMonthlyEur, salaryBadges } from '../../modules/jobs/jobSalary'
@@ -68,7 +69,11 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
   return (
     <div className="space-y-5">
       <dl className="grid grid-cols-2 gap-2 text-sm">
-        <div><dt className="text-xs text-stone-500">Location</dt><dd>{job.location || '—'}</dd></div>
+        <div>
+          <dt className="text-xs text-stone-500">Location</dt>
+          <dd>{job.location || '—'}</dd>
+          <AuthorizationBadge job={job} />
+        </div>
         <div><dt className="text-xs text-stone-500">Provider</dt><dd>{provider || '—'}</dd></div>
         <div><dt className="text-xs text-stone-500">Remote</dt><dd>{job.isRemote ? 'Yes' : 'No'}</dd></div>
         <div><dt className="text-xs text-stone-500">Status</dt><dd><Badge>{job.status}</Badge></dd></div>
