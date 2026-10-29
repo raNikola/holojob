@@ -7,6 +7,7 @@ import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { handleApiRequest } from './api-handler.js'
+import { handleAiSettingsRequest } from './ai-settings-handler.js'
 import { ensureClaudeLogin } from './claude-auth.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -49,6 +50,7 @@ const server = http.createServer(async (req, res) => {
   const url = req.url?.split('?')[0] ?? '/'
 
   if (url.startsWith('/api/')) {
+    if (await handleAiSettingsRequest(req, res)) return
     await handleApiRequest(req, res)
     return
   }

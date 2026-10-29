@@ -76,3 +76,13 @@ export async function finishAiCall(id, { ok, inputTokens, outputTokens, error, b
 export function readAiUsage() {
   return runner('usage', null)
 }
+
+/** Validate and write the gate settings (data/ai/settings.json). Resolves ai_gate.save_settings' result. */
+export function saveAiSettings(settings, confirm) {
+  return runner('settings-put', { settings, confirm: confirm === true })
+}
+
+/** Validate and write the price-table overrides (data/ai/pricing-overrides.json). */
+export function saveAiPricing(entries, confirm) {
+  return runner('pricing-put', { entries, confirm: confirm === true })
+}

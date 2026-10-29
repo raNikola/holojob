@@ -25,6 +25,7 @@ The rules (owner decisions, 2026-10-29):
 Files, created at runtime and never committed (data/ai/ is in .gitignore):
 
     data/ai/settings.json        budget, limits, automation switch (defaults below when missing)
+    data/ai/pricing-overrides.json  owner edits to the price table, merged over src/data/aiPricing.json
     data/ai/usage-ledger.jsonl   append-only, one JSON object per line
 
 Costs are always estimates: tokens times the price-table entry. Tokens are the
@@ -39,6 +40,7 @@ import ipaddress
 import json
 import math
 import os
+import re
 import sys
 import threading
 import uuid
@@ -163,16 +165,45 @@ def _local_host(base_url: str | None) -> bool:
     return address.is_loopback or address.is_private
 
 
-def load_pricing() -> dict:
+def pricing_overrides_path() -> Path:
+    return ai_dir() / "pricing-overrides.json"
+
+
+def _read_overrides() -> list[dict]:
+    try:
+        stored = json.loads(pricing_overrides_path().read_text(encoding="utf-8"))
+        entries = stored.get("entries") if isinstance(stored, dict) else None
+        return [e for e in entries or [] if isinstance(e, dict)]
+    except (OSError, ValueError):
+        return []
+
+
+def _entry_key(entry: dict) -> tuple[str, str]:
+    return str(entry.get("provider", "")).lower(), str(entry.get("model") or "*")
+
+
+def _base_pricing() -> dict:
     try:
         return json.loads(pricing_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {"currency": None, "entries": []}
 
 
-def classify(provider: str, model: str | None = None, base_url: str | None = None) -> dict:
+def _merge_pricing(base: dict, overrides: list[dict]) -> dict:
+    pending = {_entry_key(e): {**e, "origin": "override"} for e in overrides}
+    entries = [pending.pop(_entry_key(e), None) or {**e, "origin": "default"} for e in base.get("entries") or []]
+    return {**base, "entries": entries + list(pending.values())}
+
+
+def load_pricing() -> dict:
+    """The shipped price table with the owner's overrides (data/ai/pricing-overrides.json) merged by provider / model."""
+    return _merge_pricing(_base_pricing(), _read_overrides())
+
+
+def classify(provider: str, model: str | None = None, base_url: str | None = None,
+             pricing: dict | None = None) -> dict:
     """{class, inputPerMTok, outputPerMTok, priceKnown, currency, source, checkedAt} for one provider / model."""
-    pricing = load_pricing()
+    pricing = pricing or load_pricing()
     name = (provider or "").lower()
     entries = [e for e in pricing.get("entries") or [] if str(e.get("provider", "")).lower() == name]
     entry = next((e for e in entries if e.get("model") == model), None) or next(
@@ -500,25 +531,270 @@ def record_cache_hit(provider: str, model: str | None, *, feature: str | None = 
         _append(row)
 
 
+RECENT_ROWS = 50
+_SECRET = re.compile(r"(sk-[A-Za-z0-9_-]{8,}|AIza[0-9A-Za-z_-]{20,}|Bearer\s+\S+|api[_-]?key=\S+)", re.IGNORECASE)
+
+
+def _mask(value):
+    return _SECRET.sub("[hidden]", value) if isinstance(value, str) else value
+
+
+def recent_rows(limit: int = RECENT_ROWS) -> list[dict]:
+    """The last `limit` calls, newest first, as the ledger holds them. Read-only; nothing here writes the ledger."""
+    return [{k: _mask(v) for k, v in row.items()} for row in reversed(_calls(read_ledger())[-limit:])]
+
+
 def usage_summary(now: datetime | None = None) -> dict:
-    """What GET /api/ai/usage returns: effective settings, totals, and where the files are."""
+    """What GET /api/ai/usage returns: effective settings, totals, the price table, the last calls, and where the files are."""
     settings = load_settings()
     return {
-        "settings": settings,
+        "settings": public_settings(settings),
         "settingsFile": str(settings_path()),
         "settingsFileExists": settings_path().exists(),
         "ledgerFile": str(ledger_path()),
         "pricingFile": str(pricing_path()),
+        "pricingOverridesFile": str(pricing_overrides_path()),
+        "pricing": load_pricing(),
         "costsAreEstimates": True,
+        "recent": recent_rows(),
         **totals(now, settings),
     }
+
+
+# --- editing the settings and the price table ---------------------------------
+#
+# One validator and one atomic writer, shared by the Settings screen (through the CLI below)
+# and nothing else. Raising what the gate allows needs confirm=True; the ledger is never touched.
+
+SETTINGS_KEYS = tuple(DEFAULT_SETTINGS)
+_CURRENCY = re.compile(r"[A-Z]{3}")
+_TZ_NAME = re.compile(r"[A-Za-z0-9_+\-]+(/[A-Za-z0-9_+\-]+)*")
+_PROVIDER = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
+MAX_AMOUNT = 1_000_000
+MAX_COUNT = 10_000_000
+
+
+def public_settings(settings: dict) -> dict:
+    """Only the known keys (a hand-edited file may carry others) plus `error` when the file is unusable."""
+    out = {k: settings.get(k, DEFAULT_SETTINGS[k]) for k in SETTINGS_KEYS}
+    out["automation"] = {"enabled": bool((settings.get("automation") or {}).get("enabled"))}
+    if settings.get("error"):
+        out["error"] = settings["error"]
+    return out
+
+
+def _number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _integer(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _zone_exists(name: str) -> bool:
+    if not name or not _TZ_NAME.fullmatch(name):
+        return False
+    try:
+        ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError, OSError):
+        return False
+    return True
+
+
+def validate_settings(candidate) -> tuple[dict, list[str]]:
+    """(clean settings, errors). Strict: unknown keys, wrong types, negatives, bad zone or currency are errors."""
+    errors: list[str] = []
+    if not isinstance(candidate, dict):
+        return {}, ["settings must be a JSON object"]
+    for key in candidate:
+        if key not in SETTINGS_KEYS:
+            errors.append(f"unknown setting: {key}")
+    automation = candidate.get("automation", {})
+    if not isinstance(automation, dict):
+        errors.append("automation must be an object")
+    else:
+        for key in automation:
+            if key != "enabled":
+                errors.append(f"unknown setting: automation.{key}")
+        if "enabled" in automation and not isinstance(automation["enabled"], bool):
+            errors.append("automation.enabled must be true or false")
+    for key in ("dailyLimit", "monthlyLimit"):
+        if key in candidate and not (_number(candidate[key]) and 0 <= candidate[key] <= MAX_AMOUNT):
+            errors.append(f"{key} must be a number from 0 to {MAX_AMOUNT}")
+    for key in ("maxCallsDaily", "maxCallsMonthly"):
+        if key in candidate and candidate[key] is not None and not (
+                _integer(candidate[key]) and 0 <= candidate[key] <= MAX_COUNT):
+            errors.append(f"{key} must be a whole number from 0 to {MAX_COUNT}, or empty for no limit")
+    if "estimatedOutputTokens" in candidate and not (
+            _integer(candidate["estimatedOutputTokens"]) and 0 <= candidate["estimatedOutputTokens"] <= MAX_COUNT):
+        errors.append(f"estimatedOutputTokens must be a whole number from 0 to {MAX_COUNT}")
+    if "currency" in candidate and not (
+            isinstance(candidate["currency"], str) and _CURRENCY.fullmatch(candidate["currency"])):
+        errors.append("currency must be a three-letter code such as USD")
+    if "timezone" in candidate and not (
+            isinstance(candidate["timezone"], str) and _zone_exists(candidate["timezone"])):
+        errors.append("timezone must be an IANA name known to this server, such as Europe/Belgrade")
+    return candidate, errors
+
+
+def _loosening(old: dict, new: dict) -> list[str]:
+    """What the change lets the gate allow that it did not before (each needs the owner's confirm)."""
+    out = []
+    for key, label in (("dailyLimit", "daily limit"), ("monthlyLimit", "monthly limit")):
+        if _limit(new[key]) > _limit(old[key]):
+            out.append(f"{label} up: {_limit(old[key]):g} -> {_limit(new[key]):g} {new['currency']}")
+    for key, label in (("maxCallsDaily", "daily call limit"), ("maxCallsMonthly", "monthly call limit")):
+        before, after = old[key], new[key]
+        if after is None and before is not None:
+            out.append(f"{label} removed (was {before})")
+        elif after is not None and before is not None and after > before:
+            out.append(f"{label} up: {before} -> {after}")
+    if new["estimatedOutputTokens"] < old["estimatedOutputTokens"]:
+        out.append(f"estimated output tokens down: {old['estimatedOutputTokens']} -> {new['estimatedOutputTokens']} "
+                   "(each call reserves less budget)")
+    if new["timezone"] != old["timezone"]:
+        out.append(f"timezone changes where the day and month limits start: {old['timezone']} -> {new['timezone']}")
+    if new["currency"] != old["currency"]:
+        out.append(f"currency changes: {old['currency']} -> {new['currency']}")
+    if new["automation"]["enabled"] and not old["automation"]["enabled"]:
+        out.append("automatic AI tasks turned on")
+    return out
+
+
+def _atomic_write(path: Path, data: dict) -> None:
+    """Temp file next to the target, fsync, rename: a reader sees the old file or the new one, never half."""
+    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def save_settings(patch, confirm: bool = False) -> dict:
+    """Apply a partial settings object. {ok, settings, warnings} | {ok: False, errors} | {ok: False, needsConfirm, increases}."""
+    patch, errors = validate_settings(patch)
+    if errors:
+        return {"ok": False, "errors": errors}
+    with _locked():
+        current = public_settings(load_settings())
+        current.pop("error", None)
+        merged = {**current, **{k: v for k, v in patch.items() if k != "automation"},
+                  "automation": {**current["automation"], **(patch.get("automation") or {})}}
+        increases = _loosening(public_settings(load_settings()), merged)
+        if increases and not confirm:
+            return {"ok": False, "needsConfirm": True, "increases": increases}
+        _atomic_write(settings_path(), merged)
+        saved = public_settings(load_settings())
+    warnings = []
+    pricing_currency = load_pricing().get("currency")
+    if pricing_currency and pricing_currency != saved["currency"]:
+        warnings.append(f"prices are in {pricing_currency}: every paid call is refused while the budget is in {saved['currency']}")
+    return {"ok": True, "settings": saved, "warnings": warnings, "increases": increases}
+
+
+def validate_override(entry) -> tuple[dict, list[str]]:
+    """One price-table override. free / local / paid-with-price need a source note; unknown stays paid."""
+    if not isinstance(entry, dict):
+        return {}, ["each price entry must be an object"]
+    errors = [f"unknown price field: {k}" for k in entry
+              if k not in ("provider", "model", "class", "inputPerMTok", "outputPerMTok", "source", "checkedAt")]
+    provider, model, cls = entry.get("provider"), entry.get("model", "*"), entry.get("class")
+    if not (isinstance(provider, str) and _PROVIDER.fullmatch(provider.lower())):
+        errors.append("provider must be a short lowercase name")
+    if not (isinstance(model, str) and 0 < len(model) <= 120 and model.isprintable()):
+        errors.append('model must be a model name or "*"')
+    if cls not in CLASSES:
+        errors.append(f"class must be one of {', '.join(CLASSES)}")
+    prices = [entry.get("inputPerMTok"), entry.get("outputPerMTok")]
+    priced = [p is not None for p in prices]
+    if any(priced) != all(priced):
+        errors.append("set both prices or neither")
+    elif all(priced):
+        if not all(_number(p) and 0 <= p <= MAX_AMOUNT for p in prices):
+            errors.append(f"prices must be numbers from 0 to {MAX_AMOUNT}")
+        elif cls in FREE_CLASSES and any(p != 0 for p in prices):
+            errors.append(f"a {cls} model has price 0")
+        elif cls == "unknown":
+            errors.append("an unknown model has no price")
+    source = entry.get("source")
+    source = source.strip() if isinstance(source, str) else None
+    if cls in FREE_CLASSES or (cls == "paid" and all(priced)):
+        if not source:
+            errors.append(f"a source note is required to set {entry.get('model', '*')} to {cls}"
+                          + (" with a price" if cls == "paid" else ""))
+    if source and len(source) > 500:
+        errors.append("source note is too long (500 characters)")
+    if errors:
+        return {}, errors
+    return {"provider": provider.lower(), "model": model, "class": cls,
+            "inputPerMTok": prices[0], "outputPerMTok": prices[1], "source": source or None,
+            "checkedAt": datetime.now(timezone.utc).date().isoformat() if source else None}, []
+
+
+def _price_total(price: dict) -> float | None:
+    if not price["priceKnown"]:
+        return None
+    return price["inputPerMTok"] + price["outputPerMTok"]
+
+
+def _describe(price: dict) -> str:
+    if not price["priceKnown"]:
+        return f"{price['class']}, price unknown"
+    return f"{price['class']}, {price['inputPerMTok']:g} in / {price['outputPerMTok']:g} out per 1M tokens"
+
+
+def _price_loosens(old: dict, new: dict) -> bool:
+    """True when the new price entry lets calls through that the old one refused or counted dearer."""
+    if not is_paid(new["class"]):
+        return is_paid(old["class"])
+    after = _price_total(new)
+    if not is_paid(old["class"]) or after is None:
+        return False
+    before = _price_total(old)
+    return before is None or after < before
+
+
+def save_pricing_overrides(entries, confirm: bool = False) -> dict:
+    """Replace the override list (an empty list restores the shipped table)."""
+    if not isinstance(entries, list) or len(entries) > 200:
+        return {"ok": False, "errors": ["entries must be a list of at most 200 price entries"]}
+    clean, errors, seen = [], [], set()
+    for entry in entries:
+        item, problems = validate_override(entry)
+        errors += problems
+        if item:
+            key = _entry_key(item)
+            if key in seen:
+                errors.append(f"{key[0]}/{key[1]} appears twice")
+            seen.add(key)
+            clean.append(item)
+    if errors:
+        return {"ok": False, "errors": errors}
+    with _locked():
+        before, after = load_pricing(), _merge_pricing(_base_pricing(), clean)
+        # Overrides not in `clean` are dropped by this replace, so compare every key either table names.
+        keys = {_entry_key(e) for e in before["entries"] + after["entries"]}
+        loosened = []
+        for provider, model in sorted(keys):
+            probe = None if model == "*" else model
+            old, new = classify(provider, probe, pricing=before), classify(provider, probe, pricing=after)
+            if _price_loosens(old, new):
+                loosened.append(f"{provider}/{model}: {_describe(old)} -> {_describe(new)}")
+        if loosened and not confirm:
+            return {"ok": False, "needsConfirm": True, "increases": loosened}
+        _atomic_write(pricing_overrides_path(), {"entries": clean})
+    return {"ok": True, "pricing": load_pricing(), "increases": loosened}
 
 
 # --- CLI (scripts/ai-gate.js) ------------------------------------------------
 
 
 def _cli(argv: list[str]) -> int:
-    """`reserve`, `finish`, `cache-hit`, `usage`: JSON on stdin, one JSON object on stdout."""
+    """`reserve`, `finish`, `cache-hit`, `usage`, `settings-put`, `pricing-put`: JSON on stdin, one JSON object on stdout."""
     command = argv[0] if argv else ""
     raw = sys.stdin.read() if command != "usage" else ""
     args = json.loads(raw) if raw.strip() else {}
@@ -558,7 +834,13 @@ def _cli(argv: list[str]) -> int:
     if command == "usage":
         print(json.dumps(usage_summary()))
         return 0
-    print("usage: ai_gate.py reserve|finish|cache-hit|usage  (JSON on stdin)", file=sys.stderr)
+    if command == "settings-put":
+        print(json.dumps(save_settings(args.get("settings"), confirm=args.get("confirm") is True)))
+        return 0
+    if command == "pricing-put":
+        print(json.dumps(save_pricing_overrides(args.get("entries"), confirm=args.get("confirm") is True)))
+        return 0
+    print("usage: ai_gate.py reserve|finish|cache-hit|usage|settings-put|pricing-put  (JSON on stdin)", file=sys.stderr)
     return 2
 
 
