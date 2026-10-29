@@ -6,7 +6,7 @@ import { setGateRunner } from '../../scripts/ai-gate.js'
 import { setIdentitySource } from '../../scripts/ai-redact.js'
 import { getProvider } from '../../src/modules/ai/aiProviderRegistry.js'
 import { buildAiContext, buildAiRedactionHints } from '../../src/modules/ai/aiContextBuilder.js'
-import { analysisButtonState, fetchFindingStatus } from '../../src/modules/ai/findingStatus.js'
+import { REGENERATE_CONFIRM, analysisButtonState, fetchFindingStatus, regenerateDecision } from '../../src/modules/ai/findingStatus.js'
 import { setAiSecret, setSecretsRoot } from '../../scripts/secret-store.js'
 import { CANARY, useTempSecretStore } from './helpers/secretTestStore.js'
 import { selectProvider, withSelection } from './helpers/selectionStub.js'
@@ -167,5 +167,39 @@ describe('analysis button state', () => {
   it('becomes enabled as soon as a key input changes (status turns not fresh)', () => {
     expect(analysisButtonState({ status: fresh, hasAnalysis: true, loading: false }).disabled).toBe(true)
     expect(analysisButtonState({ status: { fresh: false, at: null, model: null }, hasAnalysis: true, loading: false }).disabled).toBe(false)
+  })
+})
+
+describe('regenerate decision', () => {
+  const fresh = { fresh: true, at: '2026-10-29T10:00:00.000Z', model: 'model-a' }
+  const stale = { fresh: false, at: null, model: null }
+
+  it('is disabled and ignored while a call runs, and while one has just been started', () => {
+    for (const status of [fresh, stale, null]) {
+      expect(regenerateDecision({ status, loading: true })).toEqual({ disabled: true, action: 'ignore' })
+      expect(regenerateDecision({ status, loading: false, inFlight: true })).toEqual({ disabled: true, action: 'ignore' })
+    }
+  })
+
+  it('asks first when the finding is still valid', () => {
+    expect(regenerateDecision({ status: fresh, loading: false })).toEqual({ disabled: false, action: 'confirm' })
+    expect(REGENERATE_CONFIRM).toBe('Nothing has changed since the last analysis. Regenerating makes a new AI call that counts against your limit. Continue?')
+  })
+
+  it('runs straight away when nothing valid is stored or the status is unknown', () => {
+    for (const status of [stale, null, undefined]) {
+      expect(regenerateDecision({ status, loading: false })).toEqual({ disabled: false, action: 'run' })
+    }
+  })
+
+  it('after a confirmed regenerate further clicks are ignored until it finishes, then allowed again', () => {
+    let inFlight = false
+    const click = () => regenerateDecision({ status: fresh, loading: false, inFlight }).action
+    expect(click()).toBe('confirm')
+    inFlight = true // run() sets it synchronously
+    expect(click()).toBe('ignore')
+    expect(click()).toBe('ignore')
+    inFlight = false // finished
+    expect(click()).toBe('confirm')
   })
 })

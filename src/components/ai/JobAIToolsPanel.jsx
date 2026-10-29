@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, RefreshCw, Sparkles } from 'lucide-react'
 import Tabs from '../ui/Tabs'
 import Button from '../ui/Button'
@@ -6,7 +6,7 @@ import Alert from '../ui/Alert'
 import OperationConsole from '../ui/OperationConsole'
 import { useOperationLog } from '../../hooks/useOperationLog'
 import { runAiFeature } from '../../modules/ai/aiClient'
-import { analysisButtonState, fetchFindingStatus } from '../../modules/ai/findingStatus'
+import { REGENERATE_CONFIRM, analysisButtonState, fetchFindingStatus, regenerateDecision } from '../../modules/ai/findingStatus'
 import OutreachComposer from '../outreach/OutreachComposer'
 import { rankContacts } from '../../modules/outreach/contactRanking'
 import { isApiAvailable } from '../../utils/apiAvailability'
@@ -52,6 +52,7 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const log = useOperationLog()
+  const inFlight = useRef(false)
 
   const insights = job.aiInsights || {}
 
@@ -78,6 +79,8 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
   }
 
   const run = async (tabId, skipCache = false) => {
+    if (inFlight.current) return
+    inFlight.current = true
     const featureId = FEATURE_MAP[tabId]
     setError(null)
     setLoading(true)
@@ -97,6 +100,7 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
       setError(e.message)
       log.append(`Error: ${e.message}`)
     } finally {
+      inFlight.current = false
       setLoading(false)
       log.stop()
     }
@@ -205,6 +209,15 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
     cover: 'Generate Cover Letters',
   }
 
+  const analysisFresh = tab === 'analysis' && analysisStatus?.jobId === job.jobId ? analysisStatus : null
+  const regenerate = regenerateDecision({ status: analysisFresh, loading })
+  const onRegenerate = () => {
+    const { action } = regenerateDecision({ status: analysisFresh, loading, inFlight: inFlight.current })
+    if (action === 'ignore') return
+    if (action === 'confirm' && !window.confirm(REGENERATE_CONFIRM)) return
+    run(tab, true)
+  }
+
   const primary = tab === 'analysis'
     ? analysisButtonState({ status: analysisStatus?.jobId === job.jobId ? analysisStatus : null, hasAnalysis: Boolean(insights.jobAnalysis), loading })
     : { disabled: loading, title: '' }
@@ -225,7 +238,7 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {labels[tab]}
           </Button>
-          <Button variant="ghost" onClick={() => run(tab, true)} disabled={loading} title="Regenerate: ask the AI again even if nothing changed (counts against the budget)" aria-label="Regenerate">
+          <Button variant="ghost" onClick={onRegenerate} disabled={regenerate.disabled} title="Regenerate: ask the AI again even if nothing changed (counts against the budget)" aria-label="Regenerate">
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
