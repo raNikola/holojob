@@ -215,6 +215,23 @@ Applications tracker panel.
 - No URL or hash routing (A4), no unsaved-changes layer (A8), no dark-mode persistence (A6).
 - Sources shows an empty-state line where its content is not built yet. Resumes is not in the nav (P5).
 
+**Slice 1 as built (2026-10-29).** Shipped as defined above, in two code commits (registry and test; shell, moves and
+`openSettings`). Differences from the plan text:
+- The registry is pure data (id, category, title, keywords, `risky`, an optional `note`); it holds no `render`.
+  `SettingsHome` keeps a `RENDERERS` map keyed by section id, and the test checks that its keys equal the registry ids.
+- One `AI budget, provider and usage` section (`ai-budget`) holds `AISettingsPanel` whole; splitting it is A5.
+  Likewise `application-tracking` holds `ApplicationSettingsPanel` whole.
+- Notifications is registered under Applications with a one-line note ("not configurable yet"): the follow-up
+  reminders switch does not exist in the UI. Sources is empty and shows its note.
+- The selected category is kept in `sessionStorage` (`job-dashboard-settings-category`, on the allowlist); the hash
+  route stays A4. `openSettings` sets the category, leaves the section id for `SettingsHome` and dispatches
+  `holojob:open-settings`; `App` switches the view.
+- Re-pointed to `openSettings`: `PipelineOrchestrator` (AI budget), `ApplicationTrackerPanel` (migration),
+  `ApplicationBoard` (tracking is off). `RelatedContactsPanel` still names "Settings > Privacy" as text.
+- O9 needed no new test: `tests/js/backupSecrets.test.js` already checks that an export carries nothing from
+  `data/secrets/` and that a restore cannot write it.
+- The "Clear all local data" label is unchanged (A10 rewords it).
+
 ### Track A - UI only, no behavior change
 
 | Step | What | Needs first | Independently shippable |
