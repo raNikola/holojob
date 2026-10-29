@@ -6,12 +6,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { PassThrough } from 'node:stream'
 import { createRequire } from 'node:module'
+import { isStoreBackupEntry, mergeFromBackup } from './application-store.js'
 
 const require = createRequire(import.meta.url)
 const { ZipArchive } = require('archiver')
 const AdmZip = require('adm-zip')
 
-const DATA_DIRS = ['profile', 'intelligence', 'jobs', 'resumes', 'outreach', 'audits', 'cache']
+const DATA_DIRS = ['profile', 'intelligence', 'jobs', 'resumes', 'outreach', 'audits', 'cache', 'applications']
 
 export function createBackupStream(root, clientPayload = {}) {
   const archive = new ZipArchive({ zlib: { level: 9 } })
@@ -51,20 +52,31 @@ export function createBackupStream(root, clientPayload = {}) {
   return stream
 }
 
-export function importBackupZip(root, zipBuffer) {
+/**
+ * Restore a backup zip. Every data/ entry is written over the file on disk, except the
+ * application store: its entries are merged, so a restore adds history and never
+ * removes or rewrites it.
+ */
+export async function importBackupZip(root, zipBuffer, options = {}) {
   const zip = new AdmZip(zipBuffer)
   const entries = zip.getEntries()
   const restored = []
+  const storeEntries = []
 
   for (const entry of entries) {
     if (entry.isDirectory) continue
     const name = entry.entryName
     if (!name.startsWith('data/')) continue
+    if (isStoreBackupEntry(name)) {
+      storeEntries.push({ name, data: entry.getData() })
+      continue
+    }
     const dest = path.join(root, name)
     fs.mkdirSync(path.dirname(dest), { recursive: true })
     fs.writeFileSync(dest, entry.getData())
     restored.push(name)
   }
 
-  return { ok: true, restored, count: restored.length }
+  const applications = storeEntries.length ? await mergeFromBackup(root, storeEntries, options) : null
+  return { ok: true, restored, count: restored.length, applications }
 }
