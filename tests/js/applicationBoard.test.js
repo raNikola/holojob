@@ -7,7 +7,7 @@ import crypto from 'node:crypto'
 import * as store from '../../scripts/application-store.js'
 import * as client from '../../src/modules/applications/applicationsClient.js'
 import { foldApplication } from '../../src/modules/applications/foldApplication.js'
-import { boardFootnote, buildBoard, moveChoices } from '../../src/modules/applications/boardModel.js'
+import { boardFootnote, buildBoard, dropDecision, moveChoices } from '../../src/modules/applications/boardModel.js'
 import { applicationStatistics, columnByJobId, median, stageFilterOptions, weekStart } from '../../src/modules/applications/applicationStatistics.js'
 import { boardColumn, defaultSettings } from '../../src/modules/applications/stageRegistry.js'
 import { newRequestId } from '../../src/modules/applications/trackerController.js'
@@ -188,5 +188,49 @@ describe('stage filter', () => {
     expect(columns.get(id16(1))).toBe('tech')
     expect(columns.get(id16(2))).toBeNull()
     expect(columns.get(id16(3))).toBe('applied')
+  })
+})
+
+describe('dropDecision (drag and drop on the board)', () => {
+  const settings = defaultSettings()
+  const card = { appId: 'a1', column: 'applied' }
+  const targets = moveChoices(settings, 'applied').map((o) => o.value)
+
+  it('a drop on another column is a move to that stage', () => {
+    for (const key of targets) expect(dropDecision(settings, card, key)).toEqual({ action: 'move', toStage: key })
+    expect(targets).toContain('rejected')
+    expect(targets).toContain('ghosted')
+  })
+
+  it('the same column is a no-op', () => {
+    expect(dropDecision(settings, card, 'applied')).toEqual({ action: 'none', reason: 'same-column' })
+  })
+
+  it('moving out of a closed column is allowed like the select, and into the same one is not', () => {
+    const closed = { appId: 'a2', column: 'rejected' }
+    expect(dropDecision(settings, closed, 'applied')).toEqual({ action: 'move', toStage: 'applied' })
+    expect(dropDecision(settings, closed, 'rejected').action).toBe('none')
+  })
+
+  it('refuses a column the move rules do not offer', () => {
+    expect(dropDecision(settings, card, 'withdrawn')).toEqual({ action: 'none', reason: 'not-a-target' })
+    expect(dropDecision(settings, card, 'no-such-stage').reason).toBe('not-a-target')
+  })
+
+  it('refuses while the card is moving or tracking is off', () => {
+    expect(dropDecision(settings, card, 'rejected', { busy: true })).toEqual({ action: 'none', reason: 'busy' })
+    expect(dropDecision(settings, card, 'rejected', { trackingEnabled: false })).toEqual({ action: 'none', reason: 'tracking-off' })
+  })
+
+  it('nothing dragged is a no-op', () => {
+    expect(dropDecision(settings, null, 'rejected').action).toBe('none')
+  })
+
+  it('offers exactly the targets of the Move to select', () => {
+    for (const col of ['applied', 'rejected', 'ghosted']) {
+      const offered = moveChoices(settings, col).map((o) => o.value)
+      const dropped = [...offered, col, 'x'].filter((k) => dropDecision(settings, { appId: 'z', column: col }, k).action === 'move')
+      expect(dropped.sort()).toEqual([...offered].sort())
+    }
   })
 })

@@ -60,6 +60,19 @@ export function moveChoices(settings, column) {
   return moveTargets(settings).filter((key) => key !== column).map((key) => ({ value: key, label: labelFor(key, settings) }))
 }
 
+/**
+ * What dropping a card on a column does. Pure; the server stays the authority (it refuses a voided
+ * application or an unknown stage), so a `move` here can still come back as an error on the card.
+ * @returns {{ action: 'move', toStage: string } | { action: 'none', reason: 'busy' | 'tracking-off' | 'same-column' | 'not-a-target' }}
+ */
+export function dropDecision(settings, card, toColumn, { busy = false, trackingEnabled = true } = {}) {
+  if (!trackingEnabled) return { action: 'none', reason: 'tracking-off' }
+  if (busy) return { action: 'none', reason: 'busy' }
+  if (!card || toColumn === card.column) return { action: 'none', reason: 'same-column' }
+  if (!moveChoices(settings, card.column).some((o) => o.value === toColumn)) return { action: 'none', reason: 'not-a-target' }
+  return { action: 'move', toStage: toColumn }
+}
+
 /** "3 closed · 1 unfiled", or '' when there is neither. */
 export function boardFootnote({ closed, unfiled }) {
   return [closed && `${closed} closed (other outcomes)`, unfiled && `${unfiled} unfiled`].filter(Boolean).join(' · ')
