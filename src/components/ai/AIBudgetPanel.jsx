@@ -8,7 +8,7 @@ import {
   formFromSettings, loadGateUsage, saveGatePricing, saveGateSettings, settingsFromForm,
 } from '../../modules/ai/gateClient'
 
-const CLASS_VARIANT = { free: 'high', local: 'high', paid: 'medium', unknown: 'warn' }
+const CLASS_VARIANT = { free: 'high', local: 'high', subscription: 'high', paid: 'medium', unknown: 'warn' }
 const money = (n, cur) => `${Number(n || 0).toFixed(4)} ${cur}`
 const priceText = (p) => (p == null ? '—' : String(p))
 
@@ -39,7 +39,7 @@ function UsageBucket({ title, bucket, currency }) {
     <div className="rounded-lg border border-stone-200 p-3 text-sm dark:border-stone-700">
       <p className="font-medium">{title}</p>
       <p>Spend (estimate): {money(bucket.cost, currency)}</p>
-      <p>Calls: {bucket.calls} ({bucket.paidCalls} paid)</p>
+      <p>Calls: {bucket.calls} ({bucket.paidCalls} paid, {bucket.subscriptionCalls || 0} on the Claude subscription)</p>
       <p>Refused: {bucket.refused}</p>
       {bucket.unpricedPaidCalls > 0 && <p className="text-xs text-red-600">{bucket.unpricedPaidCalls} paid calls had no known price.</p>}
     </div>
@@ -200,6 +200,19 @@ export default function AIBudgetPanel() {
               onChange={(e) => setForm({ ...form, automationEnabled: e.target.checked })} />
             <span>Automatic AI tasks (scheduled pipeline, enrichment without --manual). Off by default; on needs a confirm.</span>
           </label>
+          <div className="space-y-2 rounded-lg border border-stone-200 p-3 dark:border-stone-700">
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={form.subscriptionEnabled}
+                onChange={(e) => setForm({ ...form, subscriptionEnabled: e.target.checked })} />
+              <span>
+                Claude Code on my flat Claude subscription: calls for {form.subscriptionFeatures.join(', ')} are not charged
+                against the budget (cost 0, still logged). They use your plan&apos;s usage allowance and send the redacted ad and a
+                profile summary to Anthropic. Off by default; on needs a confirm.
+              </span>
+            </label>
+            <Input label="Max subscription calls per day" type="number" min="1" step="1" value={form.subscriptionMaxCallsDaily}
+              onChange={set('subscriptionMaxCallsDaily')} />
+          </div>
           <p className="text-xs text-stone-500">
             Limits are in {cur}. A paid call also needs a known price below. Raising a limit, removing a call cap or
             turning automation on asks you to confirm before it is saved; lowering never does.
