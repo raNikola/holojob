@@ -17,6 +17,7 @@ import OutreachDashboard from './components/outreach/OutreachDashboard'
 import QualityDashboard from './components/quality/QualityDashboard'
 import JobDetailsPage from './components/jobs/JobDetailsPage'
 import { useJobRoute } from './hooks/useJobRoute'
+import { useBackgroundRefresh } from './hooks/useBackgroundRefresh'
 import { closeJobPage } from './modules/jobs/jobRoute'
 import {
   VIEWS,
@@ -32,6 +33,7 @@ function AppContent() {
   const [view, setViewState] = useState(() => loadDemoInitialView(profile, demoMode))
 
   const routedJobId = useJobRoute()
+  useBackgroundRefresh()
 
   const setView = useCallback((next) => {
     setViewState(next)

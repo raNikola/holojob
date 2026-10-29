@@ -60,7 +60,10 @@ export function refreshApplications() {
   inflight = (async () => {
     try {
       const [store, settings] = await Promise.all([request('GET', '/api/applications'), request('GET', '/api/applications/settings')])
-      publish({ status: 'ready', store, settings: settings.settings, error: null })
+      // A background refresh that finds nothing new must not re-render every view (and its effects).
+      const unchanged = state.status === 'ready' && JSON.stringify(state.store) === JSON.stringify(store)
+        && JSON.stringify(state.settings) === JSON.stringify(settings.settings)
+      if (!unchanged) publish({ status: 'ready', store, settings: settings.settings, error: null })
     } catch (e) {
       publish({ ...state, status: 'error', error: e.message })
     } finally {

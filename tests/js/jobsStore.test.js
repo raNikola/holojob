@@ -10,6 +10,7 @@ import {
   mergeLive,
   patchJob,
   patchJobFromCopy,
+  rereadJobs,
   subscribe,
 } from '../../src/modules/jobs/jobsStore.js'
 
@@ -178,5 +179,20 @@ describe('adoptStored and mergeLive', () => {
     const live = mergeLive(prop, { jobId: 'a', status: 'saved', applicationTracking: { stage: 'old' } })
     expect(live).toEqual({ jobId: 'a', status: 'saved', applicationTracking: { stage: 'Applied' }, description: 'ad' })
     expect(mergeLive(prop, null)).toBe(prop)
+  })
+})
+
+describe('rereadJobs (focus, timer)', () => {
+  it('stays quiet when the stored list is what the views last saw, and tells them when it moved', () => {
+    const seen = []
+    const stop = subscribe((e) => seen.push(e.source))
+    getJobsSnapshot()
+    expect(rereadJobs()).toBe(false)
+    // a write the store was not told about (a missed storage event)
+    items.set(JOBS_STORAGE_KEY, JSON.stringify({ jobs: [{ jobId: 'a', status: 'saved' }] }))
+    expect(rereadJobs()).toBe(true)
+    expect(seen).toEqual(['reread'])
+    expect(getStoredJob('a').status).toBe('saved')
+    stop()
   })
 })
