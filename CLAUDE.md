@@ -106,6 +106,23 @@ keeps it only as an explanation. Do not move scoring decisions into prompts. If 
 judgement needs the model, have it return a fact, and let `scorer.py` decide what the
 fact costs. Scoring specifics: `.claude/rules/scoring.md`.
 
+## Request guard (`/api`)
+
+Every `/api` request passes `scripts/request-guard.js` first (`handleApiRoutes` in `api-handler.js`, used by the
+production server and the Vite dev middleware): POST / PUT / PATCH need `Content-Type: application/json` (a DELETE only
+when it has a body); the two binary uploads take their own type (`POST /api/cvs` PDF, `POST /api/backup/import` zip);
+an `Origin` header must be an allowed origin; wrong type 415, wrong origin or host 403. It is not authentication.
+
+- **Setting:** `CAREER_OS_ALLOWED_ORIGINS` in `.env`, comma separated, scheme optional and ignored, for example
+  `https://careeros.void,http://localhost:3073`. With a list, the Origin AND the request's Host (or the proxy's
+  `X-Forwarded-Host`) must be on it, which also stops DNS rebinding; reaching the app by another name (a LAN IP) then
+  gets 403 until that name is added. With no list, an Origin must equal the request Host (same origin) and Host is not checked.
+  A `.env` change needs `podman-compose up -d --force-recreate`.
+- Credentials are masked in error bodies, SSE errors, ledger reasons and console output by `scripts/secret-mask.js`
+  (`sk-`/`AIza` keys, `key=` / `token=` query values, Authorization, `li_at`, long tokens). Backup export and restore use
+  one exclusion list, `scripts/secret-paths.js`; a restore with `..` or an absolute path in the archive is refused whole.
+- Plan and the remaining steps (secret store, bind address, storage allowlist): `docs/redesign/BROWSER_STORAGE_POLICY.md`.
+
 ## AI budget gate
 
 Every real model call goes through `python/llm/ai_gate.py` before it is made (Python:

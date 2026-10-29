@@ -3,12 +3,13 @@
  */
 
 import { ensureClaudeLogin } from './claude-auth.js'
-import { handleApiRequest } from './api-handler.js'
-import { handleAiSettingsRequest } from './ai-settings-handler.js'
+import { handleApiRoutes } from './api-handler.js'
+import { installLogMasking } from './secret-mask.js'
 
 export { getPipelineHealth } from './api-handler.js'
 
 export function discoveryApiPlugin() {
+  installLogMasking()
   return {
     name: 'discovery-api',
     configureServer(server) {
@@ -29,7 +30,7 @@ export function discoveryApiPlugin() {
         if (!url.startsWith('/api/')) {
           return next()
         }
-        const handled = (await handleAiSettingsRequest(req, res)) || (await handleApiRequest(req, res))
+        const handled = await handleApiRoutes(req, res)
         if (!handled) {
           return next()
         }

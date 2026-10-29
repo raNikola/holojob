@@ -11,6 +11,7 @@
  */
 
 import { saveAiPricing, saveAiSettings } from './ai-gate.js'
+import { maskErrorField } from './secret-mask.js'
 
 const MAX_BODY = 64 * 1024
 
@@ -41,7 +42,7 @@ function readJson(req) {
 function send(res, status, data) {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
-  res.end(JSON.stringify(data))
+  res.end(JSON.stringify(maskErrorField(data)))
 }
 
 function statusOf(result) {

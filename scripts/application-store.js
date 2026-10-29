@@ -37,6 +37,7 @@ import {
   settingsProblem,
   withChange,
 } from '../src/modules/applications/stageRegistry.js'
+import { maskErrorField } from './secret-mask.js'
 import {
   LEGACY_CLOSED_STAGES,
   legacyChanges,
@@ -1417,7 +1418,7 @@ export function knownContactIdentity(root) {
 function sendJson(res, status, data) {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
-  res.end(JSON.stringify(data))
+  res.end(JSON.stringify(maskErrorField(data)))
 }
 
 function readJsonBody(req) {

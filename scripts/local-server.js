@@ -6,9 +6,11 @@ import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { handleApiRequest } from './api-handler.js'
-import { handleAiSettingsRequest } from './ai-settings-handler.js'
+import { handleApiRoutes } from './api-handler.js'
+import { installLogMasking } from './secret-mask.js'
 import { ensureClaudeLogin } from './claude-auth.js'
+
+installLogMasking()
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -50,8 +52,7 @@ const server = http.createServer(async (req, res) => {
   const url = req.url?.split('?')[0] ?? '/'
 
   if (url.startsWith('/api/')) {
-    if (await handleAiSettingsRequest(req, res)) return
-    await handleApiRequest(req, res)
+    await handleApiRoutes(req, res)
     return
   }
 
