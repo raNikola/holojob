@@ -121,10 +121,15 @@ an `Origin` header must be an allowed origin; wrong type 415, wrong origin or ho
 - Credentials are masked in error bodies, SSE errors, ledger reasons and console output by `scripts/secret-mask.js`
   (`sk-`/`AIza` keys, `key=` / `token=` query values, Authorization, `li_at`, long tokens). Backup export and restore use
   one exclusion list, `scripts/secret-paths.js`; a restore with `..` or an absolute path in the archive is refused whole.
+- **No login (owner-accepted, DECISIONS.md 2026-10-29):** no application login and no Caddy `basic_auth`; access is the home LAN, and
+  remote access only through Tailscale. Add the Tailscale hostname to `HOLOJOB_ALLOWED_ORIGINS` if it is used. Revisit if the app is
+  ever exposed outside the LAN or Tailscale.
 - **Bind:** `docker-compose.yml` publishes `127.0.0.1:3073:5173`, loopback only; other devices go through the reverse
   proxy (Caddy `holojob.void` -> `127.0.0.1:3073`). `tests/js/composePorts.test.js` fails if a port is published on all
   interfaces. Inside the container the app still listens on 0.0.0.0:5173, as podman's forwarding needs.
-- Plan and the remaining steps (secret store, bind address, storage allowlist): `docs/redesign/BROWSER_STORAGE_POLICY.md`.
+- Plan, approved decisions and step order (1 network / API protection, 2 AI keys, 3 `li_at`,
+  4 AI settings, 5 profile / intelligence / jobs migration, 6 browser AI confirm dialog), with the pre-migration
+  checklist: `docs/redesign/BROWSER_STORAGE_POLICY.md`. Browser keys outside its allowlist are not added.
 
 ## AI budget gate
 
@@ -158,6 +163,9 @@ full text in `docs/ARCHITECTURE.md` (Rule details moved from CLAUDE.md).
   a job needing a visa the candidate lacks is capped by scoring, not removed.
 - A missing profile, intelligence or scored-jobs file is an empty state; never fill it
   from `data/examples/` outside an explicit demo mode.
-- The browser copy of the profile is the master (`localStorage`, mirrored to
-  `data/profile/candidate-profile.json` on sync). Fix profile data in the profile form,
-  not in the disk file.
+- The server is the master for profile, intelligence, jobs and applications (DECISIONS.md, 2026-10-29); the browser
+  keeps UI state only (`docs/redesign/BROWSER_STORAGE_POLICY.md`). **Until migration step 5 ships**, the profile,
+  intelligence and jobs still live in `localStorage` and are mirrored to `data/` on sync, so fix profile data in the
+  profile form, not in the disk file. After it, the browser copy is removed per key, only after a preview, an owner
+  confirmation and a verified server write. No secret (AI key, `li_at`) is stored in or sent from the browser once
+  steps 2-3 ship; the server's `data/secrets/` (600 / 700) is the only holder.
