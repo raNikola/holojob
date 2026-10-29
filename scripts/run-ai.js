@@ -139,6 +139,29 @@ export async function runAiFeatureStream(res, { feature, context, refresh = fals
     })
 }
 
+/**
+ * Would a call with these inputs be a findings hit? Read-only: no model call, no budget reservation, no key needed, no
+ * ledger row, nothing written. Resolves { fresh, at, model }; { fresh: false, at: null, model: null } for anything that
+ * is not a hit (no selection, a feature or provider without a store, a job without an id, redaction failing, a miss).
+ */
+export async function checkAiFinding({ feature, context }) {
+  const none = { fresh: false, at: null, model: null }
+  if (!usesFindings(feature)) return none
+  const selection = (await readAiSelection()).selection
+  if (!selection || !PROVIDER_NAMES.includes(selection.provider) || UNGATED_PROVIDERS.has(selection.provider)) return none
+  const entityKey = jobEntityKey(context?.job?.jobId)
+  if (!entityKey) return none
+  try {
+    const redacted = redactContext(context)
+    assertClean(buildMessages(feature, redacted.context), redacted.ids)
+    const { cacheKey } = buildCacheKey({ feature, model: selection.model, context: redacted.context })
+    const found = lookupFinding({ feature, entityKey, cacheKey })
+    return found.hit ? { fresh: true, at: found.finding.at, model: found.finding.model } : none
+  } catch {
+    return none
+  }
+}
+
 /** Measured tokens, or nulls when the provider reported none (the gate then estimates). */
 function measuredTokens(usage) {
   const input = usage?.inputTokens || usage?.prompt_tokens || 0
@@ -183,7 +206,7 @@ export async function runAiFeature({ feature, context, refresh = false }) {
   const stored = usesFindings(feature) && !UNGATED_PROVIDERS.has(providerName) ? jobEntityKey(context?.job?.jobId) : null
   let lookupKey = null
   if (stored) {
-    lookupKey = { entityKey: stored, ...buildCacheKey({ feature, model: settings?.model, messages, context: redacted.context }) }
+    lookupKey = { entityKey: stored, ...buildCacheKey({ feature, model: settings?.model, context: redacted.context }) }
     if (!refresh) {
       const found = lookupFinding({ feature, entityKey: stored, cacheKey: lookupKey.cacheKey })
       if (found.hit) {

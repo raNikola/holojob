@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Loader2, RefreshCw, Sparkles } from 'lucide-react'
 import Tabs from '../ui/Tabs'
 import Button from '../ui/Button'
@@ -6,6 +6,7 @@ import Alert from '../ui/Alert'
 import OperationConsole from '../ui/OperationConsole'
 import { useOperationLog } from '../../hooks/useOperationLog'
 import { runAiFeature } from '../../modules/ai/aiClient'
+import { analysisButtonState, fetchFindingStatus } from '../../modules/ai/findingStatus'
 import OutreachComposer from '../outreach/OutreachComposer'
 import { rankContacts } from '../../modules/outreach/contactRanking'
 import { isApiAvailable } from '../../utils/apiAvailability'
@@ -53,6 +54,15 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
   const log = useOperationLog()
 
   const insights = job.aiInsights || {}
+
+  // Is the job analysis still valid on the server? Asked again whenever the job, the tab or a run changes.
+  const [analysisStatus, setAnalysisStatus] = useState(null)
+  useEffect(() => {
+    if (tab !== 'analysis' || loading || !isApiAvailable()) return undefined
+    let current = true
+    fetchFindingStatus('jobAnalysis', { job }).then((status) => { if (current) setAnalysisStatus({ ...status, jobId: job.jobId }) })
+    return () => { current = false }
+  }, [tab, job, loading])
 
   const persist = (featureKey, data, meta) => {
     const patch = {
@@ -195,6 +205,10 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
     cover: 'Generate Cover Letters',
   }
 
+  const primary = tab === 'analysis'
+    ? analysisButtonState({ status: analysisStatus?.jobId === job.jobId ? analysisStatus : null, hasAnalysis: Boolean(insights.jobAnalysis), loading })
+    : { disabled: loading, title: '' }
+
   return (
     <details className="rounded-xl border border-stone-200 dark:border-stone-800" open>
       <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-stone-800 dark:text-stone-200">
@@ -207,11 +221,11 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
         <Tabs tabs={TABS} active={tab} onChange={setTab} />
         {error && <Alert variant="error" title="AI error">{error}</Alert>}
         <div className="flex gap-2">
-          <Button onClick={() => run(tab)} disabled={loading}>
+          <Button onClick={() => run(tab)} disabled={primary.disabled} title={primary.title || undefined}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {labels[tab]}
           </Button>
-          <Button variant="ghost" onClick={() => run(tab, true)} disabled={loading} title="Regenerate">
+          <Button variant="ghost" onClick={() => run(tab, true)} disabled={loading} title="Regenerate: ask the AI again even if nothing changed (counts against the budget)" aria-label="Regenerate">
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>

@@ -70,26 +70,32 @@ export function jobEntityKey(jobId) {
   return jobId ? sha256(String(jobId)).slice(0, 16) : null
 }
 
+/** The job fields that make up the posting itself. */
+const POSTING_FIELDS = ['title', 'company', 'location', 'description']
+/** The job fields that make up its scores. */
+const SCORE_FIELDS = ['matchScore', 'matchLabel', 'priority', 'applyRecommendation', 'matchedSkills', 'missingSkills', 'redFlags', 'reasons', 'scoreBreakdown']
+
+const pick = (obj, fields) => Object.fromEntries(fields.map((k) => [k, obj?.[k] ?? null]))
+
 /**
- * What the job analysis depends on, taken from the redacted context: the posting, the job's scores and stage, the
- * profile summary and the AI memory. Hashed separately and added to the hash of the messages, so an input that changes
- * without changing the (truncated) prompt text still changes the key. Never holds a value, only hashes.
+ * What the job analysis depends on, taken from the redacted context: the posting, the job's scores, its stage and the
+ * candidate profile (profile summary, intelligence summary, role strategy). Nothing else: not the AI memory (the app
+ * merges every analysis into it, so it would change the key right after the call) and not the portfolio statistics.
+ * Hashed separately; holds hashes only.
  */
 function jobAnalysisManifest(context) {
   const job = context?.job || {}
-  const { description, applicationTracking, ...scores } = job
   return {
-    jobPosting: hashOf(description ?? null),
-    jobScores: hashOf(scores),
-    jobStage: hashOf(applicationTracking ?? null),
-    profile: hashOf(context?.profile ?? null),
-    memory: hashOf(context?.memory ?? null),
+    jobPosting: hashOf(pick(job, POSTING_FIELDS)),
+    jobScores: hashOf(pick(job, SCORE_FIELDS)),
+    jobStage: hashOf(job.applicationTracking ?? null),
+    profile: hashOf({ profile: context?.profile ?? null, intelligenceSummary: context?.intelligenceSummary ?? null, roleStrategy: context?.roleStrategy ?? null }),
   }
 }
 
-/** The cache key `model|promptVersion|inputHash`; the input hash covers the redacted messages and the manifest. */
-export function buildCacheKey({ feature, model, messages, context }) {
-  const inputHash = hashOf({ messages, manifest: jobAnalysisManifest(context) })
+/** The cache key `model|promptVersion|inputHash`; the input hash covers the manifest above. A prompt change is a PROMPT_VERSIONS bump. */
+export function buildCacheKey({ feature, model, context }) {
+  const inputHash = hashOf(jobAnalysisManifest(context))
   const promptVersion = PROMPT_VERSIONS[feature]
   return { inputHash, promptVersion, cacheKey: `${model || ''}|${promptVersion}|${inputHash}` }
 }
