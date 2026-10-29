@@ -6,8 +6,8 @@
  *   data/ai/findings/job/<entityKey>.json   mode 600   { version, entity, findings: [ ... ] }
  *
  * Findings are only ever appended; an existing finding is never edited or removed, and a file that cannot be read is never
- * overwritten. Expiry (the freshness window) only turns a hit into a miss. A finding holds the parsed result and the
- * redacted prompt that produced it, plus hashes: no key, base URL, cookie or identifier (the caller checks the result
+ * overwritten. Expiry (the freshness window) only turns a hit into a miss. A finding holds the parsed result, the cache
+ * key and the input hash; the prompt itself is never stored. It holds no key, base URL, cookie or identifier (the caller checks the result
  * for identifiers first, and this module refuses text that looks like a credential). Reads and writes are synchronous,
  * so appends in one process cannot interleave; the server is the only writer.
  */
@@ -173,10 +173,10 @@ export function lookupFinding({ feature, entityKey, cacheKey, now = Date.now() }
  * Appends one finding. { stored: true, finding } or { stored: false, reason }. Text that looks like a credential is not
  * stored, and a record that cannot be read is left as it is. Never throws.
  */
-export function appendFinding({ feature, entityKey, provider, model, promptVersion, inputHash, cacheKey, prompt, result, now = new Date() }) {
+export function appendFinding({ feature, entityKey, provider, model, promptVersion, inputHash, cacheKey, result, now = new Date() }) {
   try {
     const entityType = FINDINGS_ENTITY[feature]
-    const body = JSON.stringify({ prompt, result })
+    const body = JSON.stringify(result)
     if (maskSecrets(body) !== body) return { stored: false, reason: 'credential-like text' }
     const file = entityFile(entityType, entityKey)
     const read = readRecord(file)
@@ -193,7 +193,6 @@ export function appendFinding({ feature, entityKey, provider, model, promptVersi
       promptVersion,
       inputHash,
       cacheKey,
-      prompt,
       finding: result,
       source: 'model',
     }

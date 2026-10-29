@@ -180,13 +180,16 @@ describe('findings store in front of the budget gate', () => {
 })
 
 describe('what reaches the file', () => {
-  it('holds no key and no personal identifier, and the prompt is the redacted one', async () => {
+  it('holds no key and no personal identifier, and the prompt text is not stored', async () => {
     const context = baseContext({ job: { description: `Write to ${OWNER.email}, ${OWNER.name} says hi` } })
     await run(context)
     const text = fs.readFileSync(path.join(findingsDir(), `${jobEntityKey(JOB.jobId)}.json`), 'utf-8')
     for (const secret of [CANARY, OWNER.email, OWNER.name, 'Zlatan', 'Qwerty', 'owner-test.example']) expect(text).not.toContain(secret)
     const record = JSON.parse(text)
-    expect(record.findings[0].prompt.map((m) => m.content).join('\n')).toContain('[EMAIL]')
+    expect(record.findings[0]).not.toHaveProperty('prompt')
+    expect(record.findings[0]).toMatchObject({ inputHash: expect.stringMatching(/^[0-9a-f]{64}$/), cacheKey: expect.stringContaining('|1|') })
+    expect(text).not.toContain('Own the roadmap')
+    expect(text).not.toContain('[EMAIL]')
     expect(record.entity).toEqual({ type: 'job', key: jobEntityKey(JOB.jobId) })
     // The job id is part of the prompt the provider gets; the entity key and file name are opaque.
     expect(fs.readdirSync(findingsDir())).toEqual([`${jobEntityKey(JOB.jobId)}.json`])
@@ -205,7 +208,7 @@ describe('what reaches the file', () => {
   it('an answer that looks like a credential is not stored', () => {
     const saved = appendFinding({
       feature: 'jobAnalysis', entityKey: 'aaaaaaaaaaaaaaaa', promptVersion: '1', inputHash: 'h', cacheKey: 'k',
-      prompt: [], result: { note: `token sk-${'a1'.repeat(10)}` },
+      result: { note: `token sk-${'a1'.repeat(10)}` },
     })
     expect(saved.stored).toBe(false)
   })
