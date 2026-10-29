@@ -7,6 +7,7 @@ import path from 'node:path'
 import { PassThrough } from 'node:stream'
 import { createRequire } from 'node:module'
 import { isStoreBackupEntry, mergeFromBackup } from './application-store.js'
+import { isSecretPath, safeRelativePath } from './secret-paths.js'
 
 const require = createRequire(import.meta.url)
 const { ZipArchive } = require('archiver')
@@ -22,7 +23,8 @@ export function createBackupStream(root, clientPayload = {}) {
   for (const dir of DATA_DIRS) {
     const abs = path.join(root, 'data', dir)
     if (fs.existsSync(abs)) {
-      archive.directory(abs, `data/${dir}`)
+      // Credentials are left out here, in the one place that lists them (secret-paths.js).
+      archive.directory(abs, `data/${dir}`, (entry) => (isSecretPath(`data/${dir}/${entry.name}`) ? false : entry))
     }
   }
 
@@ -56,27 +58,45 @@ export function createBackupStream(root, clientPayload = {}) {
  * Restore a backup zip. Every data/ entry is written over the file on disk, except the
  * application store: its entries are merged, so a restore adds history and never
  * removes or rewrites it.
+ *
+ * An archive with an absolute path or a ".." anywhere is refused whole, before anything is written.
+ * Entries naming a credential (secret-paths.js) are skipped and listed in `refused`.
  */
 export async function importBackupZip(root, zipBuffer, options = {}) {
   const zip = new AdmZip(zipBuffer)
   const entries = zip.getEntries()
   const restored = []
+  const refused = []
   const storeEntries = []
+  const dataRoot = path.resolve(root, 'data') + path.sep
+
+  for (const entry of entries) {
+    if (safeRelativePath(entry.entryName) === null) {
+      throw new Error(`Backup refused: unsafe path in the archive (${JSON.stringify(entry.entryName).slice(0, 80)})`)
+    }
+  }
 
   for (const entry of entries) {
     if (entry.isDirectory) continue
-    const name = entry.entryName
+    const name = safeRelativePath(entry.entryName)
     if (!name.startsWith('data/')) continue
+    if (isSecretPath(name)) {
+      refused.push(name)
+      continue
+    }
     if (isStoreBackupEntry(name)) {
       storeEntries.push({ name, data: entry.getData() })
       continue
     }
-    const dest = path.join(root, name)
+    const dest = path.resolve(root, name)
+    if (!dest.startsWith(dataRoot)) {
+      throw new Error(`Backup refused: path leaves data/ (${name.slice(0, 80)})`)
+    }
     fs.mkdirSync(path.dirname(dest), { recursive: true })
     fs.writeFileSync(dest, entry.getData())
     restored.push(name)
   }
 
   const applications = storeEntries.length ? await mergeFromBackup(root, storeEntries, options) : null
-  return { ok: true, restored, count: restored.length, applications }
+  return { ok: true, restored, count: restored.length, refused, applications }
 }

@@ -10,6 +10,7 @@ import { getProvider, PROVIDER_NAMES, KEYLESS_PROVIDERS, checkProviderHealth, li
 import { initSseResponse, sseWrite } from './stream-spawn.js'
 import { UNGATED_PROVIDERS, finishAiCall, recordAiRefusal, reserveAiCall } from './ai-gate.js'
 import { assertClean, redactContext } from './ai-redact.js'
+import { maskSecrets } from './secret-mask.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -22,7 +23,7 @@ function ensureDir(dir) {
 }
 
 function sanitizeKey(key) {
-  return String(key || '').replace(/sk-[a-zA-Z0-9]{8,}/g, 'sk-****')
+  return maskSecrets(String(key || ''))
 }
 
 export function writeInterviewPrep(jobId, data) {

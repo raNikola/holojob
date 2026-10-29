@@ -28,6 +28,9 @@ import {
   runQualityAudit,
 } from './run-quality-audit.js'
 import { importLinkedInText } from './run-linkedin-import.js'
+import { handleAiSettingsRequest } from './ai-settings-handler.js'
+import { guardApiRequest } from './request-guard.js'
+import { maskErrorField } from './secret-mask.js'
 import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
 import { handleApplicationsRequest } from './application-store.js'
@@ -188,7 +191,7 @@ function readLimitedBody(req, limit) {
 function sendJson(res, status, data) {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
-  res.end(JSON.stringify(data))
+  res.end(JSON.stringify(maskErrorField(data)))
 }
 
 function contentTypeFor(filePath) {
@@ -210,6 +213,15 @@ function serveResumeFile(res, jobId, filename) {
   res.setHeader('Content-Type', contentTypeFor(filePath))
   res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`)
   fs.createReadStream(filePath).pipe(res)
+}
+
+/**
+ * Every /api request enters here: the request checks, then the AI budget routes, then the rest.
+ * The production server and the Vite dev middleware both call this and nothing else.
+ */
+export async function handleApiRoutes(req, res) {
+  if (guardApiRequest(req, res)) return true
+  return (await handleAiSettingsRequest(req, res)) || (await handleApiRequest(req, res))
 }
 
 /**
