@@ -71,7 +71,7 @@ data), **J** job-search data (not identifying alone, but the owner's private pip
 | 6 | `job-dashboard-pipeline-state` | ls | `pipelineState.js` | last pipeline run progress | J | Server-side or drop (Q5). |
 | 7 | `job-dashboard-ai-chat` | ss | `AICommandCenter.jsx:14-27` | last 50 chat messages (can quote the ad, profile summary) | P (redacted but conversational) | Remove; keep in component state only (lost on reload). |
 | 8 | `job-dashboard-ai-memory` | ls | `aiMemory.js` | goals, preferred companies, weaknesses, lessons | P | Server (`data/ai/memory.json`) or drop. |
-| 9 | `job-dashboard-ai-cache` | ls | `aiResponseCache.js` | AI responses keyed by hash, 7-day TTL | P (responses quote the ad and profile) | Remove. Server already has `data/` caches and the ledger. |
+| 9 | `job-dashboard-ai-cache` | ls | `aiResponseCache.js` | AI responses keyed by hash, 7-day TTL | P (responses quote the ad and profile) | Remove from the browser; **replaced by the server-side AI findings store** (STEP5_SERVER_MASTER_PLAN 2.8, step 2b, owner decision 2026-10-29: append-only findings per entity, lookup before the budget gate, no key, contact data redacted before it is stored or sent). Not migrated. |
 | 10 | `job-dashboard-ai-usage` | ls | `aiUsageTracker.js`, `AIUsageDashboard` | per-call token / cost estimates | J | Remove: the server ledger (`GET /api/ai/usage`) is the truth; the browser log is a duplicate. |
 | 11 | `job-dashboard-outreach-index` | none | `outreachStorage.js:1` only declares the constant | nothing written | - | Dead constant: delete. |
 | 12 | `job-dashboard-active-view` | ss | `appNavigation.js:57,84` | current view id | U | **Allow** (ss). |
@@ -144,7 +144,7 @@ the same data.
 
 - **Server is the master (Q1, decided)** for: profile (3), intelligence (4), discovered / scored jobs (5), applications (already; no browser copy), AI memory (8). The browser keeps UI state only. Each already has, or
   needs only a trivial, route: `/api/profile/save`, `/api/intelligence/save`, jobs write path, plus matching `GET`s.
-- **Removed outright** (rebuildable or duplicate): AI response cache (9), browser usage log (10), AI chat history (7, component
+- **Removed from the browser** (rebuildable or duplicate): AI response cache (9; its job passes to the server AI findings store, so a repeat browser AI call is answered from a stored finding before the budget gate reserves anything, and is a real call only when the input changed or the finding is stale), browser usage log (10), AI chat history (7, component
   state only), pipeline state (6, derive from `data/jobs/.pipeline.lock` / run output), dead constant (11).
 - **In-memory only** while the app is open (React state), loaded from the server on start.
 - **Order of operations, to avoid data loss:** (a) the server copy must exist and be verified identical to the browser copy
@@ -422,7 +422,7 @@ before the pre-migration checklist (section 9) passes for the step.
 | 2 | **AI keys to the server.** `scripts/secret-store.js`, `/api/secrets` routes, Privacy > Secrets screen (AI part), `run-ai.js` / `getAiStatus` / `getAiModels` use the store and ignore a body `apiKey` and `baseUrl`, key and base URL pinned, `redactSecrets` (exact value) on error paths, Gemini header, key field removed from `AISettingsPanel`, owner-triggered migration with the rotation checklist (section 4). Tests 6.2 and 6.4 ledger part. | **shipped `e793fc5`** | What it touches and what it does not: section 10; as built: section 11. |
 | 3 | **`li_at` without CLI arguments.** Same store; bridge reads the store; cookie passed to the scraper in the child's environment, never `--li-at`; request-body `liAt` and the session-file source dropped; outreach panel shows set / not set; migration. Test 6.4 (argv). | **shipped `615c5c3`** | As built: section 11a. |
 | 4 | **AI settings to the server (Q5).** Provider, model, temperature, max tokens, base URL (non-secret part), feature toggles move to `data/config/`; one source of truth for the provider (removes the `llm_client.active_provider()` duplicate); `aiSettings.js` stops using `localStorage`. | **shipped `e139c81`** | As built: section 11b. |
-| 5 | **Profile, intelligence and jobs migration with verification (Q1).** Storage wrapper, allowlist, ESLint rule and static test (6.1) first; then per key the preview / confirm / verified-write protocol of 2.3; then the redundant stores (AI response cache, browser usage log, chat history, AI memory, pipeline state) are removed. Jobs first (file exists, applications store is the template), profile last. | open | Large; split per key. |
+| 5 | **Profile, intelligence and jobs migration with verification (Q1).** Storage wrapper, allowlist, ESLint rule and static test (6.1) first; then per key the preview / confirm / verified-write protocol of 2.3; then the redundant stores (browser usage log, chat history, pipeline state) are removed, AI memory moves to the server, and the AI response cache is replaced by the server AI findings store (step 2b of STEP5_SERVER_MASTER_PLAN). Jobs first (file exists, applications store is the template), profile last. | open | Large; split per key. |
 | 6 | **Browser AI confirm dialog (Q8).** The nine browser AI features get the explicit confirm that shows the redacted text and the provider (principle 14), like the judge and CV analysis. | open | The next privacy task after the secrets migration (steps 2-3). |
 
 ## 8. Decisions (owner, approved 2026-10-29)
@@ -435,7 +435,7 @@ before the pre-migration checklist (section 9) passes for the step.
 | Q4 | Trust boundary | **600 / 700 on `data/secrets/`, no extra encryption in v1.** Rootless podman maps container root to the host user; the file modes protect against other host users only. Revisit with multi-device access. |
 | Q5 | Non-secret AI settings, theme | **AI settings server-side; theme is the only allowlisted browser key added** (2.2). |
 | Q6 | Moving the key in the browser | **Yes, with a rotation checklist** (section 4), including `OPENAI_API_KEY` in `.env` if it is the same key. |
-| Q7 | `AICommandCenter` chat history | **In memory only.** No server file, no browser storage. |
+| Q7 | `AICommandCenter` chat history | **In memory only.** No server file, no browser storage. Unchanged by the findings store: chat calls pass `skipCache` and are never stored. (2026-10-29: the AI response cache is no longer "removed"; it is replaced by the server AI findings store, STEP5_SERVER_MASTER_PLAN 2.8.) |
 | Q8 | Confirm dialog for browser AI features | **Approved; the next privacy task after the secrets migration** (step 6). |
 
 No open questions remain from the audit. Details the owner still picks when the step starts: the retention of the pre-overwrite backup copies (step 5).
