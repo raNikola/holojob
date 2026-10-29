@@ -2,7 +2,7 @@
 
 Structure of every data file the app reads or writes. Only shapes: `<string>`, `<number>`, `<boolean>`, `<null>` and `<x>|<y>` for mixed values, `[...]` for lists, `<id>` for a map keyed by ids, a trailing `?` on a key where some records omit it. No value is copied from candidate or profile data. Generated from the files on DS9 on 2026-10-25, plus the code for data that lives only in the browser.
 
-Where data lives: the **browser `localStorage` is the master** for the profile, intelligence, job list and application tracking; the files under `data/` are mirrors written by sync actions and read by the Python pipeline. Everything under `data/` except `data/examples/` is git-ignored and private.
+Where data lives: the **browser `localStorage` is the master** for the profile, intelligence, job list and (until the tracker migration) application tracking, whose server-side successor is the [Application store](#application-store); the files under `data/` are mirrors written by sync actions and read by the Python pipeline. Everything under `data/` except `data/examples/` is git-ignored and private.
 
 Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intelligence`, `job-dashboard-discovered-jobs`, `job-dashboard-pipeline-state`, `job-dashboard-outreach-index`, `job-dashboard-jobs-tab`, `job-dashboard-sidebar-collapsed`, `job-dashboard-ai-settings`, `job-dashboard-ai-cache`, `job-dashboard-ai-chat`, `job-dashboard-ai-memory`, `job-dashboard-ai-usage`.
 
@@ -1114,6 +1114,169 @@ Map keys are `requirement_frames.frame_key()`: the ad's title, company and descr
 ```
 
 
+
+## Application store
+
+Server-side master of the application tracker (Phase 3, [TRACKER_PLAN.md](TRACKER_PLAN.md)). Written only by
+`scripts/application-store.js`; git-ignored like all of `data/`. It holds recruiter contacts, so it never goes into
+an AI payload. Nothing in discovery, scoring or the ledger reads or writes it.
+
+| Path | Content |
+|---|---|
+| `data/applications/applications.json` | Every application: frozen snapshot, frozen attempt, append-only events |
+| `data/applications/settings.json` | Tracker switches and the stage registry. Separate from the store, written under the same lock |
+| `data/applications/files/<appId>/` | Frozen copies of what was sent: the CV, the cover letter, and every CV recorded later |
+| `data/backups/applications-<YYYYMMDD-HHMMSS>[-n]/` | Copy of `applications.json` and `settings.json` made before a backup restore merges into them |
+
+Both JSON files are written atomically (temp file, fsync, rename). An unreadable or malformed file is an error: every
+write that needs it is refused (500) and the file is never touched. A missing `applications.json` is an empty store; a
+missing `settings.json` is the defaults, and it is first written by the first change, never at startup.
+
+### applications.json
+
+```json
+{
+  "version": 1,
+  "updatedAt": "<ISO timestamp>|null",
+  "requests": { "<requestId>": "<appId>" },
+  "applications": {
+    "<appId>": {
+      "id": "<appId>",
+      "createdAt": "<ISO timestamp>",
+      "origin": "manual",
+      "posting": {
+        "jobId": "<string>|null", "postingKey": "job:<jobId> | url:<url> | tcl:<company>|<title>|<location>",
+        "title": "<string>", "company": "<string>", "location": "<string>", "url": "<string>",
+        "source": "<string>", "provider": "<string>", "datePosted": "<string>", "salary": "<string>",
+        "employmentType": "<string>", "workMode": "<string>", "isRemote": "<boolean>|null",
+        "description": "<string>", "descriptionMissing": "<boolean>",
+        "capturedFrom": "scored_jobs|job_history|browser|manual", "capturedAt": "<ISO timestamp>",
+        "capturedAfterApply": "<boolean>", "snapshotSha256": "<hex>"
+      },
+      "attempt": {
+        "channel": "company_site|job_board|email|referral|recruiter_inbound|agency|other",
+        "channelDetail": "<string>", "applicationUrl": "<string>", "appliedDate": "<YYYY-MM-DD>",
+        "cv": { "kind": "library|tailored|external|unknown", "cvLibraryId": "<16 hex>|null",
+                "label": "<string>", "fileName": "<string>|null", "sha256": "<hex>|null" },
+        "coverLetter": { "fileName": "<string>|null", "sha256": "<hex>|null" },
+        "previousApplicationId": "<appId>|null",
+        "distinctReason": "reapply_after_outcome|different_channel|resubmitted_new_cv|null"
+      },
+      "legacy": "<null>",
+      "events": [
+        { "id": "<appId>:<seq>", "seq": 1, "type": "applied", "at": "<ISO timestamp>",
+          "date": "<YYYY-MM-DD>", "source": "user", "data": {} }
+      ]
+    }
+  }
+}
+```
+
+- `appId` is `app-<16 hex>` for an application created in the app. (`mig-` and `csv-` ids come with the migration and
+  the CSV import, later steps.) `requests` keeps the last 200 create `requestId`s, so a retry returns the first result.
+- `posting`, `attempt`, `id`, `createdAt`, `origin` and `legacy` are frozen at creation. `events` only grows at the
+  end; `seq` runs 1..n with no gap and the first event is `applied`. `assertAppendOnly` checks all of this before
+  every write.
+- The current state is never stored. `foldApplication(app)` computes it from the events.
+
+### Events
+
+Every event: `{ id, seq, type, at, date, source, data }`. `at` is when it was recorded, `date` the day it happened (never
+later than today). The client sends only `{ type, date?, data }`; the server assigns the rest.
+
+| Type | `data` | Notes |
+|---|---|---|
+| `applied` | `{}` | Event 1 only, written by create |
+| `stage_changed` | `{ stage }` | `stage` is `applied` or an active work stage key. Refused on a closed application. No label: the name shown is the registry's current label |
+| `outcome_set` | `{ outcome }` | `offer_accepted`, `offer_declined`, `rejected`, `withdrawn`, `ghosted`, `position_closed`. Refused while an outcome is set |
+| `outcome_cleared` | `{ reason }` | Reopens. Refused when no outcome is set, or when reopening would leave two competing open applications (409 with `conflictingId`) |
+| `note_added` | `{ text }` | |
+| `contact_added` | `{ contactId, role?, name?, email?, linkedin? }` | `contactId` (`c<n>`) is assigned by the server |
+| `contact_updated` | `{ contactId, ...changed }` | |
+| `message_sent`, `reply_received` | `{ via, contactId?, summary? }` | |
+| `follow_up_set`, `follow_up_done` | `{ dueDate }` / `{ how? }` | |
+| `nudge_snoozed` | `{ rule, until }` | |
+| `assignment_due`, `offer_deadline` | `{ dueDate }` | |
+| `event_voided` | `{ eventId, reason }` | The only correction. Cannot target `applied`, `event_voided`, `application_voided` or `application_restored` |
+| `application_voided`, `application_restored` | `{ reason }` | A restore that brings the application back open is refused (409) when it would compete with another open one |
+| `applied_date_corrected` | `{ appliedDate }` | `attempt.appliedDate` stays frozen; the fold reads the latest non-voided correction. Not in the future |
+| `cv_recorded` | `{ kind, cvLibraryId, label, fileName, sha256, reason? }` | The first record when `attempt.cv.kind` is `unknown`, otherwise a correction (`reason` required). The server copies the file into `files/<appId>/` under a name nobody has used (`<name>-2.pdf`, ...), never over an existing one, and sets `fileName` and `sha256` itself. `attempt.cv` and every earlier copy stay as they are |
+
+`note_added`, `nudge_snoozed`, `event_voided`, `application_voided`, `application_restored`, `applied_date_corrected`
+and `cv_recorded` are not activity: they never reset a follow-up clock.
+
+Two applications **compete** when both are open and not voided, share the `postingKey` and the `attempt.channel`, and
+their CVs are not both known and different with one of them claiming `resubmitted_new_cv`. No two ever compete.
+Restore (to open), reopen and a CV correction check it. Create applies the stricter rule of TRACKER_PLAN 6c: an open
+application at the key refuses a new one unless a distinct reason is claimed and verified. Voided applications are
+ignored by every check.
+
+### Folded state
+
+`foldApplication(app)` (`src/modules/applications/foldApplication.js`, pure, registry-free) returns:
+`voided`; `stage` (the key of the latest non-voided `stage_changed`, else `applied`; kept under an outcome);
+`stageSince` (that event's `date`, else the folded applied date); `stageHistory`
+(`[{ stage, from, to }]`, one entry per spell in a stage, `to: null` while it runs, a reopen starts a new entry;
+`daysInStage(entry, today)` gives the time in it); `outcome`, `outcomeDate`; `appliedDate` (latest non-voided
+`applied_date_corrected`, else `attempt.appliedDate`); `cv` (latest non-voided `cv_recorded` without its `reason`,
+else `attempt.cv`); `notes`, `contacts`, `followUpDate`, `assignmentDue`, `offerDeadline`, `snoozed`,
+`lastActivityDate`, `eventCount`.
+
+`boardColumn(folded, settings)` (`stageRegistry.js`) gives the column: `null` when voided; `rejected` or `ghosted`;
+`closed` for the other outcomes (the Closed panel, grouped by outcome); the stage key; or `unfiled` for a retired
+or unknown key. A closed application keeps the stage it reached.
+
+### settings.json
+
+```json
+{
+  "version": 1,
+  "updatedAt": "<ISO timestamp>|null",
+  "trackingEnabled": true,
+  "followUpReminders": true,
+  "stages": {
+    "work": [
+      { "key": "screen", "label": "Screen", "retired": false, "interview": false },
+      { "key": "tech", "label": "Tech", "retired": false, "interview": true },
+      { "key": "onsite", "label": "Onsite", "retired": false, "interview": true },
+      { "key": "offer", "label": "Offer", "retired": false, "interview": false }
+    ]
+  },
+  "changes": [
+    { "at": "<ISO timestamp>", "action": "rename", "key": "tech", "old": "Tech", "new": "Technical" }
+  ]
+}
+```
+
+- **Fixed stages** are not stored: `applied` (first), and `rejected` and `ghosted` (closed columns). `unfiled` is a
+  reserved column. None of the four can be a work key, be renamed, moved or retired. The defaults above apply when
+  the file does not exist.
+- **Keys** match `^[a-z0-9_]{1,40}$`, are slugged from the label once (`_`, suffixed `_2`, `_3` on a collision with
+  any key, retired ones included) and never change. Events store only the key.
+- **Labels** are unique, case-insensitively, among active stages; at most 10 active work stages. Renaming changes the
+  label only, so no event is touched.
+- **Operations** (`POST /api/applications/settings/stages`): `add`, `rename` (label and/or `interview`), `move`
+  (`up`/`down` among active stages), `retire`, `unretire`. A stage is never deleted. `retire` is refused (409 with
+  `count`) while an open, non-voided application's folded stage is the key, and for the last active stage. `unretire`
+  puts the key back at the end with its last label. `add` with the label of a retired stage is refused (409 with
+  `retiredKey`).
+- **`interview`** marks the stages that count as interviews for the later reminder rules. It creates no interview and
+  no calendar entry.
+- **`trackingEnabled` false:** create, `/events`, `/move` and `settings/stages` answer 409 with `code:
+  "tracking_disabled"`. `GET`, `POST /settings`, backup export and restore keep working. Nothing is deleted.
+- **`changes`** keeps the last 50 settings changes (`switch`, `add`, `rename`, `interview`, `move`, `retire`,
+  `unretire`, `restore`), so a rename can be traced. They are not events.
+- **Backup restore:** with no current file the backup's file is written as it is. Otherwise the current switches,
+  labels and order win, and a key found only in the backup is appended retired with its label. A stage is never
+  dropped. Unreadable or invalid settings on either side are reported as a conflict and left alone.
+
+### Routes
+
+`GET /api/applications` (the store), `POST /api/applications` (create), `POST /api/applications/:id/events` (one
+event), `POST /api/applications/:id/move` (`{ toStage, date? }`, the server writes `stage_changed`, or
+`outcome_set` / `outcome_cleared`, in one save; moving to the current column writes nothing),
+`GET /api/applications/:id/files/:name`, `GET` and `POST /api/applications/settings`,
+`POST /api/applications/settings/stages`. There is no PUT, PATCH or DELETE.
 
 ## Examples and fixtures (tracked)
 

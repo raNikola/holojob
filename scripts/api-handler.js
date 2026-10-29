@@ -30,6 +30,7 @@ import {
 import { importLinkedInText } from './run-linkedin-import.js'
 import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
+import { handleApplicationsRequest } from './application-store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -510,6 +511,11 @@ export async function handleApiRequest(req, res) {
     return true
   }
 
+  // Application tracker: the store module owns every route under /api/applications.
+  if (await handleApplicationsRequest(req, res, url, { root: ROOT })) {
+    return true
+  }
+
   // Uploaded CVs (data/profile/cvs). The client names a CV only by its id.
   if (url === '/api/cvs' && req.method === 'POST') {
     try {
@@ -615,7 +621,7 @@ export async function handleApiRequest(req, res) {
         sendJson(res, 400, { error: 'Empty backup file' })
         return true
       }
-      const result = importBackupZip(ROOT, zipBuffer)
+      const result = await importBackupZip(ROOT, zipBuffer)
       sendJson(res, 200, result)
     } catch (e) {
       sendJson(res, 400, { error: e.message })
