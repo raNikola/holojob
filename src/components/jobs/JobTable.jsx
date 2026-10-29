@@ -222,7 +222,7 @@ export default function JobTable({
                 </td>
                 {showScores && (
                   <td className="px-3 py-2 align-top">
-                    <FitScore score={job.matchScore} label={job.matchLabel} inline />
+                    <FitScore score={job.matchScore} label={job.matchLabel} />
                     {job.engineShadow && <div className="mt-1"><EngineShadowBadge shadow={job.engineShadow} /></div>}
                   </td>
                 )}
