@@ -11,7 +11,11 @@ export function normalizePriorityFilter(value) {
   return value ? [value] : []
 }
 
-export function filterJobs(jobs, filters = {}) {
+/**
+ * `appliedJobIds` is the set of jobs with a non-voided application (appliedFilter.js); the status
+ * value "applied" reads it, since the tracker store, not the job record, says whether a job was applied to.
+ */
+export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
   const {
     searchText = '',
     location = '',
@@ -32,7 +36,9 @@ export function filterJobs(jobs, filters = {}) {
   const q = searchText.trim().toLowerCase()
 
   return (jobs || []).filter((job) => {
-    if (status && job.status !== status) return false
+    if (status === 'applied') {
+      if (!appliedJobIds?.has(job.jobId)) return false
+    } else if (status && job.status !== status) return false
     if (matchLabel && job.matchLabel !== matchLabel) return false
     if (priorities.length && !priorities.includes(job.priority)) return false
     if (minScore !== '' && minScore != null) {

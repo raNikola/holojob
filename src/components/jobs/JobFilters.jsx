@@ -2,11 +2,12 @@ import Card from '../ui/Card'
 import Input from '../ui/Input'
 import SelectField from '../ui/SelectField'
 import MultiSelectDropdown from '../ui/MultiSelectDropdown'
+import { APPLIED_FILTER, statusFilterOptions } from '../../modules/applications/appliedFilter'
 import { normalizePriorityFilter } from '../../modules/jobs/jobFilters'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { MATCH_LABELS, PRIORITIES, hasMatchScores } from '../../modules/jobs/matchScore'
 
-export default function JobFilters({ filters, sites, providers, jobs, onChange }) {
+export default function JobFilters({ filters, sites, providers, jobs, applicationStore = null, onChange }) {
   const showScoreFilters = hasMatchScores(jobs)
   return (
     <Card title="Filters" className="!p-4">
@@ -41,9 +42,12 @@ export default function JobFilters({ filters, sites, providers, jobs, onChange }
           label="Status"
           value={filters.status}
           onChange={(v) => onChange({ status: v })}
-          options={JOB_STATUSES}
+          options={statusFilterOptions(JOB_STATUSES, jobs, applicationStore)}
           placeholder="All statuses"
         />
+        {filters.status === APPLIED_FILTER && !applicationStore && (
+          <p className="self-end pb-2 text-xs text-stone-500">The application tracker has not loaded, so no job can be shown as applied.</p>
+        )}
         {showScoreFilters && (
           <>
             <Input

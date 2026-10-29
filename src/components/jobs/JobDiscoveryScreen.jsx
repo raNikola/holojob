@@ -13,6 +13,7 @@ import BulkActionsBar from './BulkActionsBar'
 import JobTable from './JobTable'
 import JobDetailDrawer from './JobDetailDrawer'
 import JobEmptyState from './JobEmptyState'
+import { appliedJobIds } from '../../modules/applications/appliedFilter'
 import { filterJobs, getUniqueProviders, getUniqueSites } from '../../modules/jobs/jobFilters'
 import { computeJobStats } from '../../modules/jobs/jobStats'
 import { probePipelineApi, runTailor } from '../../modules/jobs/pipelineRunner'
@@ -97,14 +98,16 @@ export default function JobDiscoveryScreen() {
     [state.jobs, applications.status, applications.store, applications.settings],
   )
   const stats = useMemo(() => computeJobStats(viewJobs), [viewJobs])
+  const applicationStore = applications.status === 'ready' ? applications.store : null
+  const appliedIds = useMemo(() => appliedJobIds(applicationStore), [applicationStore])
   const sites = useMemo(() => getUniqueSites(state.jobs), [state.jobs])
   const providers = useMemo(() => getUniqueProviders(state.jobs), [state.jobs])
   const effectiveFilters = useMemo(() => withProfileSalaryDefaults(state.filters, profile?.basicProfile), [state.filters, profile?.basicProfile])
   const filteredJobs = useMemo(() => {
-    let filtered = filterJobs(viewJobs, effectiveFilters)
+    let filtered = filterJobs(viewJobs, effectiveFilters, { appliedJobIds: appliedIds })
     if (showP1Only) filtered = filtered.filter((j) => isActionable(j) && (j.priority === 'P1' || j.priority === 'P2'))
     return filtered
-  }, [viewJobs, effectiveFilters, showP1Only])
+  }, [viewJobs, effectiveFilters, showP1Only, appliedIds])
 
   const p1Count = useMemo(() => state.jobs.filter((j) => isActionable(j) && j.priority === 'P1').length, [state.jobs])
   const p2Count = useMemo(() => state.jobs.filter((j) => isActionable(j) && j.priority === 'P2').length, [state.jobs])
@@ -305,7 +308,7 @@ export default function JobDiscoveryScreen() {
                   </div>
               </div>
 
-              <JobFilters filters={effectiveFilters} sites={sites} providers={providers} jobs={state.jobs} onChange={handleFilterChange} />
+              <JobFilters filters={effectiveFilters} sites={sites} providers={providers} jobs={state.jobs} applicationStore={applicationStore} onChange={handleFilterChange} />
               <BulkActionsBar
                 selectedCount={selectedJobIds.length}
                 running={bulkRunning}
