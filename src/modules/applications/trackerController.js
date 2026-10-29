@@ -8,7 +8,7 @@ import { OUTCOMES } from './applicationEnums.js'
 import * as client from './applicationsClient.js'
 import { foldApplication } from './foldApplication.js'
 import { legacyKind, legacyProblem } from './legacyTracking.js'
-import { moveTargets } from './stageRegistry.js'
+import { labelFor, moveTargets } from './stageRegistry.js'
 import { applicationsForJob, latestActiveApplication } from './trackingView.js'
 
 /** Outcomes the panel sets on an open application. Rejected and Ghosted are board columns (`move`). */
@@ -33,6 +33,110 @@ export function panelMode(job, cache) {
 
 const today = () => new Date().toISOString().slice(0, 10)
 
+const CV_FILE_ID = /^[a-f0-9]{16}$/
+const baseName = (path) => String(path).split(/[/\\]/).pop()
+export const UNKNOWN_CV = { key: 'unknown', kind: 'unknown', label: 'Not recorded yet' }
+export const EXTERNAL_CV = { key: 'external', kind: 'external', label: 'A CV outside the app (name it)' }
+
+/**
+ * The CVs the user can say they sent. A library CV is offered only when its file was stored (a 16-hex id and a
+ * `filePath`), because the store freezes a copy of the file and refuses a CV it cannot read. The tailored PDF is
+ * named by `job.tailoredAssets` (bare file name), the same list the Resume Library shows.
+ */
+export function cvOptions(job, profile) {
+  const options = []
+  const tailored = job?.tailoredAssets?.resumePdf ? baseName(job.tailoredAssets.resumePdf) : null
+  if (tailored) options.push({ key: 'tailored', kind: 'tailored', fileName: tailored, label: 'Tailored for this job' })
+  for (const cv of profile?.cvLibrary ?? []) {
+    if (!cv.filePath || !CV_FILE_ID.test(cv.id)) continue
+    options.push({
+      key: `library:${cv.id}`,
+      kind: 'library',
+      cvLibraryId: cv.id,
+      fileName: cv.fileName || `${cv.label || 'cv'}.pdf`,
+      label: `${cv.label || cv.fileName || 'CV'}${cv.id === profile.defaultCvId ? ' (default)' : ''}`,
+    })
+  }
+  options.push(EXTERNAL_CV, UNKNOWN_CV)
+  return options
+}
+
+/** The preselected option: tailored for this job, else the default library CV, else not recorded (TRACKER_PLAN 3.2). */
+export function defaultCvOption(job, profile) {
+  const options = cvOptions(job, profile)
+  return options.find((o) => o.key === 'tailored')
+    ?? options.find((o) => o.key === `library:${profile?.defaultCvId}`)
+    ?? UNKNOWN_CV
+}
+
+/** The `attempt.cv` / `cv_recorded` fields for an option; the server decides the stored file name and sha256. */
+function cvBody(option, label = '') {
+  if (!option || option.kind === 'unknown') return { kind: 'unknown' }
+  const body = { kind: option.kind }
+  if (option.kind === 'library') body.cvLibraryId = option.cvLibraryId
+  if (option.kind === 'library' || option.kind === 'tailored') body.fileName = option.fileName
+  const text = (label || (option.kind === 'external' ? '' : option.label.replace(/ \(default\)$/, ''))).trim()
+  if (text) body.label = text
+  return body
+}
+
+/** Record which CV was sent (O4): a new event; a correction of an earlier record needs a reason. */
+export async function recordCv(appId, option, { label = '', reason = '' } = {}, cache = client.getApplicationsState()) {
+  if (!option || option.kind === 'unknown') throw new client.ClientError(400, 'Pick the CV that was sent')
+  const app = cache.store?.applications?.[appId]
+  if (!app) throw new client.ClientError(404, 'Application not found')
+  const data = cvBody(option, label)
+  if (foldApplication(app).cv?.kind !== 'unknown') {
+    if (!reason.trim()) throw new client.ClientError(400, 'Correcting the recorded CV needs a reason')
+    data.reason = reason.trim()
+  }
+  return client.addEvent(appId, { type: 'cv_recorded', data })
+}
+
+/** Link to a frozen file of an application (the server serves only names recorded on it). */
+export const frozenFileUrl = (appId, fileName) => `/api/applications/${appId}/files/${encodeURIComponent(fileName)}`
+
+const EVENT_TITLES = {
+  applied: 'Applied',
+  stage_changed: 'Stage changed',
+  outcome_set: 'Closed',
+  outcome_cleared: 'Reopened',
+  note_added: 'Note added',
+  contact_added: 'Contact added',
+  contact_updated: 'Contact updated',
+  message_sent: 'Message sent',
+  reply_received: 'Reply received',
+  follow_up_set: 'Follow-up set',
+  follow_up_done: 'Follow-up done',
+  nudge_snoozed: 'Reminder snoozed',
+  assignment_due: 'Assignment due date',
+  offer_deadline: 'Offer deadline',
+  event_voided: 'Entry voided',
+  application_voided: 'Application voided',
+  application_restored: 'Application restored',
+  applied_date_corrected: 'Applied date corrected',
+  cv_recorded: 'CV recorded',
+}
+
+/** One timeline line for an event: a title and a short detail, newest first via `timeline`. */
+export function describeEvent(event, settings) {
+  const d = event.data ?? {}
+  let detail
+  switch (event.type) {
+    case 'stage_changed': detail = d.stage ? labelFor(d.stage, settings) : ''; break
+    case 'outcome_set': detail = d.outcome ?? ''; break
+    case 'applied_date_corrected': detail = d.appliedDate ?? ''; break
+    case 'follow_up_set': case 'assignment_due': case 'offer_deadline': detail = d.dueDate ?? ''; break
+    case 'cv_recorded': detail = [d.kind, d.label || d.fileName, d.reason && `(${d.reason})`].filter(Boolean).join(' · '); break
+    case 'note_added': detail = d.text ?? ''; break
+    case 'application_voided': case 'application_restored': case 'outcome_cleared': detail = d.reason ?? ''; break
+    default: detail = ''
+  }
+  return { id: event.id, date: event.date, title: EVENT_TITLES[event.type] ?? event.type, detail }
+}
+
+export const timeline = (app, settings) => [...(app.events ?? [])].reverse().map((event) => describeEvent(event, settings))
+
 /**
  * Record "applied". `form.requestId` is made once when the form opens, so a retry or a double click
  * returns the first result. `form.separateAttempt` names the reason when the user insists on a second,
@@ -51,7 +155,7 @@ export async function markApplied(job, cache, form) {
       channelDetail: form.channelDetail ?? '',
       applicationUrl: form.applicationUrl ?? '',
       appliedDate: form.appliedDate || today(),
-      cv: { kind: 'unknown' },
+      cv: cvBody(form.cv, form.cvLabel),
     },
   }
   if (form.separateAttempt) body.newAttempt = { distinctReason: form.separateAttempt }
