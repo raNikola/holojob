@@ -133,7 +133,8 @@ an `Origin` header must be an allowed origin; wrong type 415, wrong origin or ho
 
 ## Secret store (AI keys)
 
-`scripts/secret-store.js` is the only code that reads or writes `data/secrets/` (directory 700, files 600, atomic writes,
+`scripts/secret-store.js` is the only code that writes `data/secrets/` and the only Node reader; Python reads `ai.json` read-only through
+`python/llm/secret_store.py` (directory 700, files 600, atomic writes,
 never logged). `data/secrets/ai.json` holds `{ provider: { key, baseUrl, setAt } }` for openai, openrouter, claude and gemini.
 Routes: `GET /api/secrets` (set / not set, source, last 4 characters, base URL), `PUT` / `DELETE /api/secrets/ai/<provider>`
 (`scripts/secrets-handler.js`); no route returns a key, and errors never quote the request. Settings > Privacy: secrets and keys
@@ -150,7 +151,12 @@ the same last 4 characters).
 - The LinkedIn cookie is `data/secrets/linkedin.json` (`{ li_at, setAt }`), `PUT` / `DELETE /api/secrets/linkedin`, then `LINKEDIN_LI_AT`
   from `.env`. `POST /api/outreach/discover` ignores any cookie in the body. The scraper gets it only in the child's environment in deep
   mode (`--li-at` no longer exists; search mode strips it), and its text is masked. `data/outreach/linkedin_session.json` is no longer read.
-- Python `llm_client` still reads `OPENAI_API_KEY` from the environment only; it does not read the store.
+- **Python reads the store too** (`python/llm/secret_store.py`, read-only; not named `secrets.py`, which would shadow the standard library). For the
+  selected provider only (`openai`, `openrouter`), the key and pinned base URL come from the store; `.env` (`OPENAI_API_KEY`, ...) applies only when
+  the store has no key for that provider. The intended setup is store only, so `.env` keys can be removed. A store file that is not private (group or
+  other access, symlink, bad JSON) refuses the call, with no `.env` fallback; a missing key refuses before the gate (logged, ledger row), and no other
+  provider is tried. A stored key goes only to its pinned URL or the provider's own address (`*_BASE_URL` does not redirect it). The exact key is masked
+  in errors, log lines and ledger rows (`secret_store.mask`). Check without a call: `podman exec holojob python python/llm/secret_store.py status openai`.
 
 ## AI budget gate
 

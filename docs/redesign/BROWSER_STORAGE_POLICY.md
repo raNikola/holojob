@@ -515,7 +515,7 @@ Follows section 10. Where the build made a choice the text left open:
   after the move it can never come back. The allowlist (`src/modules/browserStorage/allowlist.js`, data only) and its test land here;
   the wrapper and ESLint rule are still step 5.
 - **Gemini** sends `x-goog-api-key`; the key is no longer in the URL (L11).
-- **Not done here:** `python/llm/secrets.py` (section 10 leaves Python alone; `llm_client` keeps reading `OPENAI_API_KEY` from the environment,
+- **Not done here:** ~~`python/llm/secrets.py`~~ (shipped as `secret_store.py`, section 11c) (section 10 left Python alone; `llm_client` kept reading `OPENAI_API_KEY` from the environment,
   so rotating or removing it in `.env` affects the Python judge, matcher and enrichment); ~~LinkedIn `li_at` (step 3)~~ (shipped, section 11a); the CSP and `safeHref`.
 - `.dockerignore` gained `data/secrets` and `claude-config` (owner-approved), so a build never copies them into an image layer.
 
@@ -599,3 +599,24 @@ Ledger note: the ledger is written by `python/llm/ai_gate.py` from what Node han
 | 2 | Origin / Host / Content-Type guard | `aiSelection.test.js`: foreign Origin 403, `text/plain` 415 on `PUT /api/ai/selection`. |
 | 3 | Secrets never in responses, logs or backups | The file has no secret field; a body carrying a key is rejected and not echoed (test). |
 | 4 | Every AI call passes the gate | Unchanged: the selection is read before the gate, adds no call; a refusal is a ledger row. |
+
+## 11c. Python reads the store (2026-10-29)
+
+- **Module.** `python/llm/secret_store.py`, read-only (the Node store stays the only writer). Named `secret_store`, not `secrets`: `python/llm` is on
+  `sys.path` and a `secrets.py` would shadow the standard library. Root: `HOLOJOB_SECRETS_DIR`, else `data/secrets`. It never creates the directory.
+- **One provider, one entry.** `get_credential(provider)` returns the entry of the named provider only and opens the file only for providers the store can hold
+  (`openai`, `openrouter` are the ones Python runs). Nothing is copied into `os.environ`, so child processes do not inherit a store key.
+- **Three states.** File absent, or no usable entry for the provider: the provider's variable (`OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`,
+  `GROQ_API_KEY`, `LLM_API_KEY`) applies, as before. File present but not trustworthy (not a regular file, a symlink, mode with any group or other bit,
+  unreadable, not a JSON object, a `baseUrl` that is not plain http(s)): the call **refuses**, with fixed text (no path, no content, no chained parse error), and
+  `.env` is **not** a fallback (Node falls through to `.env` there; Python deliberately does not). No key at all: refuses before the gate is asked
+  (log line, ledger `refused` row, no reservation); no other provider is tried.
+- **Key and URL are one record.** A stored key goes to its pinned `baseUrl`, else to the provider's built-in address; `OPENAI_BASE_URL` and `OPENROUTER_BASE_URL`
+  do not redirect it. A key from `.env` keeps the old `*_BASE_URL` behaviour. The gate is told the same URL the request is sent to (one resolution per call).
+- **Masking.** The exact value of a key resolved for a call (and its URL-encoded form) is replaced by `[secret]` in raised error text, log lines (a filter on the
+  `llm_client` logger), the ledger (`ai_gate._append`) and `recent_rows`. Entries of other providers are never read to build the list.
+- **Unchanged:** the budget gate, redaction, and the explicit selection. `ANTHROPIC_API_KEY` stays Node-only (Python cannot run `claude`).
+- **Tests:** `tests/python/test_secret_store.py` (store key used, pinned URL, precedence, env only without a store key, wrong-provider key never used, canary absent from
+  caplog / ledger / error chain / environment, loose mode, malformed, symlink, unreadable, bad URL, no shadowing of `secrets`). `conftest.py` points
+  `HOLOJOB_SECRETS_DIR` at a temp dir for every test and clears the key variables.
+- **Owner steps** to move a key and drop it from `.env`: README, "API keys".
