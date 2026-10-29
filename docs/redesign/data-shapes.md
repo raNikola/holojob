@@ -1215,9 +1215,10 @@ ignored by every check.
 
 `foldApplication(app)` (`src/modules/applications/foldApplication.js`, pure, registry-free) returns:
 `voided`; `stage` (the key of the latest non-voided `stage_changed`, else `applied`; kept under an outcome);
-`stageSince` (that event's `date`, else the folded applied date); `stageHistory`
+`stageSince` (the `date` of the latest `stage_changed`, else the folded applied date; not time in stage, a reopen
+into the same stage does not move it); `stageHistory`
 (`[{ stage, from, to }]`, one entry per spell in a stage, `to: null` while it runs, a reopen starts a new entry;
-`daysInStage(entry, today)` gives the time in it); `outcome`, `outcomeDate`; `appliedDate` (latest non-voided
+`daysInStage(entry, today)` gives the time in one entry, `daysInCurrentStage(folded, today)` the time in the newest); `outcome`, `outcomeDate`; `appliedDate` (latest non-voided
 `applied_date_corrected`, else `attempt.appliedDate`); `cv` (latest non-voided `cv_recorded` without its `reason`,
 else `attempt.cv`); `notes`, `contacts`, `followUpDate`, `assignmentDue`, `offerDeadline`, `snoozed`,
 `lastActivityDate`, `eventCount`.

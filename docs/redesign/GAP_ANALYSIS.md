@@ -5,7 +5,7 @@ Status: ANALYSIS, 2026-10-29. Read-only. ROADMAP.md, code and `data/` are unchan
 Inputs:
 - the docs: CLAUDE.md, [../ROADMAP.md](../ROADMAP.md), [DECISIONS.md](DECISIONS.md), [PHASE0_AUDIT.md](PHASE0_AUDIT.md),
   [TRACKER_PLAN.md](TRACKER_PLAN.md) (committed `7ff5ae0`) and [data-shapes.md](data-shapes.md);
-- the code at commit `7ff5ae0` plus the uncommitted S1 work, read file by file;
+- the code at commit `7ff5ae0` plus the S1 work (committed afterwards as `5e549a4`), read file by file;
 - ApplyPack at `5b1edfe9` (the clone used for the tracker plan).
 
 ## How to read this
@@ -15,9 +15,9 @@ Inputs:
 - **PARTIAL:** some of the capability exists. The evidence says which part.
 - **PLANNED:** only in ROADMAP.md, PHASE0_AUDIT.md or TRACKER_PLAN.md.
 - **MISSING:** in no code and no plan.
-- **S1\*:** implemented in the **uncommitted** S1 work in the tree (`scripts/application-store.js`,
+- **S1\*:** implemented in the application tracker S1 commit `5e549a4` (`scripts/application-store.js`,
   `src/modules/applications/`, `tests/js/applicationStore.test.js`, `tests/python/test_application_store_isolation.py`,
-  and diffs in `scripts/api-handler.js`, `scripts/backup-handler.js`). It is not counted as EXISTS.
+  and diffs in `scripts/api-handler.js`, `scripts/backup-handler.js`). It is committed but not counted as EXISTS: no screen uses it yet.
 
 **How each claim was checked**
 - **V-code:** read in the source.
@@ -72,13 +72,14 @@ numbers". A dash means no conflict found.
    - **Mitigation:** the default provider is `mock` (`scripts/run-ai.js:76`).
    - **Not listed:** CLAUDE.md lists only CV analysis, the judge, the matcher and the known `llm_tailor.py` gap. This
      violates principle 14 whenever a real provider is selected (D3).
-4. **Uncommitted S1 has the store, but not the revised stages.** S1\* provides the store, events, fold, duplicate
-   rules, frozen CV copies and backup merge. It still uses the fixed `STAGES` list
-   (`src/modules/applications/applicationEnums.js`). It has none of these from TRACKER_PLAN 1.6-1.9:
+4. **S1 is committed (`5e549a4`), with the revised stages.** S1\* provides the store, events, fold, duplicate rules,
+   frozen CV copies and backup merge, and also the parts of TRACKER_PLAN 1.6-1.9 that this point once listed as missing:
    - the stage registry and `settings.json`;
    - the `/move` route;
    - the competing-attempt rule;
    - the tracking switch.
+
+   What is still open is the migration (S2) and every screen (S3-S5). Nothing in the browser reads the store yet.
 5. **ApplyPack has no interviews, calendar, offers or salary calculator** (V-code at `5b1edfe9`).
    - **Interviews:** "interview" appears only in employer-mode screening (`src/web/routes/screen.tsx`).
    - **Offers:** `offer` is only a default board column.
@@ -153,12 +154,12 @@ These are covered above and in Phase 1. The engine is built and in shadow
 
 | Capability | Status | Evidence | AI | Principle | Size |
 |---|---|---|---|---|---|
-| Independent store, snapshot, frozen CV | S1\* | `application-store.js` `createApplication()`, `buildPosting()` (snapshot with sha256), `freezeFile()`; tests `creates an application with a frozen snapshot, attempt and first event`, `the frozen copy is unchanged after the library CV changes or is deleted`, `the application survives deleted job files, résumés and library CV` (not run) | none | Meets 13 and 15 | built, uncommitted |
+| Independent store, snapshot, frozen CV | S1\* | `application-store.js` `createApplication()`, `buildPosting()` (snapshot with sha256), `freezeFile()`; tests `creates an application with a frozen snapshot, attempt and first event`, `the frozen copy is unchanged after the library CV changes or is deleted`, `the application survives deleted job files, résumés and library CV` (not run) | none | Meets 13 and 15 | built, committed (S1) |
 | Append-only history | S1\* | `assertAppendOnly()`, `appendEvent()`; tests `appends keep the old log as a prefix and seq runs 1..n`, `assertAppendOnly rejects any rewrite` (not run) | none | — | built |
-| Duplicates, attempts, void and restore | S1\* (rule needs revising) | `findConflict()`, `requestId` replay; tests `a duplicate open attempt is refused`, `a voided application does not block a new one, and its restore cannot duplicate` (not run). Differs from TRACKER_PLAN 1.9 (restore of a closed record; channel rule) | none | — | S |
+| Duplicates, attempts, void and restore | S1\* | `findConflict()`, `requestId` replay; tests `a duplicate open attempt is refused`, `a voided application does not block a new one, and its restore cannot duplicate` (not run). Follows TRACKER_PLAN 1.9 (competing-attempt rule, `/move` reopen) | none | — | S |
 | Backup merge | S1\* | `mergeFromBackup()`; `backup-handler.js` diff; tests `a restore adds history and never removes or rewrites it` (not run). The diff also carries the unrelated archiver import fix | none | — | built |
 | Kanban, drag and drop | PLANNED | TRACKER_PLAN 3.2 / S4. Today `ApplicationHome.jsx` is a sortable table (`TRACKER_COLUMNS`) | none | — | M |
-| Configurable columns, stable stage ids | PLANNED | TRACKER_PLAN 1.6, 1.6.1, decision 13. S1\* still has a fixed `STAGES` | none | — | M (S1 rework + S5 UI) |
+| Configurable columns, stable stage ids | S1\* | TRACKER_PLAN 1.6, 1.6.1, decision 13. `stageRegistry.js`, `settings.json`, `POST /api/applications/settings/stages`; the Settings UI is S5 | none | — | M (S5 UI) |
 | Follow-up | PARTIAL | `src/modules/jobs/followUps.js` `isFollowUpDue()` on one `followUpDate`; `FollowUpPanel.jsx`. Nudges N0-N5: TRACKER_PLAN 5 / S5 | none | — | M |
 | Migration and CSV import | PLANNED | TRACKER_PLAN 2, 4 (S2, S6) | none | — | M each |
 
@@ -349,7 +350,7 @@ Each step uses free or offline work only. A step marked **blocked** waits for AI
 |---|---|---|---|---|
 | 1 | (d) | **AI guardrail:** server-side ledger of every call (Python and Node); one gate with a hard limit (default 0 = every paid call refused); a pipeline that runs with enrichment skipped or keyless; enrichment under the same confirm and limit as the judge; the free / paid split shown | none | Finding 1. With budget 0, nothing paid may run by accident. Everything after this is safe |
 | 2 | (d) | **Privacy fix for the browser AI features:** turn them off or redact (D3) | none | Finding 3; cheap |
-| 3 | (b) | **Tracker S1-S2:** revise and commit S1\* (TRACKER_PLAN 1.8), then migration | none | Already designed and mostly built; unblocks 4, 5, 8, 9, 10, 11, 13 |
+| 3 | (b) | **Tracker S1-S2:** S1\* is committed (TRACKER_PLAN 1.8 was the revision list); migration (S2) is next | none | Already designed and mostly built; unblocks 4, 5, 8, 9, 10, 11, 13 |
 | 4 | (a) | **Job Details facts:** show `datePosted`; carry `expiresAt` → `jobEndDate`; status open / closed / expired / unknown; last-checked; deterministic liveness check (HTTP status, board API presence) | none (liveness makes network requests to job boards, no AI) | Small, free, improves every list |
 | 5 | (b) | **Tracker S3-S6:** Job Details section, Kanban, Settings → Applications with nudges, CSV import | none | Planned in TRACKER_PLAN |
 | 6 | (b) | **Resume Manager, free part:** versions with lineage, compare versions, ATS parser view, deterministic strength checks on library CVs (`ats_scorer` categories that need no job), the pack record over `run_tailor --no-llm`, cover letter versions | none | Free; builds on the S1 frozen copies |
@@ -379,4 +380,4 @@ Each step uses free or offline work only. A step marked **blocked** waits for AI
 | D10 | **Offers vs tracker outcomes.** One offer record per application, with its own status, which drives `outcome_set offer_accepted` / `offer_declined` when decided; or a status only in the offer | Avoids two sources of truth |
 | D11 | **Job status vocabulary and liveness frequency.** `expired` = past `jobEndDate`; `closed` = not listed / liveness failed; `unknown` = never checked. How often liveness requests may hit boards | Network load, honesty of dates |
 | D12 | **Resume versions.** A new upload "as a new version of CV X" (lineage) vs a new CV. Does the frozen copy record the version number | Data model for module 5 |
-| D13 | **The uncommitted S1 work.** Revise and commit it as the base of the tracker (TRACKER_PLAN 1.8), with the archiver fix as its own commit | Unblocks step 3 |
+| D13 | **The S1 work.** Done: committed as `5e549a4`, revised per TRACKER_PLAN 1.8; the archiver fix is its own commit `549d42f` | Unblocked step 3 |

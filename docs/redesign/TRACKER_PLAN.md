@@ -208,8 +208,8 @@ Every event: `{ "id", "seq", "type", "at": "<ISO timestamp, when recorded>", "da
 |---|---|---|
 | `applied` | `{}` | Always event 1, `date` = `attempt.appliedDate` |
 | `stage_changed` | `{ stage, legacyStage? }` | `stage` is a key of the stage registry (1.6) that is active when the event is appended: `applied` or a work stage, never `rejected`/`ghosted`. Revised: the free `label` is dropped (PROPOSAL); the name shown is the registry's current label for the key |
-| `outcome_set` | `{ outcome, legacyStage? }` | Ends the application; nudges stop. Revised (PROPOSAL): refused while an outcome is already set, so a change between closed columns is always `outcome_cleared` then `outcome_set` (the move route, 3.1, writes both) |
-| `outcome_cleared` | `{ reason }` | Reopens, e.g. a "ghosted" company replies. Revised (PROPOSAL): checked like a restore (6c). Refused with 409 and the conflicting id when reopening would leave two open attempts that 6c would not allow, e.g. a rejected application whose `reapply_after_outcome` attempt is open |
+| `outcome_set` | `{ outcome, legacyStage? }` | Ends the application; nudges stop. Revised (PROPOSAL): refused (400) while an outcome is already set, and `stage_changed` is refused (400) on a closed application until it is reopened, so a change between closed columns is always `outcome_cleared` then `outcome_set` (the move route, 3.1, writes both) |
+| `outcome_cleared` | `{ reason }` | Refused (400) when no outcome is set. Reopens, e.g. a "ghosted" company replies. Revised (PROPOSAL): checked like a restore (6c). Refused with 409 and the conflicting id when reopening would leave two open attempts that 6c would not allow, e.g. a rejected application whose `reapply_after_outcome` attempt is open |
 | `note_added` | `{ text }` | Notes are a list, never one overwritten text box |
 | `contact_added` | `{ contactId, role, name, email, linkedin }` | `contactId` = `c<n>` within the application |
 | `contact_updated` | `{ contactId, ...changed fields }` | |
@@ -356,12 +356,25 @@ Rules, each with its source label:
 | **Reserved keys.** `applied`, `rejected`, `ghosted`, `unfiled` | VERIFIED (ApplyPack) |
 | **Reorder.** Move up or down one place; at an edge it changes nothing. Order is display order and the order used by nudge N5 ("a later stage") | VERIFIED (ApplyPack) for the move; PROPOSAL for N5 |
 | **Remove = retire.** A work stage is never deleted from the registry. Removing sets `retired: true`, which hides it from the board columns and the pickers but keeps its label for history. Refused (409, with the count) while any **open, non-voided** application's folded stage is that key, and refused for the last active work stage. A retired stage can be restored. Details in 1.6.1 | Decided (O1), adapted from VERIFIED (ApplyPack) |
+| **Refusals** (as built). `add` of a label that belongs to a retired stage → 409 with `{ retiredKey }`, and the owner restores that key instead. The `interview` flag of an existing stage is set through `rename` (`{ op: 'rename', key, interview }`, with or without a new `label`); `add` also accepts it for a new stage | Built (S1) |
 | **`interview` flag.** Marks the work stages that count as interviews for nudges N3 and N4 and for the "Interviewing" count. Defaults: `tech` and `onsite` true. Not in ApplyPack. The flag only drives those deterministic rules. It never creates an interview record, a calendar entry or a Google Calendar event. Real interviews, with date, time and an optional Google Calendar event, belong to the future Interviews / Calendar modules and are scheduled there, separately from stage moves | Decided (O2) |
 | **Invalid file.** An unreadable or malformed `settings.json` is an error: every write that needs the registry is refused, nothing is written over it. This is the store's rule (1.1), and it deliberately differs from ApplyPack, whose `parseStageConfig` silently falls back to the defaults, which could put cards in the wrong columns without notice | PROPOSAL |
 
 **Where the stage and the column come from.**
 - **The fold** stays pure and registry-free. It returns the key of the latest non-voided `stage_changed`, else
   `applied`, plus `stageSince`: that event's `date`, else the folded `appliedDate`.
+- **`stageSince` and `daysInStage`, exactly** (2026-10-29):
+  - `stageSince` is the `date` of the latest non-voided `stage_changed`, else the folded `appliedDate`. It is **not**
+    "time in stage". A reopen into the same stage (`outcome_cleared`, no `stage_changed`) does not move it, so after
+    a reopen it can be earlier than the day the application came back.
+  - `stageHistory` holds one `{ stage, from, to }` entry per spell: `applied` from the folded `appliedDate`, each
+    `stage_changed` and each `outcome_cleared` start a new one, and `to` is the day the spell ended (a stage change or
+    an outcome), `null` while it runs.
+  - `daysInStage(entry, today)` is whole days from `entry.from` to `entry.to`, or to `today` while `to` is `null`.
+    The time in the current stage is `daysInCurrentStage(folded, today)`, which reads the **newest** `stageHistory`
+    entry. For a closed application that entry ends on the closing day, so the count stops there.
+  - A move to another column straight after a reopen leaves a 0-day entry of the old stage in the history.
+  - Display code (the board card, "stale" after 14 days) uses `daysInCurrentStage`, never `stageSince`.
 - **The column** comes from one pure function, `boardColumn(folded, registry)`:
   - voided → no column (only the "Show voided" view);
   - outcome `rejected` or `ghosted` → that board column;
@@ -424,7 +437,7 @@ unless marked):
     protect data and must not depend on the switch.
   - **Nothing is deleted.** Turning tracking back on shows everything as it was.
 
-### 1.8 What the uncommitted S1 code needs (informational)
+### 1.8 What the S1 code needed (historical; S1 is committed as `5e549a4`)
 
 S1 work exists uncommitted in the working tree (section 7, S1). Against this revision:
 - **Stays:**
@@ -715,7 +728,7 @@ A restore can therefore add history but never remove or rewrite it.
     position closed), grouped. They appear nowhere else on the board and are set from Job Details (O3).
 - **Each column header** shows its count.
 - **Card:**
-  - company, title, stage, applied date, CV used and time in stage (`stageSince`; "stale" after 14 days in a
+  - company, title, stage, applied date, CV used and time in stage (`daysInCurrentStage`, from the newest `stageHistory` entry, not `stageSince`; "stale" after 14 days in a
     non-closed stage, as ApplyPack does, display only);
   - an "attempt N" badge when the posting has more than one;
   - clicking opens Job Details, or the snapshot view when the job is no longer in discovery.
