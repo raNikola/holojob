@@ -111,12 +111,13 @@ Browser AI features (copilot, interview coach) keep their own provider settings 
     redaction pass yet. This is a known gap against [DECISIONS.md](docs/redesign/DECISIONS.md)
     principle 14 and is scheduled with the fact gate in Phase 4.
 - **Sensitive files.** Never commit `data/profile/*.json`, `data/resumes/`, `data/cache/repos/`, `.env` or
-  `data/outreach/linkedin_session.json`. If one is committed by mistake, rotate the credentials and remove it
+  `data/outreach/linkedin_session.json` (no longer read). If one is committed by mistake, rotate the credentials and remove it
   from history before pushing anywhere.
 - **API keys** are read from the environment on the server; browser AI features keep their keys in the
   browser's localStorage (Settings) and send them only to the provider you choose.
 - **LinkedIn deep mode.** Outreach has an optional deep mode that automates linkedin.com with your `li_at`
-  cookie (`LINKEDIN_LI_AT`, or `data/outreach/linkedin_session.json`). This may violate LinkedIn's Terms of
+  cookie, kept in the server's secret store (Settings > Privacy: secrets and keys; `LINKEDIN_LI_AT` in `.env` is
+  the fallback). The cookie is never in the browser and never on a command line. This may violate LinkedIn's Terms of
   Service and can get the account suspended or banned. It runs only with explicit consent
   (`acceptTosRisk` in the API and UI, `--i-accept-tos-risk` on the scraper CLI). The default search mode does
   not authenticate to LinkedIn. Never share the cookie.
