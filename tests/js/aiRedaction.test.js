@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runAiFeature as runAi } from '../../scripts/run-ai.js'
 import { setGateRunner } from '../../scripts/ai-gate.js'
-import { RedactionError, assertClean, redactText, setIdentitySource } from '../../scripts/ai-redact.js'
+import { RedactionError, assertClean, redactContext, redactText, setIdentitySource } from '../../scripts/ai-redact.js'
 import { getProvider } from '../../src/modules/ai/aiProviderRegistry.js'
 import { buildAiContext, buildAiRedactionHints } from '../../src/modules/ai/aiContextBuilder.js'
 import { setAiSecret } from '../../scripts/secret-store.js'
@@ -110,6 +110,12 @@ afterEach(() => {
 
 const promptOf = (messages) => messages.map((m) => m.content).join('\n')
 const disk = () => ({ names: [OWNER.name], emails: [OWNER.email], phones: [OWNER.phone], links: [OWNER.site, OWNER.linkedin, OWNER.github] })
+
+describe('the tests do not read the real application store', () => {
+  it('starts every test with no stored contacts, whatever data/applications holds', () => {
+    expect(redactContext({}).ids.contacts).toEqual({ names: [], emails: [], phones: [], links: [] })
+  })
+})
 
 describe('every browser AI feature sends no identifiers to the provider', () => {
   for (const feature of FEATURES) {
