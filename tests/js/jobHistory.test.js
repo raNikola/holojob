@@ -3,13 +3,13 @@ import { formatSeen, historyBadges, isActionable } from '../../src/modules/jobs/
 import { computeJobStats } from '../../src/modules/jobs/jobStats.js'
 
 describe('history badges', () => {
-  it('flag a job first seen recently as New', () => {
+  it('flag a job first seen recently as Just found', () => {
     expect(historyBadges({ isNew: true, firstSeen: '2026-10-23T12:00:00+00:00' })).toEqual([
-      { label: 'New', variant: 'high', reason: 'First seen 2026-10-23' },
+      { label: 'Just found', variant: 'high', reason: 'First seen 2026-10-23' },
     ])
   })
 
-  it('flag a job no longer listed as Closed, and never as New too', () => {
+  it('flag a job no longer listed as Closed, and never as Just found too', () => {
     const badges = historyBadges({ isNew: true, isClosed: true, closedAt: '2026-10-25T08:00:00+00:00' })
     expect(badges.map((b) => b.label)).toEqual(['Closed'])
     expect(badges[0].reason).toBe('No longer listed since 2026-10-25')
