@@ -14,6 +14,10 @@ The rules (owner decisions, 2026-10-29):
 - A paid call needs a daily and a monthly limit above 0, a known price, and room
   under both limits and under the optional call counts. A budget of 0 (the
   default) refuses every paid call, the Claude Code CLI included.
+- Claude Code on the owner's flat subscription (setting `claudeCodeSubscription`, default off): a call by provider
+  `claude-code` for an allowlisted feature, while enabled, has class `subscription`: no per-call cost, not counted
+  against the budget, recorded in the ledger, and limited by `maxCallsDaily`. Any other feature of `claude-code`
+  stays paid and is refused at budget 0. Turning it on, raising the cap or adding a feature needs the owner's confirm.
 - An automatic task (run_pipeline.py, enrich_jobs.py without --manual) runs only
   when settings `automation.enabled` is true; default off. This holds for free
   and local providers too.
@@ -71,7 +75,17 @@ DEFAULT_SETTINGS = {
     # Day and month boundaries of the limits (IANA name).
     "timezone": "UTC",
     "automation": {"enabled": False},
+    # Claude Code on a flat monthly subscription: off until the owner confirms. `features` is the allowlist.
+    "claudeCodeSubscription": {"enabled": False, "maxCallsDaily": 5, "features": ["jobAnalysis"]},
 }
+
+# Features the subscription allowlist may name: the browser AI features and the three that always call the Claude Code CLI.
+SUBSCRIPTION_FEATURES = (
+    "jobAnalysis", "resumeEnhancement", "coverLetter", "interviewPrep", "outreach", "careerStrategy", "skillGap",
+    "applicationStrategy", "companyIntelligence", "tailoring", "job-import", "project-scan",
+)
+SUBSCRIPTION = "subscription"
+SUBSCRIPTION_PROVIDER = "claude-code"
 
 TRIGGER_ENV = "CAREER_OS_AI_TRIGGER"
 AUTOMATION = "automation"
@@ -123,7 +137,10 @@ def load_settings() -> dict:
     except (OSError, ValueError) as exc:
         return {**settings, "error": f"{path.name} unreadable: {exc}"}
     automation = {**settings["automation"], **(stored.get("automation") or {})}
-    return {**settings, **stored, "automation": automation}
+    raw = stored.get("claudeCodeSubscription")
+    # A hand-edited value that is not an object is kept as it is: subscription_settings reads it as off.
+    subscription = {**settings["claudeCodeSubscription"], **raw} if isinstance(raw, dict) else (raw if raw is not None else settings["claudeCodeSubscription"])
+    return {**settings, **stored, "automation": automation, "claudeCodeSubscription": subscription}
 
 
 def _limit(value) -> float:
@@ -231,7 +248,20 @@ def classify(provider: str, model: str | None = None, base_url: str | None = Non
 
 
 def is_paid(cls: str) -> bool:
-    return cls not in FREE_CLASSES
+    """Paid, unknown and anything not listed count against the budget; the flat subscription does not."""
+    return cls not in FREE_CLASSES and cls != SUBSCRIPTION
+
+
+def subscription_settings(settings: dict) -> tuple[bool, int, list]:
+    """(enabled, daily call cap, allowlist) from possibly hand-edited settings; anything malformed means off."""
+    raw = settings.get("claudeCodeSubscription")
+    if not isinstance(raw, dict) or raw.get("enabled") is not True:
+        return False, 0, []
+    cap = raw.get("maxCallsDaily")
+    features = raw.get("features")
+    if not _integer(cap) or cap < 0 or not isinstance(features, list):
+        return False, 0, []
+    return True, cap, [f for f in features if isinstance(f, str)]
 
 
 # --- context -----------------------------------------------------------------
@@ -327,7 +357,7 @@ def _calls(rows: list[dict]) -> list[dict]:
 
 
 def _bucket():
-    return {"calls": 0, "paidCalls": 0, "refused": 0, "cacheHits": 0,
+    return {"calls": 0, "paidCalls": 0, "subscriptionCalls": 0, "refused": 0, "cacheHits": 0,
             "inputTokens": 0, "outputTokens": 0, "cost": 0.0, "unpricedPaidCalls": 0}
 
 
@@ -359,6 +389,8 @@ def totals(now: datetime | None = None, settings: dict | None = None) -> dict:
                 b["cacheHits"] += 1
                 continue
             b["calls"] += 1
+            if row.get("class") == SUBSCRIPTION:
+                b["subscriptionCalls"] += 1
             b["inputTokens"] += int(row.get("inputTokens") or 0)
             b["outputTokens"] += int(row.get("outputTokens") or 0)
             if is_paid(row.get("class", "unknown")):
@@ -384,6 +416,11 @@ def _decide(row: dict, price: dict, settings: dict, now: datetime | None) -> str
     """The refusal reason, or None when the call may go."""
     if row["trigger"] == AUTOMATION and not (settings.get("automation") or {}).get("enabled"):
         return "automatic AI tasks are off (data/ai/settings.json automation.enabled is false)"
+    if row["class"] == SUBSCRIPTION:
+        cap = subscription_settings(settings)[1]
+        if totals(now, settings)["today"]["subscriptionCalls"] + 1 > cap:
+            return f"daily Claude subscription call limit reached ({cap})"
+        return None
     if not is_paid(row["class"]):
         return None
     label = f"{row['provider']}/{row['model'] or 'default'}"
@@ -418,6 +455,11 @@ def _call_row(provider: str, model: str | None, prompt_chars: int, base_url: str
               job_id: str | None, trigger: str | None, output_tokens: int | None, settings: dict,
               now: datetime | None) -> tuple[dict, dict]:
     price = classify(provider, model, base_url)
+    feature = feature or _feature.get() or "unspecified"
+    enabled, _, allowed = subscription_settings(settings)
+    if enabled and (provider or "").lower() == SUBSCRIPTION_PROVIDER and feature in allowed:
+        price = {**price, "class": SUBSCRIPTION, "inputPerMTok": 0, "outputPerMTok": 0, "priceKnown": True,
+                 "source": "Flat Claude subscription; no per-call charge, plan rate limits apply"}
     input_tokens = estimate_tokens(prompt_chars)
     out_tokens = int(output_tokens if output_tokens is not None else settings.get("estimatedOutputTokens") or 0)
     row = {
@@ -425,7 +467,7 @@ def _call_row(provider: str, model: str | None, prompt_chars: int, base_url: str
         "type": "call",
         "id": uuid.uuid4().hex,
         "ts": _now(now).isoformat(),
-        "feature": feature or _feature.get() or "unspecified",
+        "feature": feature,
         "trigger": trigger or current_trigger(),
         "provider": (provider or "").lower(),
         "model": model or None,
@@ -588,6 +630,13 @@ def public_settings(settings: dict) -> dict:
     """Only the known keys (a hand-edited file may carry others) plus `error` when the file is unusable."""
     out = {k: settings.get(k, DEFAULT_SETTINGS[k]) for k in SETTINGS_KEYS}
     out["automation"] = {"enabled": bool((settings.get("automation") or {}).get("enabled"))}
+    enabled, cap, features = subscription_settings(settings)
+    stored = settings.get("claudeCodeSubscription") if isinstance(settings.get("claudeCodeSubscription"), dict) else {}
+    out["claudeCodeSubscription"] = {
+        "enabled": enabled,
+        "maxCallsDaily": cap if enabled else (stored.get("maxCallsDaily") if _integer(stored.get("maxCallsDaily")) else 5),
+        "features": features if enabled else [f for f in (stored.get("features") or []) if isinstance(f, str)] or ["jobAnalysis"],
+    }
     if settings.get("error"):
         out["error"] = settings["error"]
     return out
@@ -628,6 +677,25 @@ def validate_settings(candidate) -> tuple[dict, list[str]]:
                 errors.append(f"unknown setting: automation.{key}")
         if "enabled" in automation and not isinstance(automation["enabled"], bool):
             errors.append("automation.enabled must be true or false")
+    subscription = candidate.get("claudeCodeSubscription", {})
+    if not isinstance(subscription, dict):
+        errors.append("claudeCodeSubscription must be an object")
+    else:
+        for key in subscription:
+            if key not in ("enabled", "maxCallsDaily", "features"):
+                errors.append(f"unknown setting: claudeCodeSubscription.{key}")
+        if "enabled" in subscription and not isinstance(subscription["enabled"], bool):
+            errors.append("claudeCodeSubscription.enabled must be true or false")
+        if "maxCallsDaily" in subscription and not (
+                _integer(subscription["maxCallsDaily"]) and 1 <= subscription["maxCallsDaily"] <= MAX_COUNT):
+            errors.append(f"claudeCodeSubscription.maxCallsDaily must be a whole number from 1 to {MAX_COUNT}")
+        if "features" in subscription:
+            names = subscription["features"]
+            if not (isinstance(names, list) and names and all(isinstance(n, str) for n in names)):
+                errors.append("claudeCodeSubscription.features must be a non-empty list of feature names")
+            else:
+                errors.extend(f"unknown feature: claudeCodeSubscription.features.{n}"
+                              for n in names if n not in SUBSCRIPTION_FEATURES)
     for key in ("dailyLimit", "monthlyLimit"):
         if key in candidate and not (_number(candidate[key]) and 0 <= candidate[key] <= MAX_AMOUNT):
             errors.append(f"{key} must be a number from 0 to {MAX_AMOUNT}")
@@ -668,6 +736,21 @@ def _loosening(old: dict, new: dict) -> list[str]:
         out.append(f"currency changes: {old['currency']} -> {new['currency']}")
     if new["automation"]["enabled"] and not old["automation"]["enabled"]:
         out.append("automatic AI tasks turned on")
+    before, after = old["claudeCodeSubscription"], new["claudeCodeSubscription"]
+    if after["enabled"]:
+        listed = ", ".join(after["features"])
+        if not before["enabled"]:
+            out.append(f"Claude Code calls for: {listed} will count as part of your flat Claude subscription, not "
+                       f"against the AI budget (recorded with cost 0). Limit: {after['maxCallsDaily']} calls per day. "
+                       "These calls use your Claude plan's usage allowance, which is shared with your own Claude Code "
+                       "use, and send the redacted job ad and a profile summary to Anthropic. Per-token paid "
+                       "providers stay blocked at budget 0.")
+        else:
+            if after["maxCallsDaily"] > before["maxCallsDaily"]:
+                out.append(f"Claude subscription daily call limit up: {before['maxCallsDaily']} -> {after['maxCallsDaily']}")
+            added = [n for n in after["features"] if n not in before["features"]]
+            if added:
+                out.append(f"Claude subscription now also covers: {', '.join(added)} (no budget check, daily call limit only)")
     return out
 
 
@@ -692,8 +775,9 @@ def save_settings(patch, confirm: bool = False) -> dict:
     with _locked():
         current = public_settings(load_settings())
         current.pop("error", None)
-        merged = {**current, **{k: v for k, v in patch.items() if k != "automation"},
-                  "automation": {**current["automation"], **(patch.get("automation") or {})}}
+        merged = {**current, **{k: v for k, v in patch.items() if k not in ("automation", "claudeCodeSubscription")},
+                  "automation": {**current["automation"], **(patch.get("automation") or {})},
+                  "claudeCodeSubscription": {**current["claudeCodeSubscription"], **(patch.get("claudeCodeSubscription") or {})}}
         increases = _loosening(public_settings(load_settings()), merged)
         if increases and not confirm:
             return {"ok": False, "needsConfirm": True, "increases": increases}

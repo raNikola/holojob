@@ -41,6 +41,11 @@ export function settingsFromForm(form) {
     estimatedOutputTokens: num(form.estimatedOutputTokens),
     timezone: String(form.timezone).trim(),
     automation: { enabled: Boolean(form.automationEnabled) },
+    claudeCodeSubscription: {
+      enabled: Boolean(form.subscriptionEnabled),
+      maxCallsDaily: num(form.subscriptionMaxCallsDaily),
+      features: form.subscriptionFeatures,
+    },
   }
 }
 
@@ -51,5 +56,8 @@ export function formFromSettings(s) {
     maxCallsDaily: text(s.maxCallsDaily), maxCallsMonthly: text(s.maxCallsMonthly),
     estimatedOutputTokens: text(s.estimatedOutputTokens), timezone: s.timezone,
     automationEnabled: Boolean(s.automation?.enabled),
+    subscriptionEnabled: Boolean(s.claudeCodeSubscription?.enabled),
+    subscriptionMaxCallsDaily: text(s.claudeCodeSubscription?.maxCallsDaily),
+    subscriptionFeatures: s.claudeCodeSubscription?.features || ['jobAnalysis'],
   }
 }
