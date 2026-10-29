@@ -219,3 +219,17 @@ def test_cli_settings_put_round_trip():
                          input=json.dumps({"settings": {"dailyLimit": 1}, "confirm": "true"}),
                          capture_output=True, text=True, env=env)
     assert json.loads(run.stdout)["needsConfirm"] is True  # only a real true counts
+
+
+def test_cli_refuse_records_a_refusal_with_no_budget_involved():
+    import os
+    env = {**os.environ, "CAREER_OS_AI_DIR": str(ai_gate.ai_dir())}
+    run = subprocess.run([sys.executable, str(ROOT / "python" / "llm" / "ai_gate.py"), "refuse"],
+                         input=json.dumps({"provider": "openai", "model": "gpt-x", "feature": "jobAnalysis",
+                                           "jobId": "j1", "reason": "call not made: redaction failed"}),
+                         capture_output=True, text=True, env=env)
+    assert run.returncode == 0 and json.loads(run.stdout) == {"ok": True}
+    rows = ai_gate.read_ledger()
+    assert len(rows) == 1 and rows[0]["decision"] == "refused" and rows[0]["feature"] == "jobAnalysis"
+    assert rows[0]["reason"] == "call not made: redaction failed"
+    assert ai_gate.totals()["today"]["refused"] == 1 and ai_gate.totals()["today"]["paidCalls"] == 0

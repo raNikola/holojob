@@ -86,3 +86,12 @@ export function saveAiSettings(settings, confirm) {
 export function saveAiPricing(entries, confirm) {
   return runner('pricing-put', { entries, confirm: confirm === true })
 }
+
+/** Record a call the app refused before it reached the gate (e.g. redaction failed). Never rejects. */
+export async function recordAiRefusal({ provider, model, feature, jobId, baseUrl, reason }) {
+  try {
+    await runner('refuse', { provider, model: model || null, feature, jobId: jobId || null, baseUrl: baseUrl || null, reason })
+  } catch (e) {
+    console.error(`AI gate: could not record a refusal (${reason}): ${e.message}`)
+  }
+}
