@@ -37,9 +37,14 @@ export function openJobPage(jobId) {
   notify()
 }
 
-/** Back when the page was opened from inside the app; otherwise (a deep link) drops the hash in place. */
+/** `back` when this history entry was pushed by `openJobPage` (the previous entry is the view it came from); otherwise `replace`. */
+export function closeMode(historyState) {
+  return historyState?.holojobJob ? 'back' : 'replace'
+}
+
+/** Back when the page was opened from inside the app; otherwise (a deep link, an edited hash) drops the hash in place. */
 export function closeJobPage() {
-  if (window.history.state?.holojobJob) {
+  if (closeMode(window.history.state) === 'back') {
     window.history.back()
     return
   }
