@@ -69,6 +69,19 @@ export function defaultCvOption(job, profile) {
     ?? UNKNOWN_CV
 }
 
+/** The channel the apply form starts on. */
+export const DEFAULT_CHANNEL = 'company_site'
+
+/**
+ * What a new application starts with: today, the preselected CV and the default channel. The full form and the
+ * quick "Mark Applied" button both start here, so the two cannot drift apart. `requestId` is made once per form.
+ */
+export function newApplicationDefaults(job, profile, requestId = newRequestId()) {
+  return {
+    cv: defaultCvOption(job, profile), requestId, channel: DEFAULT_CHANNEL, appliedDate: today(), applicationUrl: '', separateAttempt: null,
+  }
+}
+
 /** The `attempt.cv` / `cv_recorded` fields for an option; the server decides the stored file name and sha256. */
 function cvBody(option, label = '') {
   if (!option || option.kind === 'unknown') return { kind: 'unknown' }

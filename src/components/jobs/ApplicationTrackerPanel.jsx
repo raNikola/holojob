@@ -9,10 +9,10 @@ import { labelFor } from '../../modules/applications/stageRegistry'
 import {
   EXTERNAL_CV,
   cvOptions,
-  defaultCvOption,
   describeError,
   draftFrom,
   markApplied,
+  newApplicationDefaults,
   newRequestId,
   panelMode,
   externalConflicts,
@@ -58,9 +58,7 @@ function NewApplicationForm({ job, cache, onStatusChange }) {
   const { profile } = useProfile()
   const options = cvOptions(job, profile)
   const [cvLabel, setCvLabel] = useState('')
-  const [form, setForm] = useState(() => ({
-    cv: defaultCvOption(job, profile), requestId: newRequestId(), channel: 'company_site', appliedDate: new Date().toISOString().slice(0, 10), applicationUrl: '', separateAttempt: null,
-  }))
+  const [form, setForm] = useState(() => newApplicationDefaults(job, profile))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [initial] = useState(form)
