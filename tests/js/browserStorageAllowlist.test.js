@@ -82,3 +82,12 @@ describe('browser storage allowlist', () => {
     expect(writers).toEqual(['src/modules/ai/aiSettings.js'])
   })
 })
+
+describe('the LinkedIn cookie in the browser', () => {
+  it('no source writes linkedin_li_at; only the move code reads and removes it', () => {
+    const writers = files.filter(({ text }) => /setItem\(\s*['"`]linkedin_li_at['"`]/.test(text)).map(({ rel }) => rel)
+    expect(writers).toEqual([])
+    const namers = files.filter(({ text }) => text.includes('linkedin_li_at')).map(({ rel }) => rel)
+    expect(namers).toEqual(['src/modules/outreach/linkedinCookie.js'])
+  })
+})

@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { discoverContactsForJob } from '../src/modules/outreach/recruiterDiscovery.js'
 import { scrapeLinkedInContacts, resolveLiAt } from './linkedin-scraper-bridge.js'
+import { maskSecrets } from './secret-mask.js'
 import { computeOutreachMetrics, aggregateAllContacts } from '../src/modules/outreach/outreachMetrics.js'
 import { runAiFeature } from './run-ai.js'
 import { buildAiContext } from '../src/modules/ai/aiContextBuilder.js'
@@ -44,7 +45,7 @@ function loadJobsFromDisk() {
   }
 }
 
-export async function runOutreachDiscover({ job, fetchPages = true, deep = false, liAt = '', acceptTosRisk = false }) {
+export async function runOutreachDiscover({ job, fetchPages = true, deep = false, acceptTosRisk = false }) {
   if (!job) throw new Error('job is required')
 
   let fetchedHtml = null
@@ -56,11 +57,10 @@ export async function runOutreachDiscover({ job, fetchPages = true, deep = false
 
   // Auto-discover LinkedIn contacts. Default = public search snippets (no
   // LinkedIn login). Deep mode = authenticated people-search via li_at cookie.
-  const wantDeep = deep && acceptTosRisk && Boolean(resolveLiAt(liAt))
+  const wantDeep = deep && acceptTosRisk && Boolean(resolveLiAt())
   try {
     let scraped = await scrapeLinkedInContacts(job, {
       mode: wantDeep ? 'deep' : 'search',
-      liAt,
       acceptTosRisk: wantDeep ? acceptTosRisk : false,
     })
     // If deep mode hit a login wall / rate limit, fall back to safe search mode.
@@ -82,11 +82,11 @@ export async function runOutreachDiscover({ job, fetchPages = true, deep = false
       queriesRun: scraped.queriesRun,
       contactsFound: (scraped.contacts || []).length,
       ...(scraped.status ? { status: scraped.status } : {}),
-      ...(scraped.deepFallback ? { deepFallback: scraped.deepFallback } : {}),
-      ...(scraped.error ? { error: scraped.error } : {}),
+      ...(scraped.deepFallback ? { deepFallback: maskSecrets(scraped.deepFallback) } : {}),
+      ...(scraped.error ? { error: maskSecrets(scraped.error) } : {}),
     }
   } catch (e) {
-    discovery.metadata.linkedinScrape = { error: e.message }
+    discovery.metadata.linkedinScrape = { error: maskSecrets(e.message) }
   }
 
   const dir = path.join(OUTREACH_ROOT, path.basename(job.jobId || 'unknown'))

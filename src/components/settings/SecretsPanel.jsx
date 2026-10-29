@@ -9,10 +9,13 @@ import { PROVIDER_DEFAULTS, loadAiSettings, maskApiKey, readLegacyAiKey, clearLe
 import {
   KEYED_AI_PROVIDERS,
   deleteAiSecret,
+  deleteLinkedInSecret,
   fetchSecretsStatus,
   moveLegacyKeyToServer,
   putAiSecret,
+  putLinkedInSecret,
 } from '../../modules/ai/secretsClient'
+import { clearLegacyLinkedInCookie, moveLegacyLinkedInToServer, readLegacyLinkedInCookie } from '../../modules/outreach/linkedinCookie'
 
 /** claude and gemini use fixed endpoints in their providers, so a base URL would do nothing for them. */
 const TAKES_BASE_URL = new Set(['openai', 'openrouter'])
@@ -38,12 +41,16 @@ export default function SecretsPanel() {
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
   const [legacy, setLegacy] = useState(() => readLegacyAiKey())
+  const [linkedin, setLinkedin] = useState(null)
+  const [editingLinkedIn, setEditingLinkedIn] = useState(null) // the typed cookie, or null when the form is closed
+  const [legacyLinkedIn, setLegacyLinkedIn] = useState(() => readLegacyLinkedInCookie())
   const [moveTo, setMoveTo] = useState(() => legacyDefaults(readLegacyAiKey()))
 
   const refresh = useCallback(async () => {
     const result = await fetchSecretsStatus()
     if (result.ok) {
       setStatus(result.data.ai)
+      setLinkedin(result.data.linkedin || { set: false })
       setLoadError(result.data.unreadable ? 'The secret store file cannot be read. Nothing was changed.' : null)
     } else {
       setLoadError(result.error)
@@ -118,10 +125,69 @@ export default function SecretsPanel() {
     }
   }
 
+  const handleSaveLinkedIn = async () => {
+    setBusy(true)
+    setError(null)
+    const result = await putLinkedInSecret(editingLinkedIn)
+    setBusy(false)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    setEditingLinkedIn(null) // the typed cookie is dropped with the form state
+    setMessage('LinkedIn: cookie saved on the server.')
+    refresh()
+  }
+
+  const handleRemoveLinkedIn = async () => {
+    if (!window.confirm('Remove the stored LinkedIn cookie from the server?')) return
+    setBusy(true)
+    const result = await deleteLinkedInSecret()
+    setBusy(false)
+    if (!result.ok) setError(result.error)
+    else setMessage('LinkedIn: stored cookie removed.')
+    refresh()
+  }
+
+  const handleMoveLinkedIn = async () => {
+    // Ask before replacing a cookie the server already holds; the same cookie needs no move.
+    if (linkedin?.source === 'store') {
+      const here = legacyLinkedIn.trim().slice(-4)
+      if (linkedin.last4 === here) {
+        setError(`The server already holds this cookie (…${here}). Use "Remove from this browser without moving".`)
+        return
+      }
+      if (!window.confirm(`The server already holds a LinkedIn cookie ending …${linkedin.last4}. This browser's cookie ends …${here}. Replace the server's cookie with this browser's?`)) return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    const result = await moveLegacyLinkedInToServer()
+    setBusy(false)
+    if (!result.ok) {
+      setError(result.error)
+      if (result.onServer) setLegacyLinkedIn(readLegacyLinkedInCookie())
+    } else {
+      setLegacyLinkedIn(null)
+      setMessage('Moved. The LinkedIn cookie is on the server and removed from this browser. Rotate it now: sign out of LinkedIn everywhere, sign in again, and set the new cookie (see the checklist in docs/redesign/BROWSER_STORAGE_POLICY.md, section 4).')
+    }
+    refresh()
+  }
+
+  const handleDiscardLinkedIn = () => {
+    if (!window.confirm('Remove the LinkedIn cookie from this browser without moving it to the server?')) return
+    if (clearLegacyLinkedInCookie()) {
+      setLegacyLinkedIn(null)
+      setMessage('The LinkedIn cookie was removed from this browser.')
+    } else {
+      setError('The LinkedIn cookie could not be removed from this browser.')
+    }
+  }
+
   return (
     <Card
       title="Privacy: secrets and keys"
-      description="AI provider keys live on the server only (data/secrets/). This screen shows whether a key is set and its last 4 characters; it can never show the key."
+      description="AI provider keys and the LinkedIn cookie live on the server only (data/secrets/). This screen shows whether a key is set and its last 4 characters; it can never show the key."
     >
       <div className="space-y-4">
         {message && <Alert variant="success">{message}</Alert>}
@@ -155,6 +221,22 @@ export default function SecretsPanel() {
                 Move to server
               </Button>
               <Button variant="ghost" onClick={handleDiscard} disabled={busy}>Remove from this browser without moving</Button>
+            </div>
+          </Alert>
+        )}
+
+        {legacyLinkedIn && (
+          <Alert variant="info" title="A LinkedIn cookie is stored in this browser">
+            <p className="mb-3">
+              An older version saved the <code>li_at</code> cookie ({maskApiKey(legacyLinkedIn)}) here, in plain text. Move it to the
+              server; it is removed from this browser only after the server confirms it.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={handleMoveLinkedIn} disabled={busy}>
+                {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+                Move LinkedIn cookie to server
+              </Button>
+              <Button variant="ghost" onClick={handleDiscardLinkedIn} disabled={busy}>Remove from this browser without moving</Button>
             </div>
           </Alert>
         )}
@@ -214,6 +296,51 @@ export default function SecretsPanel() {
             <div className="flex gap-2">
               <Button type="submit" disabled={busy || !editing.key}>Save on server</Button>
               <Button type="button" variant="ghost" onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+            </div>
+          </form>
+        )}
+
+        {status && linkedin && (
+          <ul className="divide-y divide-stone-200 dark:divide-stone-800">
+            <li className="flex flex-wrap items-center justify-between gap-2 py-3">
+              <div>
+                <p className="text-sm font-medium text-stone-800 dark:text-stone-100">LinkedIn <span className="font-normal text-stone-500">(deep outreach only)</span></p>
+                <p className="text-xs text-stone-500">{linkedin.set ? `set …${linkedin.last4} · source: ${linkedin.source === 'env' ? '.env' : 'Settings'}` : 'not set'}</p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => { setMessage(null); setError(null); setEditingLinkedIn('') }} disabled={busy}>
+                  {linkedin.set ? 'Replace' : 'Set cookie'}
+                </Button>
+                {linkedin.source === 'store' && (
+                  <Button variant="ghost" onClick={handleRemoveLinkedIn} disabled={busy}>Remove</Button>
+                )}
+              </div>
+            </li>
+          </ul>
+        )}
+
+        {editingLinkedIn !== null && (
+          <form
+            className="space-y-3 rounded-lg border border-stone-200 p-4 dark:border-stone-800"
+            autoComplete="off"
+            onSubmit={(e) => { e.preventDefault(); handleSaveLinkedIn() }}
+          >
+            <p className="text-sm font-medium text-stone-800 dark:text-stone-100">LinkedIn</p>
+            <Input
+              label="li_at cookie"
+              type="password"
+              value={editingLinkedIn}
+              onChange={(e) => setEditingLinkedIn(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <p className="text-xs text-stone-500">
+              linkedin.com → browser DevTools → Application (Storage) → Cookies → copy the <code>li_at</code> value.
+              It is sent once and kept on the server.
+            </p>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={busy || !editingLinkedIn}>Save on server</Button>
+              <Button type="button" variant="ghost" onClick={() => setEditingLinkedIn(null)} disabled={busy}>Cancel</Button>
             </div>
           </form>
         )}

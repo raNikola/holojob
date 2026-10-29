@@ -7,7 +7,7 @@ Two modes, selected with --mode:
       profile snippets out of the search results. linkedin.com is never loaded,
       so no login is involved and the user's LinkedIn account is never at risk.
 
-  deep    (opt-in, requires --li-at session cookie)
+  deep    (opt-in, requires the LINKEDIN_LI_AT environment variable)
       Logs into LinkedIn with the user's own li_at cookie and reads the public
       people-search result cards (name / headline / profile URL only). Modelled
       on yash1raj234/Linkedin_Profile_scrapper's anti-detection approach:
@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import time
@@ -347,7 +348,6 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--company", required=True)
     ap.add_argument("--mode", choices=["search", "deep"], default="search")
-    ap.add_argument("--li-at", default="", help="LinkedIn li_at session cookie (deep mode)")
     ap.add_argument(
         "--i-accept-tos-risk",
         action="store_true",
@@ -355,6 +355,9 @@ def main():
     )
     ap.add_argument("--max", type=int, default=10)
     args = ap.parse_args()
+    # The cookie arrives in the environment only (argv is readable by every local process). Taken out of
+    # the environment here so the browser processes started later do not inherit it.
+    li_at = os.environ.pop("LINKEDIN_LI_AT", "").strip()
 
     company = args.company.strip()
     if not company:
@@ -369,11 +372,11 @@ def main():
                     "error": "deep mode requires --i-accept-tos-risk (LinkedIn ToS violation risk)",
                 }))
                 return
-            if not args.li_at.strip():
+            if not li_at:
                 print(json.dumps({"contacts": [], "queriesRun": 0,
-                                  "error": "deep mode requires --li-at session cookie"}))
+                                  "error": "deep mode requires the LINKEDIN_LI_AT environment variable"}))
                 return
-            result = scrape_deep(company, args.li_at.strip(), args.max)
+            result = scrape_deep(company, li_at, args.max)
         else:
             result = scrape_search(company, args.max)
     except Exception as e:  # surfaced to caller as JSON, never crash the pipeline

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Loader2, Search, UserPlus, ShieldAlert } from 'lucide-react'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
@@ -11,6 +11,7 @@ import { discoverOutreachContacts } from '../../modules/outreach/outreachClient'
 import { mergeDiscoveryIntoOutreach } from '../../modules/outreach/recruiterDiscovery'
 import { addOutreachContact } from '../../modules/outreach/outreachStorage'
 import { updateJobOutreach } from '../../modules/jobs/jobStorage'
+import { fetchSecretsStatus } from '../../modules/ai/secretsClient'
 
 export default function RelatedContactsPanel({ job, onJobUpdated }) {
   const [loading, setLoading] = useState(false)
@@ -21,14 +22,20 @@ export default function RelatedContactsPanel({ job, onJobUpdated }) {
   const [acceptTosRisk, setAcceptTosRisk] = useState(false)
   const [tosConfirmText, setTosConfirmText] = useState('')
   const [showDeepConfig, setShowDeepConfig] = useState(false)
-  const [liAt, setLiAt] = useState(() => {
-    try { return localStorage.getItem('linkedin_li_at') || '' } catch { return '' }
-  })
+  const [cookie, setCookie] = useState(null) // { set, last4 } from the server; the cookie itself never reaches the browser
   const [scrapeInfo, setScrapeInfo] = useState(null)
 
   const outreach = job.outreach || { contacts: [], messages: [], activity: [], status: 'none' }
   const contacts = outreach.contacts || []
   const ranking = rankContacts(contacts)
+
+  useEffect(() => {
+    if (!showDeepConfig) return
+    fetchSecretsStatus().then((r) => setCookie(r.ok ? r.data?.linkedin || { set: false } : null))
+  }, [showDeepConfig])
+
+  // Deep mode runs only with the box ticked, the risk accepted and the sentence typed.
+  const deepConfirmed = deep && acceptTosRisk && tosConfirmText.trim().toLowerCase() === 'i understand'
 
   const handleDiscover = async () => {
     setError(null)
@@ -36,9 +43,8 @@ export default function RelatedContactsPanel({ job, onJobUpdated }) {
     setLoading(true)
     try {
       const discovery = await discoverOutreachContacts(job, {
-        deep,
-        liAt: deep ? liAt : '',
-        acceptTosRisk: deep ? acceptTosRisk : false,
+        deep: deepConfirmed,
+        acceptTosRisk: deepConfirmed,
       })
       const nextOutreach = mergeDiscoveryIntoOutreach(outreach, discovery, job)
       onJobUpdated?.({
@@ -51,14 +57,6 @@ export default function RelatedContactsPanel({ job, onJobUpdated }) {
     } finally {
       setLoading(false)
     }
-  }
-
-  const persistLiAt = (value) => {
-    setLiAt(value)
-    try {
-      if (value) localStorage.setItem('linkedin_li_at', value)
-      else localStorage.removeItem('linkedin_li_at')
-    } catch { /* localStorage unavailable */ }
   }
 
   const handleAddContact = (form) => {
@@ -136,17 +134,12 @@ export default function RelatedContactsPanel({ job, onJobUpdated }) {
                   placeholder='Type "I understand" to confirm'
                   className="w-full rounded border border-stone-300 px-2 py-1 text-xs dark:border-stone-700 dark:bg-stone-900"
                 />
-                <input
-                  type="password"
-                  value={liAt}
-                  onChange={(e) => persistLiAt(e.target.value)}
-                  placeholder="Paste li_at cookie value"
-                  disabled={!acceptTosRisk || tosConfirmText.trim().toLowerCase() !== 'i understand'}
-                  className="w-full rounded border border-stone-300 px-2 py-1 font-mono text-xs disabled:opacity-50 dark:border-stone-700 dark:bg-stone-900"
-                />
+                <p className="text-xs text-stone-700 dark:text-stone-300">
+                  LinkedIn cookie: {cookie === null ? 'unknown' : cookie.set ? `set …${cookie.last4}` : 'not set'}
+                  {' '}— manage it in Settings &gt; Privacy: secrets and keys. It is kept on the server and never shown here.
+                </p>
                 <p className="text-[13px] text-stone-500">
-                  linkedin.com → DevTools → Application → Cookies → copy the <code>li_at</code> value.
-                  Stored only in this browser. Falls back to safe search if LinkedIn blocks the session.
+                  Falls back to safe search if LinkedIn blocks the session or no cookie is set.
                 </p>
               </div>
             )}

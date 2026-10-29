@@ -3,13 +3,15 @@
  *
  *   data/secrets/            mode 700
  *   data/secrets/ai.json     mode 600   { "<provider>": { "key": "...", "baseUrl": "https://...", "setAt": "ISO" } }
+ *   data/secrets/linkedin.json mode 600 { "li_at": "...", "setAt": "ISO" }
  *
  * Files are written atomically (a temp file in the same directory, fsync, rename) and are created with mode 600,
  * so the value is never readable by another user, not even for a moment. Nothing here logs: no console, no thrown
  * message that contains a key, a base URL or a path. A secret value leaves this module only through getAiCredential,
- * which is for the server's own provider calls; describeSecrets gives "set" and the last 4 characters.
+ * which is for the server's own provider calls (getLinkedInCookie likewise, for the scraper's environment); describeSecrets gives "set" and the last 4 characters.
  *
  * Resolution order for an AI key: the store first, then .env (OPENAI_API_KEY, ANTHROPIC_API_KEY) where one is defined.
+ * The LinkedIn cookie: the store first, then .env (LINKEDIN_LI_AT).
  */
 
 import crypto from 'node:crypto'
@@ -32,6 +34,8 @@ const MAX_URL_LENGTH = 300
 const MIN_MASK_LENGTH = 8
 
 const AI_FILE = 'ai.json'
+const LINKEDIN_FILE = 'linkedin.json'
+const LINKEDIN_ENV = 'LINKEDIN_LI_AT'
 
 /** Thrown for a request the store refuses. The message is fixed text and never contains the input. */
 export class SecretStoreError extends Error {
@@ -43,7 +47,7 @@ export class SecretStoreError extends Error {
 }
 
 let rootOverride = null
-let cache = { stamp: null, data: {} }
+const caches = new Map() // file path -> { stamp, data }
 
 function root() {
   return rootOverride || process.env.CAREER_OS_SECRETS_DIR || DEFAULT_ROOT
@@ -52,11 +56,15 @@ function root() {
 /** Tests point the store at a temp directory; pass nothing to restore the default. */
 export function setSecretsRoot(dir) {
   rootOverride = dir || null
-  cache = { stamp: null, data: {} }
+  caches.clear()
 }
 
 function aiFile() {
   return path.join(root(), AI_FILE)
+}
+
+function linkedinFile() {
+  return path.join(root(), LINKEDIN_FILE)
 }
 
 function ensureDir() {
@@ -91,26 +99,29 @@ function writeAtomic(file, text) {
   } catch { /* directory fsync is best effort */ }
 }
 
-/** The parsed store, or null when the file exists but cannot be read (it is then never overwritten). */
-function readAi() {
-  const file = aiFile()
+/** The parsed file, or null when it exists but cannot be read (it is then never overwritten). */
+function readJsonFile(file) {
   let stat
   try {
     stat = fs.statSync(file)
   } catch {
-    cache = { stamp: 'none', data: {} }
-    return cache.data
+    caches.set(file, { stamp: 'none', data: {} })
+    return {}
   }
   const stamp = `${stat.mtimeMs}:${stat.size}:${stat.ino}`
-  if (cache.stamp === stamp) return cache.data
+  const cached = caches.get(file)
+  if (cached?.stamp === stamp) return cached.data
   let data = null
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'))
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) data = parsed
   } catch { /* unreadable: handled below */ }
-  cache = { stamp, data }
+  caches.set(file, { stamp, data })
   return data
 }
+
+const readAi = () => readJsonFile(aiFile())
+const readLinkedIn = () => readJsonFile(linkedinFile())
 
 function entryOf(data, provider) {
   const entry = data && Object.hasOwn(data, provider) ? data[provider] : null
@@ -125,10 +136,10 @@ function validateProvider(provider) {
   if (!KEYED_AI_PROVIDERS.includes(provider)) throw new SecretStoreError('Unknown provider', 'provider')
 }
 
-function validateKey(key) {
+function validateKey(key, label = 'Key') {
   const value = typeof key === 'string' ? key.trim() : ''
   if (value.length < MIN_KEY_LENGTH || value.length > MAX_KEY_LENGTH || /[\s\p{Cc}]/u.test(value)) {
-    throw new SecretStoreError(`Key must be ${MIN_KEY_LENGTH} to ${MAX_KEY_LENGTH} characters, with no spaces or control characters`)
+    throw new SecretStoreError(`${label} must be ${MIN_KEY_LENGTH} to ${MAX_KEY_LENGTH} characters, with no spaces or control characters`)
   }
   return value
 }
@@ -164,7 +175,9 @@ export function describeSecrets() {
   const data = readAi()
   const ai = {}
   for (const provider of KEYED_AI_PROVIDERS) ai[provider] = describeEntry(provider, data)
-  return data === null ? { ai, unreadable: true } : { ai }
+  const linkedinData = readLinkedIn()
+  const linkedin = describeLinkedIn(linkedinData)
+  return data === null || linkedinData === null ? { ai, linkedin, unreadable: true } : { ai, linkedin }
 }
 
 /** The key and pinned base URL for a provider call, or null. Server internal: never put the result in a response. */
@@ -187,7 +200,7 @@ export function setAiSecret(provider, { key, baseUrl } = {}) {
   const entry = { key: value, setAt: new Date().toISOString() }
   if (pinned) entry.baseUrl = pinned
   writeAtomic(aiFile(), `${JSON.stringify({ ...data, [provider]: entry }, null, 2)}\n`)
-  cache = { stamp: null, data: {} }
+  caches.clear()
   return describeEntry(provider, readAi())
 }
 
@@ -205,9 +218,52 @@ export function clearAiSecret(provider) {
     } else {
       fs.rmSync(aiFile(), { force: true })
     }
-    cache = { stamp: null, data: {} }
+    caches.clear()
   }
   return describeEntry(provider, readAi())
+}
+
+function liAtEntry(data) {
+  return data && typeof data.li_at === 'string' && data.li_at ? data : null
+}
+
+function envLiAt() {
+  return String(process.env[LINKEDIN_ENV] ?? '').trim()
+}
+
+function describeLinkedIn(data) {
+  const entry = liAtEntry(data)
+  if (entry) return { set: true, source: 'store', last4: last4(entry.li_at), setAt: entry.setAt || null }
+  const envValue = envLiAt()
+  if (envValue) return { set: true, source: 'env', last4: last4(envValue), setAt: null }
+  return { set: false, source: null, last4: null, setAt: null }
+}
+
+/** The li_at cookie for the scraper's environment, or null. Server internal: never put it in a response or in argv. */
+export function getLinkedInCookie() {
+  const entry = liAtEntry(readLinkedIn())
+  if (entry) return entry.li_at
+  return envLiAt() || null
+}
+
+/** Store or replace the LinkedIn li_at cookie. Resolves the new describe entry. */
+export function setLinkedInSecret({ li_at } = {}) {
+  const value = validateKey(li_at, 'Cookie')
+  const data = readLinkedIn()
+  if (data === null) throw new SecretStoreError('The secret store file cannot be read; it was left as it is', 'unreadable')
+  ensureDir()
+  writeAtomic(linkedinFile(), `${JSON.stringify({ li_at: value, setAt: new Date().toISOString() }, null, 2)}\n`)
+  caches.clear()
+  return describeLinkedIn(readLinkedIn())
+}
+
+/** Remove the stored cookie. Resolves the describe entry after removal (a .env value may remain). */
+export function clearLinkedInSecret() {
+  const data = readLinkedIn()
+  if (data === null) throw new SecretStoreError('The secret store file cannot be read; it was left as it is', 'unreadable')
+  fs.rmSync(linkedinFile(), { force: true })
+  caches.clear()
+  return describeLinkedIn(readLinkedIn())
 }
 
 /** Every secret value this process holds (the store and .env), plus the URL-encoded form of each. */
@@ -225,6 +281,8 @@ export function exactSecretValues() {
     add(entryOf(data, provider)?.key)
     if (ENV_KEYS[provider]) add(String(process.env[ENV_KEYS[provider]] ?? '').trim())
   }
+  add(liAtEntry(readLinkedIn())?.li_at)
+  add(envLiAt())
   return [...found]
 }
 

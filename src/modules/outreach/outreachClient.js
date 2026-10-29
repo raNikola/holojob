@@ -1,13 +1,13 @@
 import { ensureApiAvailable } from '../../utils/apiAvailability.js'
 
-export async function discoverOutreachContacts(job, { fetchPages = true, deep = false, liAt = '', acceptTosRisk = false } = {}) {
+export async function discoverOutreachContacts(job, { fetchPages = true, deep = false, acceptTosRisk = false } = {}) {
   if (!(await ensureApiAvailable())) {
     throw new Error('Outreach discovery requires the local API server (npm run dev or npm run start)')
   }
   const res = await fetch('/api/outreach/discover', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ job, fetchPages, deep, liAt, acceptTosRisk }),
+    body: JSON.stringify({ job, fetchPages, deep, acceptTosRisk }),
   })
   const payload = await res.json()
   if (!res.ok) throw new Error(payload.error || 'Discovery failed')
