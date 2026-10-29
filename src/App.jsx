@@ -15,6 +15,9 @@ import CareerStrategyScreen from './components/ai/CareerStrategyScreen'
 import AICommandCenter from './components/ai/AICommandCenter'
 import OutreachDashboard from './components/outreach/OutreachDashboard'
 import QualityDashboard from './components/quality/QualityDashboard'
+import JobDetailsPage from './components/jobs/JobDetailsPage'
+import { useJobRoute } from './hooks/useJobRoute'
+import { closeJobPage } from './modules/jobs/jobRoute'
 import {
   VIEWS,
   isOnboardingComplete,
@@ -28,16 +31,24 @@ function AppContent() {
   const { demoMode, demoReady } = useDemoBootstrapContext()
   const [view, setViewState] = useState(() => loadDemoInitialView(profile, demoMode))
 
+  const routedJobId = useJobRoute()
+
   const setView = useCallback((next) => {
     setViewState(next)
     persistView(next)
   }, [])
 
+  // Choosing a view from the navigation leaves the job page; the page's own Back returns to the previous view.
+  const navigate = useCallback((next) => {
+    if (routedJobId) closeJobPage()
+    setView(next)
+  }, [setView, routedJobId])
+
   useEffect(() => {
-    const open = () => setView(VIEWS.SETTINGS)
+    const open = () => navigate(VIEWS.SETTINGS)
     window.addEventListener(OPEN_SETTINGS_EVENT, open)
     return () => window.removeEventListener(OPEN_SETTINGS_EVENT, open)
-  }, [setView])
+  }, [navigate])
 
   const handleOnboardingComplete = useCallback(() => {
     setView(demoMode ? VIEWS.JOBS : VIEWS.DASHBOARD)
@@ -64,27 +75,28 @@ function AppContent() {
   const activeView = view === VIEWS.ONBOARDING && skipOnboarding ? VIEWS.JOBS : view
 
   return (
-    <AppShell activeView={activeView} onNavigate={setView}>
-      {activeView === VIEWS.DASHBOARD && <DashboardHome onNavigate={setView} />}
-      {activeView === VIEWS.PROFILE && <ProfileHome onNavigate={setView} />}
-      {activeView === VIEWS.PROFILE_EDIT && (
+    <AppShell activeView={activeView} onNavigate={navigate}>
+      {routedJobId && <JobDetailsPage key={routedJobId} jobId={routedJobId} />}
+      {!routedJobId && activeView === VIEWS.DASHBOARD && <DashboardHome onNavigate={setView} />}
+      {!routedJobId && activeView === VIEWS.PROFILE && <ProfileHome onNavigate={setView} />}
+      {!routedJobId && activeView === VIEWS.PROFILE_EDIT && (
         <OnboardingWizard
           mode="edit"
           onComplete={() => setView(VIEWS.PROFILE)}
         />
       )}
-      {activeView === VIEWS.INTELLIGENCE && (
+      {!routedJobId && activeView === VIEWS.INTELLIGENCE && (
         <CandidateIntelligenceScreen onNavigate={setView} />
       )}
-      {activeView === VIEWS.JOBS && <JobDiscoveryScreen />}
-      {activeView === VIEWS.APPLICATIONS && <ApplicationHome />}
-      {activeView === VIEWS.RESUMES && <ResumeLibrary onNavigate={setView} />}
-      {activeView === VIEWS.CVS && <CvLibrary />}
-      {activeView === VIEWS.CAREER_STRATEGY && <CareerStrategyScreen />}
-      {activeView === VIEWS.AI_COMMAND && <AICommandCenter />}
-      {activeView === VIEWS.OUTREACH && <OutreachDashboard />}
-      {activeView === VIEWS.QUALITY && <QualityDashboard />}
-      {activeView === VIEWS.SETTINGS && <SettingsHome />}
+      {!routedJobId && activeView === VIEWS.JOBS && <JobDiscoveryScreen />}
+      {!routedJobId && activeView === VIEWS.APPLICATIONS && <ApplicationHome />}
+      {!routedJobId && activeView === VIEWS.RESUMES && <ResumeLibrary onNavigate={setView} />}
+      {!routedJobId && activeView === VIEWS.CVS && <CvLibrary />}
+      {!routedJobId && activeView === VIEWS.CAREER_STRATEGY && <CareerStrategyScreen />}
+      {!routedJobId && activeView === VIEWS.AI_COMMAND && <AICommandCenter />}
+      {!routedJobId && activeView === VIEWS.OUTREACH && <OutreachDashboard />}
+      {!routedJobId && activeView === VIEWS.QUALITY && <QualityDashboard />}
+      {!routedJobId && activeView === VIEWS.SETTINGS && <SettingsHome />}
     </AppShell>
   )
 }
