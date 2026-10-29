@@ -5,6 +5,7 @@ import AISettingsPanel from '../ai/AISettingsPanel'
 import SecretsPanel from './SecretsPanel'
 import ScoringWeightsPanel from './ScoringWeightsPanel'
 import ApplicationMigrationPanel from './ApplicationMigrationPanel'
+import ApplicationSettingsPanel from './ApplicationSettingsPanel'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
@@ -148,6 +149,8 @@ export default function SettingsHome() {
       <SecretsPanel />
 
       <ScoringWeightsPanel />
+
+      <ApplicationSettingsPanel />
 
       <ApplicationMigrationPanel />
 

@@ -96,3 +96,22 @@ export async function moveApplication(appId, body) {
   replaceApplication(result.application)
   return result
 }
+
+/** The server's answer to a settings write replaces the cached settings. */
+function replaceSettings(result) {
+  publish({ ...state, settings: result.settings })
+}
+
+/** One stage registry operation (add, rename, move, retire, unretire; TRACKER_PLAN 1.6). */
+export async function changeStages(op) {
+  const result = await request('POST', '/api/applications/settings/stages', op)
+  replaceSettings(result)
+  return result
+}
+
+/** The tracking switch (and the reminders switch, which no screen uses yet). */
+export async function changeSwitches(body) {
+  const result = await request('POST', '/api/applications/settings', body)
+  replaceSettings(result)
+  return result
+}
