@@ -59,6 +59,14 @@ export function slimJob(job) {
   return slim
 }
 
+const savedListeners = new Set()
+
+/** Calls `listener` after every successful `saveJobs`; the jobs store uses it to tell mounted views. Returns the unsubscribe. */
+export function onJobsSaved(listener) {
+  savedListeners.add(listener)
+  return () => savedListeners.delete(listener)
+}
+
 /**
  * Stores the job list. When it does not fit in localStorage (about 5M
  * characters; a few hundred enriched ads pass that), stores it without the
@@ -71,15 +79,19 @@ export function saveJobs(state, storage = globalThis.localStorage) {
     filters: state.filters,
     importedAt: state.importedAt,
   }
+  let saved = false
   try {
     storage.setItem(JOBS_STORAGE_KEY, JSON.stringify(payload))
+    saved = true
   } catch {
     try {
       storage.setItem(JOBS_STORAGE_KEY, JSON.stringify({ ...payload, jobs: payload.jobs.map(slimJob), slim: true }))
+      saved = true
     } catch (error) {
       console.warn(`Job list not saved in this browser: ${error.message}`)
     }
   }
+  if (saved) savedListeners.forEach((listener) => listener())
   return payload
 }
 
