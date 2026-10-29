@@ -1164,7 +1164,7 @@ export function planMigration(jobs, { store, settings, scored = null, ledger = n
   const applications = {}
   const seen = new Set()
 
-  for (const job of jobs) {
+  for (const [index, job] of jobs.entries()) {
     const L = legacyTrackingOf(job)
     const marked = job?.status === 'applied_manually'
     const notAnObject = Boolean(job?.applicationTracking) && !L
@@ -1173,7 +1173,7 @@ export function planMigration(jobs, { store, settings, scored = null, ledger = n
       continue
     }
     counts.candidates += 1
-    const base = { jobId: typeof job.jobId === 'string' ? job.jobId : null, title: str(job.title), company: str(job.company) }
+    const base = { index, jobId: typeof job.jobId === 'string' ? job.jobId : null, title: str(job.title), company: str(job.company) }
     const refuse = (reason) => {
       counts.unmappable += 1
       entries.push({ ...base, action: 'unmappable', reason, warnings: [] })
@@ -1263,7 +1263,6 @@ export function planMigration(jobs, { store, settings, scored = null, ledger = n
  */
 export function verifyMigration(jobs, plan, next, before) {
   const problems = []
-  const byId = new Map(jobs.filter((j) => LEGACY_JOB_ID.test(j?.jobId ?? '')).map((j) => [j.jobId, j]))
   const { counts } = plan
   if (counts.candidates !== counts.created + counts.alreadyMigrated + counts.alreadyTracked + counts.unmappable) {
     problems.push('counts do not balance')
@@ -1275,7 +1274,7 @@ export function verifyMigration(jobs, plan, next, before) {
   for (const entry of plan.entries.filter((e) => e.action === 'create')) {
     const fail = (what) => problems.push(`${entry.appId}: ${what}`)
     const app = next.applications[entry.appId]
-    const job = byId.get(entry.jobId)
+    const job = jobs[entry.index]
     if (!app || !job) { fail('missing'); continue }
     if (!wellFormed(entry.appId, app)) fail('malformed record')
     const L = legacyTrackingOf(job)
