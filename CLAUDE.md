@@ -92,6 +92,10 @@ provider, each behind an explicit confirm; the browser AI features send redacted
   if it cannot run, or a final check still finds an identifier, the call is refused and logged
   (`ai_gate.py refuse`). No confirm dialog yet for these features (principle 14 asks for one).
   `tests/js/aiRedaction.test.js` checks each feature at the provider.
+- **AI findings store** (`scripts/ai-findings-store.js`, first slice: `jobAnalysis` only): keeps the parsed answer and the redacted
+  prompt under `data/ai/findings/job/` (700 / 600, git-ignored), looked up before the budget gate; nothing leaves the server. Never
+  stored: keys, base URLs, an answer in which `ai-redact.js` (`findLeaks`) still finds an identifier. Details in
+  `docs/redesign/STEP5_SERVER_MASTER_PLAN.md` section 2.8.
 - **Known gap:** LLM tailoring (`resume_generator/llm_tailor.py`, Claude Code CLI) also
   sends candidate data (parsed CV sections about_me, experience, skill_categories,
   education, an intelligence summary and project intelligence) with no confirm step and
