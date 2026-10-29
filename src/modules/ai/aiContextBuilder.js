@@ -4,6 +4,7 @@ import { loadJobs } from '../jobs/jobStorage.js'
 import { computeJobStats } from '../jobs/jobStats.js'
 import { isActionable } from '../jobs/jobHistory.js'
 import { loadAiMemory } from './aiMemory.js'
+import { buildRedactionHints } from './redactionHints.js'
 
 function truncate(str, max = 4000) {
   if (!str) return ''
@@ -12,15 +13,22 @@ function truncate(str, max = 4000) {
 
 function summarizeProfile(profile) {
   const bp = profile?.basicProfile || {}
+  // No name, e-mail or phone: the model does not need who the candidate is (DECISIONS.md principle 14).
   return {
-    name: bp.fullName,
-    email: bp.email,
     currentRole: bp.currentRole,
     targetRoles: bp.targetRoles,
     locations: bp.preferredLocations,
     skills: profile?.resume?.parsedData?.skills?.slice(0, 30),
     experienceYears: bp.experienceYears,
   }
+}
+
+const TRACKING_FIELDS = ['applied', 'appliedDate', 'interviewStage', 'followUpDate', 'lastUpdated']
+
+/** Stage and dates only. Recruiter name / e-mail / LinkedIn, the application link and the free-text notes are left out. */
+function safeTracking(tracking) {
+  if (!tracking) return tracking
+  return Object.fromEntries(TRACKING_FIELDS.filter((k) => k in tracking).map((k) => [k, tracking[k]]))
 }
 
 function summarizeJob(job) {
@@ -40,17 +48,13 @@ function summarizeJob(job) {
     redFlags: job.redFlags,
     reasons: job.reasons,
     scoreBreakdown: job.scoreBreakdown,
-    applicationTracking: job.applicationTracking,
+    applicationTracking: safeTracking(job.applicationTracking),
     tailoredAssets: job.tailoredAssets ? { generatedAt: job.tailoredAssets.generatedAt } : null,
+    // Counts and types only: names, e-mails, links and free-text notes of recruiters and contacts stay on this machine.
     outreach: job.outreach ? {
       status: job.outreach.status,
       contactCount: job.outreach.contacts?.length || 0,
-      recentActivity: (job.outreach.activity || []).slice(0, 5),
-      recruiterFromCrm: {
-        name: job.applicationTracking?.recruiterName,
-        email: job.applicationTracking?.recruiterEmail,
-        linkedin: job.applicationTracking?.recruiterLinkedIn,
-      },
+      recentActivity: (job.outreach.activity || []).slice(0, 5).map((a) => ({ type: a.type, date: a.date })),
     } : null,
   }
 }
@@ -96,6 +100,10 @@ export function buildAiContext({ featureId, job, message, extra } = {}) {
   const stats = computeJobStats(jobState.jobs)
   const memory = loadAiMemory()
 
+  // `extra` is the caller's own object (it can carry a whole job.outreach with its contacts): never spread it as is.
+  const safeExtra = { ...extra }
+  delete safeExtra.outreach
+  delete safeExtra.contact
   const base = {
     profile: summarizeProfile(profile),
     intelligenceSummary: intelligence?.candidateSummary || null,
@@ -109,7 +117,7 @@ export function buildAiContext({ featureId, job, message, extra } = {}) {
       crmInterviewing: stats.crmInterviewing,
     },
     memory,
-    ...extra,
+    ...safeExtra,
   }
 
   if (job) base.job = summarizeJob(job)
@@ -125,8 +133,9 @@ export function buildAiContext({ featureId, job, message, extra } = {}) {
   }
   if (featureId === 'chat') base.message = message
   if (featureId === 'outreach' && extra?.contact) {
+    // The contact's name is a placeholder: the draft says [CONTACT NAME] and the owner fills it in.
     base.contact = {
-      name: extra.contact.name,
+      name: '[CONTACT NAME]',
       title: extra.contact.title,
       company: extra.contact.company,
       contactType: extra.contact.contactType,
@@ -142,4 +151,10 @@ export function buildAiContext({ featureId, job, message, extra } = {}) {
   }
 
   return base
+}
+
+/** Everything the server must strip from the prompt (see redactionHints.js). Goes beside the context, not in it. */
+export function buildAiRedactionHints({ job, extra } = {}) {
+  const jobs = [...loadJobs().jobs, ...(job ? [job] : [])]
+  return buildRedactionHints({ profile: loadProfile(), jobs, contact: extra?.contact })
 }

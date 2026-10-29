@@ -58,7 +58,7 @@ Do not build `.venv` with Python 3.15 (pinned pandas 2.3.3 has no wheel).
 ## Privacy rules and exceptions
 
 Personal data stays on the server. Three steps send candidate data to the configured
-provider, each behind an explicit confirm; a fourth is a known gap.
+provider, each behind an explicit confirm; the browser AI features send redacted text with no confirm yet; LLM tailoring is a known gap.
 
 - **CV analysis** sends the text of one CV with name, e-mails, phones and links replaced
   by placeholders (`redact.py`), only after the confirm dialog has shown that exact text
@@ -79,6 +79,18 @@ provider, each behind an explicit confirm; a fourth is a known gap.
   name, contacts, links. Runs only in a judged scoring run with `HOLOJOB_ENGINE_SHADOW` on
   (shadow mode, `match_engine/shadow.py`); the judge's confirm dialog then lists it.
   `tests/python/test_engine_privacy.py` checks all of these at `requests.post`.
+- **Browser AI features** (`scripts/run-ai.js`, the `/api/ai/*` routes: job analysis, cover letter, interview
+  prep, outreach, company intelligence, career strategy, skill gap, application strategy, resume enhancement,
+  chat): send the ad text, the job's scores and stage, and a profile summary (current role, target roles,
+  locations, skills, years). Never sent: owner name, e-mail, phone, links; recruiter / contact names, e-mails,
+  LinkedIn links, notes and activity text (left out where the context is built, `aiContextBuilder.js`; the
+  outreach contact's name is the placeholder `[CONTACT NAME]`). One central step, `scripts/ai-redact.js`, runs
+  on every context before the prompt is built and before the budget gate: it removes the owner's and the known
+  contacts' identifiers (profile mirror plus `redactionHints` from the browser), every e-mail address (a company's
+  too), phone-like numbers and profile-site links (LinkedIn, GitHub, ...); company sites stay. It fails closed:
+  if it cannot run, or a final check still finds an identifier, the call is refused and logged
+  (`ai_gate.py refuse`). No confirm dialog yet for these features (principle 14 asks for one).
+  `tests/js/aiRedaction.test.js` checks each feature at the provider.
 - **Known gap:** LLM tailoring (`resume_generator/llm_tailor.py`, Claude Code CLI) also
   sends candidate data (parsed CV sections about_me, experience, skill_categories,
   education, an intelligence summary and project intelligence) with no confirm step and

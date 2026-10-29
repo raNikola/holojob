@@ -794,7 +794,7 @@ def save_pricing_overrides(entries, confirm: bool = False) -> dict:
 
 
 def _cli(argv: list[str]) -> int:
-    """`reserve`, `finish`, `cache-hit`, `usage`, `settings-put`, `pricing-put`: JSON on stdin, one JSON object on stdout."""
+    """`reserve`, `finish`, `cache-hit`, `usage`, `refuse`, `settings-put`, `pricing-put`: JSON on stdin, one JSON object on stdout."""
     command = argv[0] if argv else ""
     raw = sys.stdin.read() if command != "usage" else ""
     args = json.loads(raw) if raw.strip() else {}
@@ -834,13 +834,21 @@ def _cli(argv: list[str]) -> int:
     if command == "usage":
         print(json.dumps(usage_summary()))
         return 0
+    if command == "refuse":
+        # A call the app stopped itself (redaction failed): recorded as a refusal, no budget involved.
+        settings = load_settings()
+        row, _ = _call_row(args.get("provider") or "", args.get("model"), 0, args.get("baseUrl"),
+                           args.get("feature"), args.get("jobId"), None, 0, settings, None)
+        record_refused(Decision(False, str(args.get("reason") or "refused before the call")[:300], row))
+        print(json.dumps({"ok": True}))
+        return 0
     if command == "settings-put":
         print(json.dumps(save_settings(args.get("settings"), confirm=args.get("confirm") is True)))
         return 0
     if command == "pricing-put":
         print(json.dumps(save_pricing_overrides(args.get("entries"), confirm=args.get("confirm") is True)))
         return 0
-    print("usage: ai_gate.py reserve|finish|cache-hit|usage|settings-put|pricing-put  (JSON on stdin)", file=sys.stderr)
+    print("usage: ai_gate.py reserve|finish|cache-hit|usage|refuse|settings-put|pricing-put  (JSON on stdin)", file=sys.stderr)
     return 2
 
 

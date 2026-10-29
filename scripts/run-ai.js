@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { buildMessages, parseAiResponse } from '../src/modules/ai/aiPromptLibrary.js'
 import { getProvider, PROVIDER_NAMES, KEYLESS_PROVIDERS, checkProviderHealth, listProviderModels } from '../src/modules/ai/aiProviderRegistry.js'
 import { initSseResponse, sseWrite } from './stream-spawn.js'
-import { UNGATED_PROVIDERS, finishAiCall, reserveAiCall } from './ai-gate.js'
+import { UNGATED_PROVIDERS, finishAiCall, recordAiRefusal, reserveAiCall } from './ai-gate.js'
+import { assertClean, redactContext } from './ai-redact.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -121,7 +122,19 @@ function measuredTokens(usage) {
 export async function runAiFeature({ feature, context, settings }) {
   const providerName = settings?.provider || 'mock'
   const provider = getProvider(providerName)
-  const messages = buildMessages(feature, context)
+  // Redaction comes first and fails closed: no identifier of the owner or a recruiter may reach the provider.
+  let messages
+  try {
+    const redacted = redactContext(context)
+    messages = buildMessages(feature, redacted.context)
+    assertClean(messages, redacted.ids)
+  } catch (e) {
+    const reason = `call not made: ${sanitizeKey(e.message)}`
+    if (!UNGATED_PROVIDERS.has(providerName)) {
+      await recordAiRefusal({ provider: providerName, model: settings?.model, feature, jobId: context?.job?.jobId, baseUrl: settings?.baseUrl, reason })
+    }
+    return { ok: false, refused: true, error: reason }
+  }
   // The AI budget gate (python/llm/ai_gate.py) decides before every real call.
   let ticket = null
   if (!UNGATED_PROVIDERS.has(providerName)) {

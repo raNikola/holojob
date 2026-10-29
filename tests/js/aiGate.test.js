@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runAiFeature } from '../../scripts/run-ai.js'
 import { reserveAiCall, setGateRunner } from '../../scripts/ai-gate.js'
+import { setIdentitySource } from '../../scripts/ai-redact.js'
 import { getProvider } from '../../src/modules/ai/aiProviderRegistry.js'
 import { describeRun } from '../../src/modules/jobs/pipelineSummary.js'
 
@@ -15,6 +16,9 @@ function gate(decision) {
   })
   return seen
 }
+
+// No test reads the server's real profile mirror.
+setIdentitySource(() => ({ names: [], emails: [], phones: [], links: [] }))
 
 afterEach(() => {
   setGateRunner()

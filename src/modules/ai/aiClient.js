@@ -3,7 +3,7 @@ import { ensureApiAvailable, isApiAvailable } from '../../utils/apiAvailability.
 import { loadAiSettings, settingsForApi } from './aiSettings.js'
 import { getFeature, isFeatureEnabled } from './aiFeatureRegistry.js'
 import { buildMessages, parseAiResponse } from './aiPromptLibrary.js'
-import { buildAiContext } from './aiContextBuilder.js'
+import { buildAiContext, buildAiRedactionHints } from './aiContextBuilder.js'
 import { buildCacheKey, getCachedResponse, setCachedResponse } from './aiResponseCache.js'
 import { trackAiUsage } from './aiUsageTracker.js'
 import { mergeFeatureIntoMemory } from './aiMemory.js'
@@ -48,7 +48,8 @@ export async function runAiFeature(featureId, { job, message, extra, skipCache =
 
   const apiBody = {
     feature: featureId,
-    context,
+    // The hints name what the server must strip; it removes them before the prompt is built.
+    context: { ...context, redactionHints: buildAiRedactionHints({ job, extra }) },
     settings: settingsForApi(settings),
     stream: Boolean(onLog),
   }
