@@ -140,6 +140,7 @@ later server store. `useJobs` / `useStoredJob` re-render after any write, a `sto
 Applications and Outreach screens take store writes in. **Still whole-object / whole-list:** those three screens save their whole list from memory
 (`saveJobs(state)` effects), and their own handlers (`handleJobUpdated` for the table's `JobTailorActions`, `ContactDetailDrawer`, `FollowUpPanel`,
 `RelatedContactsPanel` in the contact drawer, and `updateJobOutreach` / `updateJobStatus` on in-memory state) still merge whole objects. Step 2 moves them to the store.
+Across tabs, `useBackgroundRefresh` (`App.jsx`) refetches the tracker cache and re-reads the job list when the tab becomes visible or focused and every 60 s while visible (`modules/applications/refreshPolicy.js`); an edited tracker field that changed elsewhere keeps the typed value and shows "Reload fields".
 An unknown id shows "Job not found". Unsaved input: forms that call `useDraftDirty` (the tracker's three forms) make the button ask first
 (`modules/jobs/draftGuard.js`); other drafts (AI tools, contacts) are not covered yet. Not built: more tabs, AI spent, "Is it real?".
 
