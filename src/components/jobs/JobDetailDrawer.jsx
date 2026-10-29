@@ -3,7 +3,8 @@ import { Maximize2, X } from 'lucide-react'
 import JobDetailBody from './JobDetailBody'
 import Button from '../ui/Button'
 import { dirtyDraftLabels, leaveDecision } from '../../modules/jobs/draftGuard'
-import { openJobPage } from '../../modules/jobs/jobRoute'
+import ApplicationTrackingSummary from './ApplicationTrackingSummary'
+import { canOpenJobPage, MISSING_JOB_HINT, openJobPage } from '../../modules/jobs/jobRoute'
 import { mergeLive } from '../../modules/jobs/jobsStore'
 import { useStoredJob } from '../../hooks/useJobs'
 import { useJobPatcher } from '../../hooks/useJobPatcher'
@@ -19,7 +20,9 @@ export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
   if (!job) return null
 
   // The drawer stays open when the owner declines, so nothing typed is lost.
+  const canOpen = canOpenJobPage(stored)
   const openFullDetails = () => {
+    if (!canOpen) return
     const question = leaveDecision(dirtyDraftLabels())
     if (question && !window.confirm(question)) return
     openJobPage(job.jobId)
@@ -35,7 +38,9 @@ export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
             <p className="text-sm text-stone-600 dark:text-stone-400">{job.company}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={openFullDetails}><Maximize2 className="mr-1 inline h-4 w-4" />Open full details</Button>
+            <span title={canOpen ? undefined : MISSING_JOB_HINT}>
+              <Button variant="secondary" onClick={openFullDetails} disabled={!canOpen}><Maximize2 className="mr-1 inline h-4 w-4" />Open full details</Button>
+            </span>
             <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-stone-100 dark:hover:bg-stone-800" aria-label="Close details">
               <X className="h-5 w-5" />
             </button>
@@ -43,7 +48,10 @@ export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
         </div>
 
         <div className="p-4">
-          <JobDetailBody job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} onStatusChange={onStatusChange} includeAiTools={false} includeContacts={false} />
+          <JobDetailBody job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} onStatusChange={onStatusChange} includeAiTools={false} includeContacts={false} includeTracker={false} />
+          <div className="mt-5">
+            <ApplicationTrackingSummary job={job} onStatusChange={onStatusChange} onOpenFull={openFullDetails} canOpenFull={canOpen} />
+          </div>
         </div>
       </aside>
     </div>

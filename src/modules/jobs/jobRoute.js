@@ -27,6 +27,10 @@ export function findRoutedJob(jobs, jobId) {
   return job ? { status: 'found', job } : { status: 'missing', jobId }
 }
 
+/** The full page reads the stored job list, so a job that list no longer holds has nothing to open. */
+export const canOpenJobPage = (storedJob) => Boolean(storedJob)
+export const MISSING_JOB_HINT = 'This posting is no longer in your jobs list'
+
 function notify() {
   window.dispatchEvent(new CustomEvent(JOB_ROUTE_EVENT))
 }
