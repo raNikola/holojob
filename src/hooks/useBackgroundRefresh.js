@@ -5,7 +5,7 @@ import { dirtyDraftLabels } from '../modules/jobs/draftGuard'
 import { rereadJobs } from '../modules/jobs/jobsStore'
 
 /**
- * Keeps one tab in step with another: when the tab becomes visible or focused, and every 30 s while visible, the
+ * Keeps one tab in step with another: when the tab becomes visible or focused, and every 60 s while visible, the
  * application cache is fetched again and the job list is re-read. A draft that would be replaced blocks it.
  */
 export function useBackgroundRefresh() {

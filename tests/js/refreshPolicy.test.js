@@ -15,7 +15,7 @@ describe('refreshDecision', () => {
     expect(refreshDecision({ ...base, trigger: 'focus', sinceLastMs: FOCUS_MIN_GAP_MS })).toBe('refresh')
   })
 
-  it('polls about every 30 s, not sooner', () => {
+  it('polls about every 60 s, not sooner', () => {
     expect(refreshDecision({ ...base, trigger: 'poll', sinceLastMs: 5_000 })).toBe('skip')
     expect(refreshDecision({ ...base, trigger: 'poll', sinceLastMs: POLL_MS })).toBe('refresh')
   })
