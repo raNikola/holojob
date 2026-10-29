@@ -9,7 +9,7 @@ import { buildMessages, parseAiResponse } from '../src/modules/ai/aiPromptLibrar
 import { getProvider, PROVIDER_NAMES, KEYLESS_PROVIDERS, checkProviderHealth, listProviderModels } from '../src/modules/ai/aiProviderRegistry.js'
 import { initSseResponse, sseWrite } from './stream-spawn.js'
 import { UNGATED_PROVIDERS, finishAiCall, readAiSelection, recordAiRefusal, reserveAiCall } from './ai-gate.js'
-import { assertClean, findLeaks, redactContext } from './ai-redact.js'
+import { assertClean, findStructuredLeaks, redactContext } from './ai-redact.js'
 import { PROMPT_VERSIONS, appendFinding, buildCacheKey, entityKeyFor, lookupFinding, usesFindings } from './ai-findings-store.js'
 import { maskSecrets } from './secret-mask.js'
 import { getAiCredential } from './secret-store.js'
@@ -151,7 +151,7 @@ export async function checkAiFinding({ feature, context }) {
   if (!selection || !PROVIDER_NAMES.includes(selection.provider) || UNGATED_PROVIDERS.has(selection.provider)) return none
   try {
     const redacted = redactContext(context)
-    assertClean(buildMessages(feature, redacted.context), redacted.ids)
+    assertClean(buildMessages(feature, redacted.context), redacted.ids, { context: redacted.context })
     const entityKey = entityKeyFor(feature, { context, redacted: redacted.context })
     if (!entityKey) return none
     const { cacheKey } = buildCacheKey({ feature, model: selection.model, context: redacted.context })
@@ -193,7 +193,7 @@ export async function runAiFeature({ feature, context, refresh = false }) {
   try {
     redacted = redactContext(context)
     messages = buildMessages(feature, redacted.context)
-    assertClean(messages, redacted.ids)
+    assertClean(messages, redacted.ids, { context: redacted.context })
   } catch (e) {
     const reason = `call not made: ${sanitizeKey(e.message)}`
     if (!UNGATED_PROVIDERS.has(providerName)) {
@@ -263,7 +263,7 @@ export async function runAiFeature({ feature, context, refresh = false }) {
     const response = { ok: true, data, usage: result.usage, diskPath }
     if (lookupKey) {
       // An identifier echoed by the model keeps the answer off disk; the caller still gets it this once.
-      const leaks = findLeaks(JSON.stringify(data), redacted.ids)
+      const leaks = findStructuredLeaks(data, redacted.ids)
       const saved = leaks.length
         ? { stored: false, reason: `identifier in the answer (${leaks.join(', ')})` }
         : appendFinding({

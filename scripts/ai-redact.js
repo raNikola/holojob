@@ -186,8 +186,11 @@ export function redactText(text, ids) {
   return out
 }
 
-/** What is still in `text` that must not be: the kinds found, never the values. */
-export function findLeaks(text, ids) {
+/**
+ * What is still in `text` that must not be: the kinds found, never the values. `names: false` leaves the name
+ * check to the caller, who then checks the string values of the data (see `findStructuredLeaks`).
+ */
+export function findLeaks(text, ids, { names = true } = {}) {
   const found = new Set()
   const all = [ids.owner, ids.contacts]
   if (new RegExp(EMAIL_RE.source).test(text)) found.add('email')
@@ -201,8 +204,31 @@ export function findLeaks(text, ids) {
     if (re && new RegExp(re.source).test(text)) found.add('phone')
   }
   if ([...text.matchAll(PHONE_RE)].some((m) => isPhone(m[0]))) found.add('phone')
-  if (nameSpans(text, [...ids.owner.names, ...ids.contacts.names]).length) found.add('name')
+  if (names && nameSpans(text, [...ids.owner.names, ...ids.contacts.names]).length) found.add('name')
   return [...found]
+}
+
+function stringValues(value, out = []) {
+  walk(value, (s) => { out.push(s); return s })
+  return out
+}
+
+/**
+ * `findLeaks` for data that is sent as JSON. Emails, links and phones are looked for in the whole serialized text. A name
+ * is looked for in the string values only: an object key or the fixed wording around the data is written by the code, so
+ * a stored contact named "Name" must not refuse every prompt because the key `"name"` is in it. A name inside any value,
+ * also in the middle of a sentence, is still found.
+ */
+export function findStructuredLeaks(value, ids) {
+  const found = new Set(findLeaks(JSON.stringify(value), ids, { names: false }))
+  if (nameInValues(value, ids)) found.add('name')
+  return [...found]
+}
+
+/** True when a stored name is in a string value of `value`. Keys are not looked at. */
+function nameInValues(value, ids) {
+  const names = [...ids.owner.names, ...ids.contacts.names]
+  return names.length > 0 && stringValues(value).some((s) => nameSpans(s, names).length)
 }
 
 function walk(value, fn) {
@@ -250,7 +276,9 @@ export function redactContext(context) {
 }
 
 /** Last check on the finished prompt. Throws RedactionError naming the kinds, never the values. */
-export function assertClean(messages, ids) {
-  const leaks = findLeaks(messages.map((m) => String(m.content ?? '')).join('\n'), ids)
+export function assertClean(messages, ids, { context } = {}) {
+  const prompt = messages.map((m) => String(m.content ?? '')).join('\n')
+  // With the context given, a name is checked against its values; the prompt around it is the code's own text.
+  const leaks = context === undefined ? findLeaks(prompt, ids) : [...findLeaks(prompt, ids, { names: false }), ...(nameInValues(context, ids) ? ['name'] : [])]
   if (leaks.length) throw new RedactionError(`redaction check found ${leaks.join(', ')} left in the prompt`)
 }

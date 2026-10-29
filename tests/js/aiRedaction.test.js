@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runAiFeature as runAi } from '../../scripts/run-ai.js'
 import { setGateRunner } from '../../scripts/ai-gate.js'
-import { RedactionError, assertClean, redactContext, redactText, setIdentitySource } from '../../scripts/ai-redact.js'
+import { RedactionError, assertClean, findStructuredLeaks, redactContext, redactText, setContactSource, setIdentitySource } from '../../scripts/ai-redact.js'
 import { getProvider } from '../../src/modules/ai/aiProviderRegistry.js'
 import { buildAiContext, buildAiRedactionHints } from '../../src/modules/ai/aiContextBuilder.js'
 import { setAiSecret } from '../../scripts/secret-store.js'
@@ -216,6 +216,49 @@ describe('fail closed', () => {
     expect(() => assertClean([{ role: 'user', content: 'Zlatan' }], ids)).toThrow(/name/)
     expect(() => assertClean([{ role: 'user', content: 'call +49 170 5550123' }], ids)).toThrow(/phone/)
     expect(() => assertClean([{ role: 'user', content: 'Senior PM, 80000-120000 EUR, 2026-10-20, v1.2.3' }], ids)).not.toThrow()
+  })
+})
+
+describe('the last check looks for names in values, not in keys or the code\'s own wording', () => {
+  const none = { names: [], emails: [], phones: [], links: [] }
+  const ids = (names) => ({ owner: none, contacts: { ...none, names } })
+  const msgs = (context) => [{ role: 'system', content: 'the contact\'s name is the placeholder' }, { role: 'user', content: JSON.stringify(context) }]
+  const check = (context, names) => () => assertClean(msgs(context), ids(names), { context })
+
+  it('a stored contact called "Name Surname" does not refuse a prompt whose key and wording say "name"', () => {
+    expect(check({ contact: { name: '[CONTACT]', title: 'Recruiter' } }, ['Name Surname'])).not.toThrow()
+  })
+
+  it('a name in a value still refuses: alone, in a sentence, in another case, without diacritics', () => {
+    const names = ['Zoran Đurić']
+    for (const value of ['Zoran Đurić', 'Please ask Zoran about the role', 'wrote to ĐURIĆ yesterday', 'zoran djuric', 'ZORAN']) {
+      expect(check({ notes: [{ text: value }] }, names), value).toThrow(/name/)
+    }
+    expect(check({ contact: { name: 'Zoran' } }, ['Name Zoran'])).toThrow(/name/)
+  })
+
+  it('without the context the whole prompt is checked as before', () => {
+    expect(() => assertClean(msgs({ contact: { name: 'x' } }), ids(['Name Surname']))).toThrow(/name/)
+  })
+
+  it('emails, links and phones are still found anywhere, a key included', () => {
+    expect(check({ 'a@b.example': 'x' }, [])).toThrow(/email/)
+    expect(check({ note: 'see github.com/someone' }, [])).toThrow(/profile link/)
+  })
+
+  it('a model answer with a "name" key is clean, one that repeats the name is not', () => {
+    expect(findStructuredLeaks({ name: 'the role', tags: ['a'] }, ids(['Name Surname']))).toEqual([])
+    expect(findStructuredLeaks({ answer: 'Ask Surname' }, ids(['Name Surname']))).toEqual(['name'])
+    expect(findStructuredLeaks({ answer: 'mail me at someone@x.example' }, ids([]))).toEqual(['email'])
+  })
+
+  it('end to end: an outreach call is made when a stored contact is called "Name Surname", and that name never reaches the provider', async () => {
+    setIdentitySource(disk)
+    setContactSource(() => ({ names: ['Name Surname'], emails: [], phones: [], links: [] }))
+    const result = await runAiFeature({ feature: 'outreach', context: browserContext('outreach'), settings: { provider: 'openai', apiKey: 'k' } })
+    expect(result.refused).toBeUndefined()
+    expect(sent).toHaveLength(1)
+    expect(promptOf(sent[0])).not.toMatch(/surname/i)
   })
 })
 
