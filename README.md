@@ -60,7 +60,7 @@ Container (the DS9 deployment uses Podman):
 podman-compose up -d --build     # or: docker compose up -d --build
 ```
 
-`docker-compose.yml` maps host port 3073 to the app's 5173 and bind-mounts `./data`.
+`docker-compose.yml` publishes the app's 5173 on the host loopback only (`127.0.0.1:3073`; reach it from other devices through a reverse proxy) and bind-mounts `./data`.
 Changing `.env` needs `podman-compose up -d --force-recreate`; a restart does not re-read it.
 
 ## Data and storage

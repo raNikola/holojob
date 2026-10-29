@@ -121,6 +121,9 @@ an `Origin` header must be an allowed origin; wrong type 415, wrong origin or ho
 - Credentials are masked in error bodies, SSE errors, ledger reasons and console output by `scripts/secret-mask.js`
   (`sk-`/`AIza` keys, `key=` / `token=` query values, Authorization, `li_at`, long tokens). Backup export and restore use
   one exclusion list, `scripts/secret-paths.js`; a restore with `..` or an absolute path in the archive is refused whole.
+- **Bind:** `docker-compose.yml` publishes `127.0.0.1:3073:5173`, loopback only; other devices go through the reverse
+  proxy (Caddy `holojob.void` -> `127.0.0.1:3073`). `tests/js/composePorts.test.js` fails if a port is published on all
+  interfaces. Inside the container the app still listens on 0.0.0.0:5173, as podman's forwarding needs.
 - Plan and the remaining steps (secret store, bind address, storage allowlist): `docs/redesign/BROWSER_STORAGE_POLICY.md`.
 
 ## AI budget gate
