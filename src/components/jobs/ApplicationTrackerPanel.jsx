@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import Input from '../ui/Input'
 import Textarea from '../ui/Textarea'
 import Button from '../ui/Button'
@@ -24,6 +24,8 @@ import {
   frozenFileUrl,
 } from '../../modules/applications/trackerController'
 import { useApplications } from '../../hooks/useApplications'
+import { useDraftDirty } from '../../hooks/useDraftDirty'
+import { draftIsDirty } from '../../modules/jobs/draftGuard'
 import { useProfile } from '../../context/ProfileContext'
 import ApplicationTimeline from './ApplicationTimeline'
 import SettingsLink from '../settings/SettingsLink'
@@ -56,6 +58,10 @@ function NewApplicationForm({ job, cache, onStatusChange }) {
   }))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [initial] = useState(form)
+  const formId = useId()
+  const typed = (f) => ({ channel: f.channel, appliedDate: f.appliedDate, applicationUrl: f.applicationUrl, cv: f.cv.key })
+  useDraftDirty(`tracker-new-${formId}`, 'new application', Boolean(cvLabel.trim()) || draftIsDirty(typed(initial), typed(form)))
 
   const submit = async (next = form) => {
     setBusy(true)
@@ -113,6 +119,7 @@ function CvUsed({ app, folded }) {
   const options = cvOptions({}, profile).filter((o) => o.key !== 'unknown')
   const earlier = (app.events ?? []).filter((e) => e.type === 'cv_recorded' && e.data.fileName && e.data.fileName !== cv?.fileName)
   const chosen = pick ?? options[0]
+  useDraftDirty('tracker-cv', 'CV record', open && Boolean(label.trim() || reason.trim()))
 
   const submit = async () => {
     setBusy(true)
@@ -170,6 +177,7 @@ function TrackedForm({ app, settings, onVoid }) {
     setDraft((prev) => rebaseDraft(base.current, prev, nextBase))
     base.current = nextBase
   }, [app])
+  useDraftDirty('tracker-edit', 'application changes', draftIsDirty(draftFrom(app), draft))
   const set = (field) => (e) => setDraft((prev) => ({ ...prev, [field]: e.target.value }))
   const stageLabel = (value) => (value.startsWith('outcome:') ? titleCase(value.slice(8)) : labelFor(value, settings))
 

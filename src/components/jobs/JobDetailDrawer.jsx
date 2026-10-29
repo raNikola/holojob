@@ -1,5 +1,8 @@
-import { X } from 'lucide-react'
+import { Maximize2, X } from 'lucide-react'
 import JobDetailBody from './JobDetailBody'
+import Button from '../ui/Button'
+import { dirtyDraftLabels, leaveDecision } from '../../modules/jobs/draftGuard'
+import { openJobPage } from '../../modules/jobs/jobRoute'
 
 export default function JobDetailDrawer({
   job,
@@ -10,6 +13,13 @@ export default function JobDetailDrawer({
 }) {
   if (!job) return null
 
+  // The drawer stays open when the owner declines, so nothing typed is lost.
+  const openFullDetails = () => {
+    const question = leaveDecision(dirtyDraftLabels())
+    if (question && !window.confirm(question)) return
+    openJobPage(job.jobId)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="Close" />
@@ -19,9 +29,12 @@ export default function JobDetailDrawer({
             <h2 className="font-display text-lg font-semibold text-stone-900 dark:text-stone-100">{job.title}</h2>
             <p className="text-sm text-stone-600 dark:text-stone-400">{job.company}</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-stone-100 dark:hover:bg-stone-800">
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={openFullDetails}><Maximize2 className="mr-1 inline h-4 w-4" />Open full details</Button>
+            <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-stone-100 dark:hover:bg-stone-800" aria-label="Close details">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="p-4">
