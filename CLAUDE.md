@@ -131,6 +131,24 @@ an `Origin` header must be an allowed origin; wrong type 415, wrong origin or ho
   4 AI settings, 5 profile / intelligence / jobs migration, 6 browser AI confirm dialog), with the pre-migration
   checklist: `docs/redesign/BROWSER_STORAGE_POLICY.md`. Browser keys outside its allowlist are not added.
 
+## Secret store (AI keys)
+
+`scripts/secret-store.js` is the only code that reads or writes `data/secrets/` (directory 700, files 600, atomic writes,
+never logged). `data/secrets/ai.json` holds `{ provider: { key, baseUrl, setAt } }` for openai, openrouter, claude and gemini.
+Routes: `GET /api/secrets` (set / not set, source, last 4 characters, base URL), `PUT` / `DELETE /api/secrets/ai/<provider>`
+(`scripts/secrets-handler.js`); no route returns a key, and errors never quote the request. Settings > Privacy: secrets and keys
+sets, replaces and removes a key, and moves the one an older build left in the browser (cleared only after the server confirms
+the same last 4 characters).
+
+- `run-ai.js` calls `resolveAiSettings()` once per call. A keyed provider takes its key **and base URL** from the store, then
+  `.env` (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY` only); an `apiKey` or `baseUrl` in a request is ignored, so there is no fallback
+  to a key from the browser. No key answers "No API key configured" and makes no call. `claude-code`, `mock` and `ollama` need no key.
+- A custom base URL (a proxy, openrouter) is entered with the key in Settings; the key is sent only there.
+- The stored values and the `.env` keys are masked by exact value in every error, SSE event, gate record and console line
+  (`secret-mask.js`); the patterns remain a second layer. Tests point the store at a temp dir (`CAREER_OS_SECRETS_DIR`, set in
+  `vitest.config.js`) and never read the real one.
+- Python `llm_client` still reads `OPENAI_API_KEY` from the environment only; it does not read the store.
+
 ## AI budget gate
 
 Every real model call goes through `python/llm/ai_gate.py` before it is made (Python:
@@ -168,4 +186,4 @@ full text in `docs/ARCHITECTURE.md` (Rule details moved from CLAUDE.md).
   intelligence and jobs still live in `localStorage` and are mirrored to `data/` on sync, so fix profile data in the
   profile form, not in the disk file. After it, the browser copy is removed per key, only after a preview, an owner
   confirmation and a verified server write. No secret (AI key, `li_at`) is stored in or sent from the browser once
-  steps 2-3 ship; the server's `data/secrets/` (600 / 700) is the only holder.
+  steps 2-3 ship; the server's `data/secrets/` (600 / 700) is the only holder. **Step 2 shipped (AI keys); `li_at` follows in step 3.**
