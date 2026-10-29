@@ -193,6 +193,12 @@ Replaces the browser AI response cache and goes further: it is a **persistent re
 - `POST /api/ai/findings/check` `{ feature, context }` -> `{ fresh, at, model }`: read-only (no call, no reservation, no key, no ledger row); `fresh` is true when a call with these inputs would be a hit. Used by the job analysis button, which is disabled while the finding is valid and its result is on screen; Regenerate stays a separate control that goes through the gate.
 - Not done: the `mock` provider is never stored; `refresh: true` (request body, sent by "Regenerate" as `skipCache`) skips the lookup; the browser cache is still in front of the server; no `GET /api/ai/findings`, no backup rules, no other features or entities, no `atomic-store.js` (step 1 is not in the tree, so the store has its own atomic write; appends are synchronous in one process).
 
+**Second slice shipped (2026-10-29): entity `company`, feature `companyIntelligence`** (the "Company" tab of the job AI tools). Differences from the text below:
+- Key: `sha256(normalizeCompanyName(name))` first 16 hex. The name is reduced by Unicode NFKC, lower case, diacritics removed, dotted abbreviations joined (`d.o.o.` -> `doo`), other punctuation to single spaces, and trailing legal-form words dropped (`doo`, `ltd`, `llc`, `inc`, `gmbh`, `ag`, `co`, ...; a name that is only a legal form is kept): "Acme d.o.o.", "ACME Ltd" and "Ačme GmbH" are one company. The plan said only "lowercased trimmed". No company name, label or prompt is stored; the record holds the key, the model, the prompt version, the input hash and the answer.
+- Key inputs: the normalized company name, the model and `PROMPT_VERSIONS.companyIntelligence`. **Not inputs:** the posting, the job's scores, the profile and the memory, so a new posting at the same company is a hit while the finding is fresh (the plan's table also listed posting text and memory for this feature). The prompt itself still carries the job and profile context of the call that wrote the finding.
+- Freshness: `DEFAULT_FRESHNESS_DAYS.companyIntelligence = 30`. Older is a miss, a new call appends, nothing is deleted. No override file yet.
+- The check endpoint and the Company tab button work as for the analysis ("Already researched on <date> with <model>; nothing has changed"). The Claude subscription allowlist is unchanged (`jobAnalysis` only).
+
 **Entities and records.** One record per entity; findings are appended, never edited or removed.
 
 | Entity type | Entity key (opaque, no personal text) | Features that write to it |
