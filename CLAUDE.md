@@ -179,6 +179,13 @@ automation on, a looser price) needs `"confirm": true`, else 409 with the list. 
 edits are overrides in `data/ai/pricing-overrides.json`, merged over `aiPricing.json`;
 free or priced needs a source note. No route writes or deletes ledger rows.
 
+**Claude Code on a flat subscription** (`claudeCodeSubscription` in `data/ai/settings.json`, default off, owner decision 2026-10-29): when
+enabled, a call by provider `claude-code` for an allowlisted feature (default only `jobAnalysis`) gets class `subscription`: cost 0, not
+counted against the budget, written to the ledger, and limited by `maxCallsDaily` (default 5, in the settings timezone). Every other
+`claude-code` feature (tailoring, job import, project scan, ...) and every other provider keep their class and stay refused at budget 0.
+Turning it on, raising the cap or adding a feature needs `confirm: true`. A findings hit never reaches the gate, so it does not count.
+The prompts still leave the machine for Anthropic (redacted). Rule: `python/llm/ai_gate.py` (`_call_row`, `_decide`).
+
 ## AI provider selection
 
 One file, `data/config/ai-settings.json` (git-ignored, not in backups), holds the provider, model, temperature, max tokens, the ollama
