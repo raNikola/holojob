@@ -421,7 +421,7 @@ before the pre-migration checklist (section 9) passes for the step.
 | 1 | **Network and API protection.** Request guard (JSON Content-Type, Origin / Host allowlist), backup export / restore guard and secret masking; published port on `127.0.0.1`; CSP and security headers (report-only first); `safeHref` for scraped links. **No Caddy `basic_auth` and no app login (Q3: accepted risk, 5.1).** | guard `cd0cf74` and bind `766bd7b` shipped; **CSP, `safeHref` open** | Add the Tailscale hostname to `HOLOJOB_ALLOWED_ORIGINS` if used. Checklist item 1 gates step 2. |
 | 2 | **AI keys to the server.** `scripts/secret-store.js`, `/api/secrets` routes, Privacy > Secrets screen (AI part), `run-ai.js` / `getAiStatus` / `getAiModels` use the store and ignore a body `apiKey` and `baseUrl`, key and base URL pinned, `redactSecrets` (exact value) on error paths, Gemini header, key field removed from `AISettingsPanel`, owner-triggered migration with the rotation checklist (section 4). Tests 6.2 and 6.4 ledger part. | **shipped `e793fc5`** | What it touches and what it does not: section 10; as built: section 11. |
 | 3 | **`li_at` without CLI arguments.** Same store; bridge reads the store; cookie passed to the scraper in the child's environment, never `--li-at`; request-body `liAt` and the session-file source dropped; outreach panel shows set / not set; migration. Test 6.4 (argv). | **shipped `615c5c3`** | As built: section 11a. |
-| 4 | **AI settings to the server (Q5).** Provider, model, temperature, max tokens, base URL (non-secret part), feature toggles move to `data/config/`; one source of truth for the provider (removes the `llm_client.active_provider()` duplicate); `aiSettings.js` stops using `localStorage`. | open | |
+| 4 | **AI settings to the server (Q5).** Provider, model, temperature, max tokens, base URL (non-secret part), feature toggles move to `data/config/`; one source of truth for the provider (removes the `llm_client.active_provider()` duplicate); `aiSettings.js` stops using `localStorage`. | **shipped `e139c81`** | As built: section 11b. |
 | 5 | **Profile, intelligence and jobs migration with verification (Q1).** Storage wrapper, allowlist, ESLint rule and static test (6.1) first; then per key the preview / confirm / verified-write protocol of 2.3; then the redundant stores (AI response cache, browser usage log, chat history, AI memory, pipeline state) are removed. Jobs first (file exists, applications store is the template), profile last. | open | Large; split per key. |
 | 6 | **Browser AI confirm dialog (Q8).** The nine browser AI features get the explicit confirm that shows the redacted text and the provider (principle 14), like the judge and CV analysis. | open | The next privacy task after the secrets migration (steps 2-3). |
 
@@ -549,6 +549,9 @@ Ledger note: the ledger is written by `python/llm/ai_gate.py` from what Node han
   already on the server asks first, the same one is refused), or Remove from this browser without moving. The outreach panel shows
   set / not set and the last 4 and has no cookie input. Deep mode now needs the ticked box, the accepted risk **and** the typed
   "I understand" (the typed sentence used to gate only the cookie field).
+- **Entry gate (restored in `e3438c8`).** The cookie input used to be disabled until the risk box was ticked and "I understand" typed; step 3
+  moved the input to Settings and dropped that. The Set / Replace form shows the warning and needs the box and the phrase again (field, Save and the
+  submit handler; `linkedinConsent.js`). The move banner is not gated: that cookie was entered under the old gate.
 - **Browser.** `linkedin_li_at` stays in `TOLERATED_UNTIL_MIGRATED` (until step 5's scrub) because `src/modules/outreach/linkedinCookie.js`
   names it to read and remove it; nothing writes it (a static test checks).
 - **Tests.** `tests/js/linkedinSecret.test.js` (store modes, routes, argv and child environment through an injected `spawn`, masking in
@@ -563,3 +566,36 @@ Ledger note: the ledger is written by `python/llm/ai_gate.py` from what Node han
 | 2 | Origin / Host / Content-Type guard | `linkedinSecret.test.js`: foreign Origin 403, `text/plain` 415 on `PUT` / `DELETE /api/secrets/linkedin`. |
 | 3 | Secrets never in GET responses, logs or backups | Tests pass with a LinkedIn canary. The by-hand search after the real cookie is stored is the owner's (backup zip, `podman logs holojob`, and `ps` during a deep run). |
 | 4 | Every AI call passes the gate | Unchanged: this step adds no AI call. |
+
+## 11b. Step 4 as built (2026-10-29, `e139c81`)
+
+- **One file.** `data/config/ai-settings.json`: `provider`, `model`, `temperature` (0 to 2), `maxTokens` (1 to 200000), `baseUrl` (ollama only,
+  plain http(s)), `features` (the nine toggles). Validated and written by `python/llm/ai_selection.py` (strict, atomic, an unreadable file is never
+  overwritten); no field can hold a key, and `apiKey` in a body is rejected as an unknown setting. `data/config/` is git-ignored and **not in
+  backups**, so a restore leaves the selection as it is (or empty on a new machine: select once).
+- **Routes.** `GET /api/ai/selection` answers the selection, each provider's class and `nodeProviders`; `PUT` takes `{ settings, confirm }`. A paid or
+  unknown-class provider needs `confirm: true` when the provider, model or base URL changes (409 with the reason); temperature, tokens and toggles never do.
+  `claude-code` is `paid` class in `aiPricing.json`, so choosing it asks too. Provider list: the nine priced providers; each side refuses those it cannot run.
+- **Same reader.** Node asks `ai_gate.py selection-get`; Python calls `llm_client.active_provider()` (`ai_selection.require()`). `tests/python/test_ai_selection.py`
+  runs the CLI Node uses and `active_provider()` on one file. `run-ai.js` takes provider, model, temperature, tokens and the ollama URL from the selection and
+  reads none from the request; the client stopped sending them.
+- **No silent switch.** No default: nothing selected, an unreadable or invalid file, or a provider that side cannot run refuses the call, logs it, and writes a
+  ledger refusal. `OPENAI_API_KEY` & co, `HOLOJOB_LLM_PROVIDER` and the claude-code fallback no longer choose. A selected keyed provider without a key fails
+  ("No API key configured" / "OPENAI_API_KEY is not set") and tries no other. The budget gate and redaction run as before.
+- **Python callers.** A judged scoring run, CV analysis and enrichment stop with the message when nothing is selected; a local re-score (no call) uses
+  `peek_provider()` and never fails for want of one. The `--provider` / `--judge-provider` flags of the dev scripts still name a provider explicitly for one run.
+  Not covered: `llm_tailor.py`, job import and the project scan call the Claude Code CLI directly through the gate, whatever is selected.
+- **Browser.** Settings > AI Provider loads from and saves to the server and lists every provider with its class (and which path can run it). Nothing is written to
+  `localStorage` (a static test checks that only `aiSettings.js` names the key and has one `setItem`). Migration: **Move AI settings to server** sends only the
+  non-secret fields (a base URL only for ollama, unknown toggles dropped), reads the selection back, and only then removes them; a paid provider asks first, a
+  different selection already on the server asks before it is replaced, an equal one is not rewritten. A key still waiting for its move stays in the entry.
+- **Provider health and models** still list every provider (a probe, not a call) and the model list uses the provider named in the request.
+
+### Pre-migration checklist record (section 9) for step 4
+
+| # | Item | State |
+|---|---|---|
+| 1 | No path bypasses Caddy | Unchanged; owner's. |
+| 2 | Origin / Host / Content-Type guard | `aiSelection.test.js`: foreign Origin 403, `text/plain` 415 on `PUT /api/ai/selection`. |
+| 3 | Secrets never in responses, logs or backups | The file has no secret field; a body carrying a key is rejected and not echoed (test). |
+| 4 | Every AI call passes the gate | Unchanged: the selection is read before the gate, adds no call; a refusal is a ledger row. |

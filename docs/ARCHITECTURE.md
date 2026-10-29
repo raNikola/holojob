@@ -42,7 +42,9 @@ same fields, so a model call would only be discarded. `--read-outside-allowed`
 turns that off, and an empty `allowedLocations` skips nothing. Results cache on the job under `llmFacts`, keyed by a fingerprint
 of the ad, so reruns are free. `llm_client.py` holds a provider table —
 OpenAI, DeepSeek, OpenRouter, Groq, Ollama, a `custom` endpoint, and the
-Claude Code CLI as a keyless fallback. `HOLOJOB_LLM_PROVIDER` chooses.
+Claude Code CLI. Which one runs is the owner's selection in Settings > AI Provider (`data/config/ai-settings.json`,
+`python/llm/ai_selection.py`), the same file the browser path reads; no environment key, no `HOLOJOB_LLM_PROVIDER`
+and no CLI fallback chooses, and with nothing selected a call refuses (`llm_client.active_provider()`).
 
 **Job history** (`job_scoring/job_history.py`, `data/jobs/job_history.json`).
 Discovery rewrites `discovered_jobs.json` every run, so the ledger is what
