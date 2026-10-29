@@ -39,6 +39,10 @@ data/outreach/
 data/interviews/
 # AI budget settings and the append-only usage ledger (python/llm/ai_gate.py)
 data/ai/
+# Application store (applications.json, settings, frozen CV copies), user configuration, secrets
+data/applications/
+data/config/
+data/secrets/
 
 # LinkedIn session cookie for deep-mode scraping (secret — never commit)
 data/outreach/linkedin_session.json
