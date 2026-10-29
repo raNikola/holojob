@@ -14,7 +14,7 @@ import { runJobImport } from './run-job-import.js'
 import { checkClaudeAuth, ensureClaudeLogin } from './claude-auth.js'
 import { saveProfileToDisk, PROFILE_PATH } from './save-profile.js'
 import { saveIntelligenceToDisk, INTELLIGENCE_PATH } from './save-intelligence.js'
-import { runAiFeature, runAiFeatureStream, runAiChat, getAiStatus, getAiModels } from './run-ai.js'
+import { checkAiFinding, runAiFeature, runAiFeatureStream, runAiChat, getAiStatus, getAiModels } from './run-ai.js'
 import { readAiUsage } from './ai-gate.js'
 import {
   runOutreachDiscover,
@@ -672,6 +672,17 @@ export async function handleApiRequest(req, res) {
       const body = req.method === 'POST' ? await readBody(req) : {}
       const result = await getAiModels(body.settings || {})
       sendJson(res, 200, result)
+    } catch (e) {
+      sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // Read-only: is there a stored finding for these inputs? Makes no call and reserves no budget.
+  if (url === '/api/ai/findings/check' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      sendJson(res, 200, await checkAiFinding({ feature: body.feature, context: body.context }))
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }

@@ -93,7 +93,8 @@ describe('findings store in front of the budget gate', () => {
     ['the posting', null, { job: { description: 'Own the roadmap. Salary 90000 EUR.' } }],
     ['the job score', null, { job: { matchScore: 40 } }],
     ['the stage', null, { job: { applicationTracking: { applied: true, interviewStage: 'Offer' } } }],
-    ['the memory', null, { top: { memory: [{ note: 'prefers on-site' }] } }],
+    ['the title', null, { job: { title: 'Principal Product Manager' } }],
+    ['the intelligence summary', null, { top: { intelligenceSummary: { headline: 'Director' } } }],
   ])('changing %s misses and appends a second finding', async (_name, change, over) => {
     await run()
     change?.()
@@ -101,6 +102,13 @@ describe('findings store in front of the budget gate', () => {
     expect(result.cached).toBeUndefined()
     expect(result.findingId).toMatch(/:2$/)
     expect(reserves()).toHaveLength(2)
+  })
+
+  it('memory and portfolio statistics are not key inputs: the app changes them after every analysis', async () => {
+    await run(baseContext({ top: { jobStats: { total: 1 } } }))
+    const result = await run(baseContext({ top: { memory: [{ note: 'identified strength' }], jobStats: { total: 99 } } }))
+    expect(result).toMatchObject({ ok: true, cached: true })
+    expect(reserves()).toHaveLength(1)
   })
 
   it('an input beyond the truncated prompt text still changes the key', async () => {
