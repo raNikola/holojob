@@ -83,7 +83,8 @@ provider, each behind an explicit confirm; the browser AI features send redacted
   prep, outreach, company intelligence, career strategy, skill gap, application strategy, resume enhancement,
   chat): send the ad text, the job's scores and stage, and a profile summary (current role, target roles,
   locations, skills, years). Never sent: owner name, e-mail, phone, links; recruiter / contact names, e-mails,
-  LinkedIn links, notes and activity text (left out where the context is built, `aiContextBuilder.js`; the
+  LinkedIn links, notes and activity text, and from the application tracker the CV used, file names and event history (only
+  stage and dates are passed, `safeTracking` in `aiContextBuilder.js`; a typed stage label is never passed, TRACKER_PLAN 3.4) (left out where the context is built, `aiContextBuilder.js`; the
   outreach contact's name is the placeholder `[CONTACT NAME]`). One central step, `scripts/ai-redact.js`, runs
   on every context before the prompt is built and before the budget gate: it removes the owner's and the known
   contacts' identifiers (profile mirror, `redactionHints` from the browser, and every contact recorded in the
