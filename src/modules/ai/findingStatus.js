@@ -35,3 +35,15 @@ export function analysisButtonState({ status, hasAnalysis, loading }) {
   }
   return { disabled: false, title: '' }
 }
+
+export const REGENERATE_CONFIRM = 'Nothing has changed since the last analysis. Regenerating makes a new AI call that counts against your limit. Continue?'
+
+/**
+ * What a click on Regenerate does. Ignored while a call runs (`loading` or `inFlight`, the latter set synchronously so two
+ * quick clicks cannot both start one). With a valid finding on the server it asks first; otherwise it just runs.
+ * { disabled } for the button, { action: 'ignore' | 'confirm' | 'run' } for the click.
+ */
+export function regenerateDecision({ status, loading, inFlight = false }) {
+  if (loading || inFlight) return { disabled: true, action: 'ignore' }
+  return { disabled: false, action: status?.fresh ? 'confirm' : 'run' }
+}
