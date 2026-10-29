@@ -226,16 +226,53 @@ export function planSave(app, draft) {
   return calls
 }
 
-/** Send the planned calls in order; stops at the first failure, which the caller shows. */
+const CALL_NAMES = {
+  stage_changed: 'the stage', applied_date_corrected: 'the applied date', follow_up_set: 'the follow-up date', follow_up_done: 'the follow-up date',
+  contact_added: 'the recruiter', contact_updated: 'the recruiter', note_added: 'the note', outcome_set: 'the outcome',
+}
+const callName = (call) => (call.kind === 'move' ? 'the stage' : CALL_NAMES[call.event.type] ?? call.event.type)
+
+/**
+ * Send the planned calls in order; stops at the first failure. The error names the step that failed and how many
+ * landed before it (`extra.saved`), so a half-saved form is never silent. Returns the number of calls made.
+ */
 export async function saveDraft(appId, draft, cache = client.getApplicationsState()) {
   const app = cache.store?.applications?.[appId]
   if (!app) throw new client.ClientError(404, 'Application not found')
   const calls = planSave(app, draft)
+  let saved = 0
   for (const call of calls) {
-    if (call.kind === 'move') await client.moveApplication(appId, call.body)
-    else await client.addEvent(appId, call.event)
+    try {
+      if (call.kind === 'move') await client.moveApplication(appId, call.body)
+      else await client.addEvent(appId, call.event)
+    } catch (e) {
+      const where = `Saving ${callName(call)} failed${saved ? ` (${saved} of ${calls.length} changes were saved)` : ''}: ${e.message}`
+      throw new client.ClientError(e.status ?? 0, where, { ...(e.extra ?? {}), saved, planned: calls.length })
+    }
+    saved += 1
   }
   return calls.length
+}
+
+/**
+ * The draft after the application changed under it (a CV recorded, a stage move, a note, a restore). A field the user
+ * has not touched (still equal to the previous base) follows the new server value; an edited field is kept; the note
+ * box is always kept. Without this, any event wiped what was typed and the form looked as if it did nothing.
+ */
+export function rebaseDraft(prevBase, draft, nextBase) {
+  const next = { ...nextBase }
+  for (const key of Object.keys(nextBase)) {
+    if (key === 'newNote') next[key] = draft[key] ?? ''
+    else if (draft[key] !== undefined && draft[key] !== prevBase[key]) next[key] = draft[key]
+  }
+  return next
+}
+
+/** What an error looks like on screen: the server's message, and its status when there is one. */
+export function describeError(error) {
+  if (error?.extra?.code === 'tracking_disabled') return 'Application tracking is switched off in the tracker settings.'
+  const status = error?.status ? ` (HTTP ${error.status})` : ''
+  return `${error?.message ?? 'Unknown error'}${status}`
 }
 
 export const voidApplication = (appId, reason) => client.addEvent(appId, { type: 'application_voided', data: { reason } })
