@@ -136,6 +136,23 @@ describe('plan and dry run', () => {
     expect(odd.warnings.join('|')).toMatch(/appliedDate "last week" is not a date.*followUpDate "soon".*unknown interviewStage "Coffee chat"/)
   })
 
+  it('the first copy of a duplicated jobId is migrated and verified against itself', async () => {
+    const id = id16('dupe')
+    for (const second of [
+      { ...slim(id), applicationTracking: { applied: true, appliedDate: '2026-01-01', notes: 'the other copy' } },
+      { ...slim(id) },
+    ]) {
+      const jobs = [{ ...slim(id), applicationTracking: { applied: true, appliedDate: '2026-10-01', notes: 'first' } }, second]
+      const dry = await preview(jobs)
+      expect(dry.counts).toMatchObject({ created: 1, unmappable: dry.counts.candidates - 1 })
+      const res = await migrate(jobs)
+      expect(res.verified).toBe(true)
+      const app = getStore().applications[`mig-${id}`]
+      expect(app.legacy.notes).toBe('first')
+      fs.rmSync(path.join(root, 'data/applications'), { recursive: true, force: true })
+    }
+  })
+
   it('refuses a body that is not a job list', async () => {
     for (const body of [{}, { jobs: 'x' }, { jobs: [1] }, { jobs: [[]] }]) {
       await expect(store.previewMigration(root, body, { now })).rejects.toMatchObject({ status: 400 })
