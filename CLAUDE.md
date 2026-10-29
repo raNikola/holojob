@@ -147,6 +147,9 @@ the same last 4 characters).
 - The stored values and the `.env` keys are masked by exact value in every error, SSE event, gate record and console line
   (`secret-mask.js`); the patterns remain a second layer. Tests point the store at a temp dir (`CAREER_OS_SECRETS_DIR`, set in
   `vitest.config.js`) and never read the real one.
+- The LinkedIn cookie is `data/secrets/linkedin.json` (`{ li_at, setAt }`), `PUT` / `DELETE /api/secrets/linkedin`, then `LINKEDIN_LI_AT`
+  from `.env`. `POST /api/outreach/discover` ignores any cookie in the body. The scraper gets it only in the child's environment in deep
+  mode (`--li-at` no longer exists; search mode strips it), and its text is masked. `data/outreach/linkedin_session.json` is no longer read.
 - Python `llm_client` still reads `OPENAI_API_KEY` from the environment only; it does not read the store.
 
 ## AI budget gate
@@ -186,4 +189,4 @@ full text in `docs/ARCHITECTURE.md` (Rule details moved from CLAUDE.md).
   intelligence and jobs still live in `localStorage` and are mirrored to `data/` on sync, so fix profile data in the
   profile form, not in the disk file. After it, the browser copy is removed per key, only after a preview, an owner
   confirmation and a verified server write. No secret (AI key, `li_at`) is stored in or sent from the browser once
-  steps 2-3 ship; the server's `data/secrets/` (600 / 700) is the only holder. **Step 2 shipped (AI keys); `li_at` follows in step 3.**
+  steps 2-3 ship; the server's `data/secrets/` (600 / 700) is the only holder. **Steps 2 (AI keys) and 3 (`li_at`) shipped.**

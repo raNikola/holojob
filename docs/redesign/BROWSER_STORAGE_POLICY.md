@@ -420,7 +420,7 @@ before the pre-migration checklist (section 9) passes for the step.
 |---|---|---|---|
 | 1 | **Network and API protection.** Request guard (JSON Content-Type, Origin / Host allowlist), backup export / restore guard and secret masking; published port on `127.0.0.1`; CSP and security headers (report-only first); `safeHref` for scraped links. **No Caddy `basic_auth` and no app login (Q3: accepted risk, 5.1).** | guard `cd0cf74` and bind `766bd7b` shipped; **CSP, `safeHref` open** | Add the Tailscale hostname to `CAREER_OS_ALLOWED_ORIGINS` if used. Checklist item 1 gates step 2. |
 | 2 | **AI keys to the server.** `scripts/secret-store.js`, `/api/secrets` routes, Privacy > Secrets screen (AI part), `run-ai.js` / `getAiStatus` / `getAiModels` use the store and ignore a body `apiKey` and `baseUrl`, key and base URL pinned, `redactSecrets` (exact value) on error paths, Gemini header, key field removed from `AISettingsPanel`, owner-triggered migration with the rotation checklist (section 4). Tests 6.2 and 6.4 ledger part. | **shipped `e793fc5`** | What it touches and what it does not: section 10; as built: section 11. |
-| 3 | **`li_at` without CLI arguments.** Same store; bridge reads the store; cookie passed to the scraper in the child's environment, never `--li-at`; request-body `liAt` and the session-file source dropped; outreach panel shows set / not set; migration. Test 6.4 (argv). | open | |
+| 3 | **`li_at` without CLI arguments.** Same store; bridge reads the store; cookie passed to the scraper in the child's environment, never `--li-at`; request-body `liAt` and the session-file source dropped; outreach panel shows set / not set; migration. Test 6.4 (argv). | **shipped `615c5c3`** | As built: section 11a. |
 | 4 | **AI settings to the server (Q5).** Provider, model, temperature, max tokens, base URL (non-secret part), feature toggles move to `data/config/`; one source of truth for the provider (removes the `llm_client.active_provider()` duplicate); `aiSettings.js` stops using `localStorage`. | open | |
 | 5 | **Profile, intelligence and jobs migration with verification (Q1).** Storage wrapper, allowlist, ESLint rule and static test (6.1) first; then per key the preview / confirm / verified-write protocol of 2.3; then the redundant stores (AI response cache, browser usage log, chat history, AI memory, pipeline state) are removed. Jobs first (file exists, applications store is the template), profile last. | open | Large; split per key. |
 | 6 | **Browser AI confirm dialog (Q8).** The nine browser AI features get the explicit confirm that shows the redacted text and the provider (principle 14), like the judge and CV analysis. | open | The next privacy task after the secrets migration (steps 2-3). |
@@ -516,7 +516,7 @@ Follows section 10. Where the build made a choice the text left open:
   the wrapper and ESLint rule are still step 5.
 - **Gemini** sends `x-goog-api-key`; the key is no longer in the URL (L11).
 - **Not done here:** `python/llm/secrets.py` (section 10 leaves Python alone; `llm_client` keeps reading `OPENAI_API_KEY` from the environment,
-  so rotating or removing it in `.env` affects the Python judge, matcher and enrichment); LinkedIn `li_at` (step 3); the CSP and `safeHref`.
+  so rotating or removing it in `.env` affects the Python judge, matcher and enrichment); ~~LinkedIn `li_at` (step 3)~~ (shipped, section 11a); the CSP and `safeHref`.
 - `.dockerignore` gained `data/secrets` and `claude-config` (owner-approved), so a build never copies them into an image layer.
 
 ### Pre-migration checklist record (section 9) for step 2
@@ -530,3 +530,36 @@ Follows section 10. Where the build made a choice the text left open:
 
 Ledger note: the ledger is written by `python/llm/ai_gate.py` from what Node hands it, so the test asserts on the text handed to the gate
 (`finish`, `refuse`, `reserve`); the exact-value mask runs before that.
+
+## 11a. Step 3 as built (2026-10-29, `615c5c3`)
+
+- **Store.** `data/secrets/linkedin.json` `{ li_at, setAt }` (700 / 600, atomic, never overwritten when unreadable); `describeSecrets()` gains
+  `linkedin: { set, source, last4, setAt }`. Resolution: the store, then `LINKEDIN_LI_AT` in `.env`; both are exact-masked. Each file has its
+  own cache. Routes `PUT` / `DELETE /api/secrets/linkedin` (same guard, fixed error text, nothing echoed). A cookie follows the key rule
+  (12 to 512 characters, no spaces or control characters).
+- **Request.** `POST /api/outreach/discover` no longer reads `liAt` (or anything else) for the cookie; the client stopped sending it.
+- **Process.** `--li-at` is gone from the scraper. The bridge puts `LINKEDIN_LI_AT` in the child's environment in deep mode only; in search
+  mode the variable is removed from the inherited environment. Python reads it and pops it before Playwright starts. Deep mode without a
+  stored cookie does not start the scraper. Scraper stderr and the `error` / `status` it prints are masked in the bridge, and again in
+  `run-outreach.js` before `metadata.linkedinScrape` is written to `data/outreach/<job>/contacts.json` (which backups include).
+- **Session file.** `data/outreach/linkedin_session.json` is no longer read. It did not exist on this server when the step was built.
+  If it ever does: set the cookie in Settings, delete the file, and delete backups made while it existed.
+- **UI.** Privacy: secrets and keys has a LinkedIn row (Set / Replace / Remove) and a banner for a cookie found in the browser:
+  Move to server (PUT, then GET: `set`, `source === "store"`, same last 4, only then `removeItem` and a read-back; a different cookie
+  already on the server asks first, the same one is refused), or Remove from this browser without moving. The outreach panel shows
+  set / not set and the last 4 and has no cookie input. Deep mode now needs the ticked box, the accepted risk **and** the typed
+  "I understand" (the typed sentence used to gate only the cookie field).
+- **Browser.** `linkedin_li_at` stays in `TOLERATED_UNTIL_MIGRATED` (until step 5's scrub) because `src/modules/outreach/linkedinCookie.js`
+  names it to read and remove it; nothing writes it (a static test checks).
+- **Tests.** `tests/js/linkedinSecret.test.js` (store modes, routes, argv and child environment through an injected `spawn`, masking in
+  stderr, move order, backup export / restore with a real store file), `tests/python/test_scraper_cli.py` (the real script has no `--li-at`).
+  No test starts the scraper, fetches a page or writes under `data/`.
+
+### Pre-migration checklist record (section 9) for step 3
+
+| # | Item | State |
+|---|---|---|
+| 1 | No path bypasses Caddy | **Owner to run (same as step 2). Do not click "Move LinkedIn cookie to server" until it passes.** |
+| 2 | Origin / Host / Content-Type guard | `linkedinSecret.test.js`: foreign Origin 403, `text/plain` 415 on `PUT` / `DELETE /api/secrets/linkedin`. |
+| 3 | Secrets never in GET responses, logs or backups | Tests pass with a LinkedIn canary. The by-hand search after the real cookie is stored is the owner's (backup zip, `podman logs career-os`, and `ps` during a deep run). |
+| 4 | Every AI call passes the gate | Unchanged: this step adds no AI call. |
