@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Lock } from 'lucide-react'
+import { ArrowDown, ArrowUp, GripVertical, Lock } from 'lucide-react'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { changeStages, changeSwitches } from '../../modules/applications/applicationsClient'
-import { activeStages, retiredStages } from '../../modules/applications/stageRegistry'
+import { activeStages, reorderDecision, retiredStages } from '../../modules/applications/stageRegistry'
 import { buildBoard } from '../../modules/applications/boardModel'
 import { useApplications } from '../../hooks/useApplications'
 
@@ -28,6 +28,10 @@ export default function ApplicationSettingsPanel() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [offerRestore, setOfferRestore] = useState(null)
+  const [dragKey, setDragKey] = useState(null)
+  const [overKey, setOverKey] = useState(null)
+  const [pendingKey, setPendingKey] = useState(null)
+  const [rowError, setRowError] = useState(null)
 
   const { settings } = applications
   // counted from the cached store, so a move made on the board is already in it
@@ -69,6 +73,31 @@ export default function ApplicationSettingsPanel() {
     }
   }
 
+  const decide = (toKey) => dragKey && reorderDecision(settings, dragKey, toKey, { busy, trackingEnabled: enabled })
+
+  const endDrag = () => {
+    setDragKey(null)
+    setOverKey(null)
+  }
+
+  // The order on screen changes only as the server answers each single-step move.
+  const reorder = async (fromKey, toKey) => {
+    const decision = reorderDecision(settings, fromKey, toKey, { busy, trackingEnabled: enabled })
+    if (decision.action !== 'move') return
+    setBusy(true)
+    setPendingKey(fromKey)
+    setError(null)
+    setRowError(null)
+    try {
+      for (const op of decision.ops) await changeStages(op)
+    } catch (e) {
+      setRowError({ key: fromKey, message: e.message })
+    } finally {
+      setPendingKey(null)
+      setBusy(false)
+    }
+  }
+
   const add = async () => {
     if (await run(() => changeStages({ op: 'add', label: newLabel }))) setNewLabel('')
   }
@@ -106,7 +135,41 @@ export default function ApplicationSettingsPanel() {
               const count = counts?.[stage.key] ?? 0
               const draft = drafts[stage.key] ?? stage.label
               return (
-                <li key={stage.key} className="flex flex-wrap items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 dark:border-stone-700">
+                <li
+                  key={stage.key}
+                  onDragOver={(e) => {
+                    if (decide(stage.key)?.action !== 'move') return
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    if (overKey !== stage.key) setOverKey(stage.key)
+                  }}
+                  onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && overKey === stage.key) setOverKey(null) }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    const from = dragKey
+                    endDrag()
+                    if (from) reorder(from, stage.key)
+                  }}
+                  aria-busy={pendingKey === stage.key || undefined}
+                  className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${overKey === stage.key
+                    ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-300 dark:bg-teal-950/30 dark:ring-teal-700'
+                    : 'border-stone-200 dark:border-stone-700'} ${pendingKey === stage.key ? 'opacity-60' : ''}`}
+                >
+                  <span
+                    role="img"
+                    aria-label={`Drag ${stage.label} to reorder`}
+                    draggable={!busy && enabled}
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = 'move'
+                      e.dataTransfer.setData('text/plain', stage.key)
+                      e.dataTransfer.setDragImage(e.currentTarget.closest('li'), 0, 0)
+                      setDragKey(stage.key)
+                    }}
+                    onDragEnd={endDrag}
+                    className={busy || !enabled ? 'text-stone-300 dark:text-stone-700' : 'cursor-grab text-stone-500'}
+                  >
+                    <GripVertical className="h-4 w-4" />
+                  </span>
                   <input
                     aria-label={`Name of the ${stage.label} column`}
                     className={INPUT}
@@ -120,6 +183,7 @@ export default function ApplicationSettingsPanel() {
                   <Button variant="ghost" className="!min-h-0 !px-2 !py-1.5" aria-label={`Move ${stage.label} down`} disabled={busy || !enabled || i === active.length - 1} onClick={() => run(() => changeStages({ op: 'move', key: stage.key, dir: 'down' }))}><ArrowDown className="h-4 w-4" /></Button>
                   <span className="w-24 text-right text-xs text-stone-500">{count} open</span>
                   <Button variant="ghost" className="!min-h-0 !px-3 !py-1.5" disabled={busy || !enabled} onClick={() => run(() => changeStages({ op: 'retire', key: stage.key }))}>Remove</Button>
+                  {rowError?.key === stage.key && <p role="alert" className="w-full text-xs text-red-700 dark:text-red-300">{rowError.message}</p>}
                 </li>
               )
             })}

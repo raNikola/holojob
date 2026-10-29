@@ -243,6 +243,26 @@ export function applyStageOperation(settings, op, openCount = () => 0) {
   }
 }
 
+/**
+ * What dropping the work column `fromKey` on the work column `toKey` does in Settings. Pure. The route has
+ * only single-step moves, so the result is the ordered list of `move` operations (one per place passed) to
+ * send to it; the server stays the authority and may still refuse one. Applied, Rejected, Ghosted and a
+ * retired stage are not work columns on the board and are refused as source or target.
+ * @returns {{ action: 'move', ops: {op: 'move', key: string, dir: 'up'|'down'}[] }
+ *   | { action: 'none', reason: 'busy'|'tracking-off'|'fixed'|'same-position' }}
+ */
+export function reorderDecision(settings, fromKey, toKey, { busy = false, trackingEnabled = true } = {}) {
+  if (!trackingEnabled) return { action: 'none', reason: 'tracking-off' }
+  if (busy) return { action: 'none', reason: 'busy' }
+  const keys = activeStages(settings).map((s) => s.key)
+  const from = keys.indexOf(fromKey)
+  const to = keys.indexOf(toKey)
+  if (from === -1 || to === -1) return { action: 'none', reason: 'fixed' }
+  if (from === to) return { action: 'none', reason: 'same-position' }
+  const dir = to < from ? 'up' : 'down'
+  return { action: 'move', ops: Array.from({ length: Math.abs(to - from) }, () => ({ op: 'move', key: fromKey, dir })) }
+}
+
 /** The settings with `change` logged (last MAX_CHANGES kept) and `updatedAt` bumped. */
 export function withChange(settings, change, at) {
   return {
