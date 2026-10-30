@@ -1,10 +1,13 @@
-export default function Input({ label, error, confidenceTag, className = '', id, ...props }) {
+export default function Input({ label, labelExtra, error, confidenceTag, className = '', id, ...props }) {
   const inputId = id || label?.toLowerCase().replace(/\s+/g, '-')
   return (
     <div className={className}>
       {label && (
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <label htmlFor={inputId} className="text-sm font-medium text-stone-700 dark:text-stone-300">{label}</label>
+          <span className="flex items-center gap-1">
+            <label htmlFor={inputId} className="text-sm font-medium text-stone-700 dark:text-stone-300">{label}</label>
+            {labelExtra}
+          </span>
           {confidenceTag}
         </div>
       )}

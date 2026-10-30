@@ -1,57 +1,103 @@
+import { useMemo, useState } from 'react'
+import { ChevronDown, X } from 'lucide-react'
 import Card from '../ui/Card'
 import Input from '../ui/Input'
 import SelectField from '../ui/SelectField'
 import MultiSelectDropdown from '../ui/MultiSelectDropdown'
+import InfoTip from '../ui/InfoTip'
 import { APPLIED_FILTER, statusFilterOptions } from '../../modules/applications/appliedFilter'
-import { normalizePriorityFilter } from '../../modules/jobs/jobFilters'
+import {
+  CLEAR_ALL_FILTERS,
+  activeFilterChips,
+  countByValue,
+  moreFiltersCount,
+  normalizeMultiFilter,
+} from '../../modules/jobs/jobFilters'
+import { FILTER_HELP } from '../../modules/jobs/filterHelp'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { MATCH_LABELS, PRIORITIES, hasMatchScores } from '../../modules/jobs/matchScore'
 
+const SHOWN_PRIORITIES = PRIORITIES.filter((p) => p !== 'Reject')
+const tip = (key, label) => <InfoTip text={FILTER_HELP[key]} label={`About ${label}`} />
+
+function Checkbox({ label, help, checked, onChange }) {
+  return (
+    <div className="flex items-center gap-2 self-end pb-2.5">
+      <label className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+        />
+        {label}
+      </label>
+      {help}
+    </div>
+  )
+}
+
 export default function JobFilters({ filters, sites, providers, jobs, applicationStore = null, onChange }) {
   const showScoreFilters = hasMatchScores(jobs)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const chips = activeFilterChips(filters)
+  // Chips of filters that are not rendered (score filters without scores) are not counted in the toggle.
+  const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider'].includes(c.key)))
+  const priorityOptions = useMemo(
+    () => countByValue(jobs, 'priority', SHOWN_PRIORITIES).map(({ value, count }) => ({ value, label: `${value} (${count})` })),
+    [jobs],
+  )
+
   return (
     <Card title="Filters" className="!p-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Input
+          id="filter-search"
           label="Search"
+          labelExtra={tip('searchText', 'Search')}
           value={filters.searchText}
           onChange={(e) => onChange({ searchText: e.target.value })}
           placeholder="Title, company, description…"
         />
         <Input
+          id="filter-location"
           label="Location"
+          labelExtra={tip('location', 'Location')}
           value={filters.location}
           onChange={(e) => onChange({ location: e.target.value })}
           placeholder="Filter by location"
         />
-        <SelectField
-          label="Site"
-          value={filters.site}
+        <MultiSelectDropdown
+          label="Source"
+          labelExtra={tip('site', 'Source')}
+          selected={normalizeMultiFilter(filters.site)}
           onChange={(v) => onChange({ site: v })}
           options={sites}
-          placeholder="All sites"
+          placeholder="All sources"
         />
         <SelectField
-          label="Provider"
-          value={filters.provider}
-          onChange={(v) => onChange({ provider: v })}
-          options={providers}
-          placeholder="All providers"
-        />
-        <SelectField
+          id="filter-status"
           label="Status"
+          labelExtra={tip('status', 'Status')}
           value={filters.status}
           onChange={(v) => onChange({ status: v })}
           options={statusFilterOptions(JOB_STATUSES, jobs, applicationStore)}
           placeholder="All statuses"
         />
-        {filters.status === APPLIED_FILTER && !applicationStore && (
-          <p className="self-end pb-2 text-xs text-stone-500">The application tracker has not loaded, so no job can be shown as applied.</p>
-        )}
         {showScoreFilters && (
           <>
+            <MultiSelectDropdown
+              label="Priority"
+              labelExtra={tip('priority', 'Priority')}
+              selected={normalizeMultiFilter(filters.priority)}
+              onChange={(v) => onChange({ priority: v })}
+              options={priorityOptions}
+              placeholder="All priorities"
+            />
             <Input
+              id="filter-min-score"
               label="Min score"
+              labelExtra={tip('minScore', 'Min score')}
               type="number"
               min={0}
               max={100}
@@ -59,69 +105,124 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
               onChange={(e) => onChange({ minScore: e.target.value })}
               placeholder="e.g. 55"
             />
-            <Input
-              label="Min salary (EUR/month)"
-              type="number"
-              min={0}
-              value={filters.minSalary ?? ''}
-              onChange={(e) => onChange({ minSalary: e.target.value })}
-              placeholder="e.g. 2500"
-            />
-            <Input
-              label="Desired salary from (EUR/month)"
-              type="number"
-              min={0}
-              value={filters.desiredSalaryMin ?? ''}
-              onChange={(e) => onChange({ desiredSalaryMin: e.target.value })}
-            />
-            <Input
-              label="Desired salary to (EUR/month)"
-              type="number"
-              min={0}
-              value={filters.desiredSalaryMax ?? ''}
-              onChange={(e) => onChange({ desiredSalaryMax: e.target.value })}
-            />
-            {filters.salaryFromProfile && (
-              <p className="self-end pb-2 text-xs text-stone-500 sm:col-span-2 xl:col-span-3">
-                Salary filters are pre-filled from your profile, so jobs paying less than your minimum are hidden. Clear Min salary to see them with the “Below min salary” badge. Jobs with no readable pay are never hidden.
-              </p>
-            )}
-            <SelectField
-              label="Match label"
-              value={filters.matchLabel}
-              onChange={(v) => onChange({ matchLabel: v })}
-              options={MATCH_LABELS}
-              placeholder="All labels"
-            />
-            <MultiSelectDropdown
-              label="Priority"
-              selected={normalizePriorityFilter(filters.priority)}
-              onChange={(v) => onChange({ priority: v })}
-              options={PRIORITIES.filter((p) => p !== 'Reject')}
-              placeholder="All priorities"
-            />
           </>
         )}
-      </div>
-      <label className="mt-3 flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
-        <input
-          type="checkbox"
+        <Checkbox
+          label="Remote only"
+          help={tip('remoteOnly', 'Remote only')}
           checked={filters.remoteOnly}
-          onChange={(e) => onChange({ remoteOnly: e.target.checked })}
-          className="rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+          onChange={(v) => onChange({ remoteOnly: v })}
         />
-        Remote only
-      </label>
-      {showScoreFilters && (
-        <label className="mt-2 flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
-          <input
-            type="checkbox"
-            checked={filters.hideNeedsVisa}
-            onChange={(e) => onChange({ hideNeedsVisa: e.target.checked })}
-            className="rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+      </div>
+      {filters.status === APPLIED_FILTER && !applicationStore && (
+        <p className="mt-2 text-xs text-stone-500">The application tracker has not loaded, so no job can be shown as applied.</p>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          aria-expanded={moreOpen}
+          aria-controls="more-filters"
+          onClick={() => setMoreOpen((v) => !v)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-700 hover:border-teal-400 dark:border-stone-700 dark:text-stone-300"
+        >
+          More filters{moreCount > 0 ? ` (${moreCount})` : ''}
+          <ChevronDown className={`h-4 w-4 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
+        </button>
+        <button
+          type="button"
+          disabled={chips.length === 0}
+          onClick={() => onChange(CLEAR_ALL_FILTERS)}
+          className="text-sm text-stone-600 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-stone-400"
+        >
+          Clear all
+        </button>
+      </div>
+
+      {moreOpen && (
+        <div id="more-filters" className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MultiSelectDropdown
+            label="Provider"
+            labelExtra={tip('provider', 'Provider')}
+            selected={normalizeMultiFilter(filters.provider)}
+            onChange={(v) => onChange({ provider: v })}
+            options={providers}
+            placeholder="All providers"
           />
-          Hide jobs that need a visa
-        </label>
+          {showScoreFilters && (
+            <>
+              <SelectField
+                id="filter-match-label"
+                label="Match label"
+                labelExtra={tip('matchLabel', 'Match label')}
+                value={filters.matchLabel}
+                onChange={(v) => onChange({ matchLabel: v })}
+                options={MATCH_LABELS}
+                placeholder="All labels"
+              />
+              <Input
+                id="filter-min-salary"
+                label="Min salary (EUR/month)"
+                labelExtra={tip('minSalary', 'Min salary')}
+                type="number"
+                min={0}
+                value={filters.minSalary ?? ''}
+                onChange={(e) => onChange({ minSalary: e.target.value })}
+                placeholder="e.g. 2500"
+              />
+              <Input
+                id="filter-desired-from"
+                label="Desired salary from (EUR/month)"
+                labelExtra={tip('desiredSalaryMin', 'Desired salary from')}
+                type="number"
+                min={0}
+                value={filters.desiredSalaryMin ?? ''}
+                onChange={(e) => onChange({ desiredSalaryMin: e.target.value })}
+              />
+              <Input
+                id="filter-desired-to"
+                label="Desired salary to (EUR/month)"
+                labelExtra={tip('desiredSalaryMax', 'Desired salary to')}
+                type="number"
+                min={0}
+                value={filters.desiredSalaryMax ?? ''}
+                onChange={(e) => onChange({ desiredSalaryMax: e.target.value })}
+              />
+              {filters.salaryFromProfile && (
+                <p className="self-end pb-2 text-xs text-stone-500 sm:col-span-2 xl:col-span-4">
+                  Salary filters are pre-filled from your profile, so jobs paying less than your minimum are hidden. Clear Min salary to see them with the “Below min salary” badge. Jobs with no readable pay are never hidden.
+                </p>
+              )}
+              <Checkbox
+                label="Hide jobs that need a visa"
+                help={tip('hideNeedsVisa', 'Hide jobs that need a visa')}
+                checked={filters.hideNeedsVisa}
+                onChange={(v) => onChange({ hideNeedsVisa: v })}
+              />
+            </>
+          )}
+        </div>
+      )}
+
+      {chips.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Active filters">
+          {chips.map((chip) => (
+            <span key={chip.key} className="inline-flex items-center gap-1 rounded-full border border-teal-300 bg-teal-50 py-0.5 pl-2.5 pr-1 text-xs text-teal-900 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-100">
+              {chip.label}
+              <button
+                type="button"
+                aria-label={`Remove filter ${chip.label}`}
+                onClick={() => onChange(chip.patch)}
+                className="rounded-full p-0.5 hover:bg-teal-200 dark:hover:bg-teal-800"
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+          <button type="button" onClick={() => onChange(CLEAR_ALL_FILTERS)} className="text-xs text-stone-600 underline-offset-2 hover:underline dark:text-stone-400">
+            Clear all
+          </button>
+        </div>
       )}
     </Card>
   )

@@ -5,11 +5,15 @@ export function getJobProvider(job) {
   return job.provider || job.site || ''
 }
 
-/** The priority filter as a list. A string saved by the old single-select reads as a list of one. */
-export function normalizePriorityFilter(value) {
+/** A multi-value filter as a list. A string saved by an older single-select reads as a list of one. */
+export function normalizeMultiFilter(value) {
   if (Array.isArray(value)) return value.filter(Boolean)
   return value ? [value] : []
 }
+
+export const normalizePriorityFilter = normalizeMultiFilter
+
+const lowerSet = (values) => new Set(values.map((v) => String(v).toLowerCase()))
 
 /**
  * `appliedJobIds` is the set of jobs with a non-voided application (appliedFilter.js); the status
@@ -19,8 +23,8 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
   const {
     searchText = '',
     location = '',
-    site = '',
-    provider = '',
+    site = [],
+    provider = [],
     remoteOnly = false,
     hideNeedsVisa = false,
     status = '',
@@ -33,6 +37,8 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
   } = filters
 
   const priorities = normalizePriorityFilter(priority)
+  const sites = lowerSet(normalizeMultiFilter(site))
+  const providers = lowerSet(normalizeMultiFilter(provider))
   const q = searchText.trim().toLowerCase()
 
   return (jobs || []).filter((job) => {
@@ -48,8 +54,8 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     if (!passesSalaryFilters(job, { minSalary, desiredMin: desiredSalaryMin, desiredMax: desiredSalaryMax })) return false
     if (remoteOnly && !job.isRemote) return false
     if (hideNeedsVisa && NEEDS_VISA_STATUSES.has(job.workAuthorization?.status)) return false
-    if (site && (job.site || '').toLowerCase() !== site.toLowerCase()) return false
-    if (provider && getJobProvider(job).toLowerCase() !== provider.toLowerCase()) return false
+    if (sites.size && !sites.has((job.site || '').toLowerCase())) return false
+    if (providers.size && !providers.has(getJobProvider(job).toLowerCase())) return false
     if (location && !(job.location || '').toLowerCase().includes(location.toLowerCase())) return false
 
     if (q) {
@@ -80,4 +86,64 @@ export function getUniqueProviders(jobs) {
 
 export function getUniqueLocations(jobs) {
   return [...new Set((jobs || []).map((j) => j.location).filter(Boolean))].sort()
+}
+
+/** How many jobs carry each of `values` in `field`, over the whole list (no other filter applies). Values with no job are left out. */
+export function countByValue(jobs, field, values) {
+  const counts = new Map()
+  for (const job of jobs || []) counts.set(job[field], (counts.get(job[field]) || 0) + 1)
+  return values.filter((v) => counts.has(v)).map((value) => ({ value, count: counts.get(value) }))
+}
+
+const isSet = (v) => v !== '' && v != null
+
+/**
+ * The active filters as chips: `{ key, label, patch }`, where `patch` resets that filter. Pure.
+ * A salary field that is `null` means "use the profile's figure" and `withProfileSalaryDefaults`
+ * has already replaced it, so what reaches here is the effective value; clearing sets '' (an
+ * explicit empty), never null, or the profile figure would come straight back.
+ */
+export function activeFilterChips(filters = {}) {
+  const chips = []
+  const add = (key, label, patch) => chips.push({ key, label, patch })
+  if (filters.searchText?.trim()) add('searchText', `Search: ${filters.searchText.trim()}`, { searchText: '' })
+  if (filters.location?.trim()) add('location', `Location: ${filters.location.trim()}`, { location: '' })
+  const sites = normalizeMultiFilter(filters.site)
+  if (sites.length) add('site', `Source: ${sites.join(', ')}`, { site: [] })
+  if (filters.status) add('status', `Status: ${filters.status}`, { status: '' })
+  const priorities = normalizePriorityFilter(filters.priority)
+  if (priorities.length) add('priority', `Priority: ${priorities.join(', ')}`, { priority: [] })
+  if (isSet(filters.minScore)) add('minScore', `Min score: ${filters.minScore}`, { minScore: '' })
+  if (filters.remoteOnly) add('remoteOnly', 'Remote only', { remoteOnly: false })
+  const providers = normalizeMultiFilter(filters.provider)
+  if (providers.length) add('provider', `Provider: ${providers.join(', ')}`, { provider: [] })
+  if (filters.matchLabel) add('matchLabel', `Match label: ${filters.matchLabel}`, { matchLabel: '' })
+  if (isSet(filters.minSalary)) add('minSalary', `Min salary: ${filters.minSalary}`, { minSalary: '' })
+  if (isSet(filters.desiredSalaryMin)) add('desiredSalaryMin', `Desired from: ${filters.desiredSalaryMin}`, { desiredSalaryMin: '' })
+  if (isSet(filters.desiredSalaryMax)) add('desiredSalaryMax', `Desired to: ${filters.desiredSalaryMax}`, { desiredSalaryMax: '' })
+  if (filters.hideNeedsVisa) add('hideNeedsVisa', 'Hiding jobs that need a visa', { hideNeedsVisa: false })
+  return chips
+}
+
+/** The patch that clears every filter. Salary fields become '' (not null) so the profile's figures do not refill them. */
+export const CLEAR_ALL_FILTERS = {
+  searchText: '',
+  location: '',
+  site: [],
+  provider: [],
+  remoteOnly: false,
+  hideNeedsVisa: false,
+  status: '',
+  matchLabel: '',
+  priority: [],
+  minScore: '',
+  minSalary: '',
+  desiredSalaryMin: '',
+  desiredSalaryMax: '',
+}
+
+/** Filters inside "More filters" that are active, so the toggle can show a count. */
+export const MORE_FILTER_KEYS = ['provider', 'matchLabel', 'minSalary', 'desiredSalaryMin', 'desiredSalaryMax', 'hideNeedsVisa']
+export function moreFiltersCount(chips) {
+  return chips.filter((c) => MORE_FILTER_KEYS.includes(c.key)).length
 }
