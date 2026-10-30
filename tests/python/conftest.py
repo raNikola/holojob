@@ -53,6 +53,12 @@ def _ai_selection_in_tmp(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _source_settings_in_tmp(tmp_path, monkeypatch):
+    """No test reads the server's data/config/sources.json: every opt-in source starts off."""
+    monkeypatch.setenv("CAREER_OS_SOURCES", str(tmp_path / "config" / "sources.json"))
+
+
+@pytest.fixture(autouse=True)
 def _secret_store_in_tmp(tmp_path, monkeypatch):
     """No test reads the server's data/secrets/, and no key from the host shell reaches a test."""
     monkeypatch.setenv("CAREER_OS_SECRETS_DIR", str(tmp_path / "secrets"))
