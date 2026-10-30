@@ -90,8 +90,28 @@ describe('active filter chips', () => {
 
 describe('filter tooltips', () => {
   it('every filter on the panel has a text', () => {
-    for (const key of ['searchText', 'location', 'site', 'status', 'priority', 'minScore', 'remoteOnly', 'provider', 'matchLabel', 'salary', 'hideNeedsVisa']) {
+    for (const key of ['searchText', 'location', 'site', 'status', 'priority', 'minScore', 'remoteOnly', 'provider', 'matchLabel', 'salary', 'hideNeedsVisa', 'hideClosed']) {
       expect(FILTER_HELP[key], key).toBeTruthy()
     }
+  })
+})
+
+describe('Hide closed jobs', () => {
+  const list = [{ jobId: 'a' }, { jobId: 'b', isClosed: true }, { jobId: 'c', isClosed: false }]
+
+  it('is off by default and when unset', () => {
+    expect(filterJobs(list, {})).toHaveLength(3)
+    expect(filterJobs(list, { hideClosed: false })).toHaveLength(3)
+  })
+
+  it('drops jobs that are no longer listed when on', () => {
+    expect(ids(filterJobs(list, { hideClosed: true }))).toEqual(['a', 'c'])
+  })
+
+  it('has a chip that is counted in More filters, and Clear all turns it off', () => {
+    const chips = activeFilterChips({ hideClosed: true })
+    expect(chips).toEqual([{ key: 'hideClosed', label: 'Hiding closed jobs', patch: { hideClosed: false } }])
+    expect(moreFiltersCount(chips)).toBe(1)
+    expect(CLEAR_ALL_FILTERS.hideClosed).toBe(false)
   })
 })

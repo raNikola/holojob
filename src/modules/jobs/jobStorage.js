@@ -12,6 +12,7 @@ const DEFAULT_FILTERS = {
   provider: [],
   remoteOnly: false,
   hideNeedsVisa: false,
+  hideClosed: false,
   status: '',
   matchLabel: '',
   priority: [],

@@ -178,6 +178,12 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
               />
             </>
           )}
+          <Checkbox
+            label="Hide closed jobs"
+            help={tip('hideClosed', 'Hide closed jobs')}
+            checked={Boolean(filters.hideClosed)}
+            onChange={(v) => onChange({ hideClosed: v })}
+          />
         </div>
       )}
 

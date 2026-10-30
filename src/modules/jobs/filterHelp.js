@@ -10,5 +10,6 @@ export const FILTER_HELP = {
   provider: 'The connector that fetched the ad: jobspy (LinkedIn), greenhouse, ashby, workable or infostud. Tick several to see them together; none ticked shows all.',
   matchLabel: 'Shows only jobs with this label (Excellent, Strong, Good, Weak, Reject), which comes from the match score.',
   salary: 'The pay the scorer read from the ad, in EUR per month. A job matches when its pay range overlaps yours; a single figure must lie inside it. Jobs with no readable pay follow “Include jobs without salary”.',
+  hideClosed: 'Hides jobs that are no longer listed on the site they came from (marked Closed). They stay in your list until you turn this off.',
   hideNeedsVisa: 'Hides jobs the work-authorization check marked “No visa” (the ad refuses sponsorship) or “Needs visa” (the ad says nothing). Other jobs stay.',
 }
