@@ -11,6 +11,7 @@ from providers.wellfound_provider import WellfoundProvider
 from providers.wwr_provider import WWRProvider
 from providers.yc_provider import YCProvider
 from providers.infostud_provider import InfostudProvider
+from providers.joberty_provider import JobertyProvider
 from providers.workable_provider import WorkableProvider
 
 PROVIDER_CLASSES = {
@@ -24,6 +25,7 @@ PROVIDER_CLASSES = {
     "wwr": WWRProvider,
     "infostud": InfostudProvider,
     "workable": WorkableProvider,
+    "joberty": JobertyProvider,  # opt-in: in no group, runs only when named
 }
 
 PROVIDER_GROUPS = {
@@ -46,8 +48,10 @@ def resolve_providers(spec: str) -> list[str]:
     names = []
     for part in key.split(","):
         name = part.strip().lower()
-        if name and name in PROVIDER_CLASSES:
-            names.append(name)
+        # A list may mix groups and names ("serbia,joberty").
+        for member in PROVIDER_GROUPS.get(name) or [name]:
+            if member in PROVIDER_CLASSES and member not in names:
+                names.append(member)
     return names
 
 

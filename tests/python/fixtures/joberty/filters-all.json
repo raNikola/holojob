@@ -1,0 +1,95 @@
+[
+ {
+  "type": "CITY",
+  "filters": [
+   {
+    "value": "Serbia",
+    "count": 43
+   },
+   {
+    "value": "Belgrade (Serbia)",
+    "count": 28
+   },
+   {
+    "value": "Novi Sad (Serbia)",
+    "count": 17
+   },
+   {
+    "value": "Remote (Serbia)",
+    "count": 7
+   },
+   {
+    "value": "Cacak (Serbia)",
+    "count": 6
+   },
+   {
+    "value": "Nis (Serbia)",
+    "count": 5
+   },
+   {
+    "value": "Kraljevo (Serbia)",
+    "count": 3
+   },
+   {
+    "value": "Kragujevac (Serbia)",
+    "count": 3
+   },
+   {
+    "value": "Pancevo (Serbia)",
+    "count": 1
+   },
+   {
+    "value": "Subotica (Serbia)",
+    "count": 1
+   },
+   {
+    "value": "North Macedonia",
+    "count": 1
+   },
+   {
+    "value": "Skopje (North Macedonia)",
+    "count": 1
+   },
+   {
+    "value": "Croatia",
+    "count": 12
+   },
+   {
+    "value": "Zagreb (Croatia)",
+    "count": 9
+   },
+   {
+    "value": "Osijek (Croatia)",
+    "count": 3
+   },
+   {
+    "value": "Split (Croatia)",
+    "count": 1
+   },
+   {
+    "value": "Zadar (Croatia)",
+    "count": 1
+   },
+   {
+    "value": "Remote (Croatia)",
+    "count": 1
+   },
+   {
+    "value": "Rijeka (Croatia)",
+    "count": 1
+   },
+   {
+    "value": "Zapresic (Croatia)",
+    "count": 1
+   },
+   {
+    "value": "Bulgaria",
+    "count": 1
+   },
+   {
+    "value": "Sofia (Bulgaria)",
+    "count": 1
+   }
+  ]
+ }
+]
