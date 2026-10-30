@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { buildDiscoveryCommand, getDiscoveryStatus, runDiscovery } from './run-discovery.js'
 import { runPipeline } from './run-pipeline.js'
 import { runManualJobs } from './run-manual-job.js'
+import { fetchAd } from './run-ad-fill.js'
 import { buildScoringCommand, getScoringStatus, previewJudge, runJudgedScoring, runScoring } from './run-scoring.js'
 import { buildTailorCommand, getTailorStatus, runTailor, runTailorStream } from './run-tailor.js'
 import { getProjectScanStatus, runProjectScan } from './run-project-scan.js'
@@ -417,6 +418,18 @@ export async function handleApiRequest(req, res) {
       sendJson(res, result.ok ? 200 : 500, result)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // Fill from ad (Add job): the server reads one job page. No model, no candidate data; the body is the address only.
+  if (url === '/api/jobs/ad/fetch' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const result = await fetchAd(body.url)
+      sendJson(res, result.status, result.body)
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'bad_url', message: 'Could not read this page, paste the text manually.' })
     }
     return true
   }
