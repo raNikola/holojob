@@ -245,6 +245,17 @@ def test_nothing_listening_is_unreachable():
     refused(lambda: safe_fetch._request("http", "jobs.example.com", ["127.0.0.1"], port, "/", time.monotonic() + 3), "unreachable")
 
 
+def test_tls_checks_certificates_against_certifi_and_verifies_the_hostname(monkeypatch):
+    import certifi
+
+    seen = {}
+    real = safe_fetch.ssl.create_default_context
+    monkeypatch.setattr(safe_fetch.ssl, "create_default_context", lambda **kw: seen.update(kw) or real(**kw))
+    context = safe_fetch.tls_context()
+    assert seen == {"cafile": certifi.where()}
+    assert context.check_hostname is True and context.verify_mode == safe_fetch.ssl.CERT_REQUIRED
+
+
 # --- the reader --------------------------------------------------------------------------------------------------
 
 def ld(**posting):
