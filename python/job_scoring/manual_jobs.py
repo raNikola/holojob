@@ -17,7 +17,7 @@ import posixpath
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 MANUAL_PATH = ROOT / "data" / "jobs" / "manual_jobs.json"
@@ -73,6 +73,27 @@ def normalize_url(raw) -> str | None:
             resolved.append(segment)
     path = re.sub(r"/+$", "", quote("/".join(resolved), safe="/%:@!$&'()*+,;=-._~"))
     return f"{scheme}://{netloc}{path}"
+
+
+# Query parameters that say where a visitor came from, not which posting it is.
+TRACKING_PARAMS = {"ref", "refid", "trackingid", "source", "gclid", "fbclid"}
+
+
+def identity_url(raw) -> str | None:
+    """`normalize_url` that keeps the query parameters which identify a posting (?gh_jid=, ?currentJobId=, ?jk=).
+
+    The add-time duplicate check strips the whole query, as asked, and shows the clash to the owner. Anything that
+    drops a row silently uses this key instead: a board that tells postings apart by query string must not collapse
+    to one job. Tracking parameters (utm_*, ref, refId, trackingId, source, gclid, fbclid) are removed, the rest sorted.
+    """
+    base = normalize_url(raw)
+    if not base:
+        return None
+    pairs = [
+        (k, v) for k, v in parse_qsl(urlsplit(str(raw).strip()).query, keep_blank_values=True)
+        if not k.lower().startswith("utm_") and k.lower() not in TRACKING_PARAMS
+    ]
+    return f"{base}?{urlencode(sorted(pairs))}" if pairs else base
 
 
 def sanitize(payload, *, now: str | None = None) -> dict:
@@ -159,10 +180,10 @@ def find_clash(job_id: str, url: str, *lists: list[dict]) -> dict | None:
 
 
 def with_manual(jobs: list[dict], manual: list[dict]) -> list[dict]:
-    """`jobs` plus the manual jobs. A row with a manual job's id, or its normalised URL, is dropped: the manual one wins."""
+    """`jobs` plus the manual jobs. A row with a manual job's id, or its identity URL, is dropped: the manual one wins."""
     ids = {m["jobId"] for m in manual}
-    urls = {u for u in (normalize_url(m.get("jobUrl")) for m in manual) if u}
-    kept = [j for j in jobs if j.get("jobId") not in ids and normalize_url(j.get("jobUrl")) not in urls]
+    urls = {u for u in (identity_url(m.get("jobUrl")) for m in manual) if u}
+    kept = [j for j in jobs if j.get("jobId") not in ids and identity_url(j.get("jobUrl")) not in urls]
     return kept + [dict(m) for m in manual]
 
 

@@ -106,6 +106,39 @@ def test_url_normalisation_matches_the_shared_fixture(case):
     assert manual_jobs.normalize_url(case["input"]) == case["expected"]
 
 
+@pytest.mark.parametrize("case", json.loads((ROOT / "tests" / "fixtures" / "url-normalisation.json").read_text(encoding="utf-8")),
+                         ids=lambda c: repr(c["input"]))
+def test_identity_url_keeps_identifying_parameters_and_drops_tracking_ones(case):
+    assert manual_jobs.identity_url(case["input"]) == case.get("identity", case["expected"])
+
+
+def test_the_add_time_check_strips_the_query_and_names_the_clash(env, monkeypatch, capsys):
+    """The visible check follows the owner's rule (query stripped) and shows the clash; it hides nothing."""
+    base = "https://careers.example/job"
+    env.discovered.write_text(json.dumps({"jobs": [_discovered("g-1", f"{base}?gh_jid=1")]}))
+    code, out, _ = env.add(_manual(url=f"{base}?gh_jid=2"), monkeypatch, capsys)
+    assert code == 3 and json.loads(out)["existing"]["jobId"] == "g-1"
+
+
+def test_a_manual_job_replaces_only_the_posting_with_its_own_identity_and_the_run_counts_it(env, monkeypatch):
+    base = "https://careers.example/job"
+    env.discovered.write_text(json.dumps({"jobs": [
+        _discovered("g-1", f"{base}?gh_jid=1"), _discovered("g-2", f"{base}?gh_jid=2"), _discovered("g-3", f"{base}?gh_jid=3"),
+    ]}))
+    manual_jobs.save([manual_jobs.sanitize(_manual(url=f"{base}?gh_jid=2&utm_source=x"))], env.manual)
+    done = subprocess.run(
+        [sys.executable, str(RUN_SCORING), "--intelligence", str(env.intelligence), "--jobs", str(env.discovered),
+         "--manual", str(env.manual), "--output", str(env.dir / "out.json")],
+        capture_output=True, text=True,
+    )
+    assert done.returncode == 0, done.stderr
+    doc = json.loads((env.dir / "out.json").read_text())
+    assert {j["jobId"] for j in doc["jobs"]} == {"g-1", "g-3", MANUAL_ID}
+    assert doc["meta"]["manualJobs"] == {"count": 1, "replacedRows": 1}
+    assert "manual jobs: 1 added, 1 discovered rows replaced" in done.stderr
+    assert "Senior Product Manager" not in done.stderr  # counts only
+
+
 # --- what Python is given --------------------------------------------------------------------------------------
 
 def test_sanitize_keeps_only_scoring_fields_and_never_echoes_the_rest():
@@ -144,11 +177,20 @@ def test_the_row_equals_the_one_a_full_rescore_writes(env, monkeypatch, capsys):
     assert env.full_rescore()[MANUAL_ID] == env.rows()[MANUAL_ID]
 
 
-def test_missing_location_stays_unknown_not_invented(env, monkeypatch, capsys):
+def test_missing_location_stays_unknown_and_is_never_capped_as_outside(env, monkeypatch, capsys):
+    """With a location gate set (allowed: Serbia), a place the owner left empty is unknown; a stated Berlin is outside."""
+    intel = json.loads(env.intelligence.read_text())
+    intel["jobFitPreferences"] = {**intel["jobFitPreferences"], "allowedLocations": ["RS"]}
+    env.intelligence.write_text(json.dumps(intel))
+
     assert env.add(_manual(location=""), monkeypatch, capsys)[0] == 0
     row = env.rows()[MANUAL_ID]
     assert row["location"] == "" and row.get("isRemote") is None
-    assert (row.get("workAuthorization") or {}).get("location", "unknown") in ("unknown", None, "")
+    assert row["workAuthorization"]["status"] == "unknown" and row["workAuthorization"]["place"] == "unknown"
+    assert "Location not stated" in row["reasons"]
+
+    assert env.add(_manual(OTHER_ID, "https://acme.example/jobs/10", location="Berlin, Germany"), monkeypatch, capsys)[0] == 0
+    assert env.rows()[OTHER_ID]["workAuthorization"]["status"] == "outside_allowed"  # the gate works, so the first result means something
 
 
 def test_notes_and_extra_links_reach_no_output_log_or_file(env, monkeypatch, capsys):

@@ -123,7 +123,12 @@ def main() -> int:
         print("Invalid discovered jobs format", file=sys.stderr)
         return 1
     # A hand-entered job is scored with every run and wins over a discovered row with the same URL.
+    discovered_rows = len(jobs)
     jobs = manual_jobs.with_manual(jobs, manual)
+    replaced_rows = discovered_rows + len(manual) - len(jobs)
+    if manual:
+        # Counts only: nothing of a job's text is printed.
+        print(f"manual jobs: {len(manual)} added, {replaced_rows} discovered rows replaced by them", file=sys.stderr)
 
     profile = _load_profile()
     # The owner's name and links, to strip from the judge's digest; never sent.
@@ -253,6 +258,7 @@ def main() -> int:
             "judge": judge_summary,
             "engineShadow": engine_summary or {"enabled": False},
             "aiEnrichment": {"jobsWithoutFacts": without_facts, "jobs": len(scored)},
+            "manualJobs": {"count": len(manual), "replacedRows": replaced_rows},
             "quality": {"reduced": True, "reason": args.reduced_quality} if args.reduced_quality
             else {"reduced": False},
             "jobCount": len(scored),

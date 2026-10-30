@@ -277,7 +277,7 @@ export default function JobDiscoveryScreen() {
               Add job
             </Button>
           </div>
-          {addJobOpen && <AddJobDialog apiAvailable={pipelineApiAvailable} onClose={() => setAddJobOpen(false)} onSaved={handleJobAdded} />}
+          {addJobOpen && <AddJobDialog onClose={() => setAddJobOpen(false)} onSaved={handleJobAdded} />}
           {addNote && (
             <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-teal-700 dark:text-teal-300">
               <span>{addNote.text}</span>
