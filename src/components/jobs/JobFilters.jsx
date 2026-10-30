@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, X } from 'lucide-react'
 import Card from '../ui/Card'
 import Input from '../ui/Input'
@@ -22,9 +22,9 @@ import { MATCH_LABELS, PRIORITIES, hasMatchScores } from '../../modules/jobs/mat
 const SHOWN_PRIORITIES = PRIORITIES.filter((p) => p !== 'Reject')
 const tip = (key, label) => <InfoTip text={FILTER_HELP[key]} label={`About ${label}`} />
 
-function Checkbox({ label, help, checked, onChange }) {
+function Checkbox({ label, help, checked, onChange, className = 'self-end pb-2.5' }) {
   return (
-    <div className="flex items-center gap-2 self-end pb-2.5">
+    <div className={`flex items-center gap-2 ${className}`}>
       <label className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
         <input
           type="checkbox"
@@ -42,6 +42,22 @@ function Checkbox({ label, help, checked, onChange }) {
 export default function JobFilters({ filters, sites, providers, jobs, applicationStore = null, basicProfile = null, onChange }) {
   const showScoreFilters = hasMatchScores(jobs)
   const [moreOpen, setMoreOpen] = useState(false)
+  // Until the open animation ends the extras clip their content; afterwards dropdowns may extend past the box.
+  const [settled, setSettled] = useState(false)
+  const settleTimer = useRef(null)
+  useEffect(() => () => clearTimeout(settleTimer.current), [])
+  const toggleMore = () => {
+    clearTimeout(settleTimer.current)
+    const next = !moreOpen
+    setMoreOpen(next)
+    const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (!next) setSettled(false)
+    else if (reduced) setSettled(true)
+    else {
+      setSettled(false)
+      settleTimer.current = setTimeout(() => setSettled(true), 220)
+    }
+  }
   const chips = activeFilterChips(filters)
   const salary = salaryRangeOf(filters)
   // Chips of filters that are not rendered (score filters without scores) are not counted in the toggle.
@@ -130,9 +146,13 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
         <p className="mt-2 text-xs text-stone-500">The application tracker has not loaded, so no job can be shown as applied.</p>
       )}
 
-      {moreOpen && (
-        <div id="more-filters" className="mt-3 space-y-3">
-          <div className="flex flex-wrap items-start gap-3">
+      {/* The extras stay mounted (drafts and focus survive); collapsed they are invisible, so Tab skips them. */}
+      <div
+        id="more-filters"
+        className={`grid transition-[grid-template-rows,opacity,visibility] duration-200 ease-out motion-reduce:transition-none ${moreOpen ? 'visible grid-rows-[1fr] opacity-100' : 'invisible grid-rows-[0fr] opacity-0'}`}
+      >
+        <div className={`min-h-0 ${moreOpen && settled ? '' : 'overflow-hidden'}`}>
+          <div className="flex flex-wrap items-start gap-x-3 gap-y-2 pt-3">
             <div className="w-40 flex-none">
               <MultiSelectDropdown
                 label="Provider"
@@ -157,7 +177,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                   />
                 </div>
                 <SalaryFilter
-                  className="min-w-[18rem] flex-[1_1_22rem] max-w-[34rem]"
+                  className="min-w-[18rem] flex-[1_1_18rem] max-w-[26rem]"
                   from={salary.from}
                   to={salary.to}
                   includeUnknown={filters.salaryIncludeUnknown !== false}
@@ -167,25 +187,28 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                 />
               </>
             )}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
-            {showScoreFilters && (
+            {/* Beside the Salary row on wide windows (top spacer = the label row above the inputs); a compact row under it when they wrap. */}
+            <div className="flex flex-col gap-2 min-[1280px]:pt-[1.625rem]">
+              {showScoreFilters && (
+                <Checkbox
+                  className=""
+                  label="Hide jobs that need a visa"
+                  help={tip('hideNeedsVisa', 'Hide jobs that need a visa')}
+                  checked={filters.hideNeedsVisa}
+                  onChange={(v) => onChange({ hideNeedsVisa: v })}
+                />
+              )}
               <Checkbox
-                label="Hide jobs that need a visa"
-                help={tip('hideNeedsVisa', 'Hide jobs that need a visa')}
-                checked={filters.hideNeedsVisa}
-                onChange={(v) => onChange({ hideNeedsVisa: v })}
+                className=""
+                label="Hide jobs no longer listed"
+                help={tip('hideNoLongerListed', 'Hide jobs no longer listed')}
+                checked={Boolean(filters.hideNoLongerListed)}
+                onChange={(v) => onChange({ hideNoLongerListed: v })}
               />
-            )}
-            <Checkbox
-              label="Hide jobs no longer listed"
-              help={tip('hideNoLongerListed', 'Hide jobs no longer listed')}
-              checked={Boolean(filters.hideNoLongerListed)}
-              onChange={(v) => onChange({ hideNoLongerListed: v })}
-            />
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
       {chips.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Active filters">
@@ -211,11 +234,11 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
           type="button"
           aria-expanded={moreOpen}
           aria-controls="more-filters"
-          onClick={() => setMoreOpen((v) => !v)}
+          onClick={toggleMore}
           className="inline-flex items-center gap-1 text-stone-700 hover:text-teal-700 hover:underline dark:text-stone-300 dark:hover:text-teal-300"
         >
           More filters{moreCount > 0 ? ` (${moreCount})` : ''}
-          <ChevronDown className={`h-4 w-4 transition-transform ${moreOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+          <ChevronDown className={`h-4 w-4 transition-transform duration-200 motion-reduce:transition-none ${moreOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
         </button>
         <button
           type="button"
