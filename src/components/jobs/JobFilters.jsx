@@ -153,47 +153,58 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
       </div>
 
       {moreOpen && (
-        <div id="more-filters" className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MultiSelectDropdown
-            label="Provider"
-            labelExtra={tip('provider', 'Provider')}
-            selected={normalizeMultiFilter(filters.provider)}
-            onChange={(v) => onChange({ provider: v })}
-            options={providers}
-            placeholder="All providers"
-          />
-          {showScoreFilters && (
-            <>
-              <SelectField
-                id="filter-match-label"
-                label="Match label"
-                labelExtra={tip('matchLabel', 'Match label')}
-                value={filters.matchLabel}
-                onChange={(v) => onChange({ matchLabel: v })}
-                options={MATCH_LABELS}
-                placeholder="All labels"
+        <div id="more-filters" className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="w-40 flex-none">
+              <MultiSelectDropdown
+                label="Provider"
+                labelExtra={tip('provider', 'Provider')}
+                selected={normalizeMultiFilter(filters.provider)}
+                onChange={(v) => onChange({ provider: v })}
+                options={providers}
+                placeholder="All providers"
               />
-              <SalaryFilter
-                from={salary.from}
-                to={salary.to}
-                includeUnknown={filters.salaryIncludeUnknown !== false}
-                fromProfile={Boolean(filters.salaryFromProfile)}
-                onChange={onChange}
-              />
+            </div>
+            {showScoreFilters && (
+              <>
+                <div className="w-36 flex-none">
+                  <SelectField
+                    id="filter-match-label"
+                    label="Match label"
+                    labelExtra={tip('matchLabel', 'Match label')}
+                    value={filters.matchLabel}
+                    onChange={(v) => onChange({ matchLabel: v })}
+                    options={MATCH_LABELS}
+                    placeholder="All labels"
+                  />
+                </div>
+                <SalaryFilter
+                  className="min-w-[18rem] flex-[1_1_22rem] max-w-[34rem]"
+                  from={salary.from}
+                  to={salary.to}
+                  includeUnknown={filters.salaryIncludeUnknown !== false}
+                  fromProfile={Boolean(filters.salaryFromProfile)}
+                  onChange={onChange}
+                />
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+            {showScoreFilters && (
               <Checkbox
                 label="Hide jobs that need a visa"
                 help={tip('hideNeedsVisa', 'Hide jobs that need a visa')}
                 checked={filters.hideNeedsVisa}
                 onChange={(v) => onChange({ hideNeedsVisa: v })}
               />
-            </>
-          )}
-          <Checkbox
-            label="Hide closed jobs"
-            help={tip('hideClosed', 'Hide closed jobs')}
-            checked={Boolean(filters.hideClosed)}
-            onChange={(v) => onChange({ hideClosed: v })}
-          />
+            )}
+            <Checkbox
+              label="Hide closed jobs"
+              help={tip('hideClosed', 'Hide closed jobs')}
+              checked={Boolean(filters.hideClosed)}
+              onChange={(v) => onChange({ hideClosed: v })}
+            />
+          </div>
         </div>
       )}
 
