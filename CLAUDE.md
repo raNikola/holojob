@@ -90,10 +90,10 @@ provider, each behind an explicit confirm; the browser AI features send redacted
   job page the server itself fetched (held in the Node process behind a token, never taken from the browser), with the owner's name, every e-mail address, phone number and link
   removed by `redact.py` (the profile's name and links read server-side; a final check fails closed if anything of the owner's is left), plus a fixed instruction naming only the
   fields still empty after the no-AI step. Never sent: Notes, extra links, Source URL, the profile, the CV, anything the browser posts besides the token and field names. It
-  runs only on the Claude Code subscription: the gate must classify the call `subscription` (feature `job-import` in `claudeCodeSubscription.features`, which the owner adds in
-  Settings > AI budget; it is not added by code), else it is refused with that hint and the manual form stays. `ai-preview` calls no model and returns exactly the text and the gate's
+  runs only on the Claude Code subscription: the gate must classify the call `subscription` (feature `job-import` in `claudeCodeSubscription.features`, which the owner adds with the checkbox in
+  Settings > AI budget (it needs the usual confirm; no code adds it), else it is refused with that hint and the manual form stays. `ai-preview` calls no model and returns exactly the text and the gate's
   answer; `ai-extract` needs `"confirm": true` (409 without). Code accepts a value only if the text shows it (pay must read as EUR per month; a description is cut from the text
-  between two quoted snippets), so nothing is invented. `tests/python/test_ad_ai.py`, `tests/js/adFill.test.js`.
+  between two quoted snippets, cut from the original page text so the stored ad has no placeholders), so nothing is invented. Pay ranges are protected from the phone-number redaction so the AI can see them. `tests/python/test_ad_ai.py`, `tests/js/adFill.test.js`.
 - **Browser AI features** (`scripts/run-ai.js`, the `/api/ai/*` routes: job analysis, cover letter, interview
   prep, outreach, company intelligence, career strategy, skill gap, application strategy, resume enhancement,
   chat): send the ad text, the job's scores and stage, and a profile summary (current role, target roles,

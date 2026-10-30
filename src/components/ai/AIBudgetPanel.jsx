@@ -5,7 +5,7 @@ import Input from '../ui/Input'
 import Alert from '../ui/Alert'
 import Badge from '../ui/Badge'
 import {
-  formFromSettings, loadGateUsage, saveGatePricing, saveGateSettings, settingsFromForm,
+  formFromSettings, loadGateUsage, saveGatePricing, saveGateSettings, settingsFromForm, withSubscriptionFeature,
 } from '../../modules/ai/gateClient'
 
 const CLASS_VARIANT = { free: 'high', local: 'high', subscription: 'high', paid: 'medium', unknown: 'warn' }
@@ -208,6 +208,14 @@ export default function AIBudgetPanel() {
                 Claude Code on my flat Claude subscription: calls for {form.subscriptionFeatures.join(', ')} are not charged
                 against the budget (cost 0, still logged). They use your plan&apos;s usage allowance and send the redacted ad and a
                 profile summary to Anthropic. Off by default; on needs a confirm.
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={form.subscriptionFeatures.includes('job-import')}
+                onChange={(e) => setForm({ ...form, subscriptionFeatures: withSubscriptionFeature(form.subscriptionFeatures, 'job-import', e.target.checked) })} />
+              <span>
+                Also cover reading a job page&apos;s missing fields (Add job &gt; &quot;Extract the missing fields with AI&quot;, feature job-import). It sends the
+                page text, with your name, e-mail addresses, phone numbers and links removed, to Anthropic, only after you confirm in that form. Adding it needs a confirm here.
               </span>
             </label>
             <Input label="Max subscription calls per day" type="number" min="1" step="1" value={form.subscriptionMaxCallsDaily}
