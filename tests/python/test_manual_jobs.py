@@ -376,3 +376,31 @@ def test_with_manual_prefers_the_manual_row_by_id_and_by_url():
     merged = manual_jobs.with_manual(jobs, manual)
     assert [j["jobId"] for j in merged] == ["d-2", MANUAL_ID]
     assert merged[-1].get("manualEntry") is True
+
+
+# --- editing a manual job: the stored row is replaced, and wins over a discovered row ----------------------------------
+
+def test_an_edit_replaces_the_row_keeps_the_first_dates_and_stores_updated_at():
+    old = manual_jobs.sanitize({"jobId": MANUAL_ID, "title": "PM", "company": "Acme", "description": "Own it.", "jobUrl": "https://acme.example/1",
+                                "createdAt": "2026-10-01T00:00:00Z", "firstSeen": "2026-10-01T00:00:00Z"})
+    edit = manual_jobs.sanitize({"jobId": MANUAL_ID, "title": "Senior PM", "company": "Acme", "description": "Own it.", "jobUrl": "https://acme.example/2",
+                                 "createdAt": "2030-01-01T00:00:00Z", "firstSeen": "2030-01-01T00:00:00Z", "updatedAt": "2026-10-31T09:00:00Z"})
+    rows = manual_jobs.upsert([edit], [old])
+    assert len(rows) == 1
+    assert rows[0]["title"] == "Senior PM" and rows[0]["jobUrl"] == "https://acme.example/2"
+    assert rows[0]["createdAt"] == "2026-10-01T00:00:00Z" and rows[0]["firstSeen"] == "2026-10-01T00:00:00Z"
+    assert rows[0]["updatedAt"] == "2026-10-31T09:00:00Z"
+
+
+def test_an_edited_manual_job_wins_over_a_discovered_row_in_every_run():
+    edited = manual_jobs.sanitize({"jobId": MANUAL_ID, "title": "Senior PM", "company": "Acme", "description": "Own it.", "jobUrl": "https://acme.example/2"})
+    discovered = [{"jobId": "d-1", "title": "Senior PM (copy)", "jobUrl": "https://acme.example/2/"}, {"jobId": "d-2", "title": "Other", "jobUrl": "https://other.example/1"}]
+    merged = manual_jobs.with_manual(discovered, [edited])
+    assert [j["jobId"] for j in merged] == ["d-2", MANUAL_ID]
+    assert merged[-1]["title"] == "Senior PM"
+
+
+def test_the_same_id_under_a_new_address_is_not_a_clash_with_itself():
+    stored = [manual_jobs.sanitize({"jobId": MANUAL_ID, "title": "PM", "company": "Acme", "description": "x", "jobUrl": "https://acme.example/1"})]
+    assert manual_jobs.find_clash(MANUAL_ID, "https://acme.example/1?utm_source=a", stored) is None
+    assert manual_jobs.find_clash(OTHER_ID, "https://acme.example/1", stored)["jobId"] == MANUAL_ID

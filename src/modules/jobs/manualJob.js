@@ -8,7 +8,7 @@
  */
 export const SCORING_FIELDS = [
   'jobId', 'title', 'company', 'description', 'jobUrl', 'location', 'salary', 'site', 'provider',
-  'sourceChoice', 'status', 'createdAt', 'firstSeen', 'lastSeen', 'scrapedAt',
+  'sourceChoice', 'status', 'createdAt', 'firstSeen', 'lastSeen', 'scrapedAt', 'updatedAt',
 ]
 
 /** The scoring payload of a stored manual job: the string fields above, nothing else. */
@@ -18,6 +18,9 @@ export function scoringPayload(job) {
 
 /** Fields a re-import of the scored-jobs file must carry over from the stored record. */
 export const MANUAL_FIELDS = ['manualEntry', 'sourceChoice', 'sourceUrl', 'notes', 'extraLinks', 'createdAt']
+
+/** Carried over from the stored record only for a hand-entered job: an edit made here is newer than the scored file's copy. */
+export const MANUAL_ONLY_FIELDS = ['jobUrl', 'site', 'updatedAt']
 
 /** `new` is shown as "Unreviewed"; any other status keeps its stored wording. */
 export function jobStatusLabel(status) {
@@ -139,4 +142,56 @@ export function buildManualJob(input, { now = new Date(), id = `manual-${globalT
   const extraLinks = cleanExtraLinks(input.extraLinks)
   if (extraLinks.length) job.extraLinks = extraLinks
   return job
+}
+
+/** The form fields of a stored manual job, as the Add job form holds them (the Edit form starts from this). */
+export function formFromJob(job) {
+  return {
+    title: job?.title ?? '',
+    company: job?.company ?? '',
+    description: job?.description ?? '',
+    jobUrl: job?.jobUrl ?? '',
+    sourceUrl: job?.sourceUrl ?? '',
+    location: job?.location ?? '',
+    salary: job?.salary ?? '',
+    notes: job?.notes ?? '',
+    extraLinks: (job?.extraLinks || []).map((row) => ({ url: row?.url ?? '', label: row?.label ?? '' })),
+  }
+}
+
+/** Changing any of these changes what scoring reads; the others (links, notes, Source URL, Job URL) do not. */
+export const RESCORE_FIELDS = ['title', 'company', 'description', 'location', 'salary']
+
+/** `validateManualJob`, plus: the ad text of a scored job can be replaced but not removed (its score is based on it). */
+export function validateEditedJob(input, stored) {
+  const errors = validateManualJob(input)
+  if (String(stored?.description ?? '').trim() && !String(input?.description ?? '').trim()) {
+    errors.description = 'Replace the description instead of removing it: the score is based on it.'
+  }
+  return errors
+}
+
+const sameLinks = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * What an edit changes in the stored record, compared with the trimmed values already stored. An emptied optional field
+ * is `undefined` (the field is removed). `rescore` is true when something scoring reads changed; `urlChanged` when the
+ * Job URL points at a different posting (the identity key differs), which is when the duplicate check runs.
+ * @returns {{ patch: object, rescore: boolean, urlChanged: boolean }}
+ */
+export function editChanges(input, stored) {
+  const patch = {}
+  const optional = new Set(['location', 'salary', 'sourceUrl', 'notes', 'jobUrl', 'description'])
+  for (const field of ['title', 'company', 'description', 'location', 'jobUrl', 'salary', 'sourceUrl', 'notes']) {
+    const next = String(input?.[field] ?? '').trim()
+    if (next !== String(stored?.[field] ?? '').trim()) patch[field] = next || (optional.has(field) ? undefined : next)
+  }
+  const links = cleanExtraLinks(input?.extraLinks)
+  if (!sameLinks(links, cleanExtraLinks(stored?.extraLinks))) patch.extraLinks = links.length ? links : undefined
+  if ('jobUrl' in patch) patch.site = hostOf(patch.jobUrl ?? '')
+  return {
+    patch,
+    rescore: RESCORE_FIELDS.some((field) => field in patch),
+    urlChanged: 'jobUrl' in patch && identityJobUrl(patch.jobUrl) !== identityJobUrl(stored?.jobUrl),
+  }
 }
