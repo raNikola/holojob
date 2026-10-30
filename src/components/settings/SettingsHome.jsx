@@ -3,6 +3,7 @@ import { Copy, Download, Loader2, Search, Trash2, Upload } from 'lucide-react'
 import Card from '../ui/Card'
 import AISettingsPanel from '../ai/AISettingsPanel'
 import SecretsPanel from './SecretsPanel'
+import JobBoardsPanel from './JobBoardsPanel'
 import ScoringWeightsPanel from './ScoringWeightsPanel'
 import ApplicationMigrationPanel from './ApplicationMigrationPanel'
 import ApplicationSettingsPanel from './ApplicationSettingsPanel'
@@ -237,6 +238,7 @@ export default function SettingsHome() {
 // tests/js/settingsRegistry.test.js fails when an id has no entry here or an entry has no id.
 const RENDERERS = {
   'scoring-weights': () => <ScoringWeightsPanel />,
+  'job-boards': () => <JobBoardsPanel />,
   'application-tracking': () => <ApplicationSettingsPanel />,
   'application-notifications': () => (
     <Card title="Notifications">
