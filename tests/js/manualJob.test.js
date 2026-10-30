@@ -16,7 +16,7 @@ beforeEach(() => {
     removeItem: (k) => { items.delete(k) },
   })
   vi.stubGlobal('window', new EventTarget())
-  saveJobs({ meta: null, jobs: [{ jobId: 'a', status: 'saved', title: 'PM', jobUrl: 'https://Example.com/jobs/1/?utm=x#top' }, { jobId: 'b', status: 'new', title: 'Other' }], filters: {}, importedAt: null })
+  saveJobs({ meta: null, jobs: [{ jobId: 'a', status: 'saved', title: 'PM', jobUrl: 'https://Example.com/jobs/1/?utm_source=x#top' }, { jobId: 'b', status: 'new', title: 'Other' }], filters: {}, importedAt: null })
   invalidateJobs()
 })
 
@@ -55,6 +55,15 @@ describe('URL de-duplication', () => {
     expect(findDuplicateByUrl(jobs, 'https://example.com/jobs/1')?.jobId).toBe('a')
     expect(findDuplicateByUrl(jobs, 'https://example.com/jobs/2')).toBeNull()
     expect(findDuplicateByUrl(jobs, '')).toBeNull()
+  })
+
+  it('keeps identifying parameters: sibling ?gh_jid= postings are not duplicates, tracking parameters are ignored', () => {
+    const board = (n, extra = '') => `https://careers.example/job/?gh_jid=${n}${extra}#apply`
+    expect(createJob(buildManualJob({ ...FORM, jobUrl: board(1) }, { id: 'manual-1' }))).toMatchObject({ ok: true })
+    expect(createJob(buildManualJob({ ...FORM, jobUrl: board(2) }, { id: 'manual-2' }))).toMatchObject({ ok: true })
+    const again = createJob(buildManualJob({ ...FORM, jobUrl: board(1, '&utm_source=mail&fbclid=z&gclid=y&ref=x') }, { id: 'manual-3' }))
+    expect(again).toMatchObject({ ok: false, reason: 'duplicate', existing: { jobId: 'manual-1' } })
+    expect(loadJobs().jobs.map((j) => j.jobId)).toEqual(['a', 'b', 'manual-1', 'manual-2'])
   })
 })
 
