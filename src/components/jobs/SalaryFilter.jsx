@@ -17,7 +17,7 @@ import {
  * One control for the salary range in EUR per month. The typed text is a draft; the filter changes
  * only while From is not above To, so the last valid range stays active during an error.
  */
-export default function SalaryFilter({ from, to, includeUnknown, fromProfile, onChange }) {
+export default function SalaryFilter({ from, to, includeUnknown, fromProfile, onChange, className = '' }) {
   const labelId = useId()
   const hintId = useId()
   const [draft, setDraft] = useState({ from: formatAmount(from), to: formatAmount(to) })
@@ -55,7 +55,7 @@ export default function SalaryFilter({ from, to, includeUnknown, fromProfile, on
   )
 
   return (
-    <div className="sm:col-span-2">
+    <div className={className}>
       <div className="mb-1.5 flex items-center gap-1">
         <span id={labelId} className="text-sm font-medium text-stone-700 dark:text-stone-300">Salary (EUR/month)</span>
         <InfoTip text={FILTER_HELP.salary} label="About Salary" />
