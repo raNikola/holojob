@@ -310,6 +310,26 @@ def test_a_url_import_of_a_manual_jobs_link_is_refused(env, monkeypatch, capsys)
     assert "url-1" not in env.rows()
 
 
+# --- the URL import uses the same limited fetcher --------------------------------------------------------------
+
+@pytest.mark.parametrize("url", ["http://127.0.0.1:3073/api/jobs", "http://169.254.169.254/latest/meta-data/", "https://holojob.void/", "http://100.64.0.9/", "ftp://example.com/x"])
+def test_the_url_import_cannot_be_pointed_at_the_home_network(url, monkeypatch):
+    import safe_fetch
+
+    monkeypatch.setattr(safe_fetch, "_request", lambda *a, **k: pytest.fail("a request was made"))
+    job, error = importer.extract_job(url, use_llm=False)
+    assert job is None and error.startswith("fetch failed:")
+
+
+def test_the_url_import_reads_a_page_through_the_limited_fetcher(monkeypatch):
+    import safe_fetch
+
+    html = '<script type="application/ld+json">{"@type":"JobPosting","title":"PM","hiringOrganization":{"name":"Acme"},"description":"<p>' + "Own the roadmap. " * 20 + '</p>"}</script>'
+    monkeypatch.setattr(safe_fetch, "fetch_page", lambda url: safe_fetch.Page(url, html))
+    job, error = importer.extract_job("https://jobs.example.com/1", use_llm=False)
+    assert error == "" and job["title"] == "PM" and job["company"] == "Acme"
+
+
 # --- what can delete a manual job -----------------------------------------------------------------------------
 
 def test_a_rescrape_and_a_full_rescore_keep_the_manual_job(env, monkeypatch, capsys):

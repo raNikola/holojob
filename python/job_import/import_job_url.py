@@ -25,7 +25,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
 from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,14 +33,12 @@ sys.path.insert(0, str(ROOT / "python" / "job_scoring"))
 
 import claude_code  # noqa: E402
 import manual_jobs  # noqa: E402
+import safe_fetch  # noqa: E402
 from scorer import score_jobs  # noqa: E402
 
 DISCOVERED_PATH = ROOT / "data/jobs/discovered_jobs.json"
 SCORED_PATH = ROOT / "data/jobs/scored_jobs.json"
 INTELLIGENCE_PATH = ROOT / "data/intelligence/candidate-intelligence.json"
-
-UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
 EXTRACT_PROMPT = """Extract the job posting from this web page text. Return ONLY a JSON \
 object: {{"title": "", "company": "", "location": "", "employmentType": "", \
@@ -146,14 +143,13 @@ def _needs_llm(parsed: dict) -> bool:
 
 
 def extract_job(url: str, use_llm: bool) -> tuple[dict | None, str]:
+    # The same limited fetcher as Fill from ad: public http(s) hosts only, checked redirects, size and time limits.
     try:
-        resp = requests.get(url, headers={"User-Agent": UA}, timeout=30)
-    except requests.RequestException as exc:
-        return None, f"fetch failed: {exc}"
-    if resp.status_code >= 400:
-        return None, f"fetch failed: HTTP {resp.status_code}"
+        page = safe_fetch.fetch_page(url)
+    except safe_fetch.FetchRefused as exc:
+        return None, f"fetch failed: {exc.message}"
 
-    soup = BeautifulSoup(resp.text, "html.parser")
+    soup = BeautifulSoup(page.html, "html.parser")
     from_ld = _from_json_ld(soup)
     parsed = from_ld or _heuristic(soup)
 
@@ -164,7 +160,7 @@ def extract_job(url: str, use_llm: bool) -> tuple[dict | None, str]:
             return None, "this looks like a job listing page — paste the direct posting URL"
 
     if _needs_llm(parsed) and use_llm:
-        page_text = re.sub(r"\s+", " ", BeautifulSoup(resp.text, "html.parser").get_text(" "))[:8000]
+        page_text = re.sub(r"\s+", " ", BeautifulSoup(page.html, "html.parser").get_text(" "))[:8000]
         with claude_code.ai_gate.context(feature="job-import"):
             llm, err = claude_code.complete_json(EXTRACT_PROMPT.format(text=page_text), timeout=180)
         if llm:
