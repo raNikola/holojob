@@ -47,6 +47,35 @@ export function applySuggestions(form, fields) {
   return { form: next, filled }
 }
 
+export const LABELS = { title: 'Title', company: 'Company', location: 'Location', salary: 'Salary', description: 'Job description' }
+
+const names = (list) => list.map((name) => LABELS[name].toLowerCase()).join(', ')
+
+/**
+ * One state transition for a fill, so the form, the "suggested" marks and the note can never disagree. `draft` is
+ * `{ form, suggested, note }`; the result fills only the form's empty fields, marks exactly those as suggested (earlier marks
+ * stay) and words the note from what was filled. `source` is 'page' or 'ai'; `wanted` are the fields an AI step was asked for.
+ */
+export function applyFill(draft, fields, { source = 'page', wanted = [] } = {}) {
+  const { form, filled } = applySuggestions(draft.form, fields)
+  const suggested = { ...draft.suggested, ...Object.fromEntries(filled.map((name) => [name, true])) }
+  const notFound = wanted.filter((name) => !filled.includes(name))
+  let text
+  if (source === 'ai') {
+    text = `${filled.length ? `The AI found: ${names(filled)} (suggested, edit or keep). ` : 'The AI found nothing the page states. '}${notFound.length ? `Not stated in the text, left empty: ${names(notFound)}.` : ''}`.trim()
+  } else {
+    text = filled.length
+      ? `Filled from the page: ${names(filled)}. These are suggestions: edit them or leave them, nothing is saved until you click Save.`
+      : 'The page had nothing new for the empty fields.'
+  }
+  return { ...draft, form, suggested, note: { kind: 'info', text }, lastFilled: filled }
+}
+
+/** The mark of a field goes when the owner edits it. */
+export function clearSuggested(draft, field) {
+  return draft.suggested[field] ? { ...draft, suggested: { ...draft.suggested, [field]: false } } : draft
+}
+
 /** The fields the page did not state that are still empty in the form: what an AI step could be asked for. */
 export function stillMissing(form, missing) {
   return (missing || []).filter((name) => AD_FIELDS.includes(name) && isEmpty(form[name]))

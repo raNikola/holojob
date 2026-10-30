@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AD_FIELDS, READ_FAILED, adFetchBody, applySuggestions, fetchAdFields, previewAdAi, runAdAi, stillMissing } from '../../src/modules/jobs/adFill.js'
+import { AD_FIELDS, READ_FAILED, adFetchBody, applyFill, applySuggestions, clearSuggested, fetchAdFields, previewAdAi, runAdAi, stillMissing } from '../../src/modules/jobs/adFill.js'
 import { AI_FAILED_MESSAGE, EXPIRED_MESSAGE, UNREADABLE_MESSAGE, cachedPage, clearCachedPages, extractAdAi, fetchAd, previewAdAi as serverPreview } from '../../scripts/run-ad-fill.js'
 
 const json = (status, body) => ({ status, json: async () => body })
@@ -43,6 +43,51 @@ describe('applySuggestions (fills empty fields only)', () => {
 
   it('lists what a later step could still be asked for', () => {
     expect(stillMissing({ title: 'x', company: '', location: '', salary: 'y', description: '' }, ['company', 'location', 'salary', 'bogus'])).toEqual(['company', 'location'])
+  })
+})
+
+describe('applyFill (the dialog\'s one state transition)', () => {
+  const draft = (form, suggested = {}) => ({ form: { title: '', company: '', location: '', salary: '', description: '', notes: 'private', ...form }, suggested, note: null })
+
+  it('fills the empty fields, flags exactly those, and words the note from the same list', () => {
+    const next = applyFill(draft({ title: 'Typed by me' }), FIELDS)
+    expect(next.form).toMatchObject({ title: 'Typed by me', company: 'Acme', location: 'Niš, RS', salary: '3000 monthly EUR', description: 'Own the roadmap.' })
+    expect(next.suggested).toEqual({ company: true, location: true, salary: true, description: true })
+    expect(next.lastFilled).toEqual(['company', 'location', 'salary', 'description'])
+    expect(next.note.text).toMatch(/Filled from the page: company, location, salary, job description/)
+    expect(next.note.text).not.toMatch(/title/)
+  })
+
+  it('keeps earlier flags, and a later fill never touches what an earlier step or the owner put there', () => {
+    const first = applyFill(draft({}), { title: 'From the page' })
+    const typed = { ...first, form: { ...first.form, company: 'Typed meanwhile' } }
+    const second = applyFill(typed, { title: 'From the AI', company: 'From the AI', location: 'Nis' }, { source: 'ai', wanted: ['company', 'location', 'salary'] })
+    expect(second.form).toMatchObject({ title: 'From the page', company: 'Typed meanwhile', location: 'Nis' })
+    expect(second.suggested).toEqual({ title: true, location: true })
+    expect(second.note.text).toMatch(/The AI found: location/)
+    expect(second.note.text).toMatch(/Not stated in the text, left empty: company, salary/)
+  })
+
+  it('says so when the page had nothing for the empty fields, and flags nothing', () => {
+    const next = applyFill(draft({ title: 'A', company: 'B', location: 'C', salary: 'D', description: 'E' }), FIELDS)
+    expect(next.suggested).toEqual({})
+    expect(next.note.text).toMatch(/nothing new/)
+    expect(applyFill(draft({}), {}, { source: 'ai', wanted: ['company'] }).note.text).toMatch(/found nothing/)
+  })
+
+  it('never touches fields it does not own (notes, links, source URL, job URL) and does not mutate its input', () => {
+    const before = draft({ jobUrl: 'https://a.example/1', sourceUrl: 'https://s.example', extraLinks: [{ url: 'x' }] })
+    const snapshot = JSON.stringify(before)
+    const next = applyFill(before, { ...FIELDS, notes: 'x', jobUrl: 'https://evil.example', sourceUrl: 'https://evil.example', extraLinks: [] })
+    expect(next.form).toMatchObject({ notes: 'private', jobUrl: 'https://a.example/1', sourceUrl: 'https://s.example', extraLinks: [{ url: 'x' }] })
+    expect(JSON.stringify(before)).toBe(snapshot)
+  })
+
+  it('drops a flag when the owner edits the field', () => {
+    const filled = applyFill(draft({}), FIELDS)
+    const edited = clearSuggested({ ...filled, form: { ...filled.form, company: 'Mine' } }, 'company')
+    expect(edited.suggested).toEqual({ company: false, location: true, salary: true, description: true, title: true })
+    expect(clearSuggested(edited, 'notes')).toBe(edited)
   })
 })
 

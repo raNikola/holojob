@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { Loader2, Plus, Trash2, X } from 'lucide-react'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
@@ -7,10 +7,8 @@ import Textarea from '../ui/Textarea'
 import { validateManualJob } from '../../modules/jobs/manualJob'
 import { addManualJob } from '../../modules/jobs/manualScoring'
 import { jobHash } from '../../modules/jobs/jobRoute'
-import { applySuggestions, fetchAdFields, previewAdAi, runAdAi, stillMissing } from '../../modules/jobs/adFill'
+import { LABELS, applyFill, clearSuggested, fetchAdFields, previewAdAi, runAdAi, stillMissing } from '../../modules/jobs/adFill'
 import { normalizeJobUrl } from '../../modules/jobs/manualJob'
-
-const LABELS = { title: 'Title', company: 'Company', location: 'Location', salary: 'Salary', description: 'Job description' }
 
 /** Marks a value the page proposed; it goes away when the owner edits the field. */
 const SuggestedTag = () => (
@@ -27,21 +25,21 @@ const EMPTY = {
  * browser's job record and are never part of any request.
  */
 export default function AddJobDialog({ onClose, onSaved }) {
-  const [form, setForm] = useState(EMPTY)
+  // The form, the "suggested" marks and the note change together, in one transition (applyFill), so they cannot disagree.
+  const [draft, setDraft] = useState({ form: EMPTY, suggested: {}, note: null })
+  const { form, suggested, note: adNote } = draft
+  const setForm = (update) => setDraft((prev) => ({ ...prev, form: typeof update === 'function' ? update(prev.form) : update }))
+  const setNote = (note) => setDraft((prev) => ({ ...prev, note }))
   const [errors, setErrors] = useState({})
   const [duplicate, setDuplicate] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [suggested, setSuggested] = useState({})
   const [adBusy, setAdBusy] = useState(false)
-  const [adNote, setAdNote] = useState(null)
-  const filledRef = useRef([])
   const [adPage, setAdPage] = useState(null) // { token, missing } of the page last read
   const [aiPanel, setAiPanel] = useState(null) // { loading } | { preview } | { error } | { preview, sending }
 
-  const edited = (field) => setSuggested((prev) => (prev[field] ? { ...prev, [field]: false } : prev))
   const set = (field) => (event) => {
-    setForm((prev) => ({ ...prev, [field]: event.target.value }))
-    edited(field)
+    const { value } = event.target
+    setDraft((prev) => clearSuggested({ ...prev, form: { ...prev.form, [field]: value } }, field))
     // A different address is a different page: what was read from the old one is no longer offered to the AI step.
     if (field === 'jobUrl') {
       setAdPage(null)
@@ -53,28 +51,16 @@ export default function AddJobDialog({ onClose, onSaved }) {
   const fillFromAd = async () => {
     if (adBusy) return
     setAdBusy(true)
-    setAdNote(null)
+    setNote(null)
     setAiPanel(null)
     const result = await fetchAdFields(form.jobUrl)
     if (!result.ok) {
       setAdPage(null)
-      setAdNote({ kind: 'error', text: result.message })
+      setNote({ kind: 'error', text: result.message })
     } else {
       setAdPage({ token: result.token, missing: result.missing })
-      // Applied to the form as it is now: whatever was typed while the page loaded stays.
-      setForm((prev) => {
-        const next = applySuggestions(prev, result.fields)
-        filledRef.current = next.filled
-        return next.form
-      })
-      const filled = filledRef.current
-      setSuggested((prev) => ({ ...prev, ...Object.fromEntries(filled.map((name) => [name, true])) }))
-      setAdNote({
-        kind: 'info',
-        text: filled.length
-          ? `Filled from the page: ${filled.map((name) => LABELS[name].toLowerCase()).join(', ')}. These are suggestions: edit them or leave them, nothing is saved until you click Save.`
-          : 'The page had nothing new for the empty fields.',
-      })
+      // Applied to the form as it is when the answer arrives: whatever was typed while the page loaded stays.
+      setDraft((prev) => applyFill(prev, result.fields, { source: 'page' }))
     }
     setAdBusy(false)
   }
@@ -96,18 +82,7 @@ export default function AddJobDialog({ onClose, onSaved }) {
       setAiPanel({ preview, error: result.message })
       return
     }
-    setForm((prev) => {
-      const next = applySuggestions(prev, result.fields)
-      filledRef.current = next.filled
-      return next.form
-    })
-    const filled = filledRef.current
-    setSuggested((prev) => ({ ...prev, ...Object.fromEntries(filled.map((name) => [name, true])) }))
-    const notFound = preview.want.filter((name) => !filled.includes(name))
-    setAdNote({
-      kind: 'info',
-      text: `${filled.length ? `The AI found: ${filled.map((name) => LABELS[name].toLowerCase()).join(', ')} (suggested, edit or keep). ` : 'The AI found nothing the page states. '}${notFound.length ? `Not stated in the text, left empty: ${notFound.map((name) => LABELS[name].toLowerCase()).join(', ')}.` : ''}`.trim(),
-    })
+    setDraft((prev) => applyFill(prev, result.fields, { source: 'ai', wanted: preview.want }))
     setAiPanel(null)
   }
   const setLink = (index, field, value) => setForm((prev) => ({
