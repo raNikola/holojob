@@ -76,7 +76,7 @@ describe('active filter chips', () => {
   })
 
   it('counts only the filters inside More filters', () => {
-    const chips = activeFilterChips({ site: ['a'], provider: ['x'], matchLabel: 'Good', hideNeedsVisa: true, minSalary: 2500 })
+    const chips = activeFilterChips({ site: ['a'], provider: ['x'], matchLabel: 'Good', hideNeedsVisa: true, salaryFrom: 2500, salaryTo: '' })
     expect(moreFiltersCount(chips)).toBe(4)
   })
 
@@ -90,7 +90,7 @@ describe('active filter chips', () => {
 
 describe('filter tooltips', () => {
   it('every filter on the panel has a text', () => {
-    for (const key of ['searchText', 'location', 'site', 'status', 'priority', 'minScore', 'remoteOnly', 'provider', 'matchLabel', 'minSalary', 'desiredSalaryMin', 'desiredSalaryMax', 'hideNeedsVisa']) {
+    for (const key of ['searchText', 'location', 'site', 'status', 'priority', 'minScore', 'remoteOnly', 'provider', 'matchLabel', 'salary', 'hideNeedsVisa']) {
       expect(FILTER_HELP[key], key).toBeTruthy()
     }
   })
