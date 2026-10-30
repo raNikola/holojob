@@ -45,7 +45,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
   const chips = activeFilterChips(filters)
   const salary = salaryRangeOf(filters)
   // Chips of filters that are not rendered (score filters without scores) are not counted in the toggle.
-  const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider', 'hideClosed'].includes(c.key)))
+  const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider', 'hideNoLongerListed'].includes(c.key)))
   const priorityOptions = useMemo(
     () => countByValue(jobs, 'priority', SHOWN_PRIORITIES).map(({ value, count }) => ({ value, label: `${value} (${count})` })),
     [jobs],
@@ -199,10 +199,10 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
               />
             )}
             <Checkbox
-              label="Hide closed jobs"
-              help={tip('hideClosed', 'Hide closed jobs')}
-              checked={Boolean(filters.hideClosed)}
-              onChange={(v) => onChange({ hideClosed: v })}
+              label="Hide jobs no longer listed"
+              help={tip('hideNoLongerListed', 'Hide jobs no longer listed')}
+              checked={Boolean(filters.hideNoLongerListed)}
+              onChange={(v) => onChange({ hideNoLongerListed: v })}
             />
           </div>
         </div>

@@ -3,7 +3,7 @@ import {
   CLEAR_ALL_FILTERS,
   activeFilterChips,
   countByValue,
-  isConfirmedClosed,
+  isNoLongerListed,
   filterJobs,
   moreFiltersCount,
   normalizeMultiFilter,
@@ -91,33 +91,33 @@ describe('active filter chips', () => {
 
 describe('filter tooltips', () => {
   it('every filter on the panel has a text', () => {
-    for (const key of ['searchText', 'location', 'site', 'status', 'priority', 'minScore', 'remoteOnly', 'provider', 'matchLabel', 'salary', 'hideNeedsVisa', 'hideClosed']) {
+    for (const key of ['searchText', 'location', 'site', 'status', 'priority', 'minScore', 'remoteOnly', 'provider', 'matchLabel', 'salary', 'hideNeedsVisa', 'hideNoLongerListed']) {
       expect(FILTER_HELP[key], key).toBeTruthy()
     }
   })
 })
 
-describe('Hide closed jobs', () => {
+describe('Hide jobs no longer listed', () => {
   const list = [{ jobId: 'a' }, { jobId: 'b', isClosed: true }, { jobId: 'c', isClosed: false }]
 
   it('is off by default and when unset', () => {
     expect(filterJobs(list, {})).toHaveLength(3)
-    expect(filterJobs(list, { hideClosed: false })).toHaveLength(3)
+    expect(filterJobs(list, { hideNoLongerListed: false })).toHaveLength(3)
   })
 
-  it('drops jobs that are no longer listed when on', () => {
-    expect(ids(filterJobs(list, { hideClosed: true }))).toEqual(['a', 'c'])
+  it('drops jobs that disappeared from the source when on', () => {
+    expect(ids(filterJobs(list, { hideNoLongerListed: true }))).toEqual(['a', 'c'])
   })
 
   it('has a chip that is counted in More filters, and Clear all turns it off', () => {
-    const chips = activeFilterChips({ hideClosed: true })
-    expect(chips).toEqual([{ key: 'hideClosed', label: 'Hiding closed jobs', patch: { hideClosed: false } }])
+    const chips = activeFilterChips({ hideNoLongerListed: true })
+    expect(chips).toEqual([{ key: 'hideNoLongerListed', label: 'Hiding jobs no longer listed', patch: { hideNoLongerListed: false } }])
     expect(moreFiltersCount(chips)).toBe(1)
-    expect(CLEAR_ALL_FILTERS.hideClosed).toBe(false)
+    expect(CLEAR_ALL_FILTERS.hideNoLongerListed).toBe(false)
   })
 })
 
-describe('Hide closed jobs is independent of eligibility gates', () => {
+describe('Hide jobs no longer listed is independent of eligibility gates', () => {
   const list = [
     { jobId: 'open' },
     { jobId: 'unknown', isClosed: undefined },
@@ -129,14 +129,14 @@ describe('Hide closed jobs is independent of eligibility gates', () => {
     { jobId: 'closed-visa', isClosed: true, workAuthorization: { status: 'needs_visa_silent' } },
   ]
 
-  it('removes only jobs confirmed closed', () => {
-    expect(ids(filterJobs(list, { hideClosed: true }))).toEqual(['open', 'unknown', 'null', 'outside', 'visa', 'refused'])
-    expect(isConfirmedClosed({ isClosed: 'yes' })).toBe(false)
-    expect(isConfirmedClosed(undefined)).toBe(false)
+  it('removes only jobs that disappeared from the source', () => {
+    expect(ids(filterJobs(list, { hideNoLongerListed: true }))).toEqual(['open', 'unknown', 'null', 'outside', 'visa', 'refused'])
+    expect(isNoLongerListed({ isClosed: 'yes' })).toBe(false)
+    expect(isNoLongerListed(undefined)).toBe(false)
   })
 
   it('leaves jobs outside your places or needing a visa to their own filter', () => {
-    expect(ids(filterJobs(list, { hideClosed: true, hideNeedsVisa: true }))).toEqual(['open', 'unknown', 'null', 'outside'])
+    expect(ids(filterJobs(list, { hideNoLongerListed: true, hideNeedsVisa: true }))).toEqual(['open', 'unknown', 'null', 'outside'])
     expect(ids(filterJobs(list, { hideNeedsVisa: true }))).toEqual(['open', 'unknown', 'null', 'closed', 'outside'])
   })
 })

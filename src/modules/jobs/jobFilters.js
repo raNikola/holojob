@@ -14,11 +14,11 @@ export function normalizeMultiFilter(value) {
 export const normalizePriorityFilter = normalizeMultiFilter
 
 /**
- * A job discovery has confirmed closed: it was seen before and is no longer listed (`isClosed`, set by
- * python/job_scoring/job_history.py). Nothing else counts, so a job with no such field stays; the match
- * score, location and work-authorization status play no part.
+ * A job that was seen in an earlier search and has since disappeared from its source (`isClosed`, set by
+ * python/job_scoring/job_history.py). That is not proof the position is closed. Nothing else counts, so a
+ * job with no such field stays; the match score, location and work-authorization status play no part.
  */
-export function isConfirmedClosed(job) {
+export function isNoLongerListed(job) {
   return job?.isClosed === true
 }
 
@@ -36,7 +36,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     provider = [],
     remoteOnly = false,
     hideNeedsVisa = false,
-    hideClosed = false,
+    hideNoLongerListed = false,
     status = '',
     matchLabel = '',
     priority = [],
@@ -62,7 +62,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     }
     if (!matchesSalary(job.salaryMonthlyEur, salaryRange, salaryIncludeUnknown !== false)) return false
     if (remoteOnly && !job.isRemote) return false
-    if (hideClosed && isConfirmedClosed(job)) return false
+    if (hideNoLongerListed && isNoLongerListed(job)) return false
     if (hideNeedsVisa && NEEDS_VISA_STATUSES.has(job.workAuthorization?.status)) return false
     if (sites.size && !sites.has((job.site || '').toLowerCase())) return false
     if (providers.size && !providers.has(getJobProvider(job).toLowerCase())) return false
@@ -133,7 +133,7 @@ export function activeFilterChips(filters = {}) {
     const hidesUnknown = filters.salaryIncludeUnknown === false ? ', jobs without salary hidden' : ''
     add('salary', `Salary: ${describeRange(from, to)}${hidesUnknown}`, SALARY_CLEARED)
   }
-  if (filters.hideClosed) add('hideClosed', 'Hiding closed jobs', { hideClosed: false })
+  if (filters.hideNoLongerListed) add('hideNoLongerListed', 'Hiding jobs no longer listed', { hideNoLongerListed: false })
   if (filters.hideNeedsVisa) add('hideNeedsVisa', 'Hiding jobs that need a visa', { hideNeedsVisa: false })
   return chips
 }
@@ -153,7 +153,7 @@ export const CLEAR_ALL_FILTERS = {
   provider: [],
   remoteOnly: false,
   hideNeedsVisa: false,
-  hideClosed: false,
+  hideNoLongerListed: false,
   status: '',
   matchLabel: '',
   priority: [],
@@ -163,7 +163,7 @@ export const CLEAR_ALL_FILTERS = {
 }
 
 /** Filters inside "More filters" that are active, so the toggle can show a count. */
-export const MORE_FILTER_KEYS = ['provider', 'matchLabel', 'salary', 'hideNeedsVisa', 'hideClosed']
+export const MORE_FILTER_KEYS = ['provider', 'matchLabel', 'salary', 'hideNeedsVisa', 'hideNoLongerListed']
 export function moreFiltersCount(chips) {
   return chips.filter((c) => MORE_FILTER_KEYS.includes(c.key)).length
 }
