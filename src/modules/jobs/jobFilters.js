@@ -1,4 +1,5 @@
 import { NEEDS_VISA_STATUSES } from './workAuthorization.js'
+import { isActionable } from './jobHistory.js'
 import { describeRange, matchesSalary, salaryRangeOf } from './salaryFilter.js'
 
 export function getJobProvider(job) {
@@ -27,6 +28,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     provider = [],
     remoteOnly = false,
     hideNeedsVisa = false,
+    hideClosed = false,
     status = '',
     matchLabel = '',
     priority = [],
@@ -52,6 +54,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     }
     if (!matchesSalary(job.salaryMonthlyEur, salaryRange, salaryIncludeUnknown !== false)) return false
     if (remoteOnly && !job.isRemote) return false
+    if (hideClosed && !isActionable(job)) return false
     if (hideNeedsVisa && NEEDS_VISA_STATUSES.has(job.workAuthorization?.status)) return false
     if (sites.size && !sites.has((job.site || '').toLowerCase())) return false
     if (providers.size && !providers.has(getJobProvider(job).toLowerCase())) return false
@@ -122,6 +125,7 @@ export function activeFilterChips(filters = {}) {
     const hidesUnknown = filters.salaryIncludeUnknown === false ? ', jobs without salary hidden' : ''
     add('salary', `Salary: ${describeRange(from, to)}${hidesUnknown}`, SALARY_CLEARED)
   }
+  if (filters.hideClosed) add('hideClosed', 'Hiding closed jobs', { hideClosed: false })
   if (filters.hideNeedsVisa) add('hideNeedsVisa', 'Hiding jobs that need a visa', { hideNeedsVisa: false })
   return chips
 }
@@ -141,6 +145,7 @@ export const CLEAR_ALL_FILTERS = {
   provider: [],
   remoteOnly: false,
   hideNeedsVisa: false,
+  hideClosed: false,
   status: '',
   matchLabel: '',
   priority: [],
@@ -150,7 +155,7 @@ export const CLEAR_ALL_FILTERS = {
 }
 
 /** Filters inside "More filters" that are active, so the toggle can show a count. */
-export const MORE_FILTER_KEYS = ['provider', 'matchLabel', 'salary', 'hideNeedsVisa']
+export const MORE_FILTER_KEYS = ['provider', 'matchLabel', 'salary', 'hideNeedsVisa', 'hideClosed']
 export function moreFiltersCount(chips) {
   return chips.filter((c) => MORE_FILTER_KEYS.includes(c.key)).length
 }
