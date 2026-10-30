@@ -130,28 +130,6 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
         <p className="mt-2 text-xs text-stone-500">The application tracker has not loaded, so no job can be shown as applied.</p>
       )}
 
-      {/* Fixed place: directly under the main row, so opening the extras below never moves it. */}
-      <div className="mt-3 flex items-center justify-end gap-4 border-t border-stone-200 pt-2 text-sm dark:border-stone-800">
-        <button
-          type="button"
-          aria-expanded={moreOpen}
-          aria-controls="more-filters"
-          onClick={() => setMoreOpen((v) => !v)}
-          className="inline-flex items-center gap-1 text-stone-700 hover:text-teal-700 hover:underline dark:text-stone-300 dark:hover:text-teal-300"
-        >
-          More filters{moreCount > 0 ? ` (${moreCount})` : ''}
-          <ChevronDown className={`h-4 w-4 transition-transform ${moreOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          disabled={chips.length === 0}
-          onClick={() => onChange(CLEAR_ALL_FILTERS)}
-          className="text-stone-600 hover:text-teal-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-stone-400"
-        >
-          Clear all
-        </button>
-      </div>
-
       {moreOpen && (
         <div id="more-filters" className="mt-3 space-y-3">
           <div className="flex flex-wrap items-start gap-3">
@@ -223,11 +201,30 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
               </button>
             </span>
           ))}
-          <button type="button" onClick={() => onChange(CLEAR_ALL_FILTERS)} className="text-xs text-stone-600 underline-offset-2 hover:underline dark:text-stone-400">
-            Clear all
-          </button>
         </div>
       )}
+
+      {/* Always the last row: the extras open above it and the chips sit directly above it. */}
+      <div className="mt-3 flex items-center justify-end gap-4 border-t border-stone-200 pt-2 text-sm dark:border-stone-800">
+        <button
+          type="button"
+          aria-expanded={moreOpen}
+          aria-controls="more-filters"
+          onClick={() => setMoreOpen((v) => !v)}
+          className="inline-flex items-center gap-1 text-stone-700 hover:text-teal-700 hover:underline dark:text-stone-300 dark:hover:text-teal-300"
+        >
+          More filters{moreCount > 0 ? ` (${moreCount})` : ''}
+          <ChevronDown className={`h-4 w-4 transition-transform ${moreOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          disabled={chips.length === 0}
+          onClick={() => onChange(CLEAR_ALL_FILTERS)}
+          className="text-stone-600 hover:text-teal-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-stone-400"
+        >
+          Clear all
+        </button>
+      </div>
     </Card>
   )
 }
