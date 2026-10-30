@@ -1,5 +1,4 @@
 import { NEEDS_VISA_STATUSES } from './workAuthorization.js'
-import { isActionable } from './jobHistory.js'
 import { describeRange, matchesSalary, salaryRangeOf } from './salaryFilter.js'
 
 export function getJobProvider(job) {
@@ -13,6 +12,15 @@ export function normalizeMultiFilter(value) {
 }
 
 export const normalizePriorityFilter = normalizeMultiFilter
+
+/**
+ * A job discovery has confirmed closed: it was seen before and is no longer listed (`isClosed`, set by
+ * python/job_scoring/job_history.py). Nothing else counts, so a job with no such field stays; the match
+ * score, location and work-authorization status play no part.
+ */
+export function isConfirmedClosed(job) {
+  return job?.isClosed === true
+}
 
 const lowerSet = (values) => new Set(values.map((v) => String(v).toLowerCase()))
 
@@ -54,7 +62,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     }
     if (!matchesSalary(job.salaryMonthlyEur, salaryRange, salaryIncludeUnknown !== false)) return false
     if (remoteOnly && !job.isRemote) return false
-    if (hideClosed && !isActionable(job)) return false
+    if (hideClosed && isConfirmedClosed(job)) return false
     if (hideNeedsVisa && NEEDS_VISA_STATUSES.has(job.workAuthorization?.status)) return false
     if (sites.size && !sites.has((job.site || '').toLowerCase())) return false
     if (providers.size && !providers.has(getJobProvider(job).toLowerCase())) return false
