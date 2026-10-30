@@ -1,11 +1,10 @@
 // A job the owner types in by hand. Pure helpers: validation, URL normalising, the record to store.
-// Nothing here talks to the server, and Notes / extra links are owner-only (they stay in the browser's job record).
-
-export const MANUAL_SOURCES = ['LinkedIn', 'Company site', 'Referral', 'Other']
+// Nothing here talks to the server, and Notes / extra links / Source URL are owner-only (they stay in the browser's job record).
 
 /**
  * The only fields of a manual job that go to the server's scoring (python/job_scoring/manual_jobs.py SCORING_FIELDS, kept
- * in step by a test). Notes and extra links are not among them.
+ * in step by a test). Notes, extra links and the Source URL are not among them. `sourceChoice` is the old Source select, kept
+ * readable on jobs that have it.
  */
 export const SCORING_FIELDS = [
   'jobId', 'title', 'company', 'description', 'jobUrl', 'location', 'salary', 'site', 'provider',
@@ -18,7 +17,7 @@ export function scoringPayload(job) {
 }
 
 /** Fields a re-import of the scored-jobs file must carry over from the stored record. */
-export const MANUAL_FIELDS = ['manualEntry', 'sourceChoice', 'notes', 'extraLinks', 'createdAt']
+export const MANUAL_FIELDS = ['manualEntry', 'sourceChoice', 'sourceUrl', 'notes', 'extraLinks', 'createdAt']
 
 /** `new` is shown as "Unreviewed"; any other status keeps its stored wording. */
 export function jobStatusLabel(status) {
@@ -83,9 +82,14 @@ export function validateManualJob(input) {
   const errors = {}
   if (!String(input?.title ?? '').trim()) errors.title = 'Enter the job title.'
   if (!String(input?.company ?? '').trim()) errors.company = 'Enter the company.'
-  if (!String(input?.description ?? '').trim()) errors.description = 'Paste the job description.'
-  if (String(input?.jobUrl ?? '').trim() && !normalizeJobUrl(input.jobUrl)) {
-    errors.jobUrl = 'Enter a full link starting with http:// or https://.'
+  const hasUrl = Boolean(String(input?.jobUrl ?? '').trim())
+  if (!hasUrl && !String(input?.description ?? '').trim()) {
+    errors.jobUrl = 'Enter a Job URL or paste the job description.'
+    errors.description = 'Paste the job description, or enter a Job URL.'
+  }
+  if (hasUrl && !normalizeJobUrl(input.jobUrl)) errors.jobUrl = 'Enter a full link starting with http:// or https://.'
+  if (String(input?.sourceUrl ?? '').trim() && !normalizeJobUrl(input.sourceUrl)) {
+    errors.sourceUrl = 'Enter a full link starting with http:// or https://.'
   }
   const linkErrors = {}
   cleanExtraLinks(input?.extraLinks).forEach((row, index) => {
@@ -114,13 +118,12 @@ export function buildManualJob(input, { now = new Date(), id = `manual-${globalT
     jobId: id,
     title: input.title.trim(),
     company: input.company.trim(),
-    description: input.description.trim(),
+    description: String(input.description ?? '').trim(),
     location: String(input.location ?? '').trim(),
     jobUrl,
     site: hostOf(jobUrl),
     provider: 'manual',
     manualEntry: true,
-    sourceChoice: MANUAL_SOURCES.includes(input.sourceChoice) ? input.sourceChoice : 'Other',
     status: 'new',
     createdAt: stamp,
     firstSeen: stamp,
@@ -129,6 +132,8 @@ export function buildManualJob(input, { now = new Date(), id = `manual-${globalT
   }
   const salary = String(input.salary ?? '').trim()
   if (salary) job.salary = salary
+  const sourceUrl = String(input.sourceUrl ?? '').trim()
+  if (sourceUrl) job.sourceUrl = sourceUrl
   const notes = String(input.notes ?? '').trim()
   if (notes) job.notes = notes
   const extraLinks = cleanExtraLinks(input.extraLinks)

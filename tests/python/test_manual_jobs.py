@@ -29,7 +29,7 @@ LINK = "https://canary-4417.example/private"
 
 def _manual(job_id=MANUAL_ID, url="https://acme.example/jobs/9", **extra):
     return {"jobId": job_id, "title": "Senior Product Manager", "company": "Acme", "description": DESCRIPTION,
-            "jobUrl": url, "location": "", "salary": "", "sourceChoice": "Referral", "status": "new", **extra}
+            "jobUrl": url, "location": "", "salary": "", "status": "new", **extra}
 
 
 def _discovered(job_id, url, title="Backend Engineer"):
@@ -237,6 +237,32 @@ def test_an_error_in_scoring_reports_the_class_not_the_job_text(env, monkeypatch
     code, out, err = env.add(_manual(), monkeypatch, capsys)
     assert code == 5 and json.loads(out)["detail"] == "RuntimeError"
     assert "Keep   this" not in out + err
+
+
+def test_a_description_is_required_to_store_and_score(env, monkeypatch, capsys):
+    code, out, _ = env.add(_manual(description=""), monkeypatch, capsys)
+    assert code == 2 and json.loads(out)["field"] == "description"
+    assert not env.manual.exists() and not env.scored.exists()
+
+
+def test_check_only_writes_nothing_and_names_a_clash_even_without_a_description(env, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(_manual(description="", url="https://jobs.example/1/?utm_source=x"))))
+    code = importer.main(["--job-json", "-", "--check-only", *env.paths()])
+    out = capsys.readouterr().out
+    assert code == 3 and json.loads(out)["existing"]["jobId"] == "d-1"
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(_manual(description="", url="https://fresh.example/1"))))
+    assert importer.main(["--job-json", "-", "--check-only", *env.paths()]) == 0
+    capsys.readouterr()
+    assert not env.manual.exists() and not env.scored.exists()
+
+
+def test_a_source_url_is_dropped_and_no_source_is_invented(env, monkeypatch, capsys):
+    source = "https://canary-4417.linkedin.example/posts/secret"
+    code, out, err = env.add(_manual(sourceUrl=source), monkeypatch, capsys)
+    assert code == 0
+    blob = out + err + "".join(p.read_text() for p in env.dir.iterdir() if p.is_file())
+    assert "canary-4417" not in blob
+    assert "sourceChoice" not in env.rows()[MANUAL_ID]
 
 
 def test_store_only_saves_the_job_for_the_next_run_and_scores_nothing(env, monkeypatch, capsys):

@@ -4,13 +4,12 @@ import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import Input from '../ui/Input'
 import Textarea from '../ui/Textarea'
-import SelectField from '../ui/SelectField'
-import { MANUAL_SOURCES, validateManualJob } from '../../modules/jobs/manualJob'
+import { validateManualJob } from '../../modules/jobs/manualJob'
 import { addManualJob } from '../../modules/jobs/manualScoring'
 import { jobHash } from '../../modules/jobs/jobRoute'
 
 const EMPTY = {
-  title: '', company: '', description: '', jobUrl: '', sourceChoice: 'Other', location: '', salary: '', notes: '', extraLinks: [],
+  title: '', company: '', description: '', jobUrl: '', sourceUrl: '', location: '', salary: '', notes: '', extraLinks: [],
 }
 
 /**
@@ -67,7 +66,7 @@ export default function AddJobDialog({ onClose, onSaved }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id="add-job-title" className="text-lg font-semibold text-stone-900 dark:text-stone-50">Add job</h2>
-            <p className="text-xs text-stone-500">Scored on this server with the same local rules as every other job. Nothing is sent to an AI provider, and Notes and extra links never leave this browser.</p>
+            <p className="text-xs text-stone-500">Scored on this server with the same local rules as every other job. Nothing is sent to an AI provider, and Notes, extra links and the Source URL never leave this browser.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800">
             <X className="h-4 w-4" />
@@ -84,10 +83,11 @@ export default function AddJobDialog({ onClose, onSaved }) {
           <Input id="add-job-title-input" label="Title *" value={form.title} onChange={set('title')} error={errors.title} aria-required="true" aria-invalid={Boolean(errors.title)} autoFocus />
           <Input id="add-job-company" label="Company *" value={form.company} onChange={set('company')} error={errors.company} aria-required="true" aria-invalid={Boolean(errors.company)} />
         </div>
-        <Textarea id="add-job-description" label="Job description *" rows={8} value={form.description} onChange={set('description')} error={errors.description} aria-required="true" aria-invalid={Boolean(errors.description)} placeholder="Paste the text of the ad" />
+        <Textarea id="add-job-description" label="Job description" rows={8} value={form.description} onChange={set('description')} error={errors.description} aria-invalid={Boolean(errors.description)} placeholder="Paste the text of the ad. Without it the job is saved but not scored." />
+        <p className="-mt-2 text-xs text-stone-500">Title and Company are required, and either a Job URL or the description.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Input id="add-job-url" label="Job URL" value={form.jobUrl} onChange={set('jobUrl')} error={errors.jobUrl} aria-invalid={Boolean(errors.jobUrl)} placeholder="https://" inputMode="url" />
-          <SelectField id="add-job-source" label="Source" value={form.sourceChoice} onChange={(value) => setForm((prev) => ({ ...prev, sourceChoice: value }))} options={MANUAL_SOURCES} placeholder="Other" />
+          <Input id="add-job-source-url" label="Source URL" value={form.sourceUrl} onChange={set('sourceUrl')} error={errors.sourceUrl} aria-invalid={Boolean(errors.sourceUrl)} placeholder="Where you found it, e.g. a LinkedIn post (optional)" inputMode="url" />
           <Input id="add-job-location" label="Location" value={form.location} onChange={set('location')} placeholder="Left empty stays unknown" />
           <Input id="add-job-salary" label="Salary" value={form.salary} onChange={set('salary')} placeholder="As in the ad, e.g. €2,500–3,000/month" />
         </div>

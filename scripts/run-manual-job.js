@@ -19,9 +19,9 @@ const VENV_PYTHON = process.platform === 'win32' ? path.join(ROOT, '.venv/Script
 const IMPORT_SCRIPT = path.join(ROOT, 'python/job_import/import_job_url.py')
 const MAX_JOBS = 200
 
-/** The argv for a run; the jobs are not in it. `store` only stores them, `score` also scores. */
+/** The argv for a run; the jobs are not in it. `store` only stores them, `check` only looks for a clash and writes nothing, `score` also scores. */
 export function manualJobArgs(mode) {
-  return [IMPORT_SCRIPT, '--job-json', '-', ...(mode === 'store' ? ['--store-only'] : [])]
+  return [IMPORT_SCRIPT, '--job-json', '-', ...(mode === 'store' ? ['--store-only'] : mode === 'check' ? ['--check-only'] : [])]
 }
 
 const REPLY = {
@@ -33,7 +33,7 @@ const REPLY = {
 
 /**
  * @param {object[]} jobs stored manual jobs; reduced to the scoring fields here
- * @param {{ mode?: 'score' | 'store', spawnFn?: typeof spawn, python?: string }} [options]
+ * @param {{ mode?: 'score' | 'store' | 'check', spawnFn?: typeof spawn, python?: string }} [options]
  * @returns {Promise<{ status: number, body: object }>}
  */
 export function runManualJobs(jobs, { mode = 'score', spawnFn = spawn, python = VENV_PYTHON } = {}) {
@@ -57,7 +57,7 @@ export function runManualJobs(jobs, { mode = 'score', spawnFn = spawn, python = 
       } catch {
         // an unreadable answer is a failure below
       }
-      if (code === 0 && result.ok) resolve({ status: 200, body: { ok: true, jobs: result.jobs ?? [], skipped: result.skipped ?? [], stored: result.stored ?? [] } })
+      if (code === 0 && result.ok) resolve({ status: 200, body: { ok: true, jobs: result.jobs ?? [], skipped: result.skipped ?? [], stored: result.stored ?? [], checked: result.checked ?? 0 } })
       else resolve((REPLY[code] ?? REPLY[5])(result))
     })
     child.stdin.end(payload)

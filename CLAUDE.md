@@ -157,9 +157,10 @@ row wins over a discovered row with the same normalised URL, and `--min-score` n
 Duplicates: the add-time check refuses the same identity URL (`identityJobUrl` / `identity_url`: host lowercased, hash and trailing slash stripped, tracking parameters removed, `?gh_jid=`-style parameters kept; fixture `tests/fixtures/url-normalisation.json` run by
 both; the query-stripping `normalizeJobUrl` / `normalize_url` remain only as its base) against this browser's list, the discovered file, the scored file and the manual file, and shows the clash; a different id is a clash, the same id is a retry. The
 silent paths (`with_manual`, `importJobsFromFile`) use the same key (boards that tell postings apart by query string must not collapse to one job); `scored_jobs.json` `meta.manualJobs` counts the rows a manual job replaced.
-`notes` and `extraLinks` are owner-only: they stay in the browser's job record (carried over by `importJobsFromFile`) and are in no payload to Python, file, log line or
+The description is optional (Title and Company, plus a Job URL or a description, are required): a job without ad text is saved Unreviewed and unscored ("No description: paste the ad text to score it"), is only clash-checked on the server (`--check-only`, writes nothing), is not synced, and is scored once the text is pasted on Job Details. The old Source select is replaced by an optional `sourceUrl`.
+`notes`, `extraLinks` and `sourceUrl` are owner-only: they stay in the browser's job record (carried over by `importJobsFromFile`) and are in no payload to Python, file, log line or
 AI context (`SCORING_FIELDS` is the whitelist on both sides; `summarizeJob` is a whitelist too; `tests/js/manualScoring.test.js`, `tests/python/test_manual_jobs.py`).
-Add any new owner-only field to `MANUAL_FIELDS` and to those tests.
+Add any new owner-only field to `MANUAL_FIELDS` and to those tests (`sourceUrl` has a canary there).
 
 ## Request guard (`/api`)
 

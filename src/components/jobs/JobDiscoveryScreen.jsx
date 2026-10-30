@@ -167,7 +167,7 @@ export default function JobDiscoveryScreen() {
     if (openDetails) openJobPage(job.jobId)
     setAddNote(result.scored
       ? { text: `Added “${job.title}” and scored it.`, jobId: job.jobId, retry: false }
-      : { text: `Added “${job.title}” as Unreviewed. ${result.message}`, jobId: job.jobId, retry: true })
+      : { text: `Added “${job.title}” as Unreviewed. ${result.message}`, jobId: job.jobId, retry: !result.noDescription })
   }, [])
 
   const handleScoreNow = useCallback(async (jobId, title) => {
