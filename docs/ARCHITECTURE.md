@@ -21,12 +21,20 @@ its public JSON carries the full description). HelloWorld and Startuj were
 evaluated and rejected: HelloWorld shares Infostud's inventory and ID space,
 Startuj is entry-level only.
 
+`joberty` (Serbian and regional IT board, `python/job_discovery/providers/joberty_*.py`) is an **opt-in** source: in no
+group, run only with `--providers serbia,joberty` or the "Include Joberty" box on the Jobs screen (off by default,
+`job-dashboard-discovery-options`). It reads Joberty's undocumented public JSON API (product-management domain) with
+capped, spaced anonymous GETs (3 listing pages, 25 details, 1.5 to 2 s apart), skips ads the job-history ledger already
+holds, fails soft, and checks the requested country against the board's own place facet. Joberty's terms have not been
+reviewed (sections 7 and 8 are the ones to read); see `python/job_discovery/README.md`.
+
 The standard run is `--providers serbia` (all six providers); it is the
 default everywhere: the CLI, `npm run discover:jobs`, the API and every UI
 screen. `ats` and the other groups stay available by name.
 
 Dedup is two-pass (`dedupe_jobs.py`): by URL, then by title+company across
-every source, keeping the fuller description. LinkedIn publishes one role as
+every source, keeping the fuller description. The company in that key drops a trailing
+country ("Fivetran Serbia" is "Fivetran"), except in "... of <country>". LinkedIn publishes one role as
 several ads, one per city, and the same role reaches us from LinkedIn and from
 the company's own board.
 
