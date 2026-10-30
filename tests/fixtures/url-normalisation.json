@@ -1,0 +1,20 @@
+[
+  { "input": "HTTPS://Example.COM/jobs/1/?utm=x#top", "expected": "https://example.com/jobs/1" },
+  { "input": "https://example.com", "expected": "https://example.com" },
+  { "input": "https://example.com/", "expected": "https://example.com" },
+  { "input": "https://example.com:443/a", "expected": "https://example.com/a" },
+  { "input": "http://example.com:80/a/", "expected": "http://example.com/a" },
+  { "input": "https://example.com:8443/a", "expected": "https://example.com:8443/a" },
+  { "input": "https://user:pw@example.com/a", "expected": "https://example.com/a" },
+  { "input": "https://example.com/a%20b/", "expected": "https://example.com/a%20b" },
+  { "input": "https://example.com/a b", "expected": "https://example.com/a%20b" },
+  { "input": "https://example.com/a/../b", "expected": "https://example.com/b" },
+  { "input": "https://example.com/a/./b", "expected": "https://example.com/a/b" },
+  { "input": "https://bücher.de/x", "expected": "https://xn--bcher-kva.de/x" },
+  { "input": "   https://example.com/x//  ", "expected": "https://example.com/x" },
+  { "input": "https://example.com/p?id=1", "expected": "https://example.com/p" },
+  { "input": "ftp://example.com/x", "expected": null },
+  { "input": "example.com/x", "expected": null },
+  { "input": "javascript:alert(1)", "expected": null },
+  { "input": "", "expected": null }
+]
