@@ -5,7 +5,13 @@ import { Info } from 'lucide-react'
  * An info icon with a tooltip. Opens on hover, keyboard focus and tap; closes on Escape, blur and
  * mouse leave. It sits above the icon so it never covers the field under the label.
  */
-export default function InfoTip({ text, label = 'More about this filter' }) {
+const TONES = {
+  amber: 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300',
+  neutral: 'bg-stone-200 text-stone-600 hover:bg-stone-300 dark:bg-stone-700 dark:text-stone-300',
+}
+
+/** `glyph` replaces the info icon with a round badge of that character, in the `tone` colour (amber or neutral). */
+export default function InfoTip({ text, label = 'More about this filter', glyph = null, tone = 'neutral' }) {
   const id = useId()
   const root = useRef(null)
   const [hover, setHover] = useState(false)
@@ -36,9 +42,11 @@ export default function InfoTip({ text, label = 'More about this filter' }) {
         onClick={() => setTapped((v) => !v)}
         onFocus={() => setFocus(true)}
         onBlur={() => setFocus(false)}
-        className="rounded-full text-stone-400 hover:text-stone-600 focus:outline-none focus:ring-2 focus:ring-teal-500/40 dark:hover:text-stone-300"
+        className={glyph
+          ? `inline-flex h-4 w-4 items-center justify-center rounded-full text-[11px] font-bold leading-none focus:outline-none focus:ring-2 focus:ring-teal-500/40 ${TONES[tone] || TONES.neutral}`
+          : 'rounded-full text-stone-400 hover:text-stone-600 focus:outline-none focus:ring-2 focus:ring-teal-500/40 dark:hover:text-stone-300'}
       >
-        <Info className="h-3.5 w-3.5" aria-hidden="true" />
+        {glyph ? <span aria-hidden="true">{glyph}</span> : <Info className="h-3.5 w-3.5" aria-hidden="true" />}
       </button>
       <span
         id={id}

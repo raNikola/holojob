@@ -116,8 +116,8 @@ export function salaryMarker(filters, basicProfile) {
   return from === d.from && to === d.to ? 'profile' : 'differs'
 }
 
-/** "Taken from your profile (min 1,500, desired 2,000–2,500 EUR/month). Change it in Profile." Empty when the profile has no salary. */
-export function profileSalaryNote(basicProfile) {
+/** "min 1,500, desired 2,000–2,500 EUR/month", or '' when the profile has no salary. */
+export function profileSalaryFigures(basicProfile) {
   const min = parseAmount(basicProfile?.minSalaryEur)
   const lo = parseAmount(basicProfile?.desiredSalaryMinEur)
   const hi = parseAmount(basicProfile?.desiredSalaryMaxEur)
@@ -126,6 +126,15 @@ export function profileSalaryNote(basicProfile) {
   if (lo != null && hi != null) parts.push(`desired ${formatAmount(lo)}–${formatAmount(hi)}`)
   else if (lo != null) parts.push(`desired from ${formatAmount(lo)}`)
   else if (hi != null) parts.push(`desired up to ${formatAmount(hi)}`)
-  if (!parts.length) return ''
-  return `Taken from your profile (${parts.join(', ')} EUR/month). Change it in Profile.`
+  return parts.length ? `${parts.join(', ')} EUR/month` : ''
+}
+
+/** Tooltip of the Salary "!" marker for a `salaryMarker` value; '' when there is nothing to say. */
+export function salaryMarkerText(marker, basicProfile) {
+  const figures = profileSalaryFigures(basicProfile)
+  if (!figures) return ''
+  if (marker === 'profile') return `Taken from your profile (${figures}). Change it in Profile.`
+  if (marker === 'differs') return `Differs from your profile (${figures}).`
+  if (marker === 'cleared') return `Cleared. Your profile has ${figures}.`
+  return ''
 }

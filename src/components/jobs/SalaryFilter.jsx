@@ -9,7 +9,7 @@ import {
   describeRange,
   formatAmount,
   parseAmount,
-  profileSalaryNote,
+  salaryMarkerText,
   rangeError,
   salaryMarker,
   sanitizeAmount,
@@ -62,15 +62,13 @@ export default function SalaryFilter({ from, to, includeUnknown, filters, profil
       <div className="mb-1.5 flex items-center gap-1">
         <span id={labelId} className="text-sm font-medium text-stone-700 dark:text-stone-300">Salary (EUR/month)</span>
         <InfoTip text={FILTER_HELP.salary} label="About Salary" />
-        {marker === 'profile' && (
-          <span
-            role="img"
-            aria-label="Taken from your profile"
-            title="Taken from your profile"
-            className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-100 text-[11px] font-bold leading-none text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-          >
-            !
-          </span>
+        {marker && (
+          <InfoTip
+            glyph="!"
+            tone={marker === 'profile' ? 'amber' : 'neutral'}
+            label={marker === 'profile' ? 'Taken from your profile' : marker === 'cleared' ? 'Cleared' : 'Differs from your profile'}
+            text={salaryMarkerText(marker, profile)}
+          />
         )}
       </div>
       <div
@@ -93,7 +91,17 @@ export default function SalaryFilter({ from, to, includeUnknown, filters, profil
           </button>
         )}
       </div>
-      <p id={hintId} className={`mt-1 min-h-[1rem] text-xs ${invalid ? 'text-red-500' : 'text-stone-500'}`}>{hint}</p>
+      <p id={hintId} className={`mt-1 min-h-[1rem] text-xs ${invalid ? 'text-red-500' : 'text-stone-500'}`}>
+        {hint}
+        {(marker === 'differs' || marker === 'cleared') && !invalid && (
+          <>
+            {hint ? ' · ' : ''}
+            <button type="button" onClick={() => onChange(SALARY_RESET)} className="underline underline-offset-2 hover:text-teal-700 dark:hover:text-teal-300">
+              Reset to profile
+            </button>
+          </>
+        )}
+      </p>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         {SALARY_PRESETS.map((n) => (
           <button
@@ -115,15 +123,6 @@ export default function SalaryFilter({ from, to, includeUnknown, filters, profil
           Include jobs without salary
         </label>
       </div>
-      {marker === 'profile' && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{profileSalaryNote(profile)}</p>}
-      {(marker === 'differs' || marker === 'cleared') && (
-        <p className="mt-1 text-xs text-stone-500">
-          {marker === 'cleared' ? 'Cleared.' : 'Differs from your profile.'}{' '}
-          <button type="button" onClick={() => onChange(SALARY_RESET)} className="underline underline-offset-2 hover:text-teal-700 dark:hover:text-teal-300">
-            Reset to profile
-          </button>
-        </p>
-      )}
     </div>
   )
 }
