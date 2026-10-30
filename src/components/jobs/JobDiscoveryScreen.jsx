@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Download, Loader2, MoreHorizontal, RefreshCw } from 'lucide-react'
+import { Download, Loader2, MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
 import Button from '../ui/Button'
 import Tabs from '../ui/Tabs'
 import JobDiscoverySummary from './JobDiscoverySummary'
@@ -7,6 +7,8 @@ import PipelineHealthPanel from './PipelineHealthPanel'
 import PipelineOrchestrator from './PipelineOrchestrator'
 import JobImportPanel from './JobImportPanel'
 import JobUrlImport from './JobUrlImport'
+import AddJobDialog from './AddJobDialog'
+import { openJobPage } from '../../modules/jobs/jobRoute'
 import ApplicationDashboard from './ApplicationDashboard'
 import JobFilters from './JobFilters'
 import BulkActionsBar from './BulkActionsBar'
@@ -59,6 +61,7 @@ export default function JobDiscoveryScreen() {
   const [bulkRunning, setBulkRunning] = useState(false)
   const [rerunning, setRerunning] = useState(false)
   const [rerunMsg, setRerunMsg] = useState('')
+  const [addJobOpen, setAddJobOpen] = useState(false)
 
   useEffect(() => {
     saveJobs(state)
@@ -154,6 +157,12 @@ export default function JobDiscoveryScreen() {
     setState(next)
   }, [])
 
+  const handleJobAdded = useCallback((job, openDetails) => {
+    setAddJobOpen(false)
+    if (openDetails) openJobPage(job.jobId)
+    else setAutoLoadNote(`Added “${job.title}”. It is not scored yet.`)
+  }, [])
+
   const handleUrlImported = useCallback((payload) => {
     setState((prev) => {
       const next = importJobsFromFile(payload, prev)
@@ -247,6 +256,14 @@ export default function JobDiscoveryScreen() {
 
       {activeTab === 'jobs' && (
         <>
+          <div className="flex justify-end">
+            <Button variant="secondary" onClick={() => setAddJobOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add job
+            </Button>
+          </div>
+          {addJobOpen && <AddJobDialog onClose={() => setAddJobOpen(false)} onSaved={handleJobAdded} />}
+
           {pipelineApiAvailable && (
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 dark:border-stone-800 dark:bg-stone-900">
               <Button onClick={handleRerunDiscovery} disabled={rerunning || !pipelineApiAvailable}>

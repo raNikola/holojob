@@ -7,6 +7,7 @@
 // The shape is meant to move to the server later: a patch plus an optional `baseUpdatedAt`, and a `conflict`
 // result instead of a silent overwrite. Nothing here talks to the server.
 import { JOBS_STORAGE_KEY, loadJobs, onJobsSaved, saveJobs } from './jobStorage.js'
+import { findDuplicateByUrl } from './manualJob.js'
 
 /** Never part of a patch: the id names the record, `updatedAt` is stamped here, and tracking lives in the application store. */
 const RESERVED = ['jobId', 'updatedAt', 'applicationTracking']
@@ -129,6 +130,19 @@ export function addJobIfAbsent(job) {
   if (state.jobs.some((j) => j.jobId === job.jobId)) return false
   withPatching(() => saveJobs({ ...state, jobs: [...state.jobs, job] }))
   return true
+}
+
+/**
+ * Adds a hand-entered job to the latest stored list and touches no other record. A job whose main link matches a
+ * stored one (after `normalizeJobUrl`) is not added.
+ * @returns {{ ok: true, job: object } | { ok: false, reason: 'duplicate', existing: object }}
+ */
+export function createJob(job) {
+  const state = loadJobs()
+  const existing = findDuplicateByUrl(state.jobs, job.jobUrl) ?? state.jobs.find((j) => j.jobId === job.jobId)
+  if (existing) return { ok: false, reason: 'duplicate', existing }
+  withPatching(() => saveJobs({ ...state, jobs: [...state.jobs, job] }))
+  return { ok: true, job }
 }
 
 /**

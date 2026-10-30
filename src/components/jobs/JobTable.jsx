@@ -16,6 +16,7 @@ import { EngineShadowBadge } from './EngineShadowSection'
 import SortableTh, { useTableSort } from '../ui/SortableTh'
 import { sortRows } from '../../modules/tableSort'
 import { PRIORITIES } from '../../modules/jobs/matchScore'
+import { jobStatusLabel } from '../../modules/jobs/manualJob'
 
 const COLUMNS = {
   score: { type: 'number', value: (j) => j.matchScore },
@@ -36,7 +37,7 @@ const STATUS_VARIANT = {
 }
 
 function StatusBadge({ status }) {
-  const label = status?.replace(/_/g, ' ') || 'new'
+  const label = jobStatusLabel(status)
   return <Badge variant={STATUS_VARIANT[status] || 'default'}>{label}</Badge>
 }
 
