@@ -168,13 +168,16 @@ def upsert(jobs: list[dict], stored: list[dict]) -> list[dict]:
 
 
 def find_clash(job_id: str, url: str, *lists: list[dict]) -> dict | None:
-    """A job in any of the lists with the same normalised URL and another id, or None. The same id is a retry, not a clash."""
-    key = normalize_url(url)
+    """A job in any of the lists with the same identity URL and another id, or None. The same id is a retry, not a clash.
+
+    The identity URL, like the silent paths: ?gh_jid=-style parameters tell postings apart, tracking ones do not.
+    """
+    key = identity_url(url)
     if not key:
         return None
     for jobs in lists:
         for other in jobs or []:
-            if other.get("jobId") != job_id and normalize_url(other.get("jobUrl")) == key:
+            if other.get("jobId") != job_id and identity_url(other.get("jobUrl")) == key:
                 return {"jobId": other.get("jobId"), "title": other.get("title") or "", "company": other.get("company") or ""}
     return None
 

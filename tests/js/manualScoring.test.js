@@ -166,7 +166,7 @@ describe('addManualJob', () => {
 
   it('writes nothing when this browser already has the link (no request either)', async () => {
     const fetchFn = fetchStub(() => json(200, { ok: true, jobs: [SCORED] }))
-    const result = await addManualJob({ ...FORM, jobUrl: 'HTTPS://Jobs.Example/1/?x=1' }, { fetchFn, id: ID })
+    const result = await addManualJob({ ...FORM, jobUrl: 'HTTPS://Jobs.Example/1/?utm_source=x' }, { fetchFn, id: ID })
     expect(result).toMatchObject({ status: 'duplicate', existing: { jobId: 'd-1' } })
     expect(fetchFn).not.toHaveBeenCalled()
     expect(loadJobs().jobs).toHaveLength(1)

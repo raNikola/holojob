@@ -112,11 +112,13 @@ def test_identity_url_keeps_identifying_parameters_and_drops_tracking_ones(case)
     assert manual_jobs.identity_url(case["input"]) == case.get("identity", case["expected"])
 
 
-def test_the_add_time_check_strips_the_query_and_names_the_clash(env, monkeypatch, capsys):
-    """The visible check follows the owner's rule (query stripped) and shows the clash; it hides nothing."""
+def test_the_add_time_check_keeps_identifying_parameters_and_ignores_tracking_ones(env, monkeypatch, capsys):
     base = "https://careers.example/job"
-    env.discovered.write_text(json.dumps({"jobs": [_discovered("g-1", f"{base}?gh_jid=1")]}))
-    code, out, _ = env.add(_manual(url=f"{base}?gh_jid=2"), monkeypatch, capsys)
+    env.discovered.write_text(json.dumps({"jobs": [_discovered("g-1", f"{base}/?gh_jid=1#x")]}))
+    # a sibling posting of the same board is a different job and can be added
+    assert env.add(_manual(url=f"{base}?gh_jid=2"), monkeypatch, capsys)[0] == 0
+    # the same posting with other tracking parameters is the same job, and the clash is shown
+    code, out, _ = env.add(_manual(OTHER_ID, f"{base}?gh_jid=1&utm_source=mail&fbclid=z&gclid=y&ref=x"), monkeypatch, capsys)
     assert code == 3 and json.loads(out)["existing"]["jobId"] == "g-1"
 
 
@@ -258,7 +260,7 @@ def test_a_batch_upserts_the_valid_jobs_and_skips_the_rest(env, monkeypatch, cap
 # --- duplicates: manual after discovery, discovery after manual, URL import after manual ---------------------------
 
 def test_a_manual_job_with_a_discovered_jobs_url_is_refused_and_names_it(env, monkeypatch, capsys):
-    code, out, _ = env.add(_manual(url="HTTPS://Jobs.Example/1/?utm=x"), monkeypatch, capsys)
+    code, out, _ = env.add(_manual(url="HTTPS://Jobs.Example/1/?utm_source=x"), monkeypatch, capsys)
     assert code == 3
     assert json.loads(out)["existing"]["jobId"] == "d-1"
     assert not env.manual.exists() and not env.scored.exists()
