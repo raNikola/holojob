@@ -188,23 +188,28 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
               </>
             )}
             {/* The pair sits beside the Salary row on wide windows (top spacer = label row plus half the difference of input and checkbox heights, so they are centred on the input row); as a pair under the extras when they wrap. */}
-            <div className="flex min-w-[26rem] max-w-full flex-[1_1_auto] flex-wrap items-center justify-between gap-x-5 gap-y-2 min-[1280px]:pt-[2.3rem]">
+            <div className="flex min-w-[26rem] max-w-full flex-[1_1_auto] flex-wrap items-center gap-x-5 gap-y-2 min-[1280px]:pt-[2.3rem]">
+              {/* Wide windows: the visa box is centred in its half, the other sits at the right end; wrapped, both stay left. */}
               {showScoreFilters && (
+                <div className="flex items-center min-[1280px]:flex-1 min-[1280px]:justify-center">
+                  <Checkbox
+                    className=""
+                    label="Hide jobs that need a visa"
+                    help={tip('hideNeedsVisa', 'Hide jobs that need a visa')}
+                    checked={filters.hideNeedsVisa}
+                    onChange={(v) => onChange({ hideNeedsVisa: v })}
+                  />
+                </div>
+              )}
+              <div className="flex items-center min-[1280px]:flex-1 min-[1280px]:justify-end">
                 <Checkbox
                   className=""
-                  label="Hide jobs that need a visa"
-                  help={tip('hideNeedsVisa', 'Hide jobs that need a visa')}
-                  checked={filters.hideNeedsVisa}
-                  onChange={(v) => onChange({ hideNeedsVisa: v })}
+                  label="Hide jobs no longer listed"
+                  help={tip('hideNoLongerListed', 'Hide jobs no longer listed')}
+                  checked={Boolean(filters.hideNoLongerListed)}
+                  onChange={(v) => onChange({ hideNoLongerListed: v })}
                 />
-              )}
-              <Checkbox
-                className=""
-                label="Hide jobs no longer listed"
-                help={tip('hideNoLongerListed', 'Hide jobs no longer listed')}
-                checked={Boolean(filters.hideNoLongerListed)}
-                onChange={(v) => onChange({ hideNoLongerListed: v })}
-              />
+              </div>
             </div>
           </div>
         </div>
