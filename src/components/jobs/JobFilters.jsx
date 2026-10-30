@@ -53,8 +53,9 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
 
   return (
     <Card title="Filters" className="!p-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="flex flex-wrap items-end gap-3">
         <Input
+          className="min-w-[10rem] flex-[2_1_10rem]"
           id="filter-search"
           label="Search"
           labelExtra={tip('searchText', 'Search')}
@@ -63,6 +64,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
           placeholder="Title, company, description…"
         />
         <Input
+          className="min-w-[7rem] flex-[1.5_1_7rem]"
           id="filter-location"
           label="Location"
           labelExtra={tip('location', 'Location')}
@@ -70,34 +72,41 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
           onChange={(e) => onChange({ location: e.target.value })}
           placeholder="Filter by location"
         />
-        <MultiSelectDropdown
-          label="Source"
-          labelExtra={tip('site', 'Source')}
-          selected={normalizeMultiFilter(filters.site)}
-          onChange={(v) => onChange({ site: v })}
-          options={sites}
-          placeholder="All sources"
-        />
-        <SelectField
-          id="filter-status"
-          label="Status"
-          labelExtra={tip('status', 'Status')}
-          value={filters.status}
-          onChange={(v) => onChange({ status: v })}
-          options={statusFilterOptions(JOB_STATUSES, jobs, applicationStore)}
-          placeholder="All statuses"
-        />
+        <div className="w-32 flex-none">
+          <MultiSelectDropdown
+            label="Source"
+            labelExtra={tip('site', 'Source')}
+            selected={normalizeMultiFilter(filters.site)}
+            onChange={(v) => onChange({ site: v })}
+            options={sites}
+            placeholder="All sources"
+          />
+        </div>
+        <div className="w-32 flex-none">
+          <SelectField
+            id="filter-status"
+            label="Status"
+            labelExtra={tip('status', 'Status')}
+            value={filters.status}
+            onChange={(v) => onChange({ status: v })}
+            options={statusFilterOptions(JOB_STATUSES, jobs, applicationStore)}
+            placeholder="All statuses"
+          />
+        </div>
         {showScoreFilters && (
           <>
-            <MultiSelectDropdown
-              label="Priority"
-              labelExtra={tip('priority', 'Priority')}
-              selected={normalizeMultiFilter(filters.priority)}
-              onChange={(v) => onChange({ priority: v })}
-              options={priorityOptions}
-              placeholder="All priorities"
-            />
+            <div className="w-32 flex-none">
+              <MultiSelectDropdown
+                label="Priority"
+                labelExtra={tip('priority', 'Priority')}
+                selected={normalizeMultiFilter(filters.priority)}
+                onChange={(v) => onChange({ priority: v })}
+                options={priorityOptions}
+                placeholder="All priorities"
+              />
+            </div>
             <Input
+              className="w-[5.5rem] flex-none"
               id="filter-min-score"
               label="Min score"
               labelExtra={tip('minScore', 'Min score')}
