@@ -35,12 +35,13 @@ LOGIN_PATH = re.compile(r"/(?:authwall|login|log-in|signin|sign-in|uas/login|che
 
 
 class FetchRefused(Exception):
-    """The page was not fetched. `code` names why; `message` is safe to show."""
+    """The page was not fetched. `code` names why; `message` is safe to show; `status` is the HTTP status when there was one."""
 
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, status: int | None = None):
         super().__init__(code)
         self.code = code
         self.message = message
+        self.status = status
 
 
 @dataclass
@@ -49,7 +50,7 @@ class Page:
     html: str
 
 
-def _refuse(code: str) -> FetchRefused:
+def _refuse(code: str, status: int | None = None) -> FetchRefused:
     messages = {
         "bad_url": "Enter a full web address starting with http:// or https://.",
         "blocked_host": "This address is not allowed: private, local and internal hosts are refused.",
@@ -58,10 +59,11 @@ def _refuse(code: str) -> FetchRefused:
         "too_large": "The page is too large to read.",
         "not_html": "The address does not return a web page.",
         "http_error": "The site refused or did not have the page.",
+        "bot_check": "The site asks visitors to pass a bot check before showing the page.",
         "login_wall": "The page needs a login.",
         "redirects": "The address redirects too many times.",
     }
-    return FetchRefused(code, messages[code])
+    return FetchRefused(code, messages[code], status)
 
 
 def check_url(url: str) -> tuple[str, str, int, str]:
@@ -188,6 +190,19 @@ def _decode(body: bytes, content_type: str) -> str:
         return body.decode("utf-8", errors="replace")
 
 
+_CHALLENGE_TITLE = re.compile(rb"<title>\s*just a moment", re.I)
+
+
+def _bot_check(status: int, headers: dict, body: bytes) -> bool:
+    """A Cloudflare-style challenge page: the header Cloudflare sets on it, or its server name plus the "Just a moment" title.
+    Recognised only to say so; nothing is done about it (no cookies, no script run, no second try)."""
+    if status not in (403, 429):
+        return False
+    if headers.get("cf-mitigated", "").lower() == "challenge":
+        return True
+    return "cloudflare" in headers.get("server", "").lower() and _CHALLENGE_TITLE.search(body[:8192]) is not None
+
+
 def _walled(url: str) -> bool:
     parts = urlsplit(url)
     host = (parts.hostname or "").lower()
@@ -212,11 +227,11 @@ def fetch_page(url: str, *, resolver=socket.getaddrinfo, request=_request, now=t
             current = urljoin(current, headers["location"])
             continue
         if status >= 300:
-            raise _refuse("http_error")
+            raise _refuse("bot_check" if _bot_check(status, headers, body) else "http_error", status)
         if _walled(current):
             raise _refuse("login_wall")
         content_type = headers.get("content-type", "")
         if not content_type.lower().startswith(HTML_TYPES):
-            raise _refuse("not_html")
+            raise _refuse("not_html", status)
         return Page(current, _decode(body, content_type))
     raise _refuse("redirects")

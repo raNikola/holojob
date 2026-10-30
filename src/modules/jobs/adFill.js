@@ -24,8 +24,8 @@ export async function fetchAdFields(url, { fetchFn = globalThis.fetch } = {}) {
   if (response.status === 200 && data.ok && data.token) {
     return { ok: true, token: data.token, fields: data.fields ?? {}, missing: Array.isArray(data.missing) ? data.missing : [], finalUrl: data.finalUrl ?? '' }
   }
-  const blocked = data.error === 'blocked_host'
-  return { ok: false, message: blocked ? String(data.message || READ_FAILED) : READ_FAILED, blocked }
+  // The server picks the wording from the failure code and status; anything missing falls back to the generic message.
+  return { ok: false, message: typeof data.message === 'string' && data.message ? data.message : READ_FAILED, blocked: data.error === 'blocked_host' }
 }
 
 const isEmpty = (value) => !String(value ?? '').trim()

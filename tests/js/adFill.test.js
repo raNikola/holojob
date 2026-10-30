@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AD_FIELDS, READ_FAILED, adFetchBody, applyFill, applySuggestions, clearSuggested, fetchAdFields, previewAdAi, runAdAi, stillMissing } from '../../src/modules/jobs/adFill.js'
-import { AI_FAILED_MESSAGE, EXPIRED_MESSAGE, UNREADABLE_MESSAGE, cachedPage, clearCachedPages, extractAdAi, fetchAd, previewAdAi as serverPreview } from '../../scripts/run-ad-fill.js'
+import { AI_FAILED_MESSAGE, EXPIRED_MESSAGE, UNREADABLE_MESSAGE, cachedPage, clearCachedPages, extractAdAi, failureMessage, fetchAd, previewAdAi as serverPreview } from '../../scripts/run-ad-fill.js'
 
 const json = (status, body) => ({ status, json: async () => body })
 const FIELDS = { title: 'Senior PM', company: 'Acme', location: 'Niš, RS', salary: '3000 monthly EUR', description: 'Own the roadmap.' }
@@ -104,7 +104,7 @@ describe('the request to the server', () => {
 
   it.each([
     ['the network is down', () => { throw new Error('offline') }],
-    ['the server cannot read the page', () => json(502, { ok: false, error: 'login_wall', message: 'secret server text' })],
+    ['the server answers without a message', () => json(502, { ok: false, error: 'login_wall' })],
     ['an unreadable answer', () => ({ status: 200, json: async () => { throw new Error('bad json') } })],
     ['a 200 without a token', () => json(200, { ok: true })],
   ])('says the page could not be read when %s, and gives no fields', async (_name, reply) => {
@@ -115,6 +115,12 @@ describe('the request to the server', () => {
   it('shows the server\'s own message for a refused host', async () => {
     const result = await fetchAdFields('http://127.0.0.1:3073/', { fetchFn: async () => json(403, { ok: false, error: 'blocked_host', message: 'This address is not allowed: private, local and internal hosts are refused.' }) })
     expect(result).toMatchObject({ ok: false, blocked: true, message: expect.stringMatching(/not allowed/) })
+  })
+
+  it('shows the server wording for a bot check, and the generic one when the answer has none', async () => {
+    const bot = await fetchAdFields('https://x.example/1', { fetchFn: async () => json(502, { ok: false, error: 'bot_check', status: 403, message: 'This site blocks automatic readers. Open the page yourself and paste the ad text.' }) })
+    expect(bot).toMatchObject({ ok: false, blocked: false, message: expect.stringMatching(/blocks automatic readers/) })
+    expect(await fetchAdFields('https://x.example/1', { fetchFn: async () => json(502, {}) })).toMatchObject({ ok: false, message: READ_FAILED })
   })
 })
 
@@ -180,11 +186,47 @@ describe('fetchAd (Node)', () => {
     ['an unreadable page', { ok: false, error: 'unreadable', message: 'No job posting could be read from this page.' }],
     ['garbage', 'not json'],
     ['no answer', undefined],
-  ])('answers the same plain message for %s and caches nothing', async (_name, answer) => {
+  ])('answers a plain message for %s and caches nothing', async (_name, answer) => {
     const { status, body } = await fetchAd('https://a.example/1', { spawnFn: fakeSpawn(answer) })
     expect(status).toBe(502)
-    expect(body).toMatchObject({ ok: false, message: UNREADABLE_MESSAGE })
+    expect(body.ok).toBe(false)
+    expect(body.message).toMatch(/paste the (ad )?text/i)
     expect(body.token).toBeUndefined()
+  })
+
+  it.each([
+    ['bot_check', 403, /blocks automatic readers.*paste the ad text/i],
+    ['http_error', 404, /doesn't exist any more.*Paste the ad text/],
+    ['http_error', 410, /doesn't exist any more/],
+    ['http_error', 403, /refused to show this page.*Paste the ad text/],
+    ['http_error', 500, /refused to show this page/],
+    ['http_error', undefined, /refused to show this page/],
+    ['login_wall', undefined, /needs a login.*Paste the ad text/],
+    ['not_html', 200, /not a web page.*Paste the ad text/],
+    ['timeout', undefined, /didn't answer.*paste the ad text/],
+    ['unreachable', undefined, /didn't answer.*paste the ad text/],
+    ['js_only', undefined, /JavaScript.*Paste the ad text/],
+    ['unreadable', undefined, /No job posting was found.*Paste the ad text/],
+    ['too_large', undefined, new RegExp(`^${UNREADABLE_MESSAGE}$`)],
+    ['something_new', undefined, new RegExp(`^${UNREADABLE_MESSAGE}$`)],
+  ])('maps %s (status %s) to its own message', async (error, httpStatus, pattern) => {
+    expect(failureMessage(error, httpStatus)).toMatch(pattern)
+    const { status, body } = await fetchAd('https://a.example/1', { spawnFn: fakeSpawn({ ok: false, error, status: httpStatus ?? null, message: 'x' }) })
+    expect(status).toBe(502)
+    expect(body.message).toMatch(pattern)
+    expect(body.error).toBe(error)
+  })
+
+  it('answers with the code, the status and the message only: the page body and the internal message never appear', async () => {
+    const { body } = await fetchAd('https://a.example/1', { spawnFn: fakeSpawn({ ok: false, error: 'bot_check', status: 403, message: 'SECRET-CHALLENGE-BODY', pageText: 'SECRET-CHALLENGE-BODY', html: 'SECRET-CHALLENGE-BODY' }) })
+    expect(JSON.stringify(body)).not.toContain('SECRET')
+    expect(Object.keys(body).sort()).toEqual(['error', 'message', 'ok', 'status'])
+    expect(body.status).toBe(403)
+  })
+
+  it('ignores a status that is not an HTTP status', async () => {
+    const { body } = await fetchAd('https://a.example/1', { spawnFn: fakeSpawn({ ok: false, error: 'http_error', status: '<script>', message: 'x' }) })
+    expect(body.status).toBeUndefined()
   })
 
   it('says why when the host is refused', async () => {

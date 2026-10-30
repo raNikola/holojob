@@ -1,0 +1,11 @@
+{
+  "note": "Trimmed from a recorded 403 answer of a Cloudflare-fronted careers page (2026-10-30). No bypass is attempted anywhere.",
+  "status": 403,
+  "headers": {
+    "content-type": "text/html; charset=UTF-8",
+    "server": "cloudflare",
+    "cf-mitigated": "challenge",
+    "cf-ray": "a52b134d0925b311-BEG"
+  },
+  "body": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta name=\"robots\" content=\"noindex,nofollow\"></head><body>SECRET-CHALLENGE-BODY</body></html>"
+}
