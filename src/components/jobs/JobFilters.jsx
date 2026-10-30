@@ -5,6 +5,7 @@ import Input from '../ui/Input'
 import SelectField from '../ui/SelectField'
 import MultiSelectDropdown from '../ui/MultiSelectDropdown'
 import InfoTip from '../ui/InfoTip'
+import SalaryFilter from './SalaryFilter'
 import { APPLIED_FILTER, statusFilterOptions } from '../../modules/applications/appliedFilter'
 import {
   CLEAR_ALL_FILTERS,
@@ -13,6 +14,7 @@ import {
   moreFiltersCount,
   normalizeMultiFilter,
 } from '../../modules/jobs/jobFilters'
+import { salaryRangeOf } from '../../modules/jobs/salaryFilter'
 import { FILTER_HELP } from '../../modules/jobs/filterHelp'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { MATCH_LABELS, PRIORITIES, hasMatchScores } from '../../modules/jobs/matchScore'
@@ -41,6 +43,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
   const showScoreFilters = hasMatchScores(jobs)
   const [moreOpen, setMoreOpen] = useState(false)
   const chips = activeFilterChips(filters)
+  const salary = salaryRangeOf(filters)
   // Chips of filters that are not rendered (score filters without scores) are not counted in the toggle.
   const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider'].includes(c.key)))
   const priorityOptions = useMemo(
@@ -160,39 +163,13 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                 options={MATCH_LABELS}
                 placeholder="All labels"
               />
-              <Input
-                id="filter-min-salary"
-                label="Min salary (EUR/month)"
-                labelExtra={tip('minSalary', 'Min salary')}
-                type="number"
-                min={0}
-                value={filters.minSalary ?? ''}
-                onChange={(e) => onChange({ minSalary: e.target.value })}
-                placeholder="e.g. 2500"
+              <SalaryFilter
+                from={salary.from}
+                to={salary.to}
+                includeUnknown={filters.salaryIncludeUnknown !== false}
+                fromProfile={Boolean(filters.salaryFromProfile)}
+                onChange={onChange}
               />
-              <Input
-                id="filter-desired-from"
-                label="Desired salary from (EUR/month)"
-                labelExtra={tip('desiredSalaryMin', 'Desired salary from')}
-                type="number"
-                min={0}
-                value={filters.desiredSalaryMin ?? ''}
-                onChange={(e) => onChange({ desiredSalaryMin: e.target.value })}
-              />
-              <Input
-                id="filter-desired-to"
-                label="Desired salary to (EUR/month)"
-                labelExtra={tip('desiredSalaryMax', 'Desired salary to')}
-                type="number"
-                min={0}
-                value={filters.desiredSalaryMax ?? ''}
-                onChange={(e) => onChange({ desiredSalaryMax: e.target.value })}
-              />
-              {filters.salaryFromProfile && (
-                <p className="self-end pb-2 text-xs text-stone-500 sm:col-span-2 xl:col-span-4">
-                  Salary filters are pre-filled from your profile, so jobs paying less than your minimum are hidden. Clear Min salary to see them with the “Below min salary” badge. Jobs with no readable pay are never hidden.
-                </p>
-              )}
               <Checkbox
                 label="Hide jobs that need a visa"
                 help={tip('hideNeedsVisa', 'Hide jobs that need a visa')}

@@ -1,5 +1,5 @@
 import { NEEDS_VISA_STATUSES } from './workAuthorization.js'
-import { passesSalaryFilters } from './jobSalary.js'
+import { describeRange, matchesSalary, salaryRangeOf } from './salaryFilter.js'
 
 export function getJobProvider(job) {
   return job.provider || job.site || ''
@@ -31,11 +31,10 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     matchLabel = '',
     priority = [],
     minScore = '',
-    minSalary = '',
-    desiredSalaryMin = '',
-    desiredSalaryMax = '',
+    salaryIncludeUnknown = true,
   } = filters
 
+  const salaryRange = salaryRangeOf(filters)
   const priorities = normalizePriorityFilter(priority)
   const sites = lowerSet(normalizeMultiFilter(site))
   const providers = lowerSet(normalizeMultiFilter(provider))
@@ -51,7 +50,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
       const floor = Number(minScore)
       if (!Number.isNaN(floor) && (job.matchScore ?? 0) < floor) return false
     }
-    if (!passesSalaryFilters(job, { minSalary, desiredMin: desiredSalaryMin, desiredMax: desiredSalaryMax })) return false
+    if (!matchesSalary(job.salaryMonthlyEur, salaryRange, salaryIncludeUnknown !== false)) return false
     if (remoteOnly && !job.isRemote) return false
     if (hideNeedsVisa && NEEDS_VISA_STATUSES.has(job.workAuthorization?.status)) return false
     if (sites.size && !sites.has((job.site || '').toLowerCase())) return false
@@ -118,12 +117,21 @@ export function activeFilterChips(filters = {}) {
   const providers = normalizeMultiFilter(filters.provider)
   if (providers.length) add('provider', `Provider: ${providers.join(', ')}`, { provider: [] })
   if (filters.matchLabel) add('matchLabel', `Match label: ${filters.matchLabel}`, { matchLabel: '' })
-  if (isSet(filters.minSalary)) add('minSalary', `Min salary: ${filters.minSalary}`, { minSalary: '' })
-  if (isSet(filters.desiredSalaryMin)) add('desiredSalaryMin', `Desired from: ${filters.desiredSalaryMin}`, { desiredSalaryMin: '' })
-  if (isSet(filters.desiredSalaryMax)) add('desiredSalaryMax', `Desired to: ${filters.desiredSalaryMax}`, { desiredSalaryMax: '' })
+  const { from, to } = salaryRangeOf(filters)
+  if (from != null || to != null) {
+    const hidesUnknown = filters.salaryIncludeUnknown === false ? ', jobs without salary hidden' : ''
+    add('salary', `Salary: ${describeRange(from, to)}${hidesUnknown}`, SALARY_CLEARED)
+  }
   if (filters.hideNeedsVisa) add('hideNeedsVisa', 'Hiding jobs that need a visa', { hideNeedsVisa: false })
   return chips
 }
+
+/**
+ * Clears the salary range. Explicit '' (not null) so the profile's figures do not refill it, and the
+ * three fields of the old panel are reset so nothing stale is left behind. The "include jobs without
+ * salary" checkbox is not touched.
+ */
+export const SALARY_CLEARED = { salaryFrom: '', salaryTo: '', minSalary: null, desiredSalaryMin: null, desiredSalaryMax: null }
 
 /** The patch that clears every filter. Salary fields become '' (not null) so the profile's figures do not refill them. */
 export const CLEAR_ALL_FILTERS = {
@@ -137,13 +145,12 @@ export const CLEAR_ALL_FILTERS = {
   matchLabel: '',
   priority: [],
   minScore: '',
-  minSalary: '',
-  desiredSalaryMin: '',
-  desiredSalaryMax: '',
+  ...SALARY_CLEARED,
+  salaryIncludeUnknown: true,
 }
 
 /** Filters inside "More filters" that are active, so the toggle can show a count. */
-export const MORE_FILTER_KEYS = ['provider', 'matchLabel', 'minSalary', 'desiredSalaryMin', 'desiredSalaryMax', 'hideNeedsVisa']
+export const MORE_FILTER_KEYS = ['provider', 'matchLabel', 'salary', 'hideNeedsVisa']
 export function moreFiltersCount(chips) {
   return chips.filter((c) => MORE_FILTER_KEYS.includes(c.key)).length
 }

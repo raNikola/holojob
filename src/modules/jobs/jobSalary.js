@@ -1,3 +1,5 @@
+import { matchesSalary, parseAmount, salaryRangeOf } from './salaryFilter.js'
+
 /**
  * Display helpers for the salary a scorer parsed from an ad (job.salaryMonthlyEur,
  * EUR per month) and the flag it set against the candidate's minimum
@@ -18,29 +20,15 @@ export function salaryBadges(job) {
   return [{ label: 'Below min salary', variant: 'medium', reason: `${formatMonthlyEur(job.salaryMonthlyEur)} is under your minimum` }]
 }
 
-function bound(value) {
-  if (value === '' || value == null) return null
-  const n = Number(value)
-  return Number.isFinite(n) ? n : null
-}
-
 /**
- * Filter on the parsed salary. A job whose pay could not be read always
- * passes: unknown is not below anything, and most ads state no pay.
+ * Filter on the parsed salary (salaryFilter.js). A job whose pay could not be read passes: unknown is
+ * not below anything, and most ads state no pay.
  *
  * minSalary keeps jobs whose top figure reaches it; the desired range keeps
  * jobs whose range overlaps it.
  */
 export function passesSalaryFilters(job, { minSalary = '', desiredMin = '', desiredMax = '' } = {}) {
-  const pay = job?.salaryMonthlyEur
-  if (!pay) return true
-  const floor = bound(minSalary)
-  if (floor != null && pay.max < floor) return false
-  const lo = bound(desiredMin)
-  const hi = bound(desiredMax)
-  if (lo != null && pay.max < lo) return false
-  if (hi != null && pay.min > hi) return false
-  return true
+  return matchesSalary(job?.salaryMonthlyEur, salaryRangeOf({ minSalary, desiredSalaryMin: desiredMin, desiredSalaryMax: desiredMax }), true)
 }
 
 /**
@@ -49,6 +37,18 @@ export function passesSalaryFilters(job, { minSalary = '', desiredMin = '', desi
  */
 export function withProfileSalaryDefaults(filters, basicProfile = {}) {
   const pick = (own, fromProfile) => (own === null || own === undefined ? (fromProfile ?? '') : own)
+  if (filters.salaryFrom != null || filters.salaryTo != null) {
+    // The current shape: From stands in for the profile's larger lower figure, To for its desired maximum.
+    const lows = [basicProfile.minSalaryEur, basicProfile.desiredSalaryMinEur].map(parseAmount).filter((n) => n != null)
+    const profileFrom = lows.length ? Math.max(...lows) : ''
+    const profileTo = basicProfile.desiredSalaryMaxEur ?? ''
+    return {
+      ...filters,
+      salaryFromProfile: (filters.salaryFrom == null && profileFrom !== '') || (filters.salaryTo == null && profileTo !== ''),
+      salaryFrom: pick(filters.salaryFrom, profileFrom),
+      salaryTo: pick(filters.salaryTo, profileTo),
+    }
+  }
   const fromProfile = [filters.minSalary, filters.desiredSalaryMin, filters.desiredSalaryMax]
     .some((own, i) => (own === null || own === undefined) && [basicProfile.minSalaryEur, basicProfile.desiredSalaryMinEur, basicProfile.desiredSalaryMaxEur][i])
   return {

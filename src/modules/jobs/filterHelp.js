@@ -9,9 +9,6 @@ export const FILTER_HELP = {
   remoteOnly: 'Shows only jobs the ad marks as remote.',
   provider: 'The connector that fetched the ad: jobspy (LinkedIn), greenhouse, ashby, workable or infostud. Tick several to see them together; none ticked shows all.',
   matchLabel: 'Shows only jobs with this label (Excellent, Strong, Good, Weak, Reject), which comes from the match score.',
-  salary: 'Filters on the pay the scorer read from the ad, in EUR per month. Jobs whose pay could not be read are never hidden.',
-  minSalary: 'Hides jobs whose top salary figure is below this amount. Jobs with no readable pay stay. Pre-filled from your profile until you change it.',
-  desiredSalaryMin: 'Keeps jobs whose pay range reaches at least this amount. Jobs with no readable pay stay.',
-  desiredSalaryMax: 'Keeps jobs whose pay range starts at or below this amount. Jobs with no readable pay stay.',
+  salary: 'The pay the scorer read from the ad, in EUR per month. A job matches when its pay range overlaps yours; a single figure must lie inside it. Jobs with no readable pay follow “Include jobs without salary”.',
   hideNeedsVisa: 'Hides jobs the work-authorization check marked “No visa” (the ad refuses sponsorship) or “Needs visa” (the ad says nothing). Other jobs stay.',
 }

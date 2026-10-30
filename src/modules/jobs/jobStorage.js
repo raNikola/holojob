@@ -16,10 +16,10 @@ const DEFAULT_FILTERS = {
   matchLabel: '',
   priority: [],
   minScore: '',
-  // null until the user touches them: then the profile's figures apply.
-  minSalary: null,
-  desiredSalaryMin: null,
-  desiredSalaryMax: null,
+  // salaryFrom / salaryTo (EUR per month) are absent until the user touches the range: then the
+  // profile's figures apply. A list saved by the three-field panel (minSalary, desiredSalaryMin,
+  // desiredSalaryMax) is read as it stands (salaryFilter.js `salaryRangeOf`) until the range is edited.
+  salaryIncludeUnknown: true,
 }
 
 export function getDefaultJobsState() {
