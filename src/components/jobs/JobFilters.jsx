@@ -11,6 +11,7 @@ import {
   CLEAR_ALL_FILTERS,
   activeFilterChips,
   countByValue,
+  getCompanyOptions,
   moreFiltersCount,
   normalizeMultiFilter,
 } from '../../modules/jobs/jobFilters'
@@ -61,11 +62,13 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
   const chips = activeFilterChips(filters)
   const salary = salaryRangeOf(filters)
   // Chips of filters that are not rendered (score filters without scores) are not counted in the toggle.
-  const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider', 'hideNoLongerListed'].includes(c.key)))
+  const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider', 'company', 'hideNoLongerListed'].includes(c.key)))
   const priorityOptions = useMemo(
     () => countByValue(jobs, 'priority', SHOWN_PRIORITIES).map(({ value, count }) => ({ value, label: `${value} (${count})` })),
     [jobs],
   )
+
+  const companyOptions = useMemo(() => getCompanyOptions(jobs), [jobs])
 
   return (
     <Card title="Filters" className="!p-4">
@@ -161,6 +164,16 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                 onChange={(v) => onChange({ provider: v })}
                 options={providers}
                 placeholder="All providers"
+              />
+            </div>
+            <div className="min-w-[10rem] flex-[1_1_10rem]">
+              <MultiSelectDropdown
+                label="Company"
+                labelExtra={tip('company', 'Company')}
+                selected={normalizeMultiFilter(filters.company)}
+                onChange={(v) => onChange({ company: v })}
+                options={companyOptions}
+                placeholder="All companies"
               />
             </div>
             {showScoreFilters && (
