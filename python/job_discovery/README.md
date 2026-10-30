@@ -53,21 +53,25 @@ Provider groups: `all`, `ats`, `remote`, `startup`, `serbia`. `--providers` also
 ## Joberty (opt-in)
 
 `joberty` reads Joberty (joberty.com), a Serbian and regional IT board, through the JSON backend its own site
-calls (`https://backend.joberty.com/api/v1/jobs`, product-management domain only). It is in **no** provider group, so
-no default run touches it:
+calls (`https://backend.joberty.com/api/v1/jobs`, product-management domain only). It is an **opt-in source**
+(`source_definitions.py`): in **no** provider group, and **off** until the owner switches it on in
+Settings > Sources > Job boards, which asks for "I have read the terms" and stores the switch and the consent time
+server-side in `data/config/sources.json` (`source_settings.py`; not in browser storage, not in backups).
+
+Discovery is the gate, not the request: `run_discovery.py` drops an opt-in source that is off even when
+`--providers` names it, and adds one that is on to every run that asks for a group (the standard `serbia` run).
+A run that lists names only (`--providers jobspy`) gets just those names.
 
 ```bash
-python python/job_discovery/run_discovery.py --providers serbia,joberty   # the standard run plus Joberty
-python python/job_discovery/run_discovery.py --providers joberty
+python python/job_discovery/run_discovery.py --providers serbia    # plus Joberty when it is on
+python python/job_discovery/run_discovery.py --providers joberty   # Joberty alone, only when it is on
+python python/job_discovery/source_settings.py get                 # the switches, read-only
 ```
-
-On the Jobs screen the "Include Joberty (Serbian IT board)" box next to "Re-scrape jobs" adds it (off by default, remembered
-in the browser).
 
 - **The API is undocumented** and can change without notice. The client fails soft: any error is logged and the source
   returns nothing, the other providers carry on.
-- **Terms caveat:** Joberty's terms have not been reviewed for this use. The owner's note points to sections 7 and 8 of them;
-  read those before turning the box on. Nothing about the candidate is ever sent: anonymous GETs only.
+- **Terms caveat:** Joberty's terms (sections 7 and 8) restrict commercial and unauthorized use; read them before
+  switching it on. Nothing about the candidate is ever sent: anonymous GETs only.
 - **Polite by design:** a normal User-Agent, 30 s timeout, 1.5 to 2 s between requests, two retries with backoff on 429 / 5xx,
   at most 3 listing pages and 25 ad details per run. Ads the job-history ledger already holds with a real description are
   not fetched again; ads over the cap wait for the next run.

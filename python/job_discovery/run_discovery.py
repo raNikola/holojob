@@ -31,6 +31,7 @@ from export_jobs import (  # noqa: E402
 )
 from providers.jobspy_provider import JobSpyProvider  # noqa: E402
 from providers.provider_registry import PROVIDER_GROUPS, get_provider, resolve_providers  # noqa: E402
+import source_settings  # noqa: E402
 
 # The ledger lives beside the scorer's shared modules; it is loaded by path so
 # that module's siblings do not shadow this package's.
@@ -72,6 +73,23 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def effective_provider_names(spec: str | None) -> list[str]:
+    """The providers this run uses: the request, with the owner's opt-in switches applied.
+
+    The switches in data/config/sources.json are the gate, not the request: an opt-in
+    source that is off never runs, even when the request names it.
+    """
+    try:
+        settings = source_settings.read()
+    except source_settings.SourcesError as exc:
+        logger.warning("Source settings unusable (%s); every opt-in source is off for this run", exc)
+        settings = None
+    names, dropped = source_settings.effective_providers(spec, resolve_providers(spec), settings)
+    for name in dropped:
+        logger.warning("Skipping %s: an opt-in source that is off; %s", name, source_settings.OFF_HINT)
+    return names
+
+
 def main() -> int:
     args = parse_args()
     source_run_id = uuid.uuid4().hex[:12]
@@ -95,7 +113,7 @@ def main() -> int:
         logger.error("No jobSpySearchTerms found in intelligence file.")
         return 1
 
-    provider_names = resolve_providers(args.providers)
+    provider_names = effective_provider_names(args.providers)
     if not provider_names:
         logger.error("No valid providers resolved from: %s", args.providers)
         return 1

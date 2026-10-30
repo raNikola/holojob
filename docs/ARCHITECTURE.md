@@ -21,12 +21,14 @@ its public JSON carries the full description). HelloWorld and Startuj were
 evaluated and rejected: HelloWorld shares Infostud's inventory and ID space,
 Startuj is entry-level only.
 
-`joberty` (Serbian and regional IT board, `python/job_discovery/providers/joberty_*.py`) is an **opt-in** source: in no
-group, run only with `--providers serbia,joberty` or the "Include Joberty" box on the Jobs screen (off by default,
-`job-dashboard-discovery-options`). It reads Joberty's undocumented public JSON API (product-management domain) with
-capped, spaced anonymous GETs (3 listing pages, 25 details, 1.5 to 2 s apart), skips ads the job-history ledger already
-holds, fails soft, and checks the requested country against the board's own place facet. Joberty's terms have not been
-reviewed (sections 7 and 8 are the ones to read); see `python/job_discovery/README.md`.
+`joberty` (Serbian and regional IT board, `python/job_discovery/providers/joberty_*.py`) is an **opt-in** source
+(`source_definitions.py`, `opt_in=True`): in no group, off by default, and run only while the owner has switched it on
+with consent in Settings > Sources > Job boards. The switch, `consentAcceptedAt` (server time) and a history live in
+`data/config/sources.json` (`source_settings.py`, the first slice of SOURCES_SPEC.md; the other boards still follow
+the groups), and `run_discovery.py` applies them whatever the request names. It reads Joberty's undocumented public
+JSON API (product-management domain) with capped, spaced anonymous GETs (3 listing pages, 25 details, 1.5 to 2 s
+apart), skips ads the job-history ledger already holds, fails soft, and checks the requested country against the
+board's own place facet. Joberty's terms (sections 7 and 8) restrict commercial and unauthorized use; see `python/job_discovery/README.md`.
 
 The standard run is `--providers serbia` (all six providers); it is the
 default everywhere: the CLI, `npm run discover:jobs`, the API and every UI

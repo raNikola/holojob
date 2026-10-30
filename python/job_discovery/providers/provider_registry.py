@@ -13,6 +13,7 @@ from providers.yc_provider import YCProvider
 from providers.infostud_provider import InfostudProvider
 from providers.joberty_provider import JobertyProvider
 from providers.workable_provider import WorkableProvider
+from source_definitions import PROVIDER_GROUPS  # noqa: F401  (re-exported)
 
 PROVIDER_CLASSES = {
     "jobspy": JobSpyProvider,
@@ -25,18 +26,7 @@ PROVIDER_CLASSES = {
     "wwr": WWRProvider,
     "infostud": InfostudProvider,
     "workable": WorkableProvider,
-    "joberty": JobertyProvider,  # opt-in: in no group, runs only when named
-}
-
-PROVIDER_GROUPS = {
-    "all": [
-        "jobspy", "infostud", "greenhouse", "lever", "ashby", "wellfound",
-        "remoteok", "yc", "wwr",
-    ],
-    "ats": ["greenhouse", "lever", "ashby"],
-    "remote": ["remoteok", "wwr", "workable", "jobspy"],
-    "startup": ["yc", "wellfound", "ashby"],
-    "serbia": ["jobspy", "infostud", "workable", "greenhouse", "lever", "ashby"],
+    "joberty": JobertyProvider,  # opt-in (source_definitions.py): in no group
 }
 
 

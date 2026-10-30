@@ -32,6 +32,7 @@ import {
 import { importLinkedInText } from './run-linkedin-import.js'
 import { handleAiSettingsRequest } from './ai-settings-handler.js'
 import { handleSecretsRequest } from './secrets-handler.js'
+import { handleSourcesRequest } from './sources-handler.js'
 import { guardApiRequest } from './request-guard.js'
 import { maskErrorField } from './secret-mask.js'
 import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
@@ -224,7 +225,7 @@ function serveResumeFile(res, jobId, filename) {
  */
 export async function handleApiRoutes(req, res) {
   if (guardApiRequest(req, res)) return true
-  return (await handleAiSettingsRequest(req, res)) || (await handleSecretsRequest(req, res)) || (await handleApiRequest(req, res))
+  return (await handleAiSettingsRequest(req, res)) || (await handleSecretsRequest(req, res)) || (await handleSourcesRequest(req, res)) || (await handleApiRequest(req, res))
 }
 
 /**

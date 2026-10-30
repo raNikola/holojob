@@ -1,8 +1,10 @@
 """Joberty provider -- an opt-in source: Serbian and regional IT ads.
 
-Not in any provider group. It runs only with `--providers joberty` (the Jobs
-screen adds it when the "Include Joberty" box is ticked). The board's API is
-undocumented and its terms are unchecked, see joberty_client.py.
+An opt-in source (source_definitions.py): in no provider group, and it runs only
+while the owner has switched it on, with consent, in Settings > Sources
+(data/config/sources.json, enforced by run_discovery.py whatever the request
+says). The board's API is undocumented and its terms restrict commercial and
+unauthorized use (sections 7 and 8), see joberty_client.py.
 
 Role filtering is on the title (is_relevant_role). The board's own
 "Product Management" domain is only used to narrow the listing: it also holds
