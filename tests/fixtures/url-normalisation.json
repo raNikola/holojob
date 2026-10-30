@@ -1,20 +1,96 @@
 [
-  { "input": "HTTPS://Example.COM/jobs/1/?utm=x#top", "expected": "https://example.com/jobs/1" },
-  { "input": "https://example.com", "expected": "https://example.com" },
-  { "input": "https://example.com/", "expected": "https://example.com" },
-  { "input": "https://example.com:443/a", "expected": "https://example.com/a" },
-  { "input": "http://example.com:80/a/", "expected": "http://example.com/a" },
-  { "input": "https://example.com:8443/a", "expected": "https://example.com:8443/a" },
-  { "input": "https://user:pw@example.com/a", "expected": "https://example.com/a" },
-  { "input": "https://example.com/a%20b/", "expected": "https://example.com/a%20b" },
-  { "input": "https://example.com/a b", "expected": "https://example.com/a%20b" },
-  { "input": "https://example.com/a/../b", "expected": "https://example.com/b" },
-  { "input": "https://example.com/a/./b", "expected": "https://example.com/a/b" },
-  { "input": "https://bücher.de/x", "expected": "https://xn--bcher-kva.de/x" },
-  { "input": "   https://example.com/x//  ", "expected": "https://example.com/x" },
-  { "input": "https://example.com/p?id=1", "expected": "https://example.com/p" },
-  { "input": "ftp://example.com/x", "expected": null },
-  { "input": "example.com/x", "expected": null },
-  { "input": "javascript:alert(1)", "expected": null },
-  { "input": "", "expected": null }
+  {
+    "input": "HTTPS://Example.COM/jobs/1/?utm=x#top",
+    "expected": "https://example.com/jobs/1",
+    "identity": "https://example.com/jobs/1?utm=x"
+  },
+  {
+    "input": "https://example.com",
+    "expected": "https://example.com"
+  },
+  {
+    "input": "https://example.com/",
+    "expected": "https://example.com"
+  },
+  {
+    "input": "https://example.com:443/a",
+    "expected": "https://example.com/a"
+  },
+  {
+    "input": "http://example.com:80/a/",
+    "expected": "http://example.com/a"
+  },
+  {
+    "input": "https://example.com:8443/a",
+    "expected": "https://example.com:8443/a"
+  },
+  {
+    "input": "https://user:pw@example.com/a",
+    "expected": "https://example.com/a"
+  },
+  {
+    "input": "https://example.com/a%20b/",
+    "expected": "https://example.com/a%20b"
+  },
+  {
+    "input": "https://example.com/a b",
+    "expected": "https://example.com/a%20b"
+  },
+  {
+    "input": "https://example.com/a/../b",
+    "expected": "https://example.com/b"
+  },
+  {
+    "input": "https://example.com/a/./b",
+    "expected": "https://example.com/a/b"
+  },
+  {
+    "input": "https://bücher.de/x",
+    "expected": "https://xn--bcher-kva.de/x"
+  },
+  {
+    "input": "   https://example.com/x//  ",
+    "expected": "https://example.com/x"
+  },
+  {
+    "input": "https://example.com/p?id=1",
+    "expected": "https://example.com/p",
+    "identity": "https://example.com/p?id=1"
+  },
+  {
+    "input": "ftp://example.com/x",
+    "expected": null
+  },
+  {
+    "input": "example.com/x",
+    "expected": null
+  },
+  {
+    "input": "javascript:alert(1)",
+    "expected": null
+  },
+  {
+    "input": "",
+    "expected": null
+  },
+  {
+    "input": "https://boards.example/careers?gh_jid=123&utm_source=x",
+    "expected": "https://boards.example/careers",
+    "identity": "https://boards.example/careers?gh_jid=123"
+  },
+  {
+    "input": "https://boards.example/careers?b=2&a=1#x",
+    "expected": "https://boards.example/careers",
+    "identity": "https://boards.example/careers?a=1&b=2"
+  },
+  {
+    "input": "https://x.example/p?ref=abc&trackingId=9&Source=li",
+    "expected": "https://x.example/p",
+    "identity": "https://x.example/p"
+  },
+  {
+    "input": "https://www.linkedin.com/jobs/search/?currentJobId=42&refId=zz",
+    "expected": "https://www.linkedin.com/jobs/search",
+    "identity": "https://www.linkedin.com/jobs/search?currentJobId=42"
+  }
 ]

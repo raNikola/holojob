@@ -44,6 +44,23 @@ export function normalizeJobUrl(raw) {
   return `${url.protocol}//${url.host.toLowerCase()}${path}`
 }
 
+const TRACKING_PARAMS = new Set(['ref', 'refid', 'trackingid', 'source', 'gclid', 'fbclid'])
+
+/**
+ * `normalizeJobUrl` that keeps the query parameters which identify a posting (?gh_jid=, ?currentJobId=, ?jk=).
+ * The add-time duplicate check strips the whole query and shows the clash to the owner; anything that drops a row
+ * silently uses this key, so a board that tells postings apart by query string does not collapse to one job.
+ * Tracking parameters (utm_*, ref, refId, trackingId, source, gclid, fbclid) are removed, the rest sorted.
+ */
+export function identityJobUrl(raw) {
+  const base = normalizeJobUrl(raw)
+  if (!base) return null
+  const pairs = [...new URL(String(raw).trim()).searchParams.entries()]
+    .filter(([key]) => !key.toLowerCase().startsWith('utm_') && !TRACKING_PARAMS.has(key.toLowerCase()))
+    .sort(([ak, av], [bk, bv]) => (ak < bk ? -1 : ak > bk ? 1 : av < bv ? -1 : av > bv ? 1 : 0))
+  return pairs.length ? `${base}?${new URLSearchParams(pairs).toString()}` : base
+}
+
 /** The stored job whose main link matches `url`, or null. */
 export function findDuplicateByUrl(jobs, url) {
   const key = normalizeJobUrl(url)

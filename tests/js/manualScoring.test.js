@@ -6,7 +6,7 @@ import { createRequire } from 'node:module'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { importJobsFromFile, loadJobs, saveJobs } from '../../src/modules/jobs/jobStorage.js'
 import { createJob, getStoredJob, invalidateJobs } from '../../src/modules/jobs/jobsStore.js'
-import { SCORING_FIELDS, buildManualJob, normalizeJobUrl, scoringPayload } from '../../src/modules/jobs/manualJob.js'
+import { SCORING_FIELDS, buildManualJob, identityJobUrl, normalizeJobUrl, scoringPayload } from '../../src/modules/jobs/manualJob.js'
 import { addManualJob, scoreStoredJob, scoredPatch, syncManualJobs } from '../../src/modules/jobs/manualScoring.js'
 import { manualJobArgs, runManualJobs } from '../../scripts/run-manual-job.js'
 import { createBackupStream } from '../../scripts/backup-handler.js'
@@ -64,7 +64,10 @@ describe('what leaves the browser for scoring', () => {
 
   it('normalises URLs like the Python side (shared fixture)', () => {
     const cases = JSON.parse(fs.readFileSync(path.resolve('tests/fixtures/url-normalisation.json'), 'utf-8'))
-    for (const c of cases) expect(normalizeJobUrl(c.input), c.input).toBe(c.expected)
+    for (const c of cases) {
+      expect(normalizeJobUrl(c.input), c.input).toBe(c.expected)
+      expect(identityJobUrl(c.input), c.input).toBe(c.identity ?? c.expected)
+    }
   })
 })
 
@@ -265,6 +268,15 @@ describe('importJobsFromFile with manual jobs', () => {
     expect(next.jobs[0].notes).toBe(NOTE)
   })
 
+  it('drops only the sibling with the same identifying parameter, never the board\'s other postings', () => {
+    saveJobs({ ...loadJobs(), jobs: [] })
+    invalidateJobs()
+    createJob(buildManualJob({ ...FORM, jobUrl: 'https://careers.example/job?gh_jid=2&utm_source=mail' }, { id: ID, now: NOW }))
+    const board = (n) => ({ jobId: `g-${n}`, title: `Role ${n}`, jobUrl: `https://careers.example/job?gh_jid=${n}` })
+    const next = importJobsFromFile({ jobs: [board(1), board(2), board(3)] }, loadJobs())
+    expect(next.jobs.map((j) => j.jobId).sort()).toEqual([ID, 'g-1', 'g-3'].sort())
+  })
+
   it('does not touch the other jobs', () => {
     const next = importJobsFromFile({ jobs: [{ jobId: 'd-1', title: 'Backend', jobUrl: 'https://jobs.example/1' }] }, loadJobs())
     expect(next.jobs.find((j) => j.jobId === 'd-1')).toMatchObject({ status: 'saved' })
@@ -290,6 +302,19 @@ describe('owner-only fields stay local on the new path', () => {
     const logged = spies.flatMap((s) => s.mock.calls).flat().join(' ')
     spies.forEach((s) => s.mockRestore())
     expect(logged).not.toMatch(/CANARY|canary/)
+  })
+})
+
+describe('every place that replaces the job list goes through importJobsFromFile', () => {
+  it.each([
+    'src/components/jobs/PipelineOrchestrator.jsx',
+    'src/modules/jobs/usePipelineAutoRefresh.js',
+    'src/components/jobs/JobImportPanel.jsx',
+    'src/components/settings/SettingsHome.jsx',
+    'src/components/jobs/JobDiscoveryScreen.jsx',
+    'src/modules/jobs/autoLoadJobs.js',
+  ])('%s', (file) => {
+    expect(fs.readFileSync(path.resolve(file), 'utf-8')).toMatch(/importJobsFromFile\(/)
   })
 })
 

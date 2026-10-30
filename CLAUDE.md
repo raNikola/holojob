@@ -154,8 +154,10 @@ uses and merges it into `scored_jobs.json`. `run_scoring.py` adds the manual fil
 row wins over a discovered row with the same normalised URL, and `--min-score` never drops one). Scoring failure leaves the job Unreviewed with a "Score now" retry
 (details page, and the note after saving); retry is idempotent. `runScoring` / `runFullPipeline` / `runJudgedScoring` first send the browser's manual jobs to
 `/api/jobs/manual/sync`. Manual jobs get no enrichment (`aiEnrichment: "missing"`), and a `--judge` run includes them like any other ad (the ad text only).
-Duplicates: same normalised URL (`normalizeJobUrl` / `normalize_url`, one fixture `tests/fixtures/url-normalisation.json` run by both) against this browser's list, the
-discovered file, the scored file and the manual file; a different id is a clash, the same id is a retry.
+Duplicates: the add-time check refuses the same normalised URL, query stripped (`normalizeJobUrl` / `normalize_url`, one fixture `tests/fixtures/url-normalisation.json` run by
+both) against this browser's list, the discovered file, the scored file and the manual file, and shows the clash; a different id is a clash, the same id is a retry. What
+drops a row **silently** (`with_manual`, `importJobsFromFile`) uses the stricter `identity_url` / `identityJobUrl`, which keeps `?gh_jid=`-style parameters (boards that tell
+postings apart by query string must not collapse to one job); `scored_jobs.json` `meta.manualJobs` counts the rows a manual job replaced.
 `notes` and `extraLinks` are owner-only: they stay in the browser's job record (carried over by `importJobsFromFile`) and are in no payload to Python, file, log line or
 AI context (`SCORING_FIELDS` is the whitelist on both sides; `summarizeJob` is a whitelist too; `tests/js/manualScoring.test.js`, `tests/python/test_manual_jobs.py`).
 Add any new owner-only field to `MANUAL_FIELDS` and to those tests.

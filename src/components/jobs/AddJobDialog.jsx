@@ -17,7 +17,7 @@ const EMPTY = {
  * Adds a job typed in by hand. It makes no AI call and does not score the job; Notes and extra links stay in this
  * browser's job record and are never part of any request.
  */
-export default function AddJobDialog({ onClose, onSaved, apiAvailable = true }) {
+export default function AddJobDialog({ onClose, onSaved }) {
   const [form, setForm] = useState(EMPTY)
   const [errors, setErrors] = useState({})
   const [duplicate, setDuplicate] = useState(null)
@@ -36,7 +36,7 @@ export default function AddJobDialog({ onClose, onSaved, apiAvailable = true }) 
     if (Object.keys(found).length) return
     setBusy(true)
     try {
-      const result = await addManualJob(form, { apiAvailable })
+      const result = await addManualJob(form)
       if (result.status === 'duplicate') setDuplicate(result.existing)
       else onSaved(result.job, openDetails, result)
     } finally {

@@ -1,7 +1,7 @@
 /** @typedef {import('../../types/career-os.d.ts').Job} Job */
 import { salaryModeOf } from './salaryFilter.js'
 import { normalizeMultiFilter, normalizePriorityFilter } from './jobFilters.js'
-import { MANUAL_FIELDS, normalizeJobUrl } from './manualJob.js'
+import { MANUAL_FIELDS, identityJobUrl } from './manualJob.js'
 
 export const JOBS_STORAGE_KEY = 'job-dashboard-discovered-jobs'
 
@@ -149,10 +149,11 @@ export function importJobsFromFile(json, existingState = null) {
   const { meta, jobs } = parseJobsFile(json)
   const prior = existingState?.jobs || []
   // A file row with the address of a hand-entered job is that job under another id (a discovery run found the same
-  // posting): the hand-entered one stays, so the list has one row for it.
-  const manualAt = new Map(prior.filter((job) => job.manualEntry).map((job) => [normalizeJobUrl(job.jobUrl), job.jobId]).filter(([url]) => url))
+  // posting): the hand-entered one stays, so the list has one row for it. The address is the identity URL, which keeps
+  // ?gh_jid= style parameters: sibling postings of one board are different jobs and are never dropped here.
+  const manualAt = new Map(prior.filter((job) => job.manualEntry).map((job) => [identityJobUrl(job.jobUrl), job.jobId]).filter(([url]) => url))
   const incoming = jobs.filter((job) => {
-    const owner = manualAt.get(normalizeJobUrl(job.jobUrl))
+    const owner = manualAt.get(identityJobUrl(job.jobUrl))
     return !owner || owner === job.jobId
   })
   const merged = mergeStatusOnImport(prior, incoming)
