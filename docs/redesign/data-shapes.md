@@ -506,6 +506,21 @@ Fields that exist in the browser profile and appear in the disk mirror only afte
 
 
 
+## Manual jobs
+
+- **Path:** `data/jobs/manual_jobs.json`
+- **Purpose:** Jobs the owner typed in (Add job). Kept apart because discovery rewrites `discovered_jobs.json` and scoring rebuilds
+  `scored_jobs.json` from it. `run_scoring.py` adds these jobs to every run; a manual row wins over a discovered row with the same
+  normalised URL. Never written by discovery. In backups with the rest of `data/jobs/`.
+- **Written by:** `import_job_url.py --job-json` (called by `POST /api/jobs/manual/score` and `/sync`). Only the scoring fields
+  (`SCORING_FIELDS` in `manual_jobs.py`) are stored: `jobId` (`manual-<uuid>`), `title`, `company`, `description`, `jobUrl`, `location`,
+  `salary` (text as typed), `site`, `provider: "manual"`, `manualEntry: true`, `sourceChoice`, `status`, `createdAt`, `firstSeen`,
+  `lastSeen`, `scrapedAt`. Notes and extra links are not stored here; they stay in the browser's job record.
+
+```json
+{ "jobs": [ { "jobId": "manual-<uuid>", "title": "...", "company": "...", "description": "...", "jobUrl": "...", "provider": "manual", "manualEntry": true } ] }
+```
+
 ## Scored jobs
 
 - **Path:** `data/jobs/scored_jobs.json`

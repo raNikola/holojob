@@ -9,6 +9,7 @@ import JobImportPanel from './JobImportPanel'
 import JobUrlImport from './JobUrlImport'
 import AddJobDialog from './AddJobDialog'
 import { openJobPage } from '../../modules/jobs/jobRoute'
+import { scoreStoredJob } from '../../modules/jobs/manualScoring'
 import ApplicationDashboard from './ApplicationDashboard'
 import JobFilters from './JobFilters'
 import BulkActionsBar from './BulkActionsBar'
@@ -62,6 +63,7 @@ export default function JobDiscoveryScreen() {
   const [rerunning, setRerunning] = useState(false)
   const [rerunMsg, setRerunMsg] = useState('')
   const [addJobOpen, setAddJobOpen] = useState(false)
+  const [addNote, setAddNote] = useState(null)
 
   useEffect(() => {
     saveJobs(state)
@@ -157,10 +159,20 @@ export default function JobDiscoveryScreen() {
     setState(next)
   }, [])
 
-  const handleJobAdded = useCallback((job, openDetails) => {
+  const handleJobAdded = useCallback((job, openDetails, result) => {
     setAddJobOpen(false)
     if (openDetails) openJobPage(job.jobId)
-    else setAutoLoadNote(`Added “${job.title}”. It is not scored yet.`)
+    setAddNote(result.scored
+      ? { text: `Added “${job.title}” and scored it.`, jobId: job.jobId, retry: false }
+      : { text: `Added “${job.title}” as Unreviewed. ${result.message}`, jobId: job.jobId, retry: true })
+  }, [])
+
+  const handleScoreNow = useCallback(async (jobId, title) => {
+    setAddNote((prev) => ({ ...prev, busy: true }))
+    const result = await scoreStoredJob(jobId)
+    setAddNote(result.ok
+      ? { text: `Scored “${title}”.`, jobId, retry: false }
+      : { text: result.message, jobId, retry: result.reason !== 'duplicate' })
   }, [])
 
   const handleUrlImported = useCallback((payload) => {
@@ -262,7 +274,18 @@ export default function JobDiscoveryScreen() {
               Add job
             </Button>
           </div>
-          {addJobOpen && <AddJobDialog onClose={() => setAddJobOpen(false)} onSaved={handleJobAdded} />}
+          {addJobOpen && <AddJobDialog apiAvailable={pipelineApiAvailable} onClose={() => setAddJobOpen(false)} onSaved={handleJobAdded} />}
+          {addNote && (
+            <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-teal-700 dark:text-teal-300">
+              <span>{addNote.text}</span>
+              {addNote.retry && (
+                <Button variant="secondary" disabled={addNote.busy} onClick={() => handleScoreNow(addNote.jobId, state.jobs.find((j) => j.jobId === addNote.jobId)?.title ?? 'the job')}>
+                  {addNote.busy ? 'Scoring…' : 'Score now'}
+                </Button>
+              )}
+              <button type="button" className="underline" onClick={() => setAddNote(null)}>Dismiss</button>
+            </div>
+          )}
 
           {pipelineApiAvailable && (
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 dark:border-stone-800 dark:bg-stone-900">

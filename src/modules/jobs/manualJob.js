@@ -3,6 +3,20 @@
 
 export const MANUAL_SOURCES = ['LinkedIn', 'Company site', 'Referral', 'Other']
 
+/**
+ * The only fields of a manual job that go to the server's scoring (python/job_scoring/manual_jobs.py SCORING_FIELDS, kept
+ * in step by a test). Notes and extra links are not among them.
+ */
+export const SCORING_FIELDS = [
+  'jobId', 'title', 'company', 'description', 'jobUrl', 'location', 'salary', 'site', 'provider',
+  'sourceChoice', 'status', 'createdAt', 'firstSeen', 'lastSeen', 'scrapedAt',
+]
+
+/** The scoring payload of a stored manual job: the string fields above, nothing else. */
+export function scoringPayload(job) {
+  return Object.fromEntries(SCORING_FIELDS.filter((field) => typeof job?.[field] === 'string').map((field) => [field, job[field]]))
+}
+
 /** Fields a re-import of the scored-jobs file must carry over from the stored record. */
 export const MANUAL_FIELDS = ['manualEntry', 'sourceChoice', 'notes', 'extraLinks', 'createdAt']
 

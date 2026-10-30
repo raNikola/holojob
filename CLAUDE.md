@@ -70,7 +70,7 @@ provider, each behind an explicit confirm; the browser AI features send redacted
 - **CV analysis** sends the text of one CV with name, e-mails, phones and links replaced
   by placeholders (`redact.py`), only after the confirm dialog has shown that exact text
   and the provider; `/api/ai/cv-analyze` refuses a body without `"confirm": true`.
-- **Fit judge**, only with `--judge`: sends the ad plus a digest of
+- **Fit judge**, only with `--judge` (hand-entered jobs are judged like any other ad: the pasted ad text, never their notes or links): sends the ad plus a digest of
   `candidate-intelligence.json` (seniority, years, target roles, spoken languages,
   career narrative, skills, domains, project / ownership / leadership / impact examples,
   strengths, known gaps). Every line but the language list goes through `redact.py`
@@ -146,10 +146,19 @@ The drawer's tracking block is a read-only summary (`ApplicationTrackingSummary.
 
 ## Manual jobs
 
-"Add job" on the Jobs screen (`AddJobDialog.jsx`, helpers in `modules/jobs/manualJob.js`) creates a job through `createJob` in the jobs store: `manualEntry: true`,
-`provider: 'manual'`, status `new` (shown "Unreviewed"), duplicate by normalised main URL. It makes no AI call and is **not scored** (no pipeline path scores a
-pasted job). `notes` and `extraLinks` are owner-only: they live in the browser's job record, are carried over by `importJobsFromFile`, and are not in
-`summarizeJob`, so no AI context carries them (`tests/js/manualJob.test.js`). Add any new owner-only field to `MANUAL_FIELDS` and to that test.
+"Add job" on the Jobs screen (`AddJobDialog.jsx`, helpers in `modules/jobs/manualJob.js`, flow in `modules/jobs/manualScoring.js`): `manualEntry: true`,
+`provider: 'manual'`, status `new` (shown "Unreviewed"). The server is the master for the scored fields: `POST /api/jobs/manual/score`
+(`scripts/run-manual-job.js`) runs `python/job_import/import_job_url.py --job-json -` (payload on stdin; no fetch, no model, no network), which stores the job in
+`data/jobs/manual_jobs.json` (`python/job_scoring/manual_jobs.py`; discovery never writes it), scores it with the same `score_jobs()` over the same corpus a full run
+uses and merges it into `scored_jobs.json`. `run_scoring.py` adds the manual file to every run (so Re-score, Re-scrape and the full pipeline keep the jobs; a manual
+row wins over a discovered row with the same normalised URL, and `--min-score` never drops one). Scoring failure leaves the job Unreviewed with a "Score now" retry
+(details page, and the note after saving); retry is idempotent. `runScoring` / `runFullPipeline` / `runJudgedScoring` first send the browser's manual jobs to
+`/api/jobs/manual/sync`. Manual jobs get no enrichment (`aiEnrichment: "missing"`), and a `--judge` run includes them like any other ad (the ad text only).
+Duplicates: same normalised URL (`normalizeJobUrl` / `normalize_url`, one fixture `tests/fixtures/url-normalisation.json` run by both) against this browser's list, the
+discovered file, the scored file and the manual file; a different id is a clash, the same id is a retry.
+`notes` and `extraLinks` are owner-only: they stay in the browser's job record (carried over by `importJobsFromFile`) and are in no payload to Python, file, log line or
+AI context (`SCORING_FIELDS` is the whitelist on both sides; `summarizeJob` is a whitelist too; `tests/js/manualScoring.test.js`, `tests/python/test_manual_jobs.py`).
+Add any new owner-only field to `MANUAL_FIELDS` and to those tests.
 
 ## Request guard (`/api`)
 

@@ -99,10 +99,11 @@ describe('re-import of the scored-jobs file', () => {
     expect(next.jobs.map((j) => j.jobId)).toEqual(['z', 'manual-3'])
   })
 
-  it('carries notes onto a matching file record', () => {
+  it('keeps the manual row, with its notes, when the file has the same address under another id', () => {
     createJob(buildManualJob({ ...FORM, notes: 'secret-ish' }, { id: 'manual-4' }))
     const next = importJobsFromFile({ jobs: [{ jobId: 'f1', title: 'Product Manager', jobUrl: FORM.jobUrl }] }, loadJobs())
-    expect(next.jobs.find((j) => j.jobId === 'f1')).toMatchObject({ notes: 'secret-ish', manualEntry: true })
+    expect(next.jobs.find((j) => j.jobId === 'f1')).toBeUndefined()
+    expect(next.jobs.find((j) => j.jobId === 'manual-4')).toMatchObject({ notes: 'secret-ish', manualEntry: true })
   })
 })
 
