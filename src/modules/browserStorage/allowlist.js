@@ -13,6 +13,7 @@ export const BROWSER_STORAGE_ALLOWLIST = [
   { key: 'job-dashboard-jobs-tab', store: 'session', maxBytes: 64, reason: 'Which jobs tab is open.' },
   { key: 'job-dashboard-settings-category', store: 'session', maxBytes: 32, reason: 'Which Settings category is open; no content.' },
   { key: 'job-dashboard-sidebar-collapsed', store: 'local', maxBytes: 8, reason: 'Layout preference, true or false.' },
+  { key: 'job-dashboard-discovery-options', store: 'local', maxBytes: 64, reason: 'Which opt-in discovery sources are ticked (for example Joberty); booleans only, no content.' },
   { key: 'job-dashboard-theme', store: 'local', maxBytes: 16, reason: 'Light or dark choice (not persisted yet).' },
   { key: 'holojob-demo-bootstrap-done', store: 'session', maxBytes: 8, reason: 'Demo-mode flag; exists only in demo mode.' },
 ]
@@ -45,6 +46,7 @@ export const STORAGE_API_USERS = [
   'src/modules/appNavigation.js',
   'src/modules/demo/loadDemoData.js',
   'src/modules/intelligence/intelligenceExport.js',
+  'src/modules/jobs/discoveryOptions.js',
   'src/modules/jobs/jobStorage.js',
   'src/modules/jobs/pipelineState.js',
   'src/modules/outreach/linkedinCookie.js',
