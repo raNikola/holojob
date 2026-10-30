@@ -2,14 +2,16 @@ import { useEffect, useId, useState } from 'react'
 import { X } from 'lucide-react'
 import InfoTip from '../ui/InfoTip'
 import { FILTER_HELP } from '../../modules/jobs/filterHelp'
-import { SALARY_CLEARED } from '../../modules/jobs/jobFilters'
+import { SALARY_CLEARED, SALARY_RESET } from '../../modules/jobs/jobFilters'
 import {
   RANGE_ERROR_TEXT,
   SALARY_PRESETS,
   describeRange,
   formatAmount,
   parseAmount,
+  profileSalaryNote,
   rangeError,
+  salaryMarker,
   sanitizeAmount,
 } from '../../modules/jobs/salaryFilter'
 
@@ -17,7 +19,7 @@ import {
  * One control for the salary range in EUR per month. The typed text is a draft; the filter changes
  * only while From is not above To, so the last valid range stays active during an error.
  */
-export default function SalaryFilter({ from, to, includeUnknown, fromProfile, onChange, className = '' }) {
+export default function SalaryFilter({ from, to, includeUnknown, filters, profile, onChange, className = '' }) {
   const labelId = useId()
   const hintId = useId()
   const [draft, setDraft] = useState({ from: formatAmount(from), to: formatAmount(to) })
@@ -30,6 +32,7 @@ export default function SalaryFilter({ from, to, includeUnknown, fromProfile, on
   const draftFrom = parseAmount(draft.from)
   const draftTo = parseAmount(draft.to)
   const invalid = rangeError(draftFrom, draftTo)
+  const marker = salaryMarker(filters, profile)
   const hint = invalid ? RANGE_ERROR_TEXT : describeRange(draftFrom, draftTo)
 
   const edit = (next) => {
@@ -59,6 +62,16 @@ export default function SalaryFilter({ from, to, includeUnknown, fromProfile, on
       <div className="mb-1.5 flex items-center gap-1">
         <span id={labelId} className="text-sm font-medium text-stone-700 dark:text-stone-300">Salary (EUR/month)</span>
         <InfoTip text={FILTER_HELP.salary} label="About Salary" />
+        {marker === 'profile' && (
+          <span
+            role="img"
+            aria-label="Taken from your profile"
+            title="Taken from your profile"
+            className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-100 text-[11px] font-bold leading-none text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+          >
+            !
+          </span>
+        )}
       </div>
       <div
         role="group"
@@ -102,9 +115,13 @@ export default function SalaryFilter({ from, to, includeUnknown, fromProfile, on
           Include jobs without salary
         </label>
       </div>
-      {fromProfile && (
+      {marker === 'profile' && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{profileSalaryNote(profile)}</p>}
+      {(marker === 'differs' || marker === 'cleared') && (
         <p className="mt-1 text-xs text-stone-500">
-          Pre-filled from your profile, so jobs paying less than your minimum are hidden. Clear the range (x) to see them with the “Below min salary” badge.
+          {marker === 'cleared' ? 'Cleared.' : 'Differs from your profile.'}{' '}
+          <button type="button" onClick={() => onChange(SALARY_RESET)} className="underline underline-offset-2 hover:text-teal-700 dark:hover:text-teal-300">
+            Reset to profile
+          </button>
         </p>
       )}
     </div>
