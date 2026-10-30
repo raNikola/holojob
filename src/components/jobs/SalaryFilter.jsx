@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react'
-import { X } from 'lucide-react'
+import { RotateCcw, X } from 'lucide-react'
 import InfoTip from '../ui/InfoTip'
 import { FILTER_HELP } from '../../modules/jobs/filterHelp'
 import { SALARY_CLEARED, SALARY_RESET } from '../../modules/jobs/jobFilters'
@@ -90,19 +90,19 @@ export default function SalaryFilter({ from, to, includeUnknown, filters, profil
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         )}
-      </div>
-      <p id={hintId} className={`mt-1 min-h-[1rem] text-xs ${invalid ? 'text-red-500' : 'text-stone-500'}`}>
-        {hint}
-        {(marker === 'differs' || marker === 'cleared') && !invalid && (
-          <>
-            {hint ? ' · ' : ''}
-            <button type="button" onClick={() => onChange(SALARY_RESET)} className="underline underline-offset-2 hover:text-teal-700 dark:hover:text-teal-300">
-              Reset to profile
-            </button>
-          </>
+        {(marker === 'differs' || marker === 'cleared') && (
+          <InfoTip
+            icon={RotateCcw}
+            align="right"
+            label="Reset salary to your profile values"
+            text="Reset to profile"
+            onActivate={() => onChange(SALARY_RESET)}
+          />
         )}
-      </p>
-      <div className="mt-1 flex flex-wrap items-center gap-2">
+      </div>
+      {/* The range summary is read by screen readers only; the error replaces it, in view, while From is above To. */}
+      <p id={hintId} className={invalid ? 'mt-1 text-xs text-red-500' : 'sr-only'}>{hint}</p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
         {SALARY_PRESETS.map((n) => (
           <button
             key={n}
