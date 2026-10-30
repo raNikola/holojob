@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ExternalLink } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { ExternalLink, Pencil } from 'lucide-react'
 import Alert from '../ui/Alert'
 import Button from '../ui/Button'
 import Textarea from '../ui/Textarea'
+import AddJobDialog from './AddJobDialog'
 import { NO_DESCRIPTION, scoreStoredJob } from '../../modules/jobs/manualScoring'
 import { patchJob } from '../../modules/jobs/jobsStore'
 import { normalizeJobUrl } from '../../modules/jobs/manualJob'
@@ -18,6 +20,8 @@ export default function ManualJobSection({ job, onJobUpdated, apiAvailable = tru
   const [scoring, setScoring] = useState(false)
   const [scoreMessage, setScoreMessage] = useState('')
   const [pasted, setPasted] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [editMessage, setEditMessage] = useState('')
 
   const sourceUrl = normalizeJobUrl(job.sourceUrl) ? job.sourceUrl : ''
   if (!job.manualEntry && !links.length && !job.notes && !sourceUrl) return null
@@ -40,6 +44,21 @@ export default function ManualJobSection({ job, onJobUpdated, apiAvailable = tru
 
   return (
     <div className="space-y-3">
+      {job.manualEntry && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" onClick={() => { setEditMessage(''); setEditing(true) }}><Pencil className="mr-1 inline h-4 w-4" />Edit</Button>
+          {editMessage && <p role="status" className="text-sm text-stone-700 dark:text-stone-300">{editMessage}</p>}
+        </div>
+      )}
+      {editing && createPortal(
+        <AddJobDialog
+          job={job}
+          apiAvailable={apiAvailable}
+          onClose={() => setEditing(false)}
+          onSaved={(_saved, _open, result) => { setEditing(false); setEditMessage(result.message || '') }}
+        />,
+        document.body,
+      )}
       {unscored && (
         <Alert variant="info">
           <div className="space-y-2">

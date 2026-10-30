@@ -4,8 +4,8 @@ import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import Input from '../ui/Input'
 import Textarea from '../ui/Textarea'
-import { validateManualJob } from '../../modules/jobs/manualJob'
-import { addManualJob } from '../../modules/jobs/manualScoring'
+import { formFromJob, validateEditedJob, validateManualJob } from '../../modules/jobs/manualJob'
+import { addManualJob, editManualJob } from '../../modules/jobs/manualScoring'
 import { jobHash } from '../../modules/jobs/jobRoute'
 import { LABELS, applyFill, clearSuggested, fetchAdFields, previewAdAi, runAdAi, stillMissing } from '../../modules/jobs/adFill'
 import { normalizeJobUrl } from '../../modules/jobs/manualJob'
@@ -20,18 +20,20 @@ const EMPTY = {
 }
 
 /**
- * Adds a job typed in by hand. "Fill from ad" asks the server to read the Job URL and proposes values for the fields that
+ * Adds a job typed in by hand, or (with `job`) edits one that was: the same form, prefilled. "Fill from ad" asks the server to read the Job URL and proposes values for the fields that
  * are still empty (marked "suggested", editable, saved only by Save); Notes, extra links and the Source URL stay in this
  * browser's job record and are never part of any request.
  */
-export default function AddJobDialog({ onClose, onSaved }) {
+export default function AddJobDialog({ onClose, onSaved, job = null, apiAvailable = true }) {
+  const editing = Boolean(job)
   // The form, the "suggested" marks and the note change together, in one transition (applyFill), so they cannot disagree.
-  const [draft, setDraft] = useState({ form: EMPTY, suggested: {}, note: null })
+  const [draft, setDraft] = useState(() => ({ form: editing ? formFromJob(job) : EMPTY, suggested: {}, note: null }))
   const { form, suggested, note: adNote } = draft
   const setForm = (update) => setDraft((prev) => ({ ...prev, form: typeof update === 'function' ? update(prev.form) : update }))
   const setNote = (note) => setDraft((prev) => ({ ...prev, note }))
   const [errors, setErrors] = useState({})
   const [duplicate, setDuplicate] = useState(null)
+  const [failure, setFailure] = useState('')
   const [busy, setBusy] = useState(false)
   const [adBusy, setAdBusy] = useState(false)
   const [adPage, setAdPage] = useState(null) // { token, missing } of the page last read
@@ -91,14 +93,17 @@ export default function AddJobDialog({ onClose, onSaved }) {
 
   const save = async (openDetails) => {
     if (busy) return
-    const found = validateManualJob(form)
+    const found = editing ? validateEditedJob(form, job) : validateManualJob(form)
     setErrors(found)
     setDuplicate(null)
+    setFailure('')
     if (Object.keys(found).length) return
     setBusy(true)
     try {
-      const result = await addManualJob(form)
+      const result = editing ? await editManualJob(job.jobId, form, { apiAvailable }) : await addManualJob(form)
       if (result.status === 'duplicate') setDuplicate(result.existing)
+      else if (result.status === 'unchanged') onClose()
+      else if (result.status === 'missing') setFailure(result.message)
       else onSaved(result.job, openDetails, result)
     } finally {
       setBusy(false)
@@ -117,7 +122,7 @@ export default function AddJobDialog({ onClose, onSaved }) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-job-title"
-      onKeyDown={(event) => { if (event.key === 'Escape') onClose() }}
+      onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onClose() } }}
     >
       <button type="button" className="absolute inset-0 bg-black/50" onClick={onClose} aria-label="Close" tabIndex={-1} />
       <form
@@ -127,8 +132,10 @@ export default function AddJobDialog({ onClose, onSaved }) {
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 id="add-job-title" className="text-lg font-semibold text-stone-900 dark:text-stone-50">Add job</h2>
-            <p className="text-xs text-stone-500">Scored on this server with the same local rules as every other job. Nothing is sent to an AI provider, and Notes, extra links and the Source URL never leave this browser.</p>
+            <h2 id="add-job-title" className="text-lg font-semibold text-stone-900 dark:text-stone-50">{editing ? 'Edit job' : 'Add job'}</h2>
+            <p className="text-xs text-stone-500">{editing
+              ? 'Changing the title, company, description, location or salary scores the job again on this server with the local rules; changing only the links, Notes or Source URL does not. Status and tracking stay as they are. Notes, extra links and the Source URL never leave this browser.'
+              : 'Scored on this server with the same local rules as every other job. Nothing is sent to an AI provider, and Notes, extra links and the Source URL never leave this browser.'}</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800">
             <X className="h-4 w-4" />
@@ -137,9 +144,10 @@ export default function AddJobDialog({ onClose, onSaved }) {
 
         {duplicate && (
           <Alert variant="error">
-            This link is already in your jobs: <a className="font-medium underline" href={jobHash(duplicate.jobId)} onClick={onClose}>{duplicate.title || 'open that job'}</a>. No second job was created.
+            This link is already in your jobs: <a className="font-medium underline" href={jobHash(duplicate.jobId)} onClick={onClose}>{duplicate.title || 'open that job'}</a>. {editing ? 'Nothing was changed.' : 'No second job was created.'}
           </Alert>
         )}
+        {failure && <Alert variant="error">{failure}</Alert>}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Input id="add-job-title-input" label="Title *" labelExtra={tag('title')} value={form.title} onChange={set('title')} error={errors.title} aria-required="true" aria-invalid={Boolean(errors.title)} autoFocus />
@@ -216,7 +224,7 @@ export default function AddJobDialog({ onClose, onSaved }) {
 
         <div className="flex flex-wrap justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="button" variant="secondary" disabled={busy} onClick={() => save(true)}>Save and open details</Button>
+          {!editing && <Button type="button" variant="secondary" disabled={busy} onClick={() => save(true)}>Save and open details</Button>}
           <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
         </div>
       </form>

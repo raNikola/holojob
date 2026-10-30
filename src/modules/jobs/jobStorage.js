@@ -1,7 +1,7 @@
 /** @typedef {import('../../types/career-os.d.ts').Job} Job */
 import { salaryModeOf } from './salaryFilter.js'
 import { normalizeMultiFilter, normalizePriorityFilter } from './jobFilters.js'
-import { MANUAL_FIELDS, identityJobUrl } from './manualJob.js'
+import { MANUAL_FIELDS, MANUAL_ONLY_FIELDS, identityJobUrl } from './manualJob.js'
 
 export const JOBS_STORAGE_KEY = 'job-dashboard-discovered-jobs'
 
@@ -115,7 +115,7 @@ export function mergeStatusOnImport(existingJobs, incomingJobs) {
       tailoredAssets: job.tailoredAssets,
       aiInsights: job.aiInsights,
       outreach: job.outreach,
-      manual: Object.fromEntries(MANUAL_FIELDS.filter((f) => f in job).map((f) => [f, job[f]])),
+      manual: Object.fromEntries([...MANUAL_FIELDS, ...(job.manualEntry ? MANUAL_ONLY_FIELDS : [])].filter((f) => f in job).map((f) => [f, job[f]])),
     }
     preservedByKey.set(jobMatchKey(job), entry)
     if (job.jobId) preservedById.set(job.jobId, entry)

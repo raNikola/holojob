@@ -1,7 +1,7 @@
 // Adding a hand-entered job and scoring it on the server. The server file is the master for the scored fields; this
 // browser keeps its own copy of them and the owner's fields (notes, extra links, status, tracking), which never go over.
 import { createJob, getJobsSnapshot, getStoredJob, patchJob } from './jobsStore.js'
-import { buildManualJob, findDuplicateByUrl, scoringPayload } from './manualJob.js'
+import { buildManualJob, editChanges, findDuplicateByUrl, scoringPayload } from './manualJob.js'
 
 /** What the owner keeps: a scored record from the server never overwrites these. */
 const OWNER_FIELDS = [
@@ -100,6 +100,49 @@ export async function scoreStoredJob(jobId, { fetchFn = globalThis.fetch } = {})
     return { ok: false, reason: 'duplicate', existing: result.existing, message: `This link is already in your jobs as “${result.existing.title || result.existing.jobId}”, so it was not scored again.` }
   }
   return result
+}
+
+/**
+ * Edit job: writes the changes to the stored job (same id, `createdAt` / `firstSeen` kept, `updatedAt` set by the store)
+ * and re-scores on the server only when something scoring reads changed (title, company, description, location, salary).
+ * Notes, extra links and the Source URL never leave the browser; a new Job URL is stored on the server without scoring.
+ * Status, tracking and everything else of the record are not touched. A different Job URL is checked for a clash with
+ * any other job first (the job itself is ignored), and a clash writes nothing.
+ * @returns {Promise<{ status: 'duplicate', existing: object } | { status: 'missing' | 'unchanged', message?: string, job?: object } | { status: 'saved', job: object, scored: boolean, rescored: boolean, message?: string }>}
+ */
+export async function editManualJob(jobId, form, { fetchFn = globalThis.fetch, apiAvailable = true } = {}) {
+  const stored = getStoredJob(jobId)
+  if (!stored?.manualEntry) return { status: 'missing', message: 'This job is not a hand-entered job in your list.' }
+  const { patch, rescore, urlChanged } = editChanges(form, stored)
+  if (!Object.keys(patch).length) return { status: 'unchanged', job: stored }
+
+  if (urlChanged && patch.jobUrl) {
+    const local = findDuplicateByUrl(getJobsSnapshot().jobs.filter((job) => job.jobId !== jobId), patch.jobUrl)
+    if (local) return { status: 'duplicate', existing: local }
+    if (apiAvailable) {
+      const remote = await checkOnServer({ ...stored, jobUrl: patch.jobUrl }, { fetchFn })
+      if (!remote.ok) return { status: 'duplicate', existing: remote.existing }
+    }
+  }
+
+  const saved = patchJob(jobId, patch)
+  if (!saved.ok) return { status: 'missing', message: 'The job is no longer in your list.' }
+  let job = saved.job
+  const hasText = Boolean(String(job.description ?? '').trim())
+
+  if (rescore && hasText) {
+    const result = apiAvailable ? await scoreOnServer(job, { fetchFn }) : { ok: false, reason: 'unreachable', message: MESSAGES.unreachable }
+    if (result.ok) {
+      const scored = patchJob(jobId, scoredPatch(result.scored))
+      return { status: 'saved', job: scored.ok ? scored.job : job, scored: true, rescored: true }
+    }
+    return { status: 'saved', job, scored: false, rescored: false, message: `${result.message || 'Scoring failed on the server.'} The changes are saved here and are applied by the next Re-score.` }
+  }
+  if ('jobUrl' in patch && hasText && apiAvailable) {
+    // The server's copy carries the new address too, so a later run does not bring the old one back. Nothing is scored.
+    await post('/api/jobs/manual/sync', { jobs: [scoringPayload(job)] }, fetchFn)
+  }
+  return { status: 'saved', job, scored: false, rescored: false }
 }
 
 /**

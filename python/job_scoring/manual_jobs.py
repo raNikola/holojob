@@ -28,7 +28,7 @@ MAX_TEXT = 200_000
 # What scoring and the job list need. Keep in step with SCORING_FIELDS in src/modules/jobs/manualJob.js.
 SCORING_FIELDS = (
     "jobId", "title", "company", "description", "jobUrl", "location", "salary", "site", "provider",
-    "manualEntry", "sourceChoice", "status", "createdAt", "firstSeen", "lastSeen", "scrapedAt",
+    "manualEntry", "sourceChoice", "status", "createdAt", "firstSeen", "lastSeen", "scrapedAt", "updatedAt",
 )
 REQUIRED = ("jobId", "title", "company", "description")
 REQUIRED_WITHOUT_DESCRIPTION = ("jobId", "title", "company")
