@@ -167,16 +167,25 @@ def _found(value: str, folded_text: str) -> bool:
     return bool(folded) and folded in folded_text
 
 
-def _slice_description(text: str, start: str, end: str) -> str:
+# What a placeholder in the redacted copy stands for in the original text.
+_PLACEHOLDERS = {"[EMAIL]": r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", "[PHONE]": r"\+?\(?\d[\d\s().\-/]{6,}\d", "[LINK]": r"\S+", "[NAME]": r"\w+(?:\s+\w+)?"}
+
+
+def _snippet(snippet: str, original: bool = False) -> re.Pattern:
+    """A pattern for a quoted snippet: whitespace is flexible; in the original text a placeholder matches whatever it replaced."""
+    parts = re.split(r"(\[(?:EMAIL|PHONE|LINK|NAME)\])", snippet)
+    return re.compile("".join(_PLACEHOLDERS[p] if original and p in _PLACEHOLDERS else r"\s+".join(re.escape(w) for w in p.split()) + (r"\s*" if p != p.rstrip() else "") for p in parts if p), re.I)
+
+
+def _slice_description(text: str, start: str, end: str, original: bool = False) -> str:
     """The text between two snippets the model quoted, cut from the page text itself. "" if either is not there."""
     start, end = (start or "").strip(), (end or "").strip()
     if len(start) < 10 or len(end) < 10:
         return ""
-    pattern = re.compile(r"\s+".join(re.escape(w) for w in start.split()), re.I)
-    first = pattern.search(text)
+    first = _snippet(start, original).search(text)
     if not first:
         return ""
-    closing = re.compile(r"\s+".join(re.escape(w) for w in end.split()), re.I)
+    closing = _snippet(end, original)
     last = None
     for match in closing.finditer(text, first.start()):
         last = match
@@ -186,13 +195,19 @@ def _slice_description(text: str, start: str, end: str) -> str:
     return piece if len(piece) >= MIN_DESCRIPTION else ""
 
 
-def accept(answer: dict, text: str, want) -> tuple[dict, list[str]]:
-    """(fields kept, names dropped). Code decides: a value stays only if the text shows it."""
+def accept(answer: dict, text: str, want, original: str | None = None) -> tuple[dict, list[str]]:
+    """(fields kept, names dropped). Code decides: a value stays only if the text shows it.
+
+    The description is cut from the page text as fetched (`original`) when the snippets are in it, so the stored ad is the ad
+    itself, not the redacted copy the model saw; if they are only in the redacted copy, from that.
+    """
     folded_text = _fold(text)
     kept: dict = {}
     for field in want:
         if field == "description":
-            value = _slice_description(text, str(answer.get("descriptionStart") or ""), str(answer.get("descriptionEnd") or ""))
+            start, end = str(answer.get("descriptionStart") or ""), str(answer.get("descriptionEnd") or "")
+            # The snippets must be in what the model saw; the piece itself is taken from the original where it can be.
+            value = _slice_description(text, start, end) and (_slice_description(original or "", start, end, original=True) or _slice_description(text, start, end))
         else:
             raw = str(answer.get(field) or "").strip()
             value = raw if raw and len(raw) <= LIMITS[field] and _found(raw, folded_text) else ""
@@ -215,5 +230,5 @@ def extract(page_text: str, want, profile, *, complete=None) -> dict:
         answer, error = complete(request["prompt"], timeout=120)
     if not isinstance(answer, dict):
         raise Refused("ai_failed", "The AI could not read the fields from this page.")
-    fields, rejected = accept(answer, request["text"], request["want"])
+    fields, rejected = accept(answer, request["text"], request["want"], original=str(page_text or ""))
     return {"ok": True, "fields": fields, "rejected": rejected, "removed": request["removed"]}

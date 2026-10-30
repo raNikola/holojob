@@ -111,6 +111,16 @@ def test_when_claude_code_is_missing_the_reason_says_so(allowlisted, monkeypatch
     assert ad_ai.gate_status("x") == {"allowed": False, "reason": "Claude Code is not logged in", "class": "subscription", "provider": "claude-code"}
 
 
+def test_adding_job_import_to_the_allowlist_needs_the_owners_confirm_and_is_never_done_by_code(tmp_path):
+    ai_gate.save_settings({"claudeCodeSubscription": {"enabled": True, "maxCallsDaily": 5, "features": ["jobAnalysis"]}}, confirm=True)
+    asked = ai_gate.save_settings({"claudeCodeSubscription": {"features": ["jobAnalysis", "job-import"]}})
+    assert asked["ok"] is False and asked["needsConfirm"] and "job-import" in " ".join(asked["increases"])
+    assert "job-import" not in json.dumps(ai_gate.load_settings())
+    assert ai_gate.save_settings({"claudeCodeSubscription": {"features": ["jobAnalysis", "job-import"]}}, confirm=True)["ok"]
+    source = (ROOT / "python" / "job_import" / "ad_ai.py").read_text() + (ROOT / "python" / "job_import" / "ad_fill.py").read_text()
+    assert "save_settings" not in source
+
+
 def test_the_daily_subscription_cap_is_the_gates_reason(tmp_path, monkeypatch):
     monkeypatch.setattr(claude_code, "availability", lambda: {"available": True, "reason": ""})
     settings(tmp_path, enabled=True, maxCallsDaily=1, features=["job-import"])
@@ -172,6 +182,41 @@ def test_the_description_is_cut_from_the_page_text_between_the_quoted_snippets(a
     text = result["fields"]["description"]
     assert text.startswith("About the role.") and text.endswith("That is the whole role.") and "Responsibility 5" in text
     assert "mirela" not in text.lower() and "Zlatan" not in text
+
+
+def test_the_stored_description_is_the_ad_itself_not_the_redacted_copy_the_model_saw(allowlisted):
+    page = PAGE.replace("That is the whole role.", "That is the whole role. Questions: hr@acme-test.example, +381 11 555 0100.")
+    seen = {}
+
+    def complete(prompt, timeout=0):
+        seen["prompt"] = prompt
+        return {"descriptionStart": START, "descriptionEnd": "Questions: [EMAIL], [PHONE]."}, ""
+
+    result = ad_ai.extract(page, ["description"], OWNER, complete=complete)
+    assert "hr@acme-test.example" not in seen["prompt"] and "[EMAIL]" in seen["prompt"]  # the model never saw it
+    assert "hr@acme-test.example" in result["fields"]["description"]                       # the stored ad is whole
+
+
+def test_partial_json_ld_then_ai_asks_only_for_what_the_page_left_out(allowlisted):
+    import ad_reader
+
+    html = ('<html><head><title>Careers</title><script type="application/ld+json">'
+            + json.dumps({"@type": "JobPosting", "title": "Senior Product Manager", "description": "<p>" + LONG + "</p>"})
+            + "</script></head><body><p>Acme d.o.o. is hiring in Niš, Serbia. Salary: 3000 - 3500 EUR per month.</p></body></html>")
+    ad = ad_reader.read_ad(html)
+    assert ad["fields"]["title"] == "Senior Product Manager" and ad["missing"] == ["company", "location", "salary"]
+
+    seen = {}
+
+    def complete(prompt, timeout=0):
+        seen["prompt"] = prompt
+        return {"title": "Something else entirely", "company": "Acme d.o.o.", "location": "Niš, Serbia", "salary": "3000 - 3500 EUR per month"}, ""
+
+    result = ad_ai.extract(ad["pageText"], ad["missing"], OWNER, complete=complete)
+    assert '"company"' in seen["prompt"] and '"location"' in seen["prompt"] and '"salary"' in seen["prompt"]
+    assert '"title"' not in seen["prompt"] and "descriptionStart" not in seen["prompt"]       # found in JSON-LD: not asked for
+    assert set(result["fields"]) == {"company", "location", "salary"}                          # the stray title was never accepted
+    assert ad["fields"]["title"] == "Senior Product Manager"                                    # and the JSON-LD value stays
 
 
 def test_a_description_the_model_paraphrases_or_cannot_bracket_is_dropped(allowlisted):

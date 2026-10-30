@@ -129,7 +129,7 @@ def _request(scheme: str, host: str, ips: list[str], port: int, target: str, dea
         try:
             sock = socket.create_connection((ip, port), timeout=min(remaining, 8))
             if scheme == "https":
-                sock = ssl.create_default_context().wrap_socket(sock, server_hostname=host)
+                sock = tls_context().wrap_socket(sock, server_hostname=host)
             break
         except (OSError, ssl.SSLError):
             sock = None
@@ -166,6 +166,16 @@ def _request(scheme: str, host: str, ips: list[str], port: int, target: str, dea
         raise _refuse("unreachable") from None
     finally:
         connection.close()
+
+
+def tls_context() -> ssl.SSLContext:
+    """Certificates are checked against certifi's bundle when it is installed (as `requests` did), else the system store."""
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except (ImportError, OSError, ssl.SSLError):
+        return ssl.create_default_context()
 
 
 def _decode(body: bytes, content_type: str) -> str:
