@@ -33,7 +33,8 @@ export function passesSalaryFilters(job, { minSalary = '', desiredMin = '', desi
 
 /**
  * The filters with the profile's figures standing in for any salary filter the
- * user has not touched (null). An emptied field is '' and stays empty.
+ * user has not touched (null). In the current shape an emptied range ('') stays empty; in the old
+ * three-field shape a state with no figure at all counts as untouched.
  */
 export function withProfileSalaryDefaults(filters, basicProfile = {}) {
   const pick = (own, fromProfile) => (own === null || own === undefined ? (fromProfile ?? '') : own)
@@ -49,13 +50,17 @@ export function withProfileSalaryDefaults(filters, basicProfile = {}) {
       salaryTo: pick(filters.salaryTo, profileTo),
     }
   }
-  const fromProfile = [filters.minSalary, filters.desiredSalaryMin, filters.desiredSalaryMax]
+  // Saved by the three-field panel with no figure in any field: nothing was chosen (an emptied field is
+  // not a figure), so the profile's figures apply. Any figure present keeps every field as saved.
+  const legacy = [filters.minSalary, filters.desiredSalaryMin, filters.desiredSalaryMax]
+  const [min, desiredMin, desiredMax] = legacy.some((v) => parseAmount(v) != null) ? legacy : [null, null, null]
+  const fromProfile = [min, desiredMin, desiredMax]
     .some((own, i) => (own === null || own === undefined) && [basicProfile.minSalaryEur, basicProfile.desiredSalaryMinEur, basicProfile.desiredSalaryMaxEur][i])
   return {
     ...filters,
     salaryFromProfile: Boolean(fromProfile),
-    minSalary: pick(filters.minSalary, basicProfile.minSalaryEur),
-    desiredSalaryMin: pick(filters.desiredSalaryMin, basicProfile.desiredSalaryMinEur),
-    desiredSalaryMax: pick(filters.desiredSalaryMax, basicProfile.desiredSalaryMaxEur),
+    minSalary: pick(min, basicProfile.minSalaryEur),
+    desiredSalaryMin: pick(desiredMin, basicProfile.desiredSalaryMinEur),
+    desiredSalaryMax: pick(desiredMax, basicProfile.desiredSalaryMaxEur),
   }
 }
