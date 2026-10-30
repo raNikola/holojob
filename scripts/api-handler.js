@@ -421,13 +421,14 @@ export async function handleApiRequest(req, res) {
     return true
   }
 
-  // Hand-entered jobs (Add job): `score` stores and scores one, `sync` only stores the browser's manual jobs so the
+  // Hand-entered jobs (Add job): `score` stores and scores one, `check` only looks for a clash (a job without text), `sync` only stores the browser's manual jobs so the
   // next scoring run has them. Local scoring; no model, no network.
-  if ((url === '/api/jobs/manual/score' || url === '/api/jobs/manual/sync') && req.method === 'POST') {
+  if ((url === '/api/jobs/manual/score' || url === '/api/jobs/manual/check' || url === '/api/jobs/manual/sync') && req.method === 'POST') {
     try {
       const body = await readBody(req)
-      const score = url.endsWith('/score')
-      const result = await runManualJobs(score ? (body.job ? [body.job] : []) : body.jobs, { mode: score ? 'score' : 'store' })
+      const single = !url.endsWith('/sync')
+      const mode = url.endsWith('/score') ? 'score' : url.endsWith('/check') ? 'check' : 'store'
+      const result = await runManualJobs(single ? (body.job ? [body.job] : []) : body.jobs, { mode })
       sendJson(res, result.status, result.body)
     } catch {
       sendJson(res, 400, { ok: false, error: 'invalid', field: 'json' })

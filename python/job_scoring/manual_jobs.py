@@ -31,6 +31,7 @@ SCORING_FIELDS = (
     "manualEntry", "sourceChoice", "status", "createdAt", "firstSeen", "lastSeen", "scrapedAt",
 )
 REQUIRED = ("jobId", "title", "company", "description")
+REQUIRED_WITHOUT_DESCRIPTION = ("jobId", "title", "company")
 SOURCES = ("LinkedIn", "Company site", "Referral", "Other")
 
 
@@ -96,8 +97,12 @@ def identity_url(raw) -> str | None:
     return f"{base}?{urlencode(sorted(pairs))}" if pairs else base
 
 
-def sanitize(payload, *, now: str | None = None) -> dict:
-    """The manual job as stored: SCORING_FIELDS only, strings trimmed, the server's own flags set. Raises InvalidJob."""
+def sanitize(payload, *, now: str | None = None, require_description: bool = True) -> dict:
+    """The manual job as stored: SCORING_FIELDS only, strings trimmed, the server's own flags set. Raises InvalidJob.
+
+    A job is stored and scored only with its description (scoring a title alone would rank it on nothing); the
+    write-nothing duplicate check passes `require_description=False`.
+    """
     if not isinstance(payload, dict):
         raise InvalidJob("job")
     stamp = now or datetime.now(timezone.utc).isoformat()
@@ -114,15 +119,16 @@ def sanitize(payload, *, now: str | None = None) -> dict:
         if len(value) > MAX_TEXT:
             raise InvalidJob(field)
         job[field] = value
-    for field in REQUIRED:
+    for field in REQUIRED if require_description else REQUIRED_WITHOUT_DESCRIPTION:
         if not job.get(field):
             raise InvalidJob(field)
     if not JOB_ID.match(job["jobId"]):
         raise InvalidJob("jobId")
     if job.get("jobUrl") and not normalize_url(job["jobUrl"]):
         raise InvalidJob("jobUrl")
+    # An old "Source" select value stays as it was; a job without one gets none (no invented "Other").
     if job.get("sourceChoice") not in SOURCES:
-        job["sourceChoice"] = "Other"
+        job.pop("sourceChoice", None)
     job.setdefault("location", "")
     job.setdefault("jobUrl", "")
     job.setdefault("site", "")

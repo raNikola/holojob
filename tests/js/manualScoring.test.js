@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { importJobsFromFile, loadJobs, saveJobs } from '../../src/modules/jobs/jobStorage.js'
 import { createJob, getStoredJob, invalidateJobs } from '../../src/modules/jobs/jobsStore.js'
 import { SCORING_FIELDS, buildManualJob, identityJobUrl, normalizeJobUrl, scoringPayload } from '../../src/modules/jobs/manualJob.js'
-import { addManualJob, scoreStoredJob, scoredPatch, syncManualJobs } from '../../src/modules/jobs/manualScoring.js'
+import { NO_DESCRIPTION, addManualJob, scoreStoredJob, scoredPatch, syncManualJobs } from '../../src/modules/jobs/manualScoring.js'
 import { manualJobArgs, runManualJobs } from '../../scripts/run-manual-job.js'
 import { createBackupStream } from '../../scripts/backup-handler.js'
 import { buildAiContext } from '../../src/modules/ai/aiContextBuilder.js'
@@ -18,9 +18,11 @@ const AdmZip = require('adm-zip')
 const NOTE = 'NOTE-CANARY-9921'
 const LINK = 'https://canary-9921.acme.example/private'
 const LABEL = 'LABEL-CANARY-9921'
+const SOURCE_URL = 'https://canary-9921.linkedin.example/posts/secret'
 const ID = 'manual-123e4567-e89b-12d3-a456-426614174000'
 const FORM = {
-  title: 'Product Manager', company: 'Acme', description: 'Own the roadmap.', jobUrl: 'https://acme.example/jobs/9', sourceChoice: 'Referral',
+  title: 'Product Manager', company: 'Acme', description: 'Own the roadmap.', jobUrl: 'https://acme.example/jobs/9',
+  sourceUrl: SOURCE_URL,
   notes: NOTE, extraLinks: [{ url: LINK, label: LABEL }],
 }
 const NOW = new Date('2026-10-30T10:00:00Z')
@@ -110,7 +112,8 @@ describe('runManualJobs', () => {
     expect(Object.keys(JSON.parse(call.stdin)[0]).every((k) => SCORING_FIELDS.includes(k))).toBe(true)
   })
 
-  it('store mode only adds --store-only', () => {
+  it('store and check modes only add a flag', () => {
+    expect(manualJobArgs('check')).toEqual([...manualJobArgs('score'), '--check-only'])
     expect(manualJobArgs('store')).toEqual([...manualJobArgs('score'), '--store-only'])
   })
 
@@ -177,6 +180,41 @@ describe('addManualJob', () => {
     const result = await addManualJob(FORM, { fetchFn: fetchStub(() => json(409, { ok: false, error: 'duplicate', existing: { jobId: 'srv-7', title: 'Same ad' } })), id: ID })
     expect(result).toMatchObject({ status: 'duplicate', existing: { jobId: 'srv-7', title: 'Same ad' } })
     expect(JSON.stringify(loadJobs().jobs)).toBe(before)
+  })
+})
+
+describe('a job without a description', () => {
+  const bare = { ...FORM, description: '' }
+
+  it('is saved Unreviewed and unscored with the note, after a write-nothing clash check, never stored or scored on the server', async () => {
+    const fetchFn = fetchStub(() => json(200, { ok: true }))
+    const result = await addManualJob(bare, { fetchFn, id: ID, now: NOW })
+    expect(result).toMatchObject({ status: 'created', scored: false, message: NO_DESCRIPTION, noDescription: true })
+    expect(stored(ID)).toMatchObject({ status: 'new', description: '', manualEntry: true })
+    expect(stored(ID).matchScore).toBeUndefined()
+    expect(fetchFn.mock.calls.map(([url]) => url)).toEqual(['/api/jobs/manual/check'])
+    expect(fetchFn.mock.calls[0][1].body).not.toMatch(/CANARY|canary/)
+  })
+
+  it('still refuses a link the server already has, and writes nothing', async () => {
+    const before = JSON.stringify(loadJobs().jobs)
+    const result = await addManualJob(bare, { fetchFn: fetchStub(() => json(409, { existing: { jobId: 'srv-1', title: 'Same ad' } })), id: ID })
+    expect(result).toMatchObject({ status: 'duplicate', existing: { jobId: 'srv-1' } })
+    expect(JSON.stringify(loadJobs().jobs)).toBe(before)
+  })
+
+  it('is not scored, and not synced, until it has text; then Score now works', async () => {
+    await addManualJob(bare, { fetchFn: fetchStub(() => json(200, { ok: true })), id: ID, now: NOW })
+    const quiet = fetchStub(() => json(200, { ok: true, jobs: [SCORED] }))
+    expect(await scoreStoredJob(ID, { fetchFn: quiet })).toMatchObject({ ok: false, reason: 'no_description', message: NO_DESCRIPTION })
+    expect(await syncManualJobs({ fetchFn: quiet })).toEqual({ ok: true, sent: 0 })
+    expect(quiet).not.toHaveBeenCalled()
+
+    const { patchJob } = await import('../../src/modules/jobs/jobsStore.js')
+    patchJob(ID, { description: 'Own the roadmap.' })
+    expect((await scoreStoredJob(ID, { fetchFn: quiet })).ok).toBe(true)
+    expect(stored(ID)).toMatchObject({ matchScore: 71, sourceUrl: SOURCE_URL })
+    expect(quiet.mock.calls[0][1].body).not.toMatch(/CANARY|canary/)
   })
 })
 
@@ -259,7 +297,7 @@ describe('importJobsFromFile with manual jobs', () => {
   it('carries notes and links onto the file row with the same id, even without a URL match', () => {
     const next = importJobsFromFile({ jobs: [{ ...SCORED, jobUrl: '', status: 'new' }] }, loadJobs())
     expect(next.jobs.filter((j) => j.jobId === ID)).toHaveLength(1)
-    expect(next.jobs.find((j) => j.jobId === ID)).toMatchObject({ matchScore: 71, notes: NOTE, manualEntry: true, sourceChoice: 'Referral' })
+    expect(next.jobs.find((j) => j.jobId === ID)).toMatchObject({ matchScore: 71, notes: NOTE, manualEntry: true, sourceUrl: SOURCE_URL })
   })
 
   it('shows one row when a discovery run finds the same posting under its own id', () => {

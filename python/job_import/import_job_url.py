@@ -250,6 +250,20 @@ def _ok(**summary) -> int:
     return 0
 
 
+def _check_only(items, args) -> int:
+    """Writes nothing: whether each job's address is already in the discovered, scored or manual files (exit 3 names it)."""
+    lists = [_load_doc(args.discovered)["jobs"], _load_doc(args.scored)["jobs"], manual_jobs.load(args.manual)]
+    for item in items:
+        try:
+            job = manual_jobs.sanitize(item, require_description=False)
+        except manual_jobs.InvalidJob as exc:
+            return _fail(2, error="invalid", field=exc.field)
+        clash = manual_jobs.find_clash(job["jobId"], job.get("jobUrl"), *lists)
+        if clash:
+            return _fail(3, error="duplicate", existing=clash)
+    return _ok(checked=len(items))
+
+
 def run_job_json(args) -> int:
     """Store, score and merge hand-entered jobs. Exit 0 ok, 2 invalid, 3 duplicate URL, 4 no intelligence, 5 scoring failed.
 
@@ -261,6 +275,8 @@ def run_job_json(args) -> int:
         return _fail(2, error="invalid", field="json")
     batch = isinstance(payload, list)
     items = payload if batch else [payload]
+    if args.check_only:
+        return _check_only(items, args)
 
     discovered_jobs = _load_doc(args.discovered)["jobs"]
     scored_jobs = _load_doc(args.scored)["jobs"]
@@ -317,6 +333,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--url", action="append", default=[], help="Job posting URL (repeatable)")
     parser.add_argument("--no-llm", action="store_true", help="Skip Claude Code extraction fallback")
     parser.add_argument("--job-json", metavar="FILE|-", help="Hand-entered job(s) as JSON, from a file or stdin; nothing is fetched")
+    parser.add_argument("--check-only", action="store_true",
+                        help="with --job-json: only report whether the address is already in your jobs; nothing is written")
     parser.add_argument("--store-only", action="store_true",
                         help="with --job-json: store the jobs in manual_jobs.json and stop; the next scoring run scores them")
     parser.add_argument("--discovered", type=Path, default=DISCOVERED_PATH)

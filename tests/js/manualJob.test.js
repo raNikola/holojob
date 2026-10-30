@@ -22,12 +22,21 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals())
 
-const FORM = { title: 'Product Manager', company: 'Acme', description: 'Own the roadmap.', jobUrl: 'https://acme.example/jobs/9', sourceChoice: 'Referral' }
+const FORM = { title: 'Product Manager', company: 'Acme', description: 'Own the roadmap.', jobUrl: 'https://acme.example/jobs/9', sourceUrl: 'https://linkedin.example/posts/1' }
 
 describe('validateManualJob', () => {
-  it('requires title, company and description', () => {
-    expect(Object.keys(validateManualJob({ title: ' ', company: '', description: '' })).sort()).toEqual(['company', 'description', 'title'])
+  it('requires title and company, and at least one of the job URL or the description', () => {
+    expect(Object.keys(validateManualJob({ title: ' ', company: '', description: '' })).sort()).toEqual(['company', 'description', 'jobUrl', 'title'])
     expect(validateManualJob(FORM)).toEqual({})
+    expect(validateManualJob({ ...FORM, description: '' })).toEqual({})
+    expect(validateManualJob({ ...FORM, jobUrl: '' })).toEqual({})
+    expect(Object.keys(validateManualJob({ ...FORM, jobUrl: '  ', description: ' ' })).sort()).toEqual(['description', 'jobUrl'])
+  })
+
+  it('checks the Source URL as http(s) and leaves it optional', () => {
+    expect(validateManualJob({ ...FORM, sourceUrl: '' })).toEqual({})
+    expect(validateManualJob({ ...FORM, sourceUrl: 'javascript:alert(1)' }).sourceUrl).toBeTruthy()
+    expect(validateManualJob({ ...FORM, sourceUrl: 'linkedin.com/posts/1' }).sourceUrl).toBeTruthy()
   })
 
   it('accepts an empty URL but not a malformed or non-http one', () => {
@@ -75,7 +84,7 @@ describe('createJob', () => {
     const after = loadJobs().jobs
     expect(after).toHaveLength(3)
     expect(JSON.stringify(after.slice(0, 2))).toBe(JSON.stringify(before))
-    expect(after[2]).toMatchObject({ jobId: 'manual-1', status: 'new', manualEntry: true, provider: 'manual', sourceChoice: 'Referral', firstSeen: '2026-10-30T10:00:00.000Z', createdAt: '2026-10-30T10:00:00.000Z' })
+    expect(after[2]).toMatchObject({ jobId: 'manual-1', status: 'new', manualEntry: true, provider: 'manual', sourceUrl: 'https://linkedin.example/posts/1', firstSeen: '2026-10-30T10:00:00.000Z', createdAt: '2026-10-30T10:00:00.000Z' })
   })
 
   it('refuses a second job with the same normalised URL and points at the existing one', () => {
@@ -90,6 +99,13 @@ describe('createJob', () => {
     for (const key of ['matchScore', 'salaryMonthlyEur', 'isRemote']) expect(key in job).toBe(false)
     expect(job.location).toBe('')
     expect(job.jobId).toMatch(/^manual-/)
+  })
+
+  it('keeps the source URL on the job, invents no source choice, and allows no description', () => {
+    const job = buildManualJob({ ...FORM, description: '' }, { id: 'manual-x' })
+    expect(job).toMatchObject({ description: '', sourceUrl: 'https://linkedin.example/posts/1', manualEntry: true, provider: 'manual' })
+    expect('sourceChoice' in job).toBe(false)
+    expect('sourceUrl' in buildManualJob({ ...FORM, sourceUrl: ' ' })).toBe(false)
   })
 
   it('shows status new as Unreviewed', () => {
@@ -128,7 +144,7 @@ describe('owner-only fields never reach an AI context', () => {
     createJob(job)
     const context = buildAiContext({ featureId, job, message: 'hello' })
     const text = JSON.stringify({ context, hints: buildAiRedactionHints({ job }) })
-    for (const secret of [NOTE, LINK, LABEL, 'canary-7731']) expect(text).not.toContain(secret)
+    for (const secret of [NOTE, LINK, LABEL, 'canary-7731', FORM.sourceUrl]) expect(text).not.toContain(secret)
     if (featureId === 'jobAnalysis') expect(text).toContain('Own the roadmap')
   })
 })
