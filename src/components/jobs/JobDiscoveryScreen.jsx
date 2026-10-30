@@ -38,7 +38,6 @@ import { runDiscovery, runScoring, loadLatestScoredJobs } from '../../modules/jo
 import { withProfileSalaryDefaults } from '../../modules/jobs/jobSalary'
 import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { useProfile } from '../../context/ProfileContext'
-import { isActionable } from '../../modules/jobs/jobHistory'
 
 const JOB_TABS = [
   { id: 'jobs', label: 'Jobs' },
@@ -60,7 +59,6 @@ export default function JobDiscoveryScreen() {
   const [bulkRunning, setBulkRunning] = useState(false)
   const [rerunning, setRerunning] = useState(false)
   const [rerunMsg, setRerunMsg] = useState('')
-  const [showP1Only, setShowP1Only] = useState(false)
 
   useEffect(() => {
     saveJobs(state)
@@ -106,13 +104,8 @@ export default function JobDiscoveryScreen() {
   const providers = useMemo(() => getUniqueProviders(state.jobs), [state.jobs])
   const effectiveFilters = useMemo(() => withProfileSalaryDefaults(state.filters, profile?.basicProfile), [state.filters, profile?.basicProfile])
   const filteredJobs = useMemo(() => {
-    let filtered = filterJobs(viewJobs, effectiveFilters, { appliedJobIds: appliedIds })
-    if (showP1Only) filtered = filtered.filter((j) => isActionable(j) && (j.priority === 'P1' || j.priority === 'P2'))
-    return filtered
-  }, [viewJobs, effectiveFilters, showP1Only, appliedIds])
-
-  const p1Count = useMemo(() => state.jobs.filter((j) => isActionable(j) && j.priority === 'P1').length, [state.jobs])
-  const p2Count = useMemo(() => state.jobs.filter((j) => isActionable(j) && j.priority === 'P2').length, [state.jobs])
+    return filterJobs(viewJobs, effectiveFilters, { appliedJobIds: appliedIds })
+  }, [viewJobs, effectiveFilters, appliedIds])
 
   const handleRerunDiscovery = useCallback(async () => {
     setRerunning(true)
@@ -280,17 +273,6 @@ export default function JobDiscoveryScreen() {
                   <p className="text-sm text-stone-600 dark:text-stone-400">
                     {filteredJobs.length} of {state.jobs.length} jobs shown
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowP1Only(!showP1Only)}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all ${
-                      showP1Only
-                        ? 'border-teal-600 bg-teal-600 text-white'
-                        : 'border-stone-300 bg-white text-stone-700 hover:border-teal-400 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-300'
-                    }`}
-                  >
-                    {showP1Only ? '✓ P1+P2 only' : `P1 (${p1Count}) · P2 (${p2Count})`}
-                  </button>
                 </div>
                   <div className="relative">
                   <Button variant="secondary" onClick={() => setExportOpen(!exportOpen)}>

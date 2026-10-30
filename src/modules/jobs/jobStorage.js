@@ -1,5 +1,5 @@
 /** @typedef {import('../../types/career-os.d.ts').Job} Job */
-import { normalizePriorityFilter } from './jobFilters.js'
+import { normalizeMultiFilter, normalizePriorityFilter } from './jobFilters.js'
 
 export const JOBS_STORAGE_KEY = 'job-dashboard-discovered-jobs'
 
@@ -8,8 +8,8 @@ export const JOB_STATUSES = ['new', 'saved', 'rejected', 'applied_manually']
 const DEFAULT_FILTERS = {
   searchText: '',
   location: '',
-  site: '',
-  provider: '',
+  site: [],
+  provider: [],
   remoteOnly: false,
   hideNeedsVisa: false,
   status: '',
@@ -40,7 +40,7 @@ export function loadJobs() {
     return {
       ...getDefaultJobsState(),
       ...parsed,
-      filters: { ...DEFAULT_FILTERS, ...parsed.filters, priority: normalizePriorityFilter(parsed.filters?.priority) },
+      filters: { ...DEFAULT_FILTERS, ...parsed.filters, priority: normalizePriorityFilter(parsed.filters?.priority), site: normalizeMultiFilter(parsed.filters?.site), provider: normalizeMultiFilter(parsed.filters?.provider) },
       jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
     }
   } catch {
