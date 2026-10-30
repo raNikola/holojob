@@ -49,6 +49,13 @@ export function settingsFromForm(form) {
   }
 }
 
+/** The subscription allowlist with `name` added or removed (never emptied: the server needs at least one feature). */
+export function withSubscriptionFeature(features, name, on) {
+  const rest = (features || []).filter((f) => f !== name)
+  const next = on ? [...rest, name] : rest
+  return next.length ? next : features
+}
+
 export function formFromSettings(s) {
   const text = (v) => (v == null ? '' : String(v))
   return {
