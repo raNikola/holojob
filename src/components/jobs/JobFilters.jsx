@@ -177,7 +177,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                   />
                 </div>
                 <SalaryFilter
-                  className="min-w-[18rem] flex-[1_1_18rem] max-w-[26rem]"
+                  className="min-w-[18rem] flex-[1_1_18rem]"
                   from={salary.from}
                   to={salary.to}
                   includeUnknown={filters.salaryIncludeUnknown !== false}
@@ -187,8 +187,8 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                 />
               </>
             )}
-            {/* The pair sits beside the Salary row on wide windows (top spacer = the label row above the inputs); as a pair under the extras when they wrap. */}
-            <div className="flex max-w-full flex-wrap items-center gap-x-5 gap-y-2 min-[1280px]:pt-[1.625rem]">
+            {/* The pair sits beside the Salary row on wide windows (top spacer = label row plus half the difference of input and checkbox heights, so they are centred on the input row); as a pair under the extras when they wrap. */}
+            <div className="flex max-w-full flex-none flex-wrap items-center gap-x-5 gap-y-2 min-[1280px]:pt-[2.3rem]">
               {showScoreFilters && (
                 <Checkbox
                   className=""
