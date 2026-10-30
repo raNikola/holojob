@@ -6,7 +6,10 @@ import {
   parseAmount,
   rangeError,
   salaryMarker,
-  profileSalaryNote,
+  salaryMarkerText,
+  profileSalaryFigures,
+  salaryMarkerText,
+  profileSalaryFigures,
   salaryModeOf,
   salaryRangeOf,
   sanitizeAmount,
@@ -258,11 +261,16 @@ describe('markers and Reset to profile', () => {
       expect(salaryMarker(eff(f, {}), {})).toBeNull()
       expect(salaryMarker(eff(f, null), null)).toBeNull()
     }
-    expect(profileSalaryNote({})).toBe('')
+    expect(salaryMarkerText('profile', {})).toBe('')
+    expect(profileSalaryFigures({})).toBe('')
   })
 
   it('the note names the profile figures', () => {
-    expect(profileSalaryNote(bp)).toBe('Taken from your profile (min 1,500, desired 2,000–2,500 EUR/month). Change it in Profile.')
+    expect(salaryMarkerText('profile', bp)).toBe('Taken from your profile (min 1,500, desired 2,000–2,500 EUR/month). Change it in Profile.')
+    expect(salaryMarkerText('differs', bp)).toBe('Differs from your profile (min 1,500, desired 2,000–2,500 EUR/month).')
+    expect(salaryMarkerText('cleared', bp)).toBe('Cleared. Your profile has min 1,500, desired 2,000–2,500 EUR/month.')
+    expect(salaryMarkerText('profile', { desiredSalaryMinEur: 2000 })).toBe('Taken from your profile (desired from 2,000 EUR/month). Change it in Profile.')
+    expect(salaryMarkerText(null, bp)).toBe('')
   })
 
   it('Reset from set returns to untouched with the profile range and the checkbox ON', () => {
