@@ -14,6 +14,8 @@ import JobDescription from './JobDescription'
 import { formatSeen, historyBadges } from '../../modules/jobs/jobHistory'
 import { formatMonthlyEur, salaryBadges } from '../../modules/jobs/jobSalary'
 import FitJudgementSection, { isFitReason } from './FitJudgementSection'
+import ManualJobSection from './ManualJobSection'
+import { jobStatusLabel } from '../../modules/jobs/manualJob'
 import EngineShadowSection, { EngineShadowBadge } from './EngineShadowSection'
 
 const DIMENSION_LABELS = {
@@ -76,7 +78,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
         </div>
         <div><dt className="text-xs text-stone-500">Provider</dt><dd>{provider || '—'}</dd></div>
         <div><dt className="text-xs text-stone-500">Remote</dt><dd>{job.isRemote ? 'Yes' : 'No'}</dd></div>
-        <div><dt className="text-xs text-stone-500">Status</dt><dd><Badge>{job.status}</Badge></dd></div>
+        <div><dt className="text-xs text-stone-500">Status</dt><dd><Badge>{jobStatusLabel(job.status)}</Badge></dd></div>
         {job.salaryMonthlyEur && (
           <div>
             <dt className="text-xs text-stone-500">Pay (as listed)</dt>
@@ -104,6 +106,8 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
       )}
 
       <JobDescription text={job.description} />
+
+      <ManualJobSection job={job} onJobUpdated={onJobUpdated} />
 
       {showScores && (
         <>

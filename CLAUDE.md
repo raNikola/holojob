@@ -144,6 +144,13 @@ Across tabs, `useBackgroundRefresh` (`App.jsx`) refetches the tracker cache and 
 The drawer's tracking block is a read-only summary (`ApplicationTrackingSummary.jsx`, values from `modules/applications/trackingSummary.js`, the same application cache and `panelMode` as the page): stage badge, applied on, next follow-up, CV used, recruiter, history and note counts, empty fields as "Not recorded" / "Not scheduled". With no active application it offers "Mark Applied", which calls `markApplied` with `newApplicationDefaults` (today, the form's preselected CV, channel `company_site`; the full form starts from the same function) and has no separate-attempt choice, so a 409 points to Job Details. All tracking edits stay on the page. "Open full details" is disabled (tooltip "This posting is no longer in your jobs list") when the stored list lacks the job (`canOpenJobPage`). An unknown id shows "Job not found". Unsaved input: forms that call `useDraftDirty` (the tracker's three forms) make the button ask first
 (`modules/jobs/draftGuard.js`); other drafts (AI tools, contacts) are not covered yet. Not built: more tabs, AI spent, "Is it real?".
 
+## Manual jobs
+
+"Add job" on the Jobs screen (`AddJobDialog.jsx`, helpers in `modules/jobs/manualJob.js`) creates a job through `createJob` in the jobs store: `manualEntry: true`,
+`provider: 'manual'`, status `new` (shown "Unreviewed"), duplicate by normalised main URL. It makes no AI call and is **not scored** (no pipeline path scores a
+pasted job). `notes` and `extraLinks` are owner-only: they live in the browser's job record, are carried over by `importJobsFromFile`, and are not in
+`summarizeJob`, so no AI context carries them (`tests/js/manualJob.test.js`). Add any new owner-only field to `MANUAL_FIELDS` and to that test.
+
 ## Request guard (`/api`)
 
 Every `/api` request passes `scripts/request-guard.js` first (`handleApiRoutes` in `api-handler.js`, used by the

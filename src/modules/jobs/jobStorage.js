@@ -1,6 +1,7 @@
 /** @typedef {import('../../types/holojob.d.ts').Job} Job */
 import { salaryModeOf } from './salaryFilter.js'
 import { normalizeMultiFilter, normalizePriorityFilter } from './jobFilters.js'
+import { MANUAL_FIELDS } from './manualJob.js'
 
 export const JOBS_STORAGE_KEY = 'job-dashboard-discovered-jobs'
 
@@ -112,6 +113,7 @@ export function mergeStatusOnImport(existingJobs, incomingJobs) {
       tailoredAssets: job.tailoredAssets,
       aiInsights: job.aiInsights,
       outreach: job.outreach,
+      manual: Object.fromEntries(MANUAL_FIELDS.filter((f) => f in job).map((f) => [f, job[f]])),
     })
   }
 
@@ -120,6 +122,7 @@ export function mergeStatusOnImport(existingJobs, incomingJobs) {
     const preserved = preservedByKey.get(key)
     return {
       ...job,
+      ...preserved?.manual,
       status: preserved?.status || job.status || 'new',
       applicationTracking: preserved?.applicationTracking || job.applicationTracking,
       tailoredAssets: job.tailoredAssets || preserved?.tailoredAssets,
@@ -143,9 +146,12 @@ export function importJobsFromFile(json, existingState = null) {
   const { meta, jobs } = parseJobsFile(json)
   const prior = existingState?.jobs || []
   const merged = mergeStatusOnImport(prior, jobs)
+  // A hand-entered job is not in the pipeline's files; a re-import must not drop it.
+  const present = new Set(merged.map((job) => job.jobId))
+  const kept = prior.filter((job) => job.manualEntry && !present.has(job.jobId))
   return {
     meta: meta || existingState?.meta || null,
-    jobs: merged,
+    jobs: [...merged, ...kept],
     filters: existingState?.filters || { ...DEFAULT_FILTERS },
     importedAt: new Date().toISOString(),
   }
