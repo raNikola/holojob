@@ -86,7 +86,8 @@ describe('pre-fill notice', () => {
   it('flags that a filter value came from the profile, only while it did', () => {
     const bp = { minSalaryEur: 2500 }
     expect(withProfileSalaryDefaults({ minSalary: null }, bp).salaryFromProfile).toBe(true)
-    expect(withProfileSalaryDefaults({ minSalary: '' }, bp).salaryFromProfile).toBe(false)
+    expect(withProfileSalaryDefaults({ minSalary: '', desiredSalaryMin: 3000 }, bp).salaryFromProfile).toBe(false)
+    expect(withProfileSalaryDefaults({ salaryFrom: '', salaryTo: '' }, bp).salaryFromProfile).toBe(false)
     expect(withProfileSalaryDefaults({ minSalary: null }, {}).salaryFromProfile).toBe(false)
   })
 })

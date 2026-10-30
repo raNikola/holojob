@@ -143,3 +143,41 @@ describe('salary chip', () => {
     expect(chip.patch).not.toHaveProperty('salaryIncludeUnknown')
   })
 })
+
+describe('first load of the salary range', () => {
+  const bp = { minSalaryEur: 1500, desiredSalaryMinEur: 2000, desiredSalaryMaxEur: 2500 }
+
+  it('untouched + profile with salary: From is the larger lower figure, To the desired maximum, note shown', () => {
+    const f = withProfileSalaryDefaults({}, bp)
+    expect(salaryRangeOf(f)).toEqual({ from: 2000, to: 2500 })
+    expect(f.salaryFromProfile).toBe(true)
+  })
+
+  it('untouched + profile without salary: empty range, no note', () => {
+    const f = withProfileSalaryDefaults({}, {})
+    expect(salaryRangeOf(f)).toEqual({ from: null, to: null })
+    expect(f.salaryFromProfile).toBe(false)
+  })
+
+  it('deliberately cleared (x or Clear all) stays empty even with a profile salary', () => {
+    expect(salaryRangeOf(withProfileSalaryDefaults({ salaryFrom: '', salaryTo: '' }, bp))).toEqual({ from: null, to: null })
+    expect(salaryRangeOf(withProfileSalaryDefaults({ ...CLEAR_ALL_FILTERS }, bp))).toEqual({ from: null, to: null })
+  })
+
+  it('old saved state: only emptied fields count as untouched, any figure is kept as saved', () => {
+    expect(salaryRangeOf(withProfileSalaryDefaults({ minSalary: '', desiredSalaryMin: '', desiredSalaryMax: '' }, bp))).toEqual({ from: 2000, to: 2500 })
+    expect(salaryRangeOf(withProfileSalaryDefaults({ minSalary: '3000', desiredSalaryMin: '', desiredSalaryMax: '' }, bp))).toEqual({ from: 3000, to: null })
+  })
+
+  it('"Include jobs without salary" is ON for new and unset state', async () => {
+    const store = {}
+    globalThis.localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v } }
+    const { loadJobs, getDefaultJobsState, JOBS_STORAGE_KEY } = await import('../../src/modules/jobs/jobStorage.js')
+    expect(getDefaultJobsState().filters.salaryIncludeUnknown).toBe(true)
+    store[JOBS_STORAGE_KEY] = JSON.stringify({ jobs: [], filters: { minSalary: '' } })
+    expect(loadJobs().filters.salaryIncludeUnknown).toBe(true)
+    store[JOBS_STORAGE_KEY] = JSON.stringify({ jobs: [], filters: { salaryIncludeUnknown: false } })
+    expect(loadJobs().filters.salaryIncludeUnknown).toBe(false)
+    delete globalThis.localStorage
+  })
+})
