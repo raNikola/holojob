@@ -7,6 +7,10 @@ to the canonical job shape, append to discovered_jobs.json, score it against
 candidate intelligence, and merge into scored_jobs.json WITHOUT touching other
 jobs (preserves existing tailoredAssets).
 
+With --job-json the job is given, not fetched: a hand-entered posting (Add job on the Jobs screen) is stored in
+manual_jobs.json, scored together with the discovered jobs by the same score_jobs() a full run uses, and merged into
+scored_jobs.json by the same merge. No URL fetch, no LLM, no network.
+
 Prints a JSON summary to stdout for the Node wrapper.
 """
 
@@ -29,6 +33,7 @@ sys.path.insert(0, str(ROOT / "python" / "llm"))
 sys.path.insert(0, str(ROOT / "python" / "job_scoring"))
 
 import claude_code  # noqa: E402
+import manual_jobs  # noqa: E402
 from scorer import score_jobs  # noqa: E402
 
 DISCOVERED_PATH = ROOT / "data/jobs/discovered_jobs.json"
@@ -213,15 +218,114 @@ def _load_doc(path: Path) -> dict:
     return {"meta": {}, "jobs": []}
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Import jobs from URLs.")
+def merge_into_scored(scored_new: list[dict], scored_path: Path, *, keep=("tailoredAssets",), meta_key="lastUrlImportAt") -> None:
+    """Merge freshly scored jobs into scored_jobs.json by jobId, touching no other row. `keep` fields of an existing row survive."""
+    scored_doc = _load_doc(scored_path)
+    scored_by_id = {j.get("jobId"): j for j in scored_doc["jobs"]}
+    for job in scored_new:
+        existing = scored_by_id.get(job["jobId"]) or {}
+        for field in keep:
+            if existing.get(field):
+                job[field] = existing[field]
+        scored_by_id[job["jobId"]] = job
+    scored_doc["jobs"] = list(scored_by_id.values())
+    scored_doc.setdefault("meta", {})["jobCount"] = len(scored_doc["jobs"])
+    scored_doc["meta"][meta_key] = datetime.now(timezone.utc).isoformat()
+    scored_path.parent.mkdir(parents=True, exist_ok=True)
+    scored_path.write_text(json.dumps(scored_doc, indent=2), encoding="utf-8")
+
+
+def _read_job_json(source: str):
+    """The JSON from a file, or from stdin for "-" (a payload never travels in argv)."""
+    return json.loads(sys.stdin.read() if source == "-" else Path(source).read_text(encoding="utf-8"))
+
+
+def _fail(code: int, **summary) -> int:
+    print(json.dumps({"ok": False, **summary}))
+    return code
+
+
+def run_job_json(args) -> int:
+    """Store, score and merge hand-entered jobs. Exit 0 ok, 2 invalid, 3 duplicate URL, 4 no intelligence, 5 scoring failed.
+
+    Nothing printed or logged carries a field value except through the scored record itself: errors name a field only.
+    """
+    try:
+        payload = _read_job_json(args.job_json)
+    except (OSError, ValueError):
+        return _fail(2, error="invalid", field="json")
+    batch = isinstance(payload, list)
+    items = payload if batch else [payload]
+
+    discovered_jobs = _load_doc(args.discovered)["jobs"]
+    scored_jobs = _load_doc(args.scored)["jobs"]
+    stored = manual_jobs.load(args.manual)
+
+    accepted, skipped = [], []
+    for item in items:
+        try:
+            job = manual_jobs.sanitize(item)
+        except manual_jobs.InvalidJob as exc:
+            if not batch:
+                return _fail(2, error="invalid", field=exc.field)
+            skipped.append({"error": "invalid", "field": exc.field})
+            continue
+        clash = manual_jobs.find_clash(job["jobId"], job.get("jobUrl"), discovered_jobs, scored_jobs, stored, accepted)
+        if clash:
+            if not batch:
+                return _fail(3, error="duplicate", existing=clash)
+            skipped.append({"jobId": job["jobId"], "error": "duplicate", "existing": clash})
+            continue
+        accepted.append(job)
+
+    if not accepted:
+        return _fail(2, error="invalid", skipped=skipped) if skipped else _fail(2, error="invalid", field="job")
+
+    # Saved before scoring: a scoring failure leaves the job where every later run, and a retry, finds it.
+    stored = manual_jobs.upsert(accepted, stored)
+    manual_jobs.save(stored, args.manual)
+    ids = {j["jobId"] for j in accepted}
+    for job_id in sorted(ids):
+        print(f"manual job stored: {job_id}", file=sys.stderr)
+
+    try:
+        if not args.intelligence.exists():
+            return _fail(4, error="no_intelligence", saved=sorted(ids))
+        intelligence = json.loads(args.intelligence.read_text(encoding="utf-8"))
+        # The corpus a full run scores (term rarity is measured over it), so the row equals the one Re-score writes.
+        corpus = manual_jobs.with_manual(discovered_jobs, stored)
+        scored = [j for j in score_jobs([dict(j) for j in corpus], intelligence) if j.get("jobId") in ids]
+        for job in scored:
+            manual_jobs.mark_missing_facts(job)
+        merge_into_scored(scored, args.scored, keep=("tailoredAssets", "status"), meta_key="lastManualJobAt")
+    except Exception as exc:  # the message may quote job text; only the class is reported
+        return _fail(5, error="scoring_failed", detail=type(exc).__name__, saved=sorted(ids))
+
+    print(json.dumps({"ok": True, "jobs": scored, "skipped": skipped}))
+    return 0
+
+
+def parse_args(argv=None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Import jobs from URLs, or score hand-entered jobs.")
     parser.add_argument("--url", action="append", default=[], help="Job posting URL (repeatable)")
     parser.add_argument("--no-llm", action="store_true", help="Skip Claude Code extraction fallback")
-    args = parser.parse_args()
+    parser.add_argument("--job-json", metavar="FILE|-", help="Hand-entered job(s) as JSON, from a file or stdin; nothing is fetched")
+    parser.add_argument("--discovered", type=Path, default=DISCOVERED_PATH)
+    parser.add_argument("--scored", type=Path, default=SCORED_PATH)
+    parser.add_argument("--manual", type=Path, default=manual_jobs.MANUAL_PATH)
+    parser.add_argument("--intelligence", type=Path, default=INTELLIGENCE_PATH)
+    return parser.parse_args(argv)
+
+
+def main(argv=None) -> int:
+    args = parse_args(argv)
+    # Decided before anything that could reach the network or a model is looked at.
+    if args.job_json:
+        return run_job_json(args)
 
     urls = [u.strip() for u in args.url if u.strip()]
     if not urls:
-        print("No URLs given (use --url)", file=sys.stderr)
+        print("No URLs given (use --url or --job-json)", file=sys.stderr)
         return 1
 
     use_llm = not args.no_llm and claude_code.is_available()
@@ -231,35 +335,31 @@ def main() -> int:
         job, err = extract_job(url, use_llm)
         if job is None:
             errors.append({"url": url, "error": err})
+            continue
+        # The same address as a hand-entered job is that job, not a second one.
+        clash = manual_jobs.find_clash(
+            job["jobId"], job.get("jobUrl"), _load_doc(args.discovered)["jobs"], _load_doc(args.scored)["jobs"], manual_jobs.load(args.manual)
+        )
+        if clash:
+            errors.append({"url": url, "error": f"already in your jobs: {clash['title'] or clash['jobId']}"})
         else:
             imported.append(job)
 
     if imported:
         # Append to discovered jobs (dedupe by jobId, re-import refreshes the entry)
-        discovered = _load_doc(DISCOVERED_PATH)
+        discovered = _load_doc(args.discovered)
         by_id = {j.get("jobId"): j for j in discovered["jobs"]}
         for job in imported:
             by_id[job["jobId"]] = {**by_id.get(job["jobId"], {}), **job}
         discovered["jobs"] = list(by_id.values())
         discovered.setdefault("meta", {})["lastUrlImportAt"] = datetime.now(timezone.utc).isoformat()
-        DISCOVERED_PATH.parent.mkdir(parents=True, exist_ok=True)
-        DISCOVERED_PATH.write_text(json.dumps(discovered, indent=2), encoding="utf-8")
+        args.discovered.parent.mkdir(parents=True, exist_ok=True)
+        args.discovered.write_text(json.dumps(discovered, indent=2), encoding="utf-8")
 
         # Score only the new jobs and merge into scored_jobs.json (preserves tailoredAssets)
-        if INTELLIGENCE_PATH.exists():
-            intelligence = json.loads(INTELLIGENCE_PATH.read_text(encoding="utf-8"))
-            scored_new = score_jobs([dict(j) for j in imported], intelligence)
-            scored_doc = _load_doc(SCORED_PATH)
-            scored_by_id = {j.get("jobId"): j for j in scored_doc["jobs"]}
-            for job in scored_new:
-                existing = scored_by_id.get(job["jobId"]) or {}
-                if existing.get("tailoredAssets"):
-                    job["tailoredAssets"] = existing["tailoredAssets"]
-                scored_by_id[job["jobId"]] = job
-            scored_doc["jobs"] = list(scored_by_id.values())
-            scored_doc.setdefault("meta", {})["jobCount"] = len(scored_doc["jobs"])
-            scored_doc["meta"]["lastUrlImportAt"] = datetime.now(timezone.utc).isoformat()
-            SCORED_PATH.write_text(json.dumps(scored_doc, indent=2), encoding="utf-8")
+        if args.intelligence.exists():
+            intelligence = json.loads(args.intelligence.read_text(encoding="utf-8"))
+            merge_into_scored(score_jobs([dict(j) for j in imported], intelligence), args.scored)
         else:
             print("No candidate intelligence; imported without scoring", file=sys.stderr)
 

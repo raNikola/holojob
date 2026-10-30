@@ -27,6 +27,7 @@ from llm_enhancer import (  # noqa: E402
     NEVER_SENT,
     LlmFitEnhancer,
 )
+import manual_jobs  # noqa: E402
 from scorer import resolve_weights, score_jobs  # noqa: E402
 from match_engine import shadow  # noqa: E402
 from redact import identity_of  # noqa: E402 (on the path through llm_enhancer)
@@ -68,6 +69,8 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Score discovered jobs.")
     p.add_argument("--intelligence", type=Path, default=INTELLIGENCE_PATH)
     p.add_argument("--jobs", type=Path, default=JOBS_PATH)
+    p.add_argument("--manual", type=Path, default=manual_jobs.MANUAL_PATH,
+                   help="jobs typed in by hand; scored with the discovered ones, never rewritten here")
     p.add_argument("--output", type=Path, default=OUTPUT_PATH)
     p.add_argument("--min-score", type=int, default=0)
     p.add_argument(
@@ -107,16 +110,20 @@ def main() -> int:
     if not args.intelligence.exists():
         print(f"Missing intelligence: {args.intelligence}", file=sys.stderr)
         return 1
-    if not args.jobs.exists():
+    manual = manual_jobs.load(args.manual)
+    # Before the first discovery run only the hand-entered jobs exist; that is a valid input.
+    if not args.jobs.exists() and not manual:
         print(f"Missing jobs: {args.jobs}", file=sys.stderr)
         return 1
 
     intelligence = json.loads(args.intelligence.read_text(encoding="utf-8"))
-    discovered = json.loads(args.jobs.read_text(encoding="utf-8"))
+    discovered = json.loads(args.jobs.read_text(encoding="utf-8")) if args.jobs.exists() else {"jobs": []}
     jobs = discovered.get("jobs") if isinstance(discovered, dict) else discovered
     if not isinstance(jobs, list):
         print("Invalid discovered jobs format", file=sys.stderr)
         return 1
+    # A hand-entered job is scored with every run and wins over a discovered row with the same URL.
+    jobs = manual_jobs.with_manual(jobs, manual)
 
     profile = _load_profile()
     # The owner's name and links, to strip from the judge's digest; never sent.
@@ -222,14 +229,14 @@ def main() -> int:
     elif c["cached"]:
         print(f"judge: re-applied {c['cached']} cached judgements (no calls made)")
     if args.min_score > 0:
-        scored = [j for j in scored if j.get("matchScore", 0) >= args.min_score]
+        # Nothing is hidden: a hand-entered job stays whatever its score.
+        scored = [j for j in scored if j.get("manualEntry") or j.get("matchScore", 0) >= args.min_score]
 
     # A job scored without the ad facts (enrichment refused by the AI gate, skipped,
     # failed, or the ad lies outside the allowed places) is marked, never hidden:
     # its role-track and visa caps could not be checked against the ad.
     for job in scored:
-        if not (job.get("llmFacts") or {}).get("_fingerprint"):
-            job["aiEnrichment"] = "missing"
+        manual_jobs.mark_missing_facts(job)
     without_facts = sum(1 for j in scored if j.get("aiEnrichment") == "missing")
 
     labels = Counter(j.get("matchLabel") for j in scored)
