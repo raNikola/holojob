@@ -33,6 +33,7 @@ export default function SalaryFilter({ from, to, includeUnknown, filters, profil
   const draftTo = parseAmount(draft.to)
   const invalid = rangeError(draftFrom, draftTo)
   const marker = salaryMarker(filters, profile)
+  const resettable = marker === 'differs' || marker === 'cleared'
   const hint = invalid ? RANGE_ERROR_TEXT : describeRange(draftFrom, draftTo)
 
   const edit = (next) => {
@@ -53,7 +54,7 @@ export default function SalaryFilter({ from, to, includeUnknown, filters, profil
       value={draft[side]}
       onChange={(e) => edit({ ...draft, [side]: sanitizeAmount(e.target.value) })}
       onBlur={() => setDraft((d) => ({ ...d, [side]: formatAmount(parseAmount(d[side])) }))}
-      className="w-full min-w-0 bg-transparent px-1 py-2.5 text-sm focus:outline-none dark:text-stone-50"
+      className="w-0 min-w-0 flex-1 bg-transparent px-1 py-2.5 text-sm focus:outline-none dark:text-stone-50"
     />
   )
 
@@ -74,23 +75,25 @@ export default function SalaryFilter({ from, to, includeUnknown, filters, profil
       <div
         role="group"
         aria-labelledby={labelId}
-        className={`flex items-center gap-1 rounded-lg border px-3 focus-within:ring-2 focus-within:ring-teal-500/30 dark:bg-stone-950 ${invalid ? 'border-red-400' : 'border-stone-300 dark:border-stone-700'}`}
+        className={`flex items-center rounded-lg border px-3 focus-within:ring-2 focus-within:ring-teal-500/30 dark:bg-stone-950 ${invalid ? 'border-red-400' : 'border-stone-300 dark:border-stone-700'}`}
       >
         {input('from', 'Salary from, EUR per month')}
-        <span aria-hidden="true" className="text-stone-400">–</span>
+        <span aria-hidden="true" className="w-4 shrink-0 text-center text-stone-400">–</span>
         {input('to', 'Salary to, EUR per month')}
-        <span className="shrink-0 text-xs text-stone-500">EUR/mo</span>
-        {(draft.from !== '' || draft.to !== '') && (
+        <span className="w-[3.25rem] shrink-0 text-center text-xs text-stone-500">EUR/mo</span>
+        {/* Two fixed slots that are always rendered: only their visibility changes, so nothing in the box moves. */}
+        <span className={`flex h-6 w-6 shrink-0 items-center justify-center ${draft.from !== '' || draft.to !== '' ? '' : 'invisible'}`}>
           <button
             type="button"
             aria-label="Clear salary range"
+            disabled={draft.from === '' && draft.to === ''}
             onClick={() => edit({ from: '', to: '' })}
-            className="shrink-0 rounded-full p-1 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
-        )}
-        {(marker === 'differs' || marker === 'cleared') && (
+        </span>
+        <span className={`flex h-6 w-6 shrink-0 items-center justify-center ${resettable ? '' : 'invisible'}`}>
           <InfoTip
             icon={RotateCcw}
             align="right"
@@ -98,7 +101,7 @@ export default function SalaryFilter({ from, to, includeUnknown, filters, profil
             text="Reset to profile"
             onActivate={() => onChange(SALARY_RESET)}
           />
-        )}
+        </span>
       </div>
       {/* The range summary is read by screen readers only; the error replaces it, in view, while From is above To. */}
       <p id={hintId} className={invalid ? 'mt-1 text-xs text-red-500' : 'sr-only'}>{hint}</p>

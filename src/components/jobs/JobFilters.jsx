@@ -187,8 +187,8 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                 />
               </>
             )}
-            {/* Beside the Salary row on wide windows (top spacer = the label row above the inputs); a compact row under it when they wrap. */}
-            <div className="flex flex-col gap-2 min-[1280px]:pt-[1.625rem]">
+            {/* The pair sits beside the Salary row on wide windows (top spacer = the label row above the inputs); as a pair under the extras when they wrap. */}
+            <div className="flex max-w-full flex-wrap items-center gap-x-5 gap-y-2 min-[1280px]:pt-[1.625rem]">
               {showScoreFilters && (
                 <Checkbox
                   className=""
