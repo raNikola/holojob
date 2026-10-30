@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AD_FIELDS, READ_FAILED, adFetchBody, applySuggestions, fetchAdFields, stillMissing } from '../../src/modules/jobs/adFill.js'
-import { UNREADABLE_MESSAGE, cachedPage, clearCachedPages, fetchAd } from '../../scripts/run-ad-fill.js'
+import { AD_FIELDS, READ_FAILED, adFetchBody, applySuggestions, fetchAdFields, previewAdAi, runAdAi, stillMissing } from '../../src/modules/jobs/adFill.js'
+import { AI_FAILED_MESSAGE, EXPIRED_MESSAGE, UNREADABLE_MESSAGE, cachedPage, clearCachedPages, extractAdAi, fetchAd, previewAdAi as serverPreview } from '../../scripts/run-ad-fill.js'
 
 const json = (status, body) => ({ status, json: async () => body })
 const FIELDS = { title: 'Senior PM', company: 'Acme', location: 'Niš, RS', salary: '3000 monthly EUR', description: 'Own the roadmap.' }
@@ -146,5 +146,109 @@ describe('fetchAd (Node)', () => {
     const { status, body } = await fetchAd('http://127.0.0.1:3073/', { spawnFn: fakeSpawn({ ok: false, error: 'blocked_host', message: 'This address is not allowed: private, local and internal hosts are refused.' }) })
     expect(status).toBe(403)
     expect(body.message).toMatch(/not allowed/)
+  })
+})
+
+// --- step 2: the AI step -----------------------------------------------------------------------------------------
+
+const NOTE = 'NOTE-CANARY-5530'
+const SOURCE = 'https://canary-5530.linkedin.example/posts/x'
+const LINK = 'https://canary-5530.example/private'
+const PAGE_OK = { ok: true, finalUrl: 'https://a.example/1', source: 'none', fields: {}, missing: ['company', 'location', 'salary'], pageText: 'Acme is hiring in Nis.' }
+
+async function cachedToken(page = PAGE_OK) {
+  const { body } = await fetchAd('https://a.example/1', { spawnFn: fakeSpawn(page) })
+  return body.token
+}
+
+describe('the AI step in the browser client', () => {
+  it('previews with the token and field names only, and runs with confirm only from the run call', async () => {
+    const fetchFn = vi.fn(async () => json(200, { ok: true, text: 't', want: ['company'], removed: {}, provider: 'claude-code', gate: { allowed: true, reason: null, class: 'subscription' } }))
+    await previewAdAi({ token: 'tok', want: ['company'], notes: NOTE, sourceUrl: SOURCE }, { fetchFn })
+    expect(fetchFn.mock.calls[0][0]).toBe('/api/jobs/ad/ai-preview')
+    expect(JSON.parse(fetchFn.mock.calls[0][1].body)).toEqual({ token: 'tok', want: ['company'] })
+
+    const runFn = vi.fn(async () => json(200, { ok: true, fields: { company: 'Acme' }, rejected: [] }))
+    expect(await runAdAi({ token: 'tok', want: ['company'], notes: NOTE }, { fetchFn: runFn })).toEqual({ ok: true, fields: { company: 'Acme' }, rejected: [] })
+    expect(runFn.mock.calls[0][0]).toBe('/api/jobs/ad/ai-extract')
+    expect(JSON.parse(runFn.mock.calls[0][1].body)).toEqual({ token: 'tok', want: ['company'], confirm: true })
+    expect(runFn.mock.calls[0][1].body).not.toMatch(/CANARY|canary/)
+  })
+
+  it('shows the server\'s reason when it is refused and a plain message when the network fails', async () => {
+    const refused = await runAdAi({ token: 't', want: ['company'] }, { fetchFn: async () => json(403, { ok: false, error: 'refused', message: 'paid call refused: add job-import to the Claude subscription allowlist in Settings > AI budget' }) })
+    expect(refused).toMatchObject({ ok: false, message: expect.stringMatching(/job-import/) })
+    const down = await previewAdAi({ token: 't', want: ['company'] }, { fetchFn: async () => { throw new Error('offline') } })
+    expect(down.ok).toBe(false)
+    expect(down.message).toMatch(/by hand/)
+  })
+})
+
+describe('the AI step on the server (Node)', () => {
+  beforeEach(() => clearCachedPages())
+  afterEach(() => clearCachedPages())
+
+  it('previews from the cached page and sends Python the page text and the field names only', async () => {
+    const token = await cachedToken()
+    const spawnFn = fakeSpawn({ ok: true, text: 'Acme is hiring in Nis.', want: ['company', 'location'], provider: 'claude-code', gate: { allowed: true, reason: null, class: 'subscription' } })
+    const { status, body } = await serverPreview({ token, want: ['company', 'location'] }, { spawnFn })
+    expect(status).toBe(200)
+    expect(body.gate.allowed).toBe(true)
+    const [call] = spawnFn.calls
+    expect(call.args[1]).toBe('ai-preview')
+    expect(JSON.parse(call.stdin)).toEqual({ pageText: 'Acme is hiring in Nis.', want: ['company', 'location'] })
+  })
+
+  it('asks only for fields the page left out, whatever the browser names', async () => {
+    const token = await cachedToken()
+    const spawnFn = fakeSpawn({ ok: true, fields: {}, rejected: ['company'] })
+    await extractAdAi({ token, want: ['title', 'company', 'description', 'bogus'], confirm: true }, { spawnFn })
+    expect(JSON.parse(spawnFn.calls[0].stdin).want).toEqual(['company'])
+    const none = await extractAdAi({ token, want: ['title', 'description'], confirm: true }, { spawnFn })
+    expect(none.status).toBe(422)
+    expect(spawnFn.calls).toHaveLength(1)
+  })
+
+  it('refuses to extract without confirm: true, and does not start Python', async () => {
+    const token = await cachedToken()
+    const spawnFn = fakeSpawn({ ok: true, fields: {} })
+    for (const confirm of [undefined, false, 'true', 1, null]) {
+      const { status, body } = await extractAdAi({ token, want: ['company'], confirm }, { spawnFn })
+      expect(status).toBe(409)
+      expect(body.error).toBe('confirm_required')
+    }
+    expect(spawnFn.calls).toHaveLength(0)
+  })
+
+  it('never passes Notes, extra links, the Source URL or anything else the request carries to Python', async () => {
+    const token = await cachedToken()
+    const spawnFn = fakeSpawn({ ok: true, fields: {}, rejected: [] })
+    await extractAdAi({ token, want: ['company'], confirm: true, notes: NOTE, extraLinks: [{ url: LINK }], sourceUrl: SOURCE, profile: { fullName: 'Zlatan' }, pageText: `${NOTE} injected by the browser` }, { spawnFn })
+    const [call] = spawnFn.calls
+    expect(Object.keys(JSON.parse(call.stdin)).sort()).toEqual(['pageText', 'want'])
+    expect(call.stdin + call.args.join(' ')).not.toMatch(/CANARY|canary|Zlatan|injected/)
+    expect(JSON.parse(call.stdin).pageText).toBe('Acme is hiring in Nis.')
+  })
+
+  it('answers an unknown or old token as expired and calls nothing', async () => {
+    const spawnFn = fakeSpawn({ ok: true, fields: {} })
+    for (const run of [serverPreview, extractAdAi]) {
+      const { status, body } = await run({ token: 'nope', want: ['company'], confirm: true }, { spawnFn })
+      expect(status).toBe(410)
+      expect(body.message).toBe(EXPIRED_MESSAGE)
+    }
+    expect(spawnFn.calls).toHaveLength(0)
+  })
+
+  it('shows the gate\'s reason when refused, and a plain message when the AI fails', async () => {
+    const token = await cachedToken()
+    const reason = 'paid call claude-code/default refused: add job-import to the Claude subscription allowlist in Settings > AI budget'
+    const refused = await extractAdAi({ token, want: ['company'], confirm: true }, { spawnFn: fakeSpawn({ ok: false, error: 'refused', message: reason }) })
+    expect(refused).toMatchObject({ status: 403, body: { error: 'refused', message: reason } })
+    const failed = await extractAdAi({ token, want: ['company'], confirm: true }, { spawnFn: fakeSpawn({ ok: false, error: 'ai_failed', message: 'model said: SECRET' }) })
+    expect(failed).toMatchObject({ status: 502, body: { message: AI_FAILED_MESSAGE } })
+    expect(JSON.stringify(failed)).not.toContain('SECRET')
+    const crashed = await extractAdAi({ token, want: ['company'], confirm: true }, { spawnFn: fakeSpawn(undefined) })
+    expect(crashed.status).toBe(502)
   })
 })

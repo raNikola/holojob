@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Fill from ad: read one job page for the Add job form. Writes nothing; no candidate data comes in.
 
-    ad_fill.py fetch      stdin {"url": ...}   ->  the fields the page's JSON-LD states, what is missing, the page text
+    ad_fill.py fetch        stdin {"url": ...}             ->  the fields the page's JSON-LD states, what is missing, the page text
+    ad_fill.py ai-preview   stdin {"pageText", "want": [...]}  ->  exactly what an AI step would send, and whether the gate allows it (no call)
+    ad_fill.py ai-extract   stdin {"pageText", "want": [...]}  ->  the missing fields Claude Code read out of the (redacted) text; only after the caller's confirm
 
 A fetch that fails or finds no readable ad answers {"ok": false, "error": <code>, "message": ...}; the form then changes
 nothing. Prints one JSON object to stdout.
@@ -30,7 +32,32 @@ def fetch(payload: dict) -> dict:
     return {"ok": True, "finalUrl": page.url, **ad}
 
 
-COMMANDS = {"fetch": fetch}
+def _profile():
+    import os
+
+    import ad_ai
+
+    return ad_ai.load_profile(Path(os.environ.get("HOLOJOB_PROFILE_PATH") or ad_ai.PROFILE_PATH))
+
+
+def _ai(run):
+    import ad_ai
+
+    try:
+        return run(ad_ai)
+    except ad_ai.Refused as exc:
+        return {"ok": False, "error": exc.code, "message": exc.message}
+
+
+def ai_preview(payload: dict) -> dict:
+    return _ai(lambda ai: ai.preview(str(payload.get("pageText") or ""), payload.get("want") or [], _profile()))
+
+
+def ai_extract(payload: dict) -> dict:
+    return _ai(lambda ai: ai.extract(str(payload.get("pageText") or ""), payload.get("want") or [], _profile()))
+
+
+COMMANDS = {"fetch": fetch, "ai-preview": ai_preview, "ai-extract": ai_extract}
 
 
 def main(argv=None) -> int:

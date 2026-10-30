@@ -51,3 +51,36 @@ export function applySuggestions(form, fields) {
 export function stillMissing(form, missing) {
   return (missing || []).filter((name) => AD_FIELDS.includes(name) && isEmpty(form[name]))
 }
+
+async function postAi(path, body, fetchFn) {
+  let response
+  try {
+    response = await fetchFn(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  } catch {
+    return { status: 0, data: {} }
+  }
+  return { status: response.status, data: await response.json().catch(() => ({})) }
+}
+
+const AI_UNAVAILABLE = 'The AI step is not available right now. Fill the fields in by hand.'
+
+/**
+ * What the AI step would send: the redacted page text, the fields, and whether the gate allows it. Calls no model.
+ * The body is the token and the field names only.
+ * @returns {Promise<{ ok: true, text: string, want: string[], removed: object, provider: string, gate: { allowed: boolean, reason: string|null, class: string } } | { ok: false, message: string }>}
+ */
+export async function previewAdAi({ token, want }, { fetchFn = globalThis.fetch } = {}) {
+  const { status, data } = await postAi('/api/jobs/ad/ai-preview', { token, want }, fetchFn)
+  if (status === 200 && data.ok) return data
+  return { ok: false, message: data.message || AI_UNAVAILABLE }
+}
+
+/**
+ * The one call that sends the page text to a model; send it only from the confirm button.
+ * @returns {Promise<{ ok: true, fields: object, rejected: string[] } | { ok: false, message: string }>}
+ */
+export async function runAdAi({ token, want }, { fetchFn = globalThis.fetch } = {}) {
+  const { status, data } = await postAi('/api/jobs/ad/ai-extract', { token, want, confirm: true }, fetchFn)
+  if (status === 200 && data.ok) return { ok: true, fields: data.fields ?? {}, rejected: data.rejected ?? [] }
+  return { ok: false, message: data.message || AI_UNAVAILABLE }
+}

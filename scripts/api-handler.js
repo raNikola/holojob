@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { buildDiscoveryCommand, getDiscoveryStatus, runDiscovery } from './run-discovery.js'
 import { runPipeline } from './run-pipeline.js'
 import { runManualJobs } from './run-manual-job.js'
-import { fetchAd } from './run-ad-fill.js'
+import { extractAdAi, fetchAd, previewAdAi } from './run-ad-fill.js'
 import { buildScoringCommand, getScoringStatus, previewJudge, runJudgedScoring, runScoring } from './run-scoring.js'
 import { buildTailorCommand, getTailorStatus, runTailor, runTailorStream } from './run-tailor.js'
 import { getProjectScanStatus, runProjectScan } from './run-project-scan.js'
@@ -430,6 +430,19 @@ export async function handleApiRequest(req, res) {
       sendJson(res, result.status, result.body)
     } catch {
       sendJson(res, 400, { ok: false, error: 'bad_url', message: 'Could not read this page, paste the text manually.' })
+    }
+    return true
+  }
+
+  // Fill from ad, step 2 (AI): `preview` returns exactly what would be sent and calls no model; `extract` is the only path that
+  // sends the (redacted) page text to Claude Code and needs `"confirm": true`. Both take a token and field names, nothing else.
+  if ((url === '/api/jobs/ad/ai-preview' || url === '/api/jobs/ad/ai-extract') && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const result = url.endsWith('/ai-preview') ? await previewAdAi(body) : await extractAdAi(body)
+      sendJson(res, result.status, result.body)
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'invalid', message: 'The request was not understood.' })
     }
     return true
   }

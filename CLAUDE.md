@@ -86,6 +86,14 @@ provider, each behind an explicit confirm; the browser AI features send redacted
   name, contacts, links. Runs only in a judged scoring run with `HOLOJOB_ENGINE_SHADOW` on
   (shadow mode, `match_engine/shadow.py`); the judge's confirm dialog then lists it.
   `tests/python/test_engine_privacy.py` checks all of these at `requests.post`.
+- **Fill from ad, AI step** (Add job form, `python/job_import/ad_ai.py`, `POST /api/jobs/ad/ai-preview` / `ai-extract`): sends **no candidate data**. It sends the text of one
+  job page the server itself fetched (held in the Node process behind a token, never taken from the browser), with the owner's name, every e-mail address, phone number and link
+  removed by `redact.py` (the profile's name and links read server-side; a final check fails closed if anything of the owner's is left), plus a fixed instruction naming only the
+  fields still empty after the no-AI step. Never sent: Notes, extra links, Source URL, the profile, the CV, anything the browser posts besides the token and field names. It
+  runs only on the Claude Code subscription: the gate must classify the call `subscription` (feature `job-import` in `claudeCodeSubscription.features`, which the owner adds in
+  Settings > AI budget; it is not added by code), else it is refused with that hint and the manual form stays. `ai-preview` calls no model and returns exactly the text and the gate's
+  answer; `ai-extract` needs `"confirm": true` (409 without). Code accepts a value only if the text shows it (pay must read as EUR per month; a description is cut from the text
+  between two quoted snippets), so nothing is invented. `tests/python/test_ad_ai.py`, `tests/js/adFill.test.js`.
 - **Browser AI features** (`scripts/run-ai.js`, the `/api/ai/*` routes: job analysis, cover letter, interview
   prep, outreach, company intelligence, career strategy, skill gap, application strategy, resume enhancement,
   chat): send the ad text, the job's scores and stage, and a profile summary (current role, target roles,
@@ -162,14 +170,14 @@ The description is optional (Title and Company, plus a Job URL or a description,
 AI context (`SCORING_FIELDS` is the whitelist on both sides; `summarizeJob` is a whitelist too; `tests/js/manualScoring.test.js`, `tests/python/test_manual_jobs.py`).
 Add any new owner-only field to `MANUAL_FIELDS` and to those tests (`sourceUrl` has a canary there).
 
-**Fill from ad (Add job form, step 1, no AI):** the button next to Job URL calls `POST /api/jobs/ad/fetch` (`scripts/run-ad-fill.js` -> `python/job_import/ad_fill.py fetch`).
+**Fill from ad (Add job form, step 1, no AI; step 2 is the privacy bullet above):** the button next to Job URL calls `POST /api/jobs/ad/fetch` (`scripts/run-ad-fill.js` -> `python/job_import/ad_fill.py fetch`).
 The body is the address only (never Notes, links, Source URL or any profile data). The page is fetched by `python/job_import/safe_fetch.py`, the only fetcher with SSRF
 limits: http(s) on ports 80/443 only, no credentials in the URL, every resolved address must be public (private, loopback, link-local, Tailscale's 100.64/10, NAT64/6to4/Teredo
 are refused, so `holojob.void` and `127.0.0.1:3073` cannot be fetched), the connection is pinned to the checked address, redirects are followed by hand (3 max, each hop checked),
 no cookies/auth/Referer/proxy/compression, 2 MB and 15 s limits, HTML only, login walls and LinkedIn posts refused. `ad_reader.py` reads schema.org JobPosting JSON-LD only
 (title, company, location, description with its breaks, salary only when it reads as EUR per month, else unknown). Nothing is written. The page text stays in the Node process
 behind a 15-minute token (`cachedPage`), never in the browser. The form (`modules/jobs/adFill.js`) fills **empty fields only**, marks them "suggested" until edited, and saves
-nothing before Save. A failed or unreadable fetch shows "Could not read this page, paste the text manually." and changes nothing.
+nothing before Save. A failed or unreadable fetch shows "Could not read this page, paste the text manually." and changes nothing. If the page leaves fields empty, the form offers "Extract the missing fields with AI": a confirm panel shows the exact redacted text, the fields and the gate's answer (or why it is refused); values come back as suggestions into empty fields only. The URL import (`import_job_url.py`) uses the same `safe_fetch`.
 
 ## Request guard (`/api`)
 
