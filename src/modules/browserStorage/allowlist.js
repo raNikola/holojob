@@ -13,7 +13,6 @@ export const BROWSER_STORAGE_ALLOWLIST = [
   { key: 'job-dashboard-jobs-tab', store: 'session', maxBytes: 64, reason: 'Which jobs tab is open.' },
   { key: 'job-dashboard-settings-category', store: 'session', maxBytes: 32, reason: 'Which Settings category is open; no content.' },
   { key: 'job-dashboard-sidebar-collapsed', store: 'local', maxBytes: 8, reason: 'Layout preference, true or false.' },
-  { key: 'job-dashboard-discovery-options', store: 'local', maxBytes: 64, reason: 'Which opt-in discovery sources are ticked (for example Joberty); booleans only, no content.' },
   { key: 'job-dashboard-theme', store: 'local', maxBytes: 16, reason: 'Light or dark choice (not persisted yet).' },
   { key: 'career-os-demo-bootstrap-done', store: 'session', maxBytes: 8, reason: 'Demo-mode flag; exists only in demo mode.' },
 ]
@@ -21,6 +20,7 @@ export const BROWSER_STORAGE_ALLOWLIST = [
 export const TOLERATED_UNTIL_MIGRATED = [
   { key: 'job-dashboard-ai-settings', store: 'local', until: 'step 5', reason: 'Settings left in step 4 and the key in step 2; read once and removed (aiSettings.js), never written. Only a legacy value waiting for its move may remain; the entry goes with the generic scrub.' },
   { key: 'linkedin_li_at', store: 'local', until: 'step 5', reason: 'LinkedIn cookie left in step 3; only a legacy value waiting for the move may remain. It is read and removed (outreach/linkedinCookie.js), never written; the entry goes with the generic scrub.' },
+  { key: 'job-dashboard-discovery-options', store: 'local', until: 'step 5', reason: 'The old Jobs-screen Joberty checkbox; the switch now lives on the server (Settings > Sources). Read once, handed to the server and removed (sources/sourcesClient.js), never written.' },
   { key: 'job-dashboard-candidate-profile', store: 'local', until: 'step 5', reason: 'Server becomes the master (Q1).' },
   { key: 'job-dashboard-candidate-intelligence', store: 'local', until: 'step 5', reason: 'Server becomes the master (Q1).' },
   { key: 'job-dashboard-discovered-jobs', store: 'local', until: 'step 5', reason: 'Server becomes the master (Q1).' },
@@ -46,10 +46,10 @@ export const STORAGE_API_USERS = [
   'src/modules/appNavigation.js',
   'src/modules/demo/loadDemoData.js',
   'src/modules/intelligence/intelligenceExport.js',
-  'src/modules/jobs/discoveryOptions.js',
   'src/modules/jobs/jobStorage.js',
   'src/modules/jobs/pipelineState.js',
   'src/modules/outreach/linkedinCookie.js',
   'src/modules/sidebarState.js',
+  'src/modules/sources/sourcesClient.js',
   'src/utils/storage.js',
 ]

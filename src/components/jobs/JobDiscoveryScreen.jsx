@@ -7,8 +7,7 @@ import PipelineHealthPanel from './PipelineHealthPanel'
 import PipelineOrchestrator from './PipelineOrchestrator'
 import JobImportPanel from './JobImportPanel'
 import JobUrlImport from './JobUrlImport'
-import DiscoverySourceOptions from './DiscoverySourceOptions'
-import { discoveryProviders, loadDiscoveryOptions, saveDiscoveryOptions } from '../../modules/jobs/discoveryOptions'
+import { migrateLegacyDiscoveryOptions } from '../../modules/sources/sourcesClient'
 import AddJobDialog from './AddJobDialog'
 import { openJobPage } from '../../modules/jobs/jobRoute'
 import { scoreStoredJob } from '../../modules/jobs/manualScoring'
@@ -63,10 +62,12 @@ export default function JobDiscoveryScreen() {
   const [selectedJob, setSelectedJob] = useState(null)
   const [bulkRunning, setBulkRunning] = useState(false)
   const [rerunning, setRerunning] = useState(false)
-  const [discoveryOptions, setDiscoveryOptions] = useState(loadDiscoveryOptions)
   const [rerunMsg, setRerunMsg] = useState('')
   const [addJobOpen, setAddJobOpen] = useState(false)
   const [addNote, setAddNote] = useState(null)
+
+  // The old opt-in source checkbox lived here; its value moves to Settings > Sources on the server once.
+  useEffect(() => { migrateLegacyDiscoveryOptions() }, [])
 
   useEffect(() => {
     saveJobs(state)
@@ -123,7 +124,7 @@ export default function JobDiscoveryScreen() {
       if (!intelligence?.searchStrategy?.jobSpySearchTerms?.length) {
         throw new Error('Run candidate intelligence generation first (Module 2).')
       }
-      await runDiscovery({ providers: discoveryProviders(discoveryOptions), country: searchCountry(profile, intelligence), intelligence, profile })
+      await runDiscovery({ providers: 'serbia', country: searchCountry(profile, intelligence), intelligence, profile })
       setRerunMsg('Scoring jobs…')
       await runScoring()
       const jobs = await loadLatestScoredJobs()
@@ -135,7 +136,7 @@ export default function JobDiscoveryScreen() {
     } finally {
       setRerunning(false)
     }
-  }, [profile, discoveryOptions])
+  }, [profile])
 
   const handleRescore = useCallback(async () => {
     setRerunning(true)
@@ -296,11 +297,6 @@ export default function JobDiscoveryScreen() {
                 {rerunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Re-scrape jobs
               </Button>
-              <DiscoverySourceOptions
-                options={discoveryOptions}
-                disabled={rerunning}
-                onChange={(next) => { setDiscoveryOptions(next); saveDiscoveryOptions(next) }}
-              />
               <Button variant="secondary" onClick={handleRescore} disabled={rerunning}>
                 <RefreshCw className="h-4 w-4" />
                 Re-score

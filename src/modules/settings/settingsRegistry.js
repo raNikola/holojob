@@ -10,7 +10,7 @@
 
 export const SETTINGS_CATEGORIES = [
   { id: 'job-search', title: 'Job search', empty: null },
-  { id: 'sources', title: 'Sources', empty: 'Job boards and watched companies are not configurable here yet. Pick a provider group under Jobs > Pipeline.' },
+  { id: 'sources', title: 'Sources', empty: null },
   { id: 'applications', title: 'Applications', empty: null },
   { id: 'ai-costs', title: 'AI & costs', empty: null },
   { id: 'privacy-security', title: 'Privacy & security', empty: null },
@@ -21,6 +21,7 @@ export const SETTINGS_CATEGORIES = [
 
 export const SETTINGS_SECTIONS = [
   { id: 'scoring-weights', category: 'job-search', title: 'Scoring weights', keywords: ['weights', 'scoring', 'score', 're-score', 'sliders'] },
+  { id: 'job-boards', category: 'sources', title: 'Job boards', keywords: ['sources', 'boards', 'providers', 'joberty', 'opt-in', 'scrape', 'discovery', 'terms'] },
   { id: 'application-tracking', category: 'applications', title: 'Tracking and board columns', keywords: ['tracking', 'tracker', 'board', 'columns', 'stages', 'applications'] },
   { id: 'application-notifications', category: 'applications', title: 'Notifications', keywords: ['notifications', 'reminders', 'follow-up', 'nudges'], note: 'Follow-up reminders are not configurable yet.' },
   { id: 'application-migration', category: 'applications', title: 'Application tracking migration', keywords: ['migration', 'migrate', 'import', 'tracking', 'old format'] },
