@@ -1,8 +1,49 @@
 import { NEEDS_VISA_STATUSES } from './workAuthorization.js'
 import { describeRange, matchesSalary, salaryRangeOf } from './salaryFilter.js'
+import geography from '../../data/geography.json'
 
 export function getJobProvider(job) {
   return job.provider || job.site || ''
+}
+
+/** What the Provider filter compares: a job added by hand is "manual" (the flag, not its Source URL), any other its connector. */
+const providerOf = (job) => (job?.manualEntry === true ? 'manual' : getJobProvider(job))
+export const MANUAL_PROVIDER = 'Manual'
+
+const foldName = (text) => String(text ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/^[ .]+|[ .]+$/g, '')
+const COUNTRY_NAMES = new Set(geography.countries.flatMap((c) => [c.name, ...(c.aliases || [])]).map(foldName))
+const COUNTRY_JOINERS = new Set(['of', 'in', 'for', 'de', 'du'])
+
+/**
+ * The company without a trailing country, as the dedupe key does it (python/job_discovery/dedupe_jobs.py `_company_name`):
+ * "Fivetran Serbia" is Fivetran's Serbian entity. A name that ends "of <country>" ("Bank of Serbia") is the country's own and stays whole.
+ * `name` keeps the writing of the first words; `key` is lower-case with single spaces.
+ */
+export function companyParts(value) {
+  const words = String(value ?? '').trim().split(/\s+/).filter(Boolean)
+  const lower = words.map((w) => w.toLowerCase())
+  for (const size of [2, 1]) {
+    if (lower.length > size && COUNTRY_NAMES.has(foldName(lower.slice(-size).join(' ')))) {
+      const rest = lower.slice(0, -size)
+      if (!COUNTRY_JOINERS.has(rest[rest.length - 1])) return { name: words.slice(0, -size).join(' '), key: rest.join(' ') }
+    }
+  }
+  return { name: words.join(' '), key: lower.join(' ') }
+}
+
+/** The Company filter's entries, one per company, `{ value, label }` with the number of jobs in `jobs`, sorted by name. */
+export function getCompanyOptions(jobs) {
+  const entries = new Map()
+  for (const job of jobs || []) {
+    const { name, key } = companyParts(job.company)
+    if (!key) continue
+    const entry = entries.get(key) || { value: name, count: 0 }
+    entry.count += 1
+    entries.set(key, entry)
+  }
+  return [...entries.values()]
+    .sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }))
+    .map(({ value, count }) => ({ value, label: `${value} (${count})` }))
 }
 
 /** A multi-value filter as a list. A string saved by an older single-select reads as a list of one. */
@@ -34,6 +75,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     location = '',
     site = [],
     provider = [],
+    company = [],
     remoteOnly = false,
     hideNeedsVisa = false,
     hideNoLongerListed = false,
@@ -48,6 +90,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
   const priorities = normalizePriorityFilter(priority)
   const sites = lowerSet(normalizeMultiFilter(site))
   const providers = lowerSet(normalizeMultiFilter(provider))
+  const companies = new Set(normalizeMultiFilter(company).map((c) => companyParts(c).key))
   const q = searchText.trim().toLowerCase()
 
   return (jobs || []).filter((job) => {
@@ -65,7 +108,8 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     if (hideNoLongerListed && isNoLongerListed(job)) return false
     if (hideNeedsVisa && NEEDS_VISA_STATUSES.has(job.workAuthorization?.status)) return false
     if (sites.size && !sites.has((job.site || '').toLowerCase())) return false
-    if (providers.size && !providers.has(getJobProvider(job).toLowerCase())) return false
+    if (providers.size && !providers.has(providerOf(job).toLowerCase())) return false
+    if (companies.size && !companies.has(companyParts(job.company).key)) return false
     if (location && !(job.location || '').toLowerCase().includes(location.toLowerCase())) return false
 
     if (q) {
@@ -90,8 +134,11 @@ export function getUniqueSites(jobs) {
   return [...new Set((jobs || []).map((j) => j.site).filter(Boolean))].sort()
 }
 
+/** The connectors present in `jobs`, sorted; "Manual" (jobs added by hand) is listed first when there are any. */
 export function getUniqueProviders(jobs) {
-  return [...new Set((jobs || []).map((j) => getJobProvider(j)).filter(Boolean))].sort()
+  const all = new Set((jobs || []).map((j) => providerOf(j)).filter(Boolean))
+  const hasManual = all.delete('manual')
+  return [...(hasManual ? [MANUAL_PROVIDER] : []), ...[...all].sort()]
 }
 
 export function getUniqueLocations(jobs) {
@@ -127,6 +174,8 @@ export function activeFilterChips(filters = {}) {
   if (filters.remoteOnly) add('remoteOnly', 'Remote only', { remoteOnly: false })
   const providers = normalizeMultiFilter(filters.provider)
   if (providers.length) add('provider', `Provider: ${providers.join(', ')}`, { provider: [] })
+  const companies = normalizeMultiFilter(filters.company)
+  if (companies.length) add('company', `Company: ${companies.join(', ')}`, { company: [] })
   if (filters.matchLabel) add('matchLabel', `Match label: ${filters.matchLabel}`, { matchLabel: '' })
   const { from, to } = salaryRangeOf(filters)
   if (from != null || to != null) {
@@ -159,6 +208,7 @@ export const CLEAR_ALL_FILTERS = {
   location: '',
   site: [],
   provider: [],
+  company: [],
   remoteOnly: false,
   hideNeedsVisa: false,
   hideNoLongerListed: false,
@@ -171,7 +221,7 @@ export const CLEAR_ALL_FILTERS = {
 }
 
 /** Filters inside "More filters" that are active, so the toggle can show a count. */
-export const MORE_FILTER_KEYS = ['provider', 'matchLabel', 'salary', 'hideNeedsVisa', 'hideNoLongerListed']
+export const MORE_FILTER_KEYS = ['provider', 'company', 'matchLabel', 'salary', 'hideNeedsVisa', 'hideNoLongerListed']
 export function moreFiltersCount(chips) {
   return chips.filter((c) => MORE_FILTER_KEYS.includes(c.key)).length
 }

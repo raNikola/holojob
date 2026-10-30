@@ -12,6 +12,7 @@ const DEFAULT_FILTERS = {
   location: '',
   site: [],
   provider: [],
+  company: [],
   remoteOnly: false,
   hideNeedsVisa: false,
   hideNoLongerListed: false,
@@ -43,7 +44,7 @@ export function loadJobs() {
     return {
       ...getDefaultJobsState(),
       ...parsed,
-      filters: { ...DEFAULT_FILTERS, ...parsed.filters, priority: normalizePriorityFilter(parsed.filters?.priority), salaryMode: salaryModeOf(parsed.filters || {}), site: normalizeMultiFilter(parsed.filters?.site), provider: normalizeMultiFilter(parsed.filters?.provider) },
+      filters: { ...DEFAULT_FILTERS, ...parsed.filters, priority: normalizePriorityFilter(parsed.filters?.priority), salaryMode: salaryModeOf(parsed.filters || {}), site: normalizeMultiFilter(parsed.filters?.site), provider: normalizeMultiFilter(parsed.filters?.provider), company: normalizeMultiFilter(parsed.filters?.company) },
       jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
     }
   } catch {
