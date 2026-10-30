@@ -143,7 +143,7 @@ export function activeFilterChips(filters = {}) {
  * three fields of the old panel are reset so nothing stale is left behind. The "include jobs without
  * salary" checkbox is not touched.
  */
-export const SALARY_CLEARED = { salaryFrom: '', salaryTo: '', minSalary: null, desiredSalaryMin: null, desiredSalaryMax: null }
+export const SALARY_CLEARED = { salaryMode: 'cleared', salaryFrom: '', salaryTo: '', minSalary: null, desiredSalaryMin: null, desiredSalaryMax: null }
 
 /** The patch that clears every filter. Salary fields become '' (not null) so the profile's figures do not refill them. */
 export const CLEAR_ALL_FILTERS = {

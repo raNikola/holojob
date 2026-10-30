@@ -36,7 +36,7 @@ export default function SalaryFilter({ from, to, includeUnknown, fromProfile, on
     setDraft(next)
     const f = parseAmount(next.from)
     const t = parseAmount(next.to)
-    if (!rangeError(f, t)) onChange({ ...SALARY_CLEARED, salaryFrom: f ?? '', salaryTo: t ?? '' })
+    if (!rangeError(f, t)) onChange({ ...SALARY_CLEARED, salaryMode: f == null && t == null ? 'cleared' : 'set', salaryFrom: f ?? '', salaryTo: t ?? '' })
   }
   const input = (side, name) => (
     <input
