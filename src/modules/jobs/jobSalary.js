@@ -35,7 +35,8 @@ export function passesSalaryFilters(job, { minSalary = '', desiredMin = '', desi
  * The filters with the profile's figures standing in for any salary filter the
  * user has not touched. The three states (untouched / set / cleared) are defined in salaryFilter.js.
  */
-export function withProfileSalaryDefaults(filters, basicProfile = {}) {
+export function withProfileSalaryDefaults(filters, profile) {
+  const basicProfile = profile || {}
   const pick = (own, fromProfile) => (own === null || own === undefined ? (fromProfile ?? '') : own)
   const mode = salaryModeOf(filters)
   if (mode === 'cleared') {

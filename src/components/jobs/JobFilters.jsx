@@ -39,7 +39,7 @@ function Checkbox({ label, help, checked, onChange }) {
   )
 }
 
-export default function JobFilters({ filters, sites, providers, jobs, applicationStore = null, onChange }) {
+export default function JobFilters({ filters, sites, providers, jobs, applicationStore = null, basicProfile = null, onChange }) {
   const showScoreFilters = hasMatchScores(jobs)
   const [moreOpen, setMoreOpen] = useState(false)
   const chips = activeFilterChips(filters)
@@ -161,7 +161,8 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                   from={salary.from}
                   to={salary.to}
                   includeUnknown={filters.salaryIncludeUnknown !== false}
-                  fromProfile={Boolean(filters.salaryFromProfile)}
+                  filters={filters}
+                  profile={basicProfile}
                   onChange={onChange}
                 />
               </>

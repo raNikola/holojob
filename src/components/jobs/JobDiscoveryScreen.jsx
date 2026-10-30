@@ -292,7 +292,7 @@ export default function JobDiscoveryScreen() {
                   </div>
               </div>
 
-              <JobFilters filters={effectiveFilters} sites={sites} providers={providers} jobs={state.jobs} applicationStore={applicationStore} onChange={handleFilterChange} />
+              <JobFilters filters={effectiveFilters} sites={sites} providers={providers} jobs={state.jobs} applicationStore={applicationStore} basicProfile={profile?.basicProfile} onChange={handleFilterChange} />
               <BulkActionsBar
                 selectedCount={selectedJobIds.length}
                 running={bulkRunning}

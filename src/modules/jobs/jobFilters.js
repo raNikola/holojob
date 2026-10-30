@@ -145,6 +145,14 @@ export function activeFilterChips(filters = {}) {
  */
 export const SALARY_CLEARED = { salaryMode: 'cleared', salaryFrom: '', salaryTo: '', minSalary: null, desiredSalaryMin: null, desiredSalaryMax: null }
 
+/**
+ * Gives the salary back to the profile: untouched again, so the profile's current figures apply (they are
+ * read at render, not copied), and the checkbox is ON.
+ */
+export const SALARY_RESET = {
+  salaryMode: 'untouched', salaryFrom: null, salaryTo: null, minSalary: null, desiredSalaryMin: null, desiredSalaryMax: null, salaryIncludeUnknown: true,
+}
+
 /** The patch that clears every filter. Salary fields become '' (not null) so the profile's figures do not refill them. */
 export const CLEAR_ALL_FILTERS = {
   searchText: '',

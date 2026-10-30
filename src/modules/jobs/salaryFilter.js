@@ -93,3 +93,39 @@ export function salaryRangeOf(filters = {}) {
   const lows = [parseAmount(filters.minSalary), parseAmount(filters.desiredSalaryMin)].filter((n) => n != null)
   return { from: lows.length ? Math.max(...lows) : null, to: parseAmount(filters.desiredSalaryMax) }
 }
+
+/** The profile's salary as a range: From the larger of minimum and desired-from, To the desired maximum. null = not in the profile. */
+export function profileSalaryDefaults(basicProfile) {
+  const lows = [basicProfile?.minSalaryEur, basicProfile?.desiredSalaryMinEur].map(parseAmount).filter((n) => n != null)
+  return { from: lows.length ? Math.max(...lows) : null, to: parseAmount(basicProfile?.desiredSalaryMaxEur) }
+}
+
+/**
+ * What the Salary control tells the owner about where its values come from, or null when the profile has
+ * no salary (nothing to compare with, no reset):
+ * 'profile' (untouched, or a range equal to the profile's), 'differs' (set to something else),
+ * 'cleared' (emptied).
+ */
+export function salaryMarker(filters, basicProfile) {
+  const d = profileSalaryDefaults(basicProfile)
+  if (d.from == null && d.to == null) return null
+  const mode = salaryModeOf(filters)
+  if (mode === 'untouched') return 'profile'
+  if (mode === 'cleared') return 'cleared'
+  const { from, to } = salaryRangeOf(filters)
+  return from === d.from && to === d.to ? 'profile' : 'differs'
+}
+
+/** "Taken from your profile (min 1,500, desired 2,000–2,500 EUR/month). Change it in Profile." Empty when the profile has no salary. */
+export function profileSalaryNote(basicProfile) {
+  const min = parseAmount(basicProfile?.minSalaryEur)
+  const lo = parseAmount(basicProfile?.desiredSalaryMinEur)
+  const hi = parseAmount(basicProfile?.desiredSalaryMaxEur)
+  const parts = []
+  if (min != null) parts.push(`min ${formatAmount(min)}`)
+  if (lo != null && hi != null) parts.push(`desired ${formatAmount(lo)}–${formatAmount(hi)}`)
+  else if (lo != null) parts.push(`desired from ${formatAmount(lo)}`)
+  else if (hi != null) parts.push(`desired up to ${formatAmount(hi)}`)
+  if (!parts.length) return ''
+  return `Taken from your profile (${parts.join(', ')} EUR/month). Change it in Profile.`
+}

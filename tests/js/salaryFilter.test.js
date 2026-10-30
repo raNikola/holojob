@@ -5,11 +5,13 @@ import {
   matchesSalary,
   parseAmount,
   rangeError,
+  salaryMarker,
+  profileSalaryNote,
   salaryModeOf,
   salaryRangeOf,
   sanitizeAmount,
 } from '../../src/modules/jobs/salaryFilter.js'
-import { activeFilterChips, filterJobs, CLEAR_ALL_FILTERS } from '../../src/modules/jobs/jobFilters.js'
+import { activeFilterChips, filterJobs, CLEAR_ALL_FILTERS, SALARY_RESET } from '../../src/modules/jobs/jobFilters.js'
 import { withProfileSalaryDefaults } from '../../src/modules/jobs/jobSalary.js'
 
 const pay = (min, max = min) => ({ min, max })
@@ -236,6 +238,71 @@ describe('salary modes: untouched / set / cleared', () => {
     expect(loadJobs().filters.salaryMode).toBe('untouched')
     store['job-dashboard-discovered-jobs'] = JSON.stringify({ jobs: [], filters: { salaryFrom: '', salaryTo: '' } })
     expect(loadJobs().filters.salaryMode).toBe('cleared')
+    delete globalThis.localStorage
+  })
+})
+
+describe('markers and Reset to profile', () => {
+  const bp = { minSalaryEur: 1500, desiredSalaryMinEur: 2000, desiredSalaryMaxEur: 2500 }
+  const eff = (f, profile = bp) => withProfileSalaryDefaults(f, profile)
+
+  it('untouched shows the profile marker; set to something else "differs"; emptied "cleared"', () => {
+    expect(salaryMarker(eff({}), bp)).toBe('profile')
+    expect(salaryMarker(eff({ salaryMode: 'set', salaryFrom: 3000, salaryTo: '' }), bp)).toBe('differs')
+    expect(salaryMarker(eff({ salaryMode: 'set', salaryFrom: 2000, salaryTo: 2500 }), bp)).toBe('profile')
+    expect(salaryMarker(eff({ ...CLEAR_ALL_FILTERS }), bp)).toBe('cleared')
+  })
+
+  it('a profile without salary has no marker and so no reset link', () => {
+    for (const f of [{}, { salaryMode: 'set', salaryFrom: 3000 }, { ...CLEAR_ALL_FILTERS }]) {
+      expect(salaryMarker(eff(f, {}), {})).toBeNull()
+      expect(salaryMarker(eff(f, null), null)).toBeNull()
+    }
+    expect(profileSalaryNote({})).toBe('')
+  })
+
+  it('the note names the profile figures', () => {
+    expect(profileSalaryNote(bp)).toBe('Taken from your profile (min 1,500, desired 2,000–2,500 EUR/month). Change it in Profile.')
+  })
+
+  it('Reset from set returns to untouched with the profile range and the checkbox ON', () => {
+    const state = { salaryMode: 'set', salaryFrom: 3000, salaryTo: '', salaryIncludeUnknown: false }
+    const after = eff({ ...state, ...SALARY_RESET })
+    expect(salaryModeOf(after)).toBe('untouched')
+    expect(salaryRangeOf(after)).toEqual({ from: 2000, to: 2500 })
+    expect(after.salaryIncludeUnknown).toBe(true)
+    expect(salaryMarker(after, bp)).toBe('profile')
+  })
+
+  it('Reset from cleared does the same', () => {
+    const after = eff({ ...CLEAR_ALL_FILTERS, ...SALARY_RESET })
+    expect(salaryRangeOf(after)).toEqual({ from: 2000, to: 2500 })
+    expect(salaryMarker(after, bp)).toBe('profile')
+  })
+
+  it('Reset reads the profile as it is now', () => {
+    const state = { ...SALARY_RESET }
+    expect(salaryRangeOf(eff(state, bp))).toEqual({ from: 2000, to: 2500 })
+    expect(salaryRangeOf(eff(state, { ...bp, desiredSalaryMinEur: 2600, desiredSalaryMaxEur: 3000 }))).toEqual({ from: 2600, to: 3000 })
+  })
+
+  it('set, cleared and reset all survive save and reload', async () => {
+    const store = {}
+    const storage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v } }
+    globalThis.localStorage = storage
+    const { loadJobs, getDefaultJobsState, saveJobs, updateFilters } = await import('../../src/modules/jobs/jobStorage.js')
+    const cases = [
+      [{ salaryMode: 'set', salaryFrom: 3000, salaryTo: '' }, { from: 3000, to: null }],
+      [{ ...CLEAR_ALL_FILTERS }, { from: null, to: null }],
+      [{ ...SALARY_RESET }, { from: 2000, to: 2500 }],
+    ]
+    for (const [patch, expected] of cases) {
+      const state = updateFilters(getDefaultJobsState(), patch)
+      saveJobs(state, storage)
+      const back = loadJobs()
+      expect(salaryRangeOf(eff(back.filters))).toEqual(expected)
+      expect(salaryModeOf(back.filters)).toBe(patch.salaryMode)
+    }
     delete globalThis.localStorage
   })
 })
