@@ -153,7 +153,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
       >
         <div className={`min-h-0 ${moreOpen && settled ? '' : 'overflow-hidden'}`}>
           <div className="flex flex-wrap items-start gap-x-3 gap-y-2 pt-3">
-            <div className="w-40 flex-none">
+            <div className="min-w-[10rem] flex-[1_1_10rem]">
               <MultiSelectDropdown
                 label="Provider"
                 labelExtra={tip('provider', 'Provider')}
@@ -165,7 +165,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
             </div>
             {showScoreFilters && (
               <>
-                <div className="w-36 flex-none">
+                <div className="min-w-[9rem] flex-[1_1_9rem]">
                   <SelectField
                     id="filter-match-label"
                     label="Match label"
@@ -177,7 +177,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                   />
                 </div>
                 <SalaryFilter
-                  className="min-w-[18rem] flex-[1_1_18rem]"
+                  className="w-[22rem] max-w-full flex-none"
                   from={salary.from}
                   to={salary.to}
                   includeUnknown={filters.salaryIncludeUnknown !== false}
@@ -188,7 +188,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
               </>
             )}
             {/* The pair sits beside the Salary row on wide windows (top spacer = label row plus half the difference of input and checkbox heights, so they are centred on the input row); as a pair under the extras when they wrap. */}
-            <div className="flex max-w-full flex-none flex-wrap items-center gap-x-5 gap-y-2 min-[1280px]:pt-[2.3rem]">
+            <div className="flex min-w-[26rem] max-w-full flex-[1_1_auto] flex-wrap items-center justify-between gap-x-5 gap-y-2 min-[1280px]:pt-[2.3rem]">
               {showScoreFilters && (
                 <Checkbox
                   className=""
