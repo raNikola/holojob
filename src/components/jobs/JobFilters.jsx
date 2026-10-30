@@ -45,7 +45,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
   const chips = activeFilterChips(filters)
   const salary = salaryRangeOf(filters)
   // Chips of filters that are not rendered (score filters without scores) are not counted in the toggle.
-  const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider'].includes(c.key)))
+  const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider', 'hideClosed'].includes(c.key)))
   const priorityOptions = useMemo(
     () => countByValue(jobs, 'priority', SHOWN_PRIORITIES).map(({ value, count }) => ({ value, label: `${value} (${count})` })),
     [jobs],
@@ -130,22 +130,23 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
         <p className="mt-2 text-xs text-stone-500">The application tracker has not loaded, so no job can be shown as applied.</p>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-3">
+      {/* Fixed place: directly under the main row, so opening the extras below never moves it. */}
+      <div className="mt-3 flex items-center justify-end gap-4 border-t border-stone-200 pt-2 text-sm dark:border-stone-800">
         <button
           type="button"
           aria-expanded={moreOpen}
           aria-controls="more-filters"
           onClick={() => setMoreOpen((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-700 hover:border-teal-400 dark:border-stone-700 dark:text-stone-300"
+          className="inline-flex items-center gap-1 text-stone-700 hover:text-teal-700 hover:underline dark:text-stone-300 dark:hover:text-teal-300"
         >
           More filters{moreCount > 0 ? ` (${moreCount})` : ''}
-          <ChevronDown className={`h-4 w-4 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`h-4 w-4 transition-transform ${moreOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
         </button>
         <button
           type="button"
           disabled={chips.length === 0}
           onClick={() => onChange(CLEAR_ALL_FILTERS)}
-          className="text-sm text-stone-600 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-stone-400"
+          className="text-stone-600 hover:text-teal-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-stone-400"
         >
           Clear all
         </button>
