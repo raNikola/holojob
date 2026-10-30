@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Fill from ad: read one job page for the Add job form. Writes nothing; no candidate data comes in.
+
+    ad_fill.py fetch      stdin {"url": ...}   ->  the fields the page's JSON-LD states, what is missing, the page text
+
+A fetch that fails or finds no readable ad answers {"ok": false, "error": <code>, "message": ...}; the form then changes
+nothing. Prints one JSON object to stdout.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import ad_reader  # noqa: E402
+import safe_fetch  # noqa: E402
+
+
+def fetch(payload: dict) -> dict:
+    try:
+        page = safe_fetch.fetch_page(str(payload.get("url") or ""))
+    except safe_fetch.FetchRefused as exc:
+        return {"ok": False, "error": exc.code, "message": exc.message}
+    ad = ad_reader.read_ad(page.html)
+    if not ad["readable"]:
+        return {"ok": False, "error": "unreadable", "message": "No job posting could be read from this page."}
+    return {"ok": True, "finalUrl": page.url, **ad}
+
+
+COMMANDS = {"fetch": fetch}
+
+
+def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    command = COMMANDS.get(argv[0]) if argv else None
+    if command is None:
+        print(json.dumps({"ok": False, "error": "usage", "message": "unknown command"}))
+        return 2
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+    except ValueError:
+        payload = {}
+    print(json.dumps(command(payload if isinstance(payload, dict) else {})))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

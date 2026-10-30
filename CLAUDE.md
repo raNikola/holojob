@@ -162,6 +162,15 @@ The description is optional (Title and Company, plus a Job URL or a description,
 AI context (`SCORING_FIELDS` is the whitelist on both sides; `summarizeJob` is a whitelist too; `tests/js/manualScoring.test.js`, `tests/python/test_manual_jobs.py`).
 Add any new owner-only field to `MANUAL_FIELDS` and to those tests (`sourceUrl` has a canary there).
 
+**Fill from ad (Add job form, step 1, no AI):** the button next to Job URL calls `POST /api/jobs/ad/fetch` (`scripts/run-ad-fill.js` -> `python/job_import/ad_fill.py fetch`).
+The body is the address only (never Notes, links, Source URL or any profile data). The page is fetched by `python/job_import/safe_fetch.py`, the only fetcher with SSRF
+limits: http(s) on ports 80/443 only, no credentials in the URL, every resolved address must be public (private, loopback, link-local, Tailscale's 100.64/10, NAT64/6to4/Teredo
+are refused, so `holojob.void` and `127.0.0.1:3073` cannot be fetched), the connection is pinned to the checked address, redirects are followed by hand (3 max, each hop checked),
+no cookies/auth/Referer/proxy/compression, 2 MB and 15 s limits, HTML only, login walls and LinkedIn posts refused. `ad_reader.py` reads schema.org JobPosting JSON-LD only
+(title, company, location, description with its breaks, salary only when it reads as EUR per month, else unknown). Nothing is written. The page text stays in the Node process
+behind a 15-minute token (`cachedPage`), never in the browser. The form (`modules/jobs/adFill.js`) fills **empty fields only**, marks them "suggested" until edited, and saves
+nothing before Save. A failed or unreadable fetch shows "Could not read this page, paste the text manually." and changes nothing.
+
 ## Request guard (`/api`)
 
 Every `/api` request passes `scripts/request-guard.js` first (`handleApiRoutes` in `api-handler.js`, used by the

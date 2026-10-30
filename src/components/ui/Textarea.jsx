@@ -1,8 +1,13 @@
-export default function Textarea({ label, error, className = '', id, rows = 4, ...props }) {
+export default function Textarea({ label, labelExtra, error, className = '', id, rows = 4, ...props }) {
   const inputId = id || label?.toLowerCase().replace(/\s+/g, '-')
   return (
     <div className={className}>
-      {label && <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300">{label}</label>}
+      {label && (
+        <div className="mb-1.5 flex items-center gap-2">
+          <label htmlFor={inputId} className="text-sm font-medium text-stone-700 dark:text-stone-300">{label}</label>
+          {labelExtra}
+        </div>
+      )}
       <textarea
         id={inputId}
         rows={rows}
