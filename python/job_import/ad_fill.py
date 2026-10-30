@@ -25,10 +25,13 @@ def fetch(payload: dict) -> dict:
     try:
         page = safe_fetch.fetch_page(str(payload.get("url") or ""))
     except safe_fetch.FetchRefused as exc:
-        return {"ok": False, "error": exc.code, "message": exc.message}
+        # The code and the HTTP status only; nothing from the page itself.
+        return {"ok": False, "error": exc.code, "status": exc.status, "message": exc.message}
     ad = ad_reader.read_ad(page.html)
     if not ad["readable"]:
-        return {"ok": False, "error": "unreadable", "message": "No job posting could be read from this page."}
+        # No posting data and next to no text, but scripts: the content is drawn by JavaScript, which is not run here.
+        scripted = "<script" in page.html.lower()
+        return {"ok": False, "error": "js_only" if scripted else "unreadable", "message": "No job posting could be read from this page."}
     return {"ok": True, "finalUrl": page.url, **ad}
 
 

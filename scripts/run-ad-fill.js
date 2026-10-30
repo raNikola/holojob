@@ -23,6 +23,28 @@ const MAX_ENTRIES = 20
 
 export const UNREADABLE_MESSAGE = 'Could not read this page, paste the text manually.'
 
+const PASTE = 'Paste the ad text.'
+const MESSAGES = {
+  bot_check: 'This site blocks automatic readers. Open the page yourself and paste the ad text.',
+  login_wall: `This page needs a login. ${PASTE}`,
+  not_html: 'This address is not a web page (for example a PDF or a file). Paste the ad text.',
+  timeout: `The site didn't answer. Try again, or paste the ad text.`,
+  unreachable: `The site didn't answer. Try again, or paste the ad text.`,
+  js_only: `The page loads its content with JavaScript, which the reader can't run. ${PASTE}`,
+  unreadable: `No job posting was found on this page. ${PASTE}`,
+}
+
+/**
+ * The text shown for a failed read. Chosen here from the failure code and the HTTP status only, never from the page, so a
+ * site cannot put words into it. Codes without their own wording get the generic message.
+ */
+export function failureMessage(code, status) {
+  if (code === 'http_error') {
+    return status === 404 || status === 410 ? `The site says this page doesn't exist any more. ${PASTE}` : `The site refused to show this page to an automatic reader. ${PASTE}`
+  }
+  return MESSAGES[code] ?? UNREADABLE_MESSAGE
+}
+
 const pages = new Map()
 
 function remember(entry, now) {
@@ -83,9 +105,11 @@ export async function fetchAd(url, options = {}) {
   if (!result || result.ok !== true) {
     const error = typeof result?.error === 'string' ? result.error : 'failed'
     const blocked = error === 'blocked_host'
+    const code = Number(result?.status)
+    const httpStatus = Number.isInteger(code) && code >= 100 && code <= 599 ? code : undefined
     return {
       status: blocked ? 403 : 502,
-      body: { ok: false, error, message: blocked ? String(result.message) : UNREADABLE_MESSAGE, detail: typeof result?.message === 'string' ? result.message : '' },
+      body: { ok: false, error, status: httpStatus, message: blocked ? String(result.message) : failureMessage(error, httpStatus) },
     }
   }
   const token = remember({ pageText: String(result.pageText ?? ''), fields: result.fields ?? {}, missing: result.missing ?? [] }, options.now ?? Date.now())

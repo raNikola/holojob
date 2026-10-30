@@ -148,6 +148,62 @@ def test_any_error_status_is_a_failure(status):
     refused(lambda: safe_fetch.fetch_page("https://jobs.example.com/a", resolver=PUBLIC, request=Script(page(status=status))), "http_error")
 
 
+CHALLENGE = json.loads((Path(__file__).resolve().parents[1] / "fixtures" / "cloudflare-challenge.json").read_text(encoding="utf-8"))
+
+
+def challenge(status=None, headers=None, body=None):
+    return (status or CHALLENGE["status"], {**CHALLENGE["headers"], **(headers or {})}, (body or CHALLENGE["body"]).encode())
+
+
+def test_the_recorded_cloudflare_challenge_is_a_bot_check_with_its_status():
+    error = refused(lambda: safe_fetch.fetch_page("https://jobs.example.com/a", resolver=PUBLIC, request=Script(challenge())), "bot_check")
+    assert error.status == 403 and "SECRET" not in error.message
+
+
+@pytest.mark.parametrize("status,headers,body", [
+    (429, None, None),                                                              # rate-limited challenge
+    (403, {"cf-mitigated": "challenge", "server": "nginx"}, "<html></html>"),       # the header alone
+    (403, {"cf-mitigated": ""}, None),                                              # server + title, no header
+])
+def test_bot_check_is_recognised_from_the_header_or_from_server_and_title(status, headers, body):
+    refused(lambda: safe_fetch.fetch_page("https://jobs.example.com/a", resolver=PUBLIC,
+                                          request=Script(challenge(status, headers, body))), "bot_check")
+
+
+@pytest.mark.parametrize("answer", [
+    challenge(200),                                                                  # not an error status
+    challenge(500),                                                                  # not 403 / 429
+    challenge(403, {"cf-mitigated": "", "server": "nginx"}),                         # title alone proves nothing
+    challenge(403, {"cf-mitigated": ""}, "<html><title>Forbidden</title></html>"),   # Cloudflare 403 without a challenge
+])
+def test_other_answers_are_not_a_bot_check(answer):
+    try:
+        safe_fetch.fetch_page("https://jobs.example.com/a", resolver=PUBLIC, request=Script(answer))
+    except FetchRefused as error:
+        assert error.code != "bot_check"
+
+
+@pytest.mark.parametrize("status", [404, 410, 500])
+def test_an_http_error_carries_its_status(status):
+    error = refused(lambda: safe_fetch.fetch_page("https://jobs.example.com/a", resolver=PUBLIC, request=Script(page(status=status))), "http_error")
+    assert error.status == status
+
+
+def test_fetch_command_passes_code_and_status_only(monkeypatch):
+    def boom(url):
+        raise FetchRefused("bot_check", "The site asks visitors to pass a bot check before showing the page.", 403)
+
+    monkeypatch.setattr(safe_fetch, "fetch_page", boom)
+    answer = ad_fill.fetch({"url": "https://jobs.example.com/1"})
+    assert answer["error"] == "bot_check" and answer["status"] == 403 and set(answer) == {"ok", "error", "status", "message"}
+
+
+def test_a_page_of_scripts_and_no_text_is_js_only_a_bare_one_is_unreadable(monkeypatch):
+    shell = "<html><body><div id='root'></div><script src='/app.js'></script></body></html>"
+    monkeypatch.setattr(safe_fetch, "fetch_page", lambda url: safe_fetch.Page(url, shell))
+    assert ad_fill.fetch({"url": "https://jobs.example.com/1"})["error"] == "js_only"
+
+
 def test_a_redirect_without_a_target_is_a_failure():
     refused(lambda: safe_fetch.fetch_page("https://jobs.example.com/a", resolver=PUBLIC, request=Script(page(status=302))), "http_error")
 
@@ -343,7 +399,7 @@ def test_fetch_command_reports_a_refusal_without_fields(monkeypatch):
         raise FetchRefused("login_wall", "The page needs a login.")
 
     monkeypatch.setattr(safe_fetch, "fetch_page", boom)
-    assert ad_fill.fetch({"url": "https://www.linkedin.com/posts/x"}) == {"ok": False, "error": "login_wall", "message": "The page needs a login."}
+    assert ad_fill.fetch({"url": "https://www.linkedin.com/posts/x"}) == {"ok": False, "error": "login_wall", "status": None, "message": "The page needs a login."}
     monkeypatch.setattr(safe_fetch, "fetch_page", lambda url: safe_fetch.Page(url, "<div id='root'></div>"))
     assert ad_fill.fetch({"url": "https://jobs.example.com/1"})["error"] == "unreadable"
 
