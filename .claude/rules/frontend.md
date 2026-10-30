@@ -10,7 +10,7 @@ paths:
 - No default country, market or role anywhere in the UI; search country comes from the profile or intelligence.
 - Scoring weights default from `src/data/scoringWeights.json` only; saved weights win, and every regenerate goes through `regenerateIntelligence()`.
 - Geography and work-authorization data are shared with Python (`src/data/geography.json`); keep both sides in step.
-- Judged runs and CV analysis need their confirm dialog; never call those routes without `"confirm": true`.
+- Judged runs, CV analysis and the Add job form's AI extraction (`/api/jobs/ad/ai-extract`) need their confirm dialog; never call those routes without `"confirm": true`. The extraction's request is the token and field names only.
 - Code and comments in English. Run `npm run lint` and `npm run test:js` after changes.
 
 Data shapes: `docs/redesign/data-shapes.md`. Architecture: `docs/ARCHITECTURE.md`.

@@ -91,3 +91,42 @@ export async function fetchAd(url, options = {}) {
   const token = remember({ pageText: String(result.pageText ?? ''), fields: result.fields ?? {}, missing: result.missing ?? [] }, options.now ?? Date.now())
   return { status: 200, body: { ok: true, token, fields: result.fields ?? {}, missing: result.missing ?? [], finalUrl: result.finalUrl ?? text, source: result.source ?? 'none' } }
 }
+
+export const EXPIRED_MESSAGE = 'The page was read a while ago. Click Fill from ad again.'
+export const AI_FAILED_MESSAGE = 'The AI could not read the fields from this page. Fill them in by hand.'
+
+/** The fields to ask for: those the owner wants that the page did not state. A token that is gone or a list with nothing left is refused. */
+function wanted(entry, want) {
+  const asked = Array.isArray(want) ? want.map(String) : []
+  return asked.filter((name) => (entry.missing || []).includes(name))
+}
+
+/**
+ * What an AI step would send, without sending it: the redacted page text, the fields, the provider and whether the gate allows it.
+ * The text comes from the cached page; nothing from the browser but the token and the field names.
+ */
+export async function previewAdAi({ token, want }, options = {}) {
+  const entry = cachedPage(token, options.now)
+  if (!entry) return { status: 410, body: { ok: false, error: 'expired', message: EXPIRED_MESSAGE } }
+  const fields = wanted(entry, want)
+  if (!fields.length) return { status: 422, body: { ok: false, error: 'nothing_to_ask', message: 'Every field is already filled.' } }
+  const result = await runAdFill('ai-preview', { pageText: entry.pageText, want: fields }, options)
+  if (!result || result.ok !== true) return { status: 502, body: { ok: false, error: result?.error || 'failed', message: result?.message || AI_FAILED_MESSAGE } }
+  return { status: 200, body: result }
+}
+
+/** The one path that sends the page text to a model. Refused without `confirm: true`, like the CV analysis. */
+export async function extractAdAi({ token, want, confirm }, options = {}) {
+  if (confirm !== true) return { status: 409, body: { ok: false, error: 'confirm_required', message: 'Confirm what is sent first.' } }
+  const entry = cachedPage(token, options.now)
+  if (!entry) return { status: 410, body: { ok: false, error: 'expired', message: EXPIRED_MESSAGE } }
+  const fields = wanted(entry, want)
+  if (!fields.length) return { status: 422, body: { ok: false, error: 'nothing_to_ask', message: 'Every field is already filled.' } }
+  const result = await runAdFill('ai-extract', { pageText: entry.pageText, want: fields }, options)
+  if (result?.ok === true) return { status: 200, body: { ok: true, fields: result.fields ?? {}, rejected: result.rejected ?? [] } }
+  const refused = result?.error === 'refused'
+  return {
+    status: refused ? 403 : 502,
+    body: { ok: false, error: result?.error || 'failed', message: refused || result?.error === 'redaction' ? String(result.message) : AI_FAILED_MESSAGE },
+  }
+}

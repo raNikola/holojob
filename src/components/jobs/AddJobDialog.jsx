@@ -7,7 +7,7 @@ import Textarea from '../ui/Textarea'
 import { validateManualJob } from '../../modules/jobs/manualJob'
 import { addManualJob } from '../../modules/jobs/manualScoring'
 import { jobHash } from '../../modules/jobs/jobRoute'
-import { applySuggestions, fetchAdFields } from '../../modules/jobs/adFill'
+import { applySuggestions, fetchAdFields, previewAdAi, runAdAi, stillMissing } from '../../modules/jobs/adFill'
 import { normalizeJobUrl } from '../../modules/jobs/manualJob'
 
 const LABELS = { title: 'Title', company: 'Company', location: 'Location', salary: 'Salary', description: 'Job description' }
@@ -35,11 +35,18 @@ export default function AddJobDialog({ onClose, onSaved }) {
   const [adBusy, setAdBusy] = useState(false)
   const [adNote, setAdNote] = useState(null)
   const filledRef = useRef([])
+  const [adPage, setAdPage] = useState(null) // { token, missing } of the page last read
+  const [aiPanel, setAiPanel] = useState(null) // { loading } | { preview } | { error } | { preview, sending }
 
   const edited = (field) => setSuggested((prev) => (prev[field] ? { ...prev, [field]: false } : prev))
   const set = (field) => (event) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }))
     edited(field)
+    // A different address is a different page: what was read from the old one is no longer offered to the AI step.
+    if (field === 'jobUrl') {
+      setAdPage(null)
+      setAiPanel(null)
+    }
   }
   const tag = (field) => (suggested[field] ? <SuggestedTag /> : null)
 
@@ -47,10 +54,13 @@ export default function AddJobDialog({ onClose, onSaved }) {
     if (adBusy) return
     setAdBusy(true)
     setAdNote(null)
+    setAiPanel(null)
     const result = await fetchAdFields(form.jobUrl)
     if (!result.ok) {
+      setAdPage(null)
       setAdNote({ kind: 'error', text: result.message })
     } else {
+      setAdPage({ token: result.token, missing: result.missing })
       // Applied to the form as it is now: whatever was typed while the page loaded stays.
       setForm((prev) => {
         const next = applySuggestions(prev, result.fields)
@@ -67,6 +77,38 @@ export default function AddJobDialog({ onClose, onSaved }) {
       })
     }
     setAdBusy(false)
+  }
+
+  // Fields the page did not state that are still empty: what the AI step could be asked for.
+  const askable = adPage ? stillMissing(form, adPage.missing) : []
+
+  const openAiPanel = async () => {
+    setAiPanel({ loading: true })
+    const preview = await previewAdAi({ token: adPage.token, want: askable })
+    setAiPanel(preview.ok ? { preview } : { error: preview.message })
+  }
+
+  const sendToAi = async () => {
+    const { preview } = aiPanel
+    setAiPanel({ preview, sending: true })
+    const result = await runAdAi({ token: adPage.token, want: preview.want })
+    if (!result.ok) {
+      setAiPanel({ preview, error: result.message })
+      return
+    }
+    setForm((prev) => {
+      const next = applySuggestions(prev, result.fields)
+      filledRef.current = next.filled
+      return next.form
+    })
+    const filled = filledRef.current
+    setSuggested((prev) => ({ ...prev, ...Object.fromEntries(filled.map((name) => [name, true])) }))
+    const notFound = preview.want.filter((name) => !filled.includes(name))
+    setAdNote({
+      kind: 'info',
+      text: `${filled.length ? `The AI found: ${filled.map((name) => LABELS[name].toLowerCase()).join(', ')} (suggested, edit or keep). ` : 'The AI found nothing the page states. '}${notFound.length ? `Not stated in the text, left empty: ${notFound.map((name) => LABELS[name].toLowerCase()).join(', ')}.` : ''}`.trim(),
+    })
+    setAiPanel(null)
   }
   const setLink = (index, field, value) => setForm((prev) => ({
     ...prev, extraLinks: prev.extraLinks.map((row, i) => (i === index ? { ...row, [field]: value } : row)),
@@ -137,12 +179,44 @@ export default function AddJobDialog({ onClose, onSaved }) {
               {adBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {adBusy ? 'Reading the page…' : 'Fill from ad'}
             </Button>
+            {askable.length > 0 && !aiPanel && (
+              <Button type="button" variant="secondary" onClick={openAiPanel}>Extract the missing fields with AI</Button>
+            )}
             {adNote && <p role="status" className={`text-xs ${adNote.kind === 'error' ? 'text-red-600 dark:text-red-400' : 'text-stone-600 dark:text-stone-400'}`}>{adNote.text}</p>}
           </div>
           <Input id="add-job-source-url" label="Source URL" value={form.sourceUrl} onChange={set('sourceUrl')} error={errors.sourceUrl} aria-invalid={Boolean(errors.sourceUrl)} placeholder="Where you found it, e.g. a LinkedIn post (optional)" inputMode="url" />
           <Input id="add-job-location" label="Location" labelExtra={tag('location')} value={form.location} onChange={set('location')} placeholder="Left empty stays unknown" />
           <Input id="add-job-salary" label="Salary" labelExtra={tag('salary')} value={form.salary} onChange={set('salary')} placeholder="As in the ad, e.g. €2,500–3,000/month" />
         </div>
+
+        {aiPanel && (
+          <div className="space-y-3 rounded-lg border-2 border-amber-400 p-3 text-sm dark:border-amber-500" role="group" aria-label="Extract the missing fields with AI">
+            {aiPanel.loading && <p>Checking what would be sent…</p>}
+            {aiPanel.error && <Alert variant="error">{aiPanel.error}</Alert>}
+            {aiPanel.preview && (
+              <>
+                <p>
+                  This sends the text below to <strong>Claude Code (Anthropic)</strong> and asks only for: <strong>{aiPanel.preview.want.map((name) => LABELS[name].toLowerCase()).join(', ')}</strong>.
+                  The page text is the ad as fetched, with names, e-mail addresses, phone numbers and links removed
+                  ({aiPanel.preview.removed.emails} e-mails, {aiPanel.preview.removed.phones} phones, {aiPanel.preview.removed.links} links, {aiPanel.preview.removed.names} names).
+                  Nothing else is sent: not your Notes, extra links, Source URL, profile or CV. The AI may only copy what the text says; anything it cannot find stays empty.
+                </p>
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-stone-50 p-2 text-xs dark:bg-stone-900" aria-label="Text that would be sent">{aiPanel.preview.text}</pre>
+                {aiPanel.preview.gate.allowed
+                  ? <p className="text-xs text-stone-600 dark:text-stone-400">Covered by your Claude subscription (no charge, counted in its daily limit).</p>
+                  : <Alert variant="error">Not sent: {aiPanel.preview.gate.reason}. You can still fill the fields in by hand.</Alert>}
+              </>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {aiPanel.preview && (
+                <Button type="button" disabled={!aiPanel.preview.gate.allowed || aiPanel.sending} onClick={sendToAi}>
+                  {aiPanel.sending ? 'Reading…' : 'Send to Claude Code'}
+                </Button>
+              )}
+              <Button type="button" variant="ghost" disabled={aiPanel.sending} onClick={() => setAiPanel(null)}>{aiPanel.preview ? 'Cancel, fill in by hand' : 'Close'}</Button>
+            </div>
+          </div>
+        )}
 
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium text-stone-700 dark:text-stone-300">Extra links</legend>
