@@ -1,0 +1,31 @@
+{
+ "saved": false,
+ "applied": false,
+ "text": "<p><strong>About Us</strong></p>\r\n<p>Fivetran and dbt Labs are bringing together two industry-leading companies with a shared mission: helping organizations unlock the full value of their data.</p>\r\n<p>Together, we&rsquo;re delivering the data infrastructure layer that helps organizations move, transform, and trust their data &mdash; from the moment data moves, through every transformation, to the context teams and AI systems rely on.</p>\r\n<p>Fivetran helps organizations automate data movement across the systems, clouds, engines, and tools they rely on. dbt Labs pioneered analytics engineering, helping teams transform data into reliable, governed insights. Together, we support thousands of organizations as they build a trusted foundation for analytics, AI, and better business decisions.</p>\r\n<p>As we bring our teams and technology together, we&rsquo;re building on the strengths of both companies while continuing to deliver the products and experiences our customers know and trust. It&rsquo;s an exciting time to join us: we&rsquo;re creating a company with the scale, talent, and technology to help more organizations put their data to work with greater speed, confidence, and impact.</p>\r\n<p>During this transition period, you may see references to both Fivetran and dbt Labs throughout our recruiting process as we integrate our teams, systems, and career sites.</p>\r\n<p><strong>About the Role</strong></p>\r\n<p>Fivetran is building data pipelines to power the modern data stack for thousands of companies.</p>\r\n<p>We&rsquo;re looking for an experienced Technical Product Manager to join Systems Engineering and own the roadmap for the capabilities and technology that power Fivetran&rsquo;s global Customer Support organization.</p>\r\n<p>You&rsquo;ll sit at the intersection of Suppor",
+ "domains": [
+  "Product Management"
+ ],
+ "coverImageFileType": "image/png",
+ "industry": "Software",
+ "applyUrl": "https://www.fivetran.com/careers/job?gh_jid=7818224003",
+ "technologies": [
+  "Jira",
+  "SQL",
+  "Zendesk",
+  "Salesforce"
+ ],
+ "seniority": "Senior",
+ "id": 83188,
+ "type": "PREMIUM",
+ "logoFileType": "image/png",
+ "cities": [
+  "Novi Sad (Serbia)"
+ ],
+ "expirationDate": 1793487600000,
+ "companyId": 2130,
+ "companyName": "Fivetran Serbia",
+ "companyRate": 4.4,
+ "website": "https://www.fivetran.com/",
+ "jobTitle": "Sr. Staff Technical Product Manager ",
+ "companyUrlName": "fivetran-serbia"
+}

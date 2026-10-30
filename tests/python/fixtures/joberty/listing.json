@@ -1,0 +1,76 @@
+{
+ "totalPage": 1,
+ "totalElements": 3,
+ "items": [
+  {
+   "id": 83311,
+   "type": "PREMIUM",
+   "domains": [
+    "Project Management",
+    "Product Management"
+   ],
+   "logoFileType": "image/jpeg",
+   "technologies": [
+    "API"
+   ],
+   "seniority": "Intermediate, Senior",
+   "cities": [
+    "Belgrade (Serbia)"
+   ],
+   "expirationDate": 1795734000000,
+   "companyId": 22140,
+   "companyName": "Sokin",
+   "companyRate": 3.5,
+   "website": "careers.sokin.com/",
+   "jobTitle": "Implementation Manager ",
+   "companyUrlName": "sokin"
+  },
+  {
+   "id": 83187,
+   "type": "PREMIUM",
+   "domains": [
+    "Product Management"
+   ],
+   "logoFileType": "image/png",
+   "technologies": [
+    "PHP"
+   ],
+   "seniority": "Junior",
+   "cities": [
+    "Novi Sad (Serbia)"
+   ],
+   "expirationDate": 1793487600000,
+   "companyId": 631,
+   "companyName": "Ximedes",
+   "companyRate": 4.6,
+   "website": "www.ximedes.com",
+   "jobTitle": "Junior Product Owner — Ginger (XPP)",
+   "companyUrlName": "ximedes"
+  },
+  {
+   "id": 83188,
+   "type": "PREMIUM",
+   "domains": [
+    "Product Management"
+   ],
+   "logoFileType": "image/png",
+   "technologies": [
+    "Jira",
+    "SQL",
+    "Zendesk",
+    "Salesforce"
+   ],
+   "seniority": "Senior",
+   "cities": [
+    "Novi Sad (Serbia)"
+   ],
+   "expirationDate": 1793487600000,
+   "companyId": 2130,
+   "companyName": "Fivetran Serbia",
+   "companyRate": 4.4,
+   "website": "https://www.fivetran.com/",
+   "jobTitle": "Sr. Staff Technical Product Manager ",
+   "companyUrlName": "fivetran-serbia"
+  }
+ ]
+}
