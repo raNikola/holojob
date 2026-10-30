@@ -245,6 +245,11 @@ def _fail(code: int, **summary) -> int:
     return code
 
 
+def _ok(**summary) -> int:
+    print(json.dumps({"ok": True, **summary}))
+    return 0
+
+
 def run_job_json(args) -> int:
     """Store, score and merge hand-entered jobs. Exit 0 ok, 2 invalid, 3 duplicate URL, 4 no intelligence, 5 scoring failed.
 
@@ -288,6 +293,9 @@ def run_job_json(args) -> int:
     for job_id in sorted(ids):
         print(f"manual job stored: {job_id}", file=sys.stderr)
 
+    if args.store_only:
+        return _ok(stored=sorted(ids), skipped=skipped)
+
     try:
         if not args.intelligence.exists():
             return _fail(4, error="no_intelligence", saved=sorted(ids))
@@ -301,8 +309,7 @@ def run_job_json(args) -> int:
     except Exception as exc:  # the message may quote job text; only the class is reported
         return _fail(5, error="scoring_failed", detail=type(exc).__name__, saved=sorted(ids))
 
-    print(json.dumps({"ok": True, "jobs": scored, "skipped": skipped}))
-    return 0
+    return _ok(jobs=scored, skipped=skipped)
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -310,6 +317,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--url", action="append", default=[], help="Job posting URL (repeatable)")
     parser.add_argument("--no-llm", action="store_true", help="Skip Claude Code extraction fallback")
     parser.add_argument("--job-json", metavar="FILE|-", help="Hand-entered job(s) as JSON, from a file or stdin; nothing is fetched")
+    parser.add_argument("--store-only", action="store_true",
+                        help="with --job-json: store the jobs in manual_jobs.json and stop; the next scoring run scores them")
     parser.add_argument("--discovered", type=Path, default=DISCOVERED_PATH)
     parser.add_argument("--scored", type=Path, default=SCORED_PATH)
     parser.add_argument("--manual", type=Path, default=manual_jobs.MANUAL_PATH)

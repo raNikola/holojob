@@ -195,6 +195,16 @@ def test_an_error_in_scoring_reports_the_class_not_the_job_text(env, monkeypatch
     assert "Keep   this" not in out + err
 
 
+def test_store_only_saves_the_job_for_the_next_run_and_scores_nothing(env, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps([_manual(notes=NOTE)])))
+    code = importer.main(["--job-json", "-", "--store-only", *env.paths()])
+    out = capsys.readouterr().out
+    assert code == 0 and json.loads(out)["stored"] == [MANUAL_ID]
+    assert not env.scored.exists() and [j["jobId"] for j in manual_jobs.load(env.manual)] == [MANUAL_ID]
+    assert NOTE not in out + env.manual.read_text()
+    assert MANUAL_ID in env.full_rescore()  # the next scoring run has it
+
+
 def test_a_batch_upserts_the_valid_jobs_and_skips_the_rest(env, monkeypatch, capsys):
     code, out, _ = env.add([_manual(), _manual(OTHER_ID, "https://acme.example/jobs/10"), {"jobId": "bad"}], monkeypatch, capsys)
     assert code == 0

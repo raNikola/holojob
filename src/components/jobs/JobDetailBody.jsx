@@ -107,7 +107,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
 
       <JobDescription text={job.description} />
 
-      <ManualJobSection job={job} onJobUpdated={onJobUpdated} />
+      <ManualJobSection job={job} onJobUpdated={onJobUpdated} apiAvailable={apiAvailable} />
 
       {showScores && (
         <>

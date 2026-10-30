@@ -1,7 +1,7 @@
 /** @typedef {import('../../types/career-os.d.ts').Job} Job */
 import { salaryModeOf } from './salaryFilter.js'
 import { normalizeMultiFilter, normalizePriorityFilter } from './jobFilters.js'
-import { MANUAL_FIELDS } from './manualJob.js'
+import { MANUAL_FIELDS, normalizeJobUrl } from './manualJob.js'
 
 export const JOBS_STORAGE_KEY = 'job-dashboard-discovered-jobs'
 
@@ -106,20 +106,23 @@ function jobMatchKey(job) {
 
 export function mergeStatusOnImport(existingJobs, incomingJobs) {
   const preservedByKey = new Map()
+  const preservedById = new Map()
   for (const job of existingJobs || []) {
-    preservedByKey.set(jobMatchKey(job), {
+    const entry = {
       status: job.status || 'new',
       applicationTracking: job.applicationTracking,
       tailoredAssets: job.tailoredAssets,
       aiInsights: job.aiInsights,
       outreach: job.outreach,
       manual: Object.fromEntries(MANUAL_FIELDS.filter((f) => f in job).map((f) => [f, job[f]])),
-    })
+    }
+    preservedByKey.set(jobMatchKey(job), entry)
+    if (job.jobId) preservedById.set(job.jobId, entry)
   }
 
   return incomingJobs.map((job) => {
     const key = jobMatchKey(job)
-    const preserved = preservedByKey.get(key)
+    const preserved = preservedById.get(job.jobId) ?? preservedByKey.get(key)
     return {
       ...job,
       ...preserved?.manual,
@@ -145,8 +148,15 @@ export function parseJobsFile(json) {
 export function importJobsFromFile(json, existingState = null) {
   const { meta, jobs } = parseJobsFile(json)
   const prior = existingState?.jobs || []
-  const merged = mergeStatusOnImport(prior, jobs)
-  // A hand-entered job is not in the pipeline's files; a re-import must not drop it.
+  // A file row with the address of a hand-entered job is that job under another id (a discovery run found the same
+  // posting): the hand-entered one stays, so the list has one row for it.
+  const manualAt = new Map(prior.filter((job) => job.manualEntry).map((job) => [normalizeJobUrl(job.jobUrl), job.jobId]).filter(([url]) => url))
+  const incoming = jobs.filter((job) => {
+    const owner = manualAt.get(normalizeJobUrl(job.jobUrl))
+    return !owner || owner === job.jobId
+  })
+  const merged = mergeStatusOnImport(prior, incoming)
+  // A hand-entered job the file lacks (saved while the server was away) is not dropped by a re-import.
   const present = new Set(merged.map((job) => job.jobId))
   const kept = prior.filter((job) => job.manualEntry && !present.has(job.jobId))
   return {

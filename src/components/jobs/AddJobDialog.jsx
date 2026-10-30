@@ -5,8 +5,8 @@ import Alert from '../ui/Alert'
 import Input from '../ui/Input'
 import Textarea from '../ui/Textarea'
 import SelectField from '../ui/SelectField'
-import { MANUAL_SOURCES, buildManualJob, validateManualJob } from '../../modules/jobs/manualJob'
-import { createJob } from '../../modules/jobs/jobsStore'
+import { MANUAL_SOURCES, validateManualJob } from '../../modules/jobs/manualJob'
+import { addManualJob } from '../../modules/jobs/manualScoring'
 import { jobHash } from '../../modules/jobs/jobRoute'
 
 const EMPTY = {
@@ -17,27 +17,31 @@ const EMPTY = {
  * Adds a job typed in by hand. It makes no AI call and does not score the job; Notes and extra links stay in this
  * browser's job record and are never part of any request.
  */
-export default function AddJobDialog({ onClose, onSaved }) {
+export default function AddJobDialog({ onClose, onSaved, apiAvailable = true }) {
   const [form, setForm] = useState(EMPTY)
   const [errors, setErrors] = useState({})
   const [duplicate, setDuplicate] = useState(null)
+  const [busy, setBusy] = useState(false)
 
   const set = (field) => (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))
   const setLink = (index, field, value) => setForm((prev) => ({
     ...prev, extraLinks: prev.extraLinks.map((row, i) => (i === index ? { ...row, [field]: value } : row)),
   }))
 
-  const save = (openDetails) => {
+  const save = async (openDetails) => {
+    if (busy) return
     const found = validateManualJob(form)
     setErrors(found)
     setDuplicate(null)
     if (Object.keys(found).length) return
-    const result = createJob(buildManualJob(form))
-    if (!result.ok) {
-      setDuplicate(result.existing)
-      return
+    setBusy(true)
+    try {
+      const result = await addManualJob(form, { apiAvailable })
+      if (result.status === 'duplicate') setDuplicate(result.existing)
+      else onSaved(result.job, openDetails, result)
+    } finally {
+      setBusy(false)
     }
-    onSaved(result.job, openDetails)
   }
 
   // Rows as the validator numbers them: blank rows are dropped, so error indexes follow the non-blank ones.
@@ -63,7 +67,7 @@ export default function AddJobDialog({ onClose, onSaved }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id="add-job-title" className="text-lg font-semibold text-stone-900 dark:text-stone-50">Add job</h2>
-            <p className="text-xs text-stone-500">Saved in this browser as you type it. Nothing is sent to an AI provider, and the job is not scored yet.</p>
+            <p className="text-xs text-stone-500">Scored on this server with the same local rules as every other job. Nothing is sent to an AI provider, and Notes and extra links never leave this browser.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800">
             <X className="h-4 w-4" />
@@ -111,8 +115,8 @@ export default function AddJobDialog({ onClose, onSaved }) {
 
         <div className="flex flex-wrap justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="button" variant="secondary" onClick={() => save(true)}>Save and open details</Button>
-          <Button type="submit">Save</Button>
+          <Button type="button" variant="secondary" disabled={busy} onClick={() => save(true)}>Save and open details</Button>
+          <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
         </div>
       </form>
     </div>

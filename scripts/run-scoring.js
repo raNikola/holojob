@@ -13,6 +13,7 @@ const ROOT = path.resolve(__dirname, '..')
 const INTELLIGENCE_PATH = path.join(ROOT, 'data/intelligence/candidate-intelligence.json')
 const JOBS_PATH = path.join(ROOT, 'data/jobs/discovered_jobs.json')
 const SCORED_PATH = path.join(ROOT, 'data/jobs/scored_jobs.json')
+const MANUAL_PATH = path.join(ROOT, 'data/jobs/manual_jobs.json')
 const VENV_PYTHON = process.platform === 'win32' ? path.join(ROOT, '.venv/Scripts/python.exe') : path.join(ROOT, '.venv/bin/python')
 const RUN_SCORING = path.join(ROOT, 'python/job_scoring/run_scoring.py')
 
@@ -67,7 +68,8 @@ function checkInputs() {
     }
   }
 
-  if (!fs.existsSync(JOBS_PATH)) {
+  // Before the first discovery run, hand-entered jobs are a valid input on their own.
+  if (!fs.existsSync(JOBS_PATH) && !fs.existsSync(MANUAL_PATH)) {
     return {
       ok: false,
       exitCode: 1,

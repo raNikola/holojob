@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildDiscoveryCommand, getDiscoveryStatus, runDiscovery } from './run-discovery.js'
 import { runPipeline } from './run-pipeline.js'
+import { runManualJobs } from './run-manual-job.js'
 import { buildScoringCommand, getScoringStatus, previewJudge, runJudgedScoring, runScoring } from './run-scoring.js'
 import { buildTailorCommand, getTailorStatus, runTailor, runTailorStream } from './run-tailor.js'
 import { getProjectScanStatus, runProjectScan } from './run-project-scan.js'
@@ -416,6 +417,20 @@ export async function handleApiRequest(req, res) {
       sendJson(res, result.ok ? 200 : 500, result)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // Hand-entered jobs (Add job): `score` stores and scores one, `sync` only stores the browser's manual jobs so the
+  // next scoring run has them. Local scoring; no model, no network.
+  if ((url === '/api/jobs/manual/score' || url === '/api/jobs/manual/sync') && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const score = url.endsWith('/score')
+      const result = await runManualJobs(score ? (body.job ? [body.job] : []) : body.jobs, { mode: score ? 'score' : 'store' })
+      sendJson(res, result.status, result.body)
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'invalid', field: 'json' })
     }
     return true
   }
