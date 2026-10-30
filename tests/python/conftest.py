@@ -59,6 +59,14 @@ def _source_settings_in_tmp(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _manual_jobs_in_tmp(tmp_path, monkeypatch):
+    """No test reads the owner's data/jobs/manual_jobs.json: a scoring run merges that file in, which changes what it scores and sends."""
+    import manual_jobs
+
+    monkeypatch.setattr(manual_jobs, "MANUAL_PATH", tmp_path / "jobs" / "manual_jobs.json")
+
+
+@pytest.fixture(autouse=True)
 def _secret_store_in_tmp(tmp_path, monkeypatch):
     """No test reads the server's data/secrets/, and no key from the host shell reaches a test."""
     monkeypatch.setenv("HOLOJOB_SECRETS_DIR", str(tmp_path / "secrets"))
