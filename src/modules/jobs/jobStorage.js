@@ -1,4 +1,5 @@
 /** @typedef {import('../../types/holojob.d.ts').Job} Job */
+import { salaryModeOf } from './salaryFilter.js'
 import { normalizeMultiFilter, normalizePriorityFilter } from './jobFilters.js'
 
 export const JOBS_STORAGE_KEY = 'job-dashboard-discovered-jobs'
@@ -17,9 +18,9 @@ const DEFAULT_FILTERS = {
   matchLabel: '',
   priority: [],
   minScore: '',
-  // salaryFrom / salaryTo (EUR per month) are absent until the user touches the range: then the
-  // profile's figures apply. A list saved by the three-field panel (minSalary, desiredSalaryMin,
-  // desiredSalaryMax) is read as it stands (salaryFilter.js `salaryRangeOf`) until the range is edited.
+  // salaryMode: untouched | set | cleared (salaryFilter.js). salaryFrom / salaryTo (EUR per month) exist
+  // once the range has been edited; state saved by the three-field panel is read by `salaryModeOf`.
+  salaryMode: 'untouched',
   salaryIncludeUnknown: true,
 }
 
@@ -41,7 +42,7 @@ export function loadJobs() {
     return {
       ...getDefaultJobsState(),
       ...parsed,
-      filters: { ...DEFAULT_FILTERS, ...parsed.filters, priority: normalizePriorityFilter(parsed.filters?.priority), site: normalizeMultiFilter(parsed.filters?.site), provider: normalizeMultiFilter(parsed.filters?.provider) },
+      filters: { ...DEFAULT_FILTERS, ...parsed.filters, priority: normalizePriorityFilter(parsed.filters?.priority), salaryMode: salaryModeOf(parsed.filters || {}), site: normalizeMultiFilter(parsed.filters?.site), provider: normalizeMultiFilter(parsed.filters?.provider) },
       jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
     }
   } catch {

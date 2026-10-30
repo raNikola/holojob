@@ -5,6 +5,7 @@ import {
   matchesSalary,
   parseAmount,
   rangeError,
+  salaryModeOf,
   salaryRangeOf,
   sanitizeAmount,
 } from '../../src/modules/jobs/salaryFilter.js'
@@ -178,6 +179,63 @@ describe('first load of the salary range', () => {
     expect(loadJobs().filters.salaryIncludeUnknown).toBe(true)
     store[JOBS_STORAGE_KEY] = JSON.stringify({ jobs: [], filters: { salaryIncludeUnknown: false } })
     expect(loadJobs().filters.salaryIncludeUnknown).toBe(false)
+    delete globalThis.localStorage
+  })
+})
+
+describe('salary modes: untouched / set / cleared', () => {
+  const bp = { minSalaryEur: 1500, desiredSalaryMinEur: 2000, desiredSalaryMaxEur: 2500 }
+  const range = (f) => salaryRangeOf(withProfileSalaryDefaults(f, bp))
+
+  it('untouched takes the profile, with the checkbox ON', () => {
+    expect(salaryModeOf({})).toBe('untouched')
+    expect(range({ salaryMode: 'untouched' })).toEqual({ from: 2000, to: 2500 })
+    expect(range({})).toEqual({ from: 2000, to: 2500 })
+    expect(withProfileSalaryDefaults({ salaryMode: 'untouched' }, bp).salaryFromProfile).toBe(true)
+  })
+
+  it('set uses the typed values, an open end stays open', () => {
+    expect(range({ salaryMode: 'set', salaryFrom: 3000, salaryTo: '' })).toEqual({ from: 3000, to: null })
+    expect(withProfileSalaryDefaults({ salaryMode: 'set', salaryFrom: 3000, salaryTo: '' }, bp).salaryFromProfile).toBe(false)
+  })
+
+  it('cleared stays empty whatever the profile or old keys hold', () => {
+    expect(range({ salaryMode: 'cleared', salaryFrom: '', salaryTo: '' })).toEqual({ from: null, to: null })
+    expect(range({ salaryMode: 'cleared', minSalary: 9000 })).toEqual({ from: null, to: null })
+    expect(salaryRangeOf({ salaryMode: 'cleared', minSalary: 9000 })).toEqual({ from: null, to: null })
+  })
+
+  it('Clear all and the chip put the filter in cleared', () => {
+    expect(CLEAR_ALL_FILTERS.salaryMode).toBe('cleared')
+    expect(range({ ...CLEAR_ALL_FILTERS })).toEqual({ from: null, to: null })
+  })
+
+  it('migrates old state conservatively', () => {
+    expect(salaryModeOf({ minSalary: '', desiredSalaryMin: '', desiredSalaryMax: '' })).toBe('untouched')
+    expect(salaryModeOf({ minSalary: null })).toBe('untouched')
+    expect(salaryModeOf({ minSalary: '2500' })).toBe('set')
+    expect(salaryModeOf({ salaryFrom: 2000, salaryTo: '' })).toBe('set')
+    expect(salaryModeOf({ salaryFrom: '', salaryTo: '' })).toBe('cleared')
+  })
+
+  it('survives save and reload unchanged; cleared is not refilled', async () => {
+    const store = {}
+    const storage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v } }
+    globalThis.localStorage = storage
+    const { loadJobs, getDefaultJobsState, saveJobs, updateFilters } = await import('../../src/modules/jobs/jobStorage.js')
+    for (const patch of [{}, { salaryMode: 'set', salaryFrom: 3000, salaryTo: 4000, salaryIncludeUnknown: false }, { ...CLEAR_ALL_FILTERS }]) {
+      const state = updateFilters(getDefaultJobsState(), patch)
+      saveJobs(state, storage)
+      const back = loadJobs()
+      expect(back.filters).toEqual(state.filters)
+      expect(salaryRangeOf(withProfileSalaryDefaults(back.filters, bp))).toEqual(salaryRangeOf(withProfileSalaryDefaults(state.filters, bp)))
+    }
+    saveJobs(updateFilters(getDefaultJobsState(), { ...CLEAR_ALL_FILTERS }), storage)
+    expect(salaryRangeOf(withProfileSalaryDefaults(loadJobs().filters, bp))).toEqual({ from: null, to: null })
+    store['job-dashboard-discovered-jobs'] = JSON.stringify({ jobs: [], filters: { minSalary: '', desiredSalaryMin: '' } })
+    expect(loadJobs().filters.salaryMode).toBe('untouched')
+    store['job-dashboard-discovered-jobs'] = JSON.stringify({ jobs: [], filters: { salaryFrom: '', salaryTo: '' } })
+    expect(loadJobs().filters.salaryMode).toBe('cleared')
     delete globalThis.localStorage
   })
 })
