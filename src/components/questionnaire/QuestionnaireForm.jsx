@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Loader2 } from 'lucide-react'
 import Card from '../ui/Card'
+import { RequiredNote } from '../ui/RequiredMark'
 import OperationConsole from '../ui/OperationConsole'
 import QuestionField from './QuestionField'
 import { QUESTIONS, QUESTION_COUNT, QUESTION_SECTIONS } from '../../data/questions'
@@ -71,7 +72,7 @@ async function fetchJson(url) {
   }
 }
 
-export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion }) {
+export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion, showErrors = false }) {
   const { profile, updateProfile } = useProfile()
   const [projectIntel, setProjectIntel] = useState(null)
   const [candidateIntel, setCandidateIntel] = useState(null)
@@ -265,7 +266,9 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion 
 
       {currentQuestion && (
         <Card className="!p-4">
+          <RequiredNote />
           <QuestionField
+            error={showErrors && !isNonEmpty(getAnswer(currentQuestion.id)) ? 'Please answer this question.' : undefined}
             question={currentQuestion}
             answer={getAnswer(currentQuestion.id)}
             onChange={(answer) => setAnswer(currentQuestion.id, currentQuestion.text, answer)}
