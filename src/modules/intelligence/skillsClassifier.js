@@ -1,5 +1,6 @@
 import { SKILLS_DICTIONARY } from '../../data/skillsDictionary.js'
 import { matchSkillToBucket } from './skillBuckets.js'
+import { containsTerm } from '../../utils/termMatch.js'
 import { isNonTechnicalPhrase } from './mappingPhrases.js'
 
 function dedupe(arr) {
@@ -62,7 +63,7 @@ function matchesSkillsDictionary(skill) {
   const lower = (skill || '').toLowerCase().trim()
   return SKILLS_DICTIONARY.some((s) => {
     const dictLower = s.toLowerCase()
-    return lower === dictLower || lower.includes(dictLower) || dictLower.includes(lower)
+    return lower === dictLower || containsTerm(lower, dictLower) || containsTerm(dictLower, lower)
   })
 }
 
