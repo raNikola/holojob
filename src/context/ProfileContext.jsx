@@ -5,6 +5,7 @@ import { extractProfileFromResume } from '../utils/profileExtractor'
 import { SKILLS_DICTIONARY } from '../data/skillsDictionary'
 import { addCv, ensureCvLibrary, registerActiveUpload, patchCvAnalysis, removeCv, renameCv, setCvAnalysis, setDefaultCv, syncDefaultEntry } from '../utils/cvLibrary'
 import { joinAnswerList, parseAnswerList } from '../utils/answerList'
+import { unansweredQuestionIds } from '../modules/profile/questionnaireStatus'
 
 // Seed Q2 and Q5 with resume skills so the questionnaire is pre-filled on arrival.
 const SKILL_QS = [2, 5]
@@ -117,6 +118,8 @@ export function ProfileProvider({ children }) {
         ...prev.meta,
         onboardingComplete: true,
         completedAt: new Date().toISOString(),
+        // Finished with questions still unknown; drives the "Complete your profile" card.
+        onboardingFinishedEarly: unansweredQuestionIds(prev).length > 0,
       },
     }))
   }, [])
