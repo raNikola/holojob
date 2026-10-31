@@ -1,14 +1,24 @@
 import { SKILLS_DICTIONARY } from '../data/skillsDictionary'
+import { containsTerm } from './termMatch'
+import { headingOf, labeledField } from './headingVocabulary'
 
-const SECTION_HEADERS = [
-  { key: 'projects', patterns: [/^projects?\b/i, /^personal projects?\b/i] },
-  { key: 'workExperience', patterns: [/^work experience\b/i, /^professional experience\b/i, /^experience\b/i, /^employment\b/i] },
-  { key: 'education', patterns: [/^education\b/i, /^academic\b/i, /^qualifications?\b/i] },
-  { key: 'certifications', patterns: [/^certifications?\b/i, /^licenses?\b/i] },
-]
+// The vocabulary sections this extractor keeps, and the profile list each one fills.
+// Every other heading (skills, languages, personal details, ...) still ends the
+// section before it, so its lines are not read as part of that section.
+const KEPT_SECTIONS = { projects: 'projects', experience: 'workExperience', education: 'education', certifications: 'certifications' }
 
 function withConfidence(value, confidence) {
   return { value, confidence }
+}
+
+// First "Label: value" line of the opening of the text whose label means `field`
+// ("Ime i prezime", "Telefon", "Adresa", ...) in any language the vocabulary holds.
+function labeledValue(lines, field) {
+  for (const line of lines.slice(0, 40)) {
+    const labeled = labeledField(line)
+    if (labeled && labeled.field === field && labeled.value) return labeled.value
+  }
+  return ''
 }
 
 function extractEmail(text) {
@@ -16,7 +26,9 @@ function extractEmail(text) {
   return match ? withConfidence(match[0], 'high') : withConfidence('', 'low')
 }
 
-function extractPhone(text) {
+function extractPhone(text, lines = []) {
+  const labeled = labeledValue(lines, 'phone')
+  if (/\d{6,}/.test(labeled)) return withConfidence(labeled, 'high')
   const patterns = [/\+91[\s-]?[6-9]\d{9}/, /\+?\d{1,3}[\s.-]?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}/, /\b[6-9]\d{9}\b/]
   for (const pattern of patterns) {
     const match = text.match(pattern)
@@ -42,8 +54,11 @@ function extractLinkedIn(links) {
 }
 
 function extractFullName(lines) {
-  for (const line of lines.slice(0, 5)) {
+  const labeled = labeledValue(lines, 'fullName')
+  if (/\p{L}/u.test(labeled) && labeled.length <= 60) return withConfidence(labeled, 'medium')
+  for (const line of lines.slice(0, 8)) {
     const trimmed = line.trim()
+    if (headingOf(trimmed) || labeledField(trimmed)) continue
     if (!trimmed || trimmed.length < 3 || trimmed.length > 60) continue
     if (/@/.test(trimmed) || /https?:/i.test(trimmed) || /\d{5,}/.test(trimmed)) continue
     if (/^(resume|curriculum vitae|cv)$/i.test(trimmed)) continue
@@ -66,7 +81,9 @@ const PLACE_RE = new RegExp(
 // further down, "Product Lead, Acme" would read as a place.
 const HEADER_CHARS = 600
 
-function extractLocation(text) {
+function extractLocation(text, lines = []) {
+  const labeled = labeledValue(lines, 'address') || labeledValue(lines, 'location')
+  if (labeled) return withConfidence(labeled, 'medium')
   const match = text.slice(0, HEADER_CHARS).match(PLACE_RE)
   if (match) return withConfidence(match[0], 'medium')
   return withConfidence('', 'low')
@@ -98,15 +115,8 @@ function extractCurrentRole(lines, sections) {
 }
 
 function extractSkills(text) {
-  const found = []
-  const lower = text.toLowerCase()
-  for (const skill of SKILLS_DICTIONARY) {
-    const escaped = skill.replace(/[.+*?^${}()|[\]\\]/g, '\\$&')
-    if (new RegExp('\\b' + escaped + '\\b', 'i').test(lower) || lower.includes(skill.toLowerCase())) {
-      found.push(skill)
-    }
-  }
-  const confidence = found.length >= 5 ? 'high' : found.length >= 2 ? 'medium' : found.length ? 'low' : 'low'
+  const found = SKILLS_DICTIONARY.filter((skill) => containsTerm(text, skill))
+  const confidence = found.length >= 5 ? 'high' : found.length >= 2 ? 'medium' : 'low'
   return withConfidence(found, confidence)
 }
 
@@ -118,16 +128,14 @@ function parseSections(lines) {
   const sections = { projects: [], workExperience: [], education: [], certifications: [] }
   let current = null
   for (const line of lines) {
-    let matched = false
-    for (const { key, patterns } of SECTION_HEADERS) {
-      if (patterns.some((p) => p.test(line))) { current = key; matched = true; break }
+    const heading = headingOf(line)
+    if (heading) {
+      current = KEPT_SECTIONS[heading.key] ?? null
+      continue
     }
-    if (matched) continue
     if (current && line.length > 2) {
       const entry = line.replace(/^[-•*●▪]\s*/, '').trim()
-      if (entry && !SECTION_HEADERS.some((s) => s.patterns.some((p) => p.test(entry)))) {
-        sections[current].push(entry)
-      }
+      if (entry && !headingOf(entry)) sections[current].push(entry)
     }
   }
   return sections
@@ -137,13 +145,13 @@ export function extractProfileFromResume(rawText) {
   const text = rawText || ''
   const lines = splitLines(text)
   const email = extractEmail(text)
-  const phone = extractPhone(text)
+  const phone = extractPhone(text, lines)
   const linksResult = extractLinks(text)
   const links = linksResult.value
   const github = extractGitHub(links)
   const linkedin = extractLinkedIn(links)
   const fullName = extractFullName(lines)
-  const location = extractLocation(text)
+  const location = extractLocation(text, lines)
   const experienceYears = extractExperienceYears(text)
   const skills = extractSkills(text)
   const sections = parseSections(lines)
