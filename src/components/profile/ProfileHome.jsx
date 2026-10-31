@@ -127,7 +127,10 @@ export default function ProfileHome({ onNavigate }) {
         <div className="space-y-5">
           {(questionnaire.answers || []).map((a) => describeAnswer(a, profile)).filter(Boolean).map((d) => (
             <div key={d.id} className="border-b border-stone-100 pb-4 last:border-0 last:pb-0 dark:border-stone-800">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{d.label}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                {d.label}
+                {d.derived && <span className="ml-2 font-normal normal-case text-amber-700 dark:text-amber-300">from your résumé, not confirmed</span>}
+              </p>
               {d.kind === 'chips' && (
                 <ul className="mt-2 flex flex-wrap gap-1.5">
                   {d.items.map((item) => (

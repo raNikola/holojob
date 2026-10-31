@@ -4,7 +4,7 @@ import Card from '../ui/Card'
 import OperationConsole from '../ui/OperationConsole'
 import QuestionField from './QuestionField'
 import { QUESTIONS, QUESTION_COUNT } from '../../data/questions'
-import { HIGH_IMPACT_QUESTION_IDS, orderedQuestions } from '../../modules/profile/questionnaireStatus'
+import { HIGH_IMPACT_QUESTION_IDS, derivedEntry, isDerivedAnswer, orderedQuestions } from '../../modules/profile/questionnaireStatus'
 import { SKILLS_DICTIONARY } from '../../data/skillsDictionary'
 import { useProfile } from '../../context/ProfileContext'
 import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
@@ -114,7 +114,7 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion 
         const current = idx >= 0 ? answers[idx].answer || '' : ''
         // Only seed if there's no real answer yet (empty or a single leftover)
         if (parseAnswerList(current).length > 1) continue
-        const entry = { id: qid, question: `Q${qid}`, answer: joinAnswerList(autoSkills) }
+        const entry = derivedEntry(qid, `Q${qid}`, joinAnswerList(autoSkills))
         if (idx >= 0) answers[idx] = entry
         else answers.push(entry)
         didSeed = true
@@ -130,6 +130,8 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion 
     const found = profile.questionnaire.answers.find((a) => a.id === id)
     return found?.answer || ''
   }
+
+  const isDerived = (id) => isDerivedAnswer(profile.questionnaire.answers.find((a) => a.id === id))
 
   const setAnswer = (id, question, answer) => {
     updateProfile((prev) => {
@@ -272,6 +274,11 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion 
 
       {currentQuestion && (
         <Card className="!p-4">
+          {isDerived(currentQuestion.id) && (
+            <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
+              Pre-filled from your résumé, not confirmed by you. Change it, or press Continue to keep it as a suggestion.
+            </p>
+          )}
           <QuestionField
             question={currentQuestion}
             answer={getAnswer(currentQuestion.id)}
