@@ -1,4 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist'
+import { pagesToText } from './pdfTextLayout'
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker
@@ -18,14 +19,14 @@ export async function extractTextFromPdf(file) {
     throw new Error('Unable to read this PDF. The file may be corrupted or password-protected.')
   }
 
-  const pageTexts = []
+  const pages = []
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
     const content = await page.getTextContent()
-    pageTexts.push(content.items.map((item) => item.str).join(' '))
+    pages.push(content.items)
   }
 
-  const rawText = pageTexts.join('\n\n').replace(/\s+/g, ' ').trim()
+  const rawText = pagesToText(pages)
   if (!rawText) throw new Error('No text could be extracted from this PDF. It may be image-only or scanned.')
   return rawText
 }
