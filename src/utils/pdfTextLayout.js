@@ -62,7 +62,7 @@ function joinLine(lineItems) {
     out += item.str
     prev = item
   }
-  return fixHyphenSpacing(out.replace(/[ \t ]+/g, ' ').trim())
+  return fixHyphenSpacing(out.replace(/[ \t\u00a0]+/g, ' ').trim())
 }
 
 export function pageItemsToText(items) {
