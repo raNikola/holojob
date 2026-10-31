@@ -1,9 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown, Plus, X } from 'lucide-react'
+import RequiredMark from './RequiredMark'
 import { getRoleCount, roleDataMeta, searchRoles } from '../../utils/jobRoles'
 
 export default function RoleCombobox({
   label,
+  required = false,
+  error,
   selected = [],
   onChange,
   placeholder = 'Search 600+ tech roles...',
@@ -14,6 +17,7 @@ export default function RoleCombobox({
   const [highlightIndex, setHighlightIndex] = useState(0)
   const containerRef = useRef(null)
   const listboxId = useId()
+  const inputId = `${listboxId}-input`
 
   const results = searchRoles(query, 12)
   const trimmedQuery = query.trim()
@@ -68,7 +72,7 @@ export default function RoleCombobox({
     <div ref={containerRef}>
       {label && (
         <div className="mb-1.5">
-          <label className="text-sm font-medium text-stone-700 dark:text-stone-300">{label}</label>
+          <label htmlFor={inputId} className="text-sm font-medium text-stone-700 dark:text-stone-300">{label}{required && <RequiredMark />}</label>
           {hint && <p className="mt-0.5 text-xs text-stone-500 dark:text-stone-400">{hint}</p>}
         </div>
       )}
@@ -87,10 +91,13 @@ export default function RoleCombobox({
       )}
 
       <div className="relative">
-        <div className="flex items-center rounded-lg border border-stone-300 bg-white dark:border-stone-700 dark:bg-stone-950">
+        <div className={`flex items-center rounded-lg border bg-white dark:bg-stone-950 ${error ? 'border-red-400' : 'border-stone-300 dark:border-stone-700'}`}>
           <input
             type="text"
+            id={inputId}
             role="combobox"
+            aria-required={required || undefined}
+            aria-invalid={error ? true : undefined}
             aria-expanded={open}
             aria-controls={listboxId}
             aria-autocomplete="list"
@@ -129,6 +136,7 @@ export default function RoleCombobox({
         )}
       </div>
 
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
       <p className="mt-1.5 text-xs text-stone-400">{getRoleCount()} tech roles from {meta.source}. Type to search or add custom roles.</p>
     </div>
   )
