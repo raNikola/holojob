@@ -18,7 +18,7 @@ import json
 import re
 from pathlib import Path
 
-from cv_analysis.redact import EMAIL_RE, PATH_URL_RE, PHONE_RE, SCHEME_URL_RE, SOCIAL_RE
+from cv_analysis.redact import EMAIL_RE, PHONE_RE, SCHEME_URL_RE, SOCIAL_RE
 from cv_analysis.redact import _is_phone as _looks_like_phone_number
 
 MAX_TEXT_BYTES = 200 * 1024
@@ -61,6 +61,11 @@ _YEAR = r"(?:19|20)\d{2}"
 _DATE = rf"(?:{_MONTH}\s+{_YEAR}|\d{{1,2}}[/.]{_YEAR}|{_YEAR})"
 _PRESENT = r"(?:present|current|now|today|ongoing)"
 _RANGE = re.compile(rf"(?<![\w/])({_DATE})\s*(?:-|–|—|to|until|till)\s*({_DATE}|{_PRESENT})(?!\w)", re.I)
+# A host without a scheme counts as a link only when it is written in lowercase and its last label is
+# not a language or framework suffix, so "Node.js/React" and "ASP.NET/C#" in a skills line stay text.
+_BARE_LINK_RE = re.compile(r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.([a-z]{2,})/\S*")
+_NOT_A_TLD = {"js", "ts", "py", "rb", "rs", "go", "cs", "sh", "md", "ex"}
+_THOUSANDS = re.compile(r"\d{1,3}(?:[ .,]\d{3}){2,}")
 _PHONE_LABEL = re.compile(r"\b(?:phone|tel|telephone|mobile|mob|cell)\b", re.I)
 _LOCATION_LABEL = re.compile(r"^(?:location|address|based in|city)\s*:\s*(.+)$", re.I)
 _PLACE = re.compile(r"^[A-Z][A-Za-z.'’\- ]{1,30}(?:,\s*[A-Z][A-Za-z.'’\- ]{1,30}){1,2}$")
@@ -90,9 +95,13 @@ def _scrub_token(token: str, found: dict[str, list[str]]) -> str:
         found["emails"].extend(m.group(0).rstrip(_TRAILING) for m in EMAIL_RE.finditer(token))
         token = EMAIL_RE.sub("", token)
     if "." in token or "://" in token:
-        for pattern in (SCHEME_URL_RE, SOCIAL_RE, PATH_URL_RE):
+        for pattern in (SCHEME_URL_RE, SOCIAL_RE):
             found["links"].extend(m.group(0).rstrip(_TRAILING) for m in pattern.finditer(token))
             token = pattern.sub("", token)
+        for match in list(_BARE_LINK_RE.finditer(token)):
+            if match.group(1) not in _NOT_A_TLD:
+                found["links"].append(match.group(0).rstrip(_TRAILING))
+                token = token.replace(match.group(0), "", 1)
     return token
 
 
@@ -363,6 +372,7 @@ def parse_text(text: object) -> dict:
 
     nonblank = [i for i, l in enumerate(scrubbed) if l]
     nonblank_rank = {i: n for n, i in enumerate(nonblank)}
+    first_heading = next((i for i, l in enumerate(scrubbed) if l and _header(l)), len(scrubbed))
     phone = ""
     phone_values: set[str] = set()
     for i, line in enumerate(scrubbed):
@@ -370,7 +380,10 @@ def parse_text(text: object) -> dict:
             labelled = _labelled(line, start)
             if value.startswith("+") or labelled:
                 phone_values.add(value)
-            if not phone and (value.startswith("+") or labelled or nonblank_rank.get(i, 99) < 12):
+            # An unlabelled number is a phone only near the top, in the part before the first heading or on a
+            # line that also held an e-mail or link, and never when it is grouped like an amount ("10 000 000").
+            top = nonblank_rank.get(i, 99) < 12 and (i < first_heading or i in changed_lines)
+            if not phone and (value.startswith("+") or labelled or (top and not _THOUSANDS.fullmatch(value))):
                 phone = value
                 phone_values.add(value)
     if phone_values:
