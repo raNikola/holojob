@@ -239,6 +239,34 @@ Chess; write taylor.fictional@example.org
         assert "10 000 000 EUR" in joined
 
 
+class TestFalsePositives:
+    def test_an_amount_is_not_taken_for_a_phone_number(self):
+        text = "Jane Sample\nProduct Manager\n\nSUMMARY\nManaged a 10 000 000 EUR budget across teams.\n\nEXPERIENCE\nPM at Acme | 2019 - 2021\n- Managed a 10 000 000 EUR budget\n"
+        d = parse_text(text)
+        assert "phone" not in d["basicProfile"]
+        assert "10 000 000" in " ".join(u["text"] for u in d["unplaced"])
+        assert "10 000 000" in d["parsedData"]["experienceDetail"][0]["bullets"][0]
+
+    def test_an_amount_in_text_without_headings_is_not_a_phone_number(self):
+        d = parse_text("Jane Sample\nProduct Manager\nManaged a 10 000 000 EUR budget across teams.")
+        assert "phone" not in d["basicProfile"]
+        assert "10 000 000" in " ".join(u["text"] for u in d["unplaced"])
+
+    def test_an_unlabelled_phone_in_the_header_is_still_found(self):
+        assert parse_text("Jane Sample\nProduct Manager\n(415) 555-0132 | Springfield, Ohio\n\nSKILLS\nSQL")["basicProfile"]["phone"] == "(415) 555-0132"
+
+    def test_technology_names_joined_by_a_slash_are_not_links(self):
+        d = parse_text("Jane Sample\nSKILLS\nNode.js/React, ASP.NET/C#, TypeScript\n\nEXPERIENCE\nDev at Acme | 2019 - 2021\n- Built Node.js/Express services and Vue.js/Nuxt apps\n")
+        assert d["links"] == []
+        assert d["parsedData"]["skills"] == ["Node.js/React", "ASP.NET/C#", "TypeScript"]
+        assert d["parsedData"]["experienceDetail"][0]["bullets"] == ["Built Node.js/Express services and Vue.js/Nuxt apps"]
+        assert not any("moved out" in w for w in d["warnings"])
+
+    def test_a_real_bare_host_is_still_a_link(self):
+        d = parse_text("Jane Sample\nportfolio: taylorf.example.org/work\nSKILLS\nSQL")
+        assert d["links"] == ["taylorf.example.org/work"]
+
+
 class TestHostileInput:
     def timed(self, text, limit=5.0):
         started = time.perf_counter()
