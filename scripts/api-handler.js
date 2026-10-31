@@ -28,6 +28,7 @@ import {
   runQualityAudit,
 } from './run-quality-audit.js'
 import { importLinkedInText } from './run-linkedin-import.js'
+import { IMPORT_ERRORS, MAX_IMPORT_BODY_BYTES, parseImportSource } from './run-profile-import.js'
 import { handleAiSettingsRequest } from './ai-settings-handler.js'
 import { handleSecretsRequest } from './secrets-handler.js'
 import { guardApiRequest } from './request-guard.js'
@@ -583,6 +584,30 @@ export async function handleApiRequest(req, res) {
     } catch (e) {
       sendJson(res, 400, { error: e.message })
     }
+    return true
+  }
+
+  // Stateless: parses pasted text into an import draft and writes nothing. Every answer is fixed text; the text is never echoed.
+  if (url === '/api/profile/import/parse' && req.method === 'POST') {
+    const fail = (code) => {
+      const { status, error } = IMPORT_ERRORS[code] ?? IMPORT_ERRORS.parse_failed
+      sendJson(res, status, { ok: false, code, error })
+    }
+    if (Number(req.headers['content-length'] ?? 0) > MAX_IMPORT_BODY_BYTES) {
+      res.setHeader('Connection', 'close')
+      fail('too_large')
+      return true
+    }
+    let body
+    try {
+      body = JSON.parse((await readLimitedBody(req, MAX_IMPORT_BODY_BYTES)).toString('utf-8') || '{}')
+    } catch (e) {
+      fail(/too large/.test(String(e?.message)) ? 'too_large' : 'invalid_request')
+      return true
+    }
+    const result = await parseImportSource(body?.source, body?.text)
+    if (result.ok) sendJson(res, 200, { ok: true, draft: result.draft })
+    else fail(result.code)
     return true
   }
 
