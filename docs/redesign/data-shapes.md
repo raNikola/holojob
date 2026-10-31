@@ -329,7 +329,7 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
 
 - **Where:** in memory only, between the parse route and the Save button of the import wizard. Never written to `data/`, never put in `localStorage`; an unsaved draft is lost on a refresh.
 - **Purpose:** what one import source yielded, for the review screen. It is not a profile format: every field maps onto the profile shape above, and `applyImportDraft` (`src/modules/profile/importDraft.js`) is the only code that turns a reviewed draft into a profile.
-- **Made by:** `POST /api/profile/import/parse` (body `{ "source": "paste", "text": "<string>" }`, JSON, up to 200 KB of text), which runs `python/profile_import/text_parser.py` and writes nothing.
+- **Made by:** `POST /api/profile/import/parse` (body `{ "source": "paste", "text": "<string>" }`, JSON, up to 200 KB of text), which runs `python/profile_import/text_parser.py` and writes nothing. Headings and field labels ("Education", "Obrazovanje", "Ime i prezime:", ...) come from `src/data/sectionHeadings.json`, one block per language, in Latin or Cyrillic script; the same file feeds the PDF path (`src/utils/profileExtractor.js`). A new language is a new block there, with no code change.
 
 ```json
 {
