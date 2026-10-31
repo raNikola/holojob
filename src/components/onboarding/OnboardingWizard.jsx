@@ -3,7 +3,7 @@ import { Moon, Sun, ChevronLeft, ChevronRight } from 'lucide-react'
 import ProgressBar from './ProgressBar'
 import StepLayout from './StepLayout'
 import WelcomeStep from './WelcomeStep'
-import ResumeUpload from '../resume/ResumeUpload'
+import ImportWizard from '../import/ImportWizard'
 import ProfileForm from '../profile/ProfileForm'
 import RepositoryForm from '../repositories/RepositoryForm'
 import QuestionnaireForm from '../questionnaire/QuestionnaireForm'
@@ -20,10 +20,10 @@ import { cvFilesToDiscard } from '../../utils/cvLibrary'
 
 const STEP_CONFIG = [
   { title: 'Welcome', description: '' },
-  { title: 'Upload resume', description: 'Upload your PDF resume for local text extraction and autofill.' },
+  { title: 'Bring in your history', description: 'Import a resume or LinkedIn data, review what was found, then save it.' },
   { title: 'Your profile', description: 'Review and edit autofilled details from your resume.' },
   { title: 'Repositories', description: 'Add GitHub links and local project folder paths.' },
-  { title: 'Questionnaire', description: 'Answer 17 interactive questions to build your candidate intelligence profile.' },
+  { title: 'Questionnaire', description: `Answer ${QUESTION_COUNT} interactive questions to build your candidate intelligence profile.` },
   { title: 'Review & export', description: 'Review everything and export your candidate-profile.json.' },
 ]
 
@@ -37,6 +37,7 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   // The profile as it was when this edit began, for Cancel. Nothing is kept in onboarding.
   const [snapshot] = useState(() => (mode === 'edit' ? takeProfileSnapshot(profile) : null))
   const [errors, setErrors] = useState([])
+  const [importBusy, setImportBusy] = useState(false)
   const [questionnaireIndex, setQuestionnaireIndex] = useState(0)
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
 
@@ -129,7 +130,7 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   const renderStep = () => {
     switch (currentStep) {
       case 0: return <WelcomeStep onNext={goNext} onDemoComplete={onComplete} />
-      case 1: return <ResumeUpload />
+      case 1: return <ImportWizard onBusyChange={setImportBusy} onManual={() => jumpToStep(2)} onSaved={() => jumpToStep(2)} />
       case 2: return <ProfileForm />
       case 3: return <RepositoryForm />
       case 4: return <QuestionnaireForm
@@ -205,7 +206,7 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
                   </Button>
                 </>
               )}
-              <Button onClick={goNext}>
+              <Button onClick={goNext} disabled={importBusy && currentStep === 1}>
                 Continue <ChevronRight className="h-4 w-4" />
               </Button>
             </div>

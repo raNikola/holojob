@@ -4,7 +4,7 @@
 // (basicProfile, parsedData, languages, links), a confidence per field, and what could not be
 // placed. `applyImportDraft` is the only place that turns a reviewed draft into a profile.
 
-import { addCv, newCvId } from '../../utils/cvLibrary.js'
+import { addCv, ensureCvLibrary, newCvId } from '../../utils/cvLibrary.js'
 import { normalizeLanguages } from '../../utils/languages.js'
 
 export const IMPORT_SOURCES = {
@@ -109,19 +109,33 @@ function githubUrl(link) {
 
 const bare = (url) => norm(url).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '')
 
+const cleanLines = (value) => list(value).map(text).filter(Boolean)
+
+/** Experience entries as saved: trimmed, empty bullets gone, and entries with nothing to say dropped. */
+function cleanEntries(value) {
+  return list(value)
+    .map((e) => ({ title: text(e?.title), company: text(e?.company), start: text(e?.start), end: text(e?.end), bullets: cleanLines(e?.bullets) }))
+    .filter((e) => e.title || e.company || e.start || e.bullets.length)
+}
+
 function entryParsedData(draft) {
   const parsed = draft.parsedData || {}
-  const entries = list(parsed.experienceDetail)
+  const entries = cleanEntries(parsed.experienceDetail)
   return {
-    skills: list(parsed.skills),
-    projects: list(parsed.projects),
-    education: list(parsed.education),
-    certifications: list(parsed.certifications),
-    links: list(draft.links),
-    workExperience: entries.length ? deriveWorkExperience(entries) : list(parsed.workExperience),
+    skills: cleanLines(parsed.skills),
+    projects: cleanLines(parsed.projects),
+    education: cleanLines(parsed.education),
+    certifications: cleanLines(parsed.certifications),
+    links: cleanLines(draft.links),
+    workExperience: entries.length ? deriveWorkExperience(entries) : cleanLines(parsed.workExperience),
     experienceDetail: entries,
     competencyGroups: list(parsed.competencyGroups),
   }
+}
+
+/** True when saving would make the new My CVs entry the active CV: the profile has no CV yet. */
+export function willBeActive(profile) {
+  return !ensureCvLibrary(profile).defaultCvId
 }
 
 /**
@@ -221,4 +235,31 @@ export function withSection(draft, id, items) {
     }
   } else parsedData[id] = items
   return next
+}
+
+const entryConfidenceKey = (index) => `experienceDetail.${index}`
+
+/** A copy of the draft with one experience entry changed; only that entry's parser confidence is dropped. */
+export function withEntry(draft, index, entry) {
+  const { [entryConfidenceKey(index)]: _dropped, ...confidence } = draft.confidence || {}
+  const entries = list(draft.parsedData?.experienceDetail).map((e, i) => (i === index ? entry : e))
+  return { ...draft, confidence, parsedData: { ...draft.parsedData, experienceDetail: entries, workExperience: deriveWorkExperience(cleanEntries(entries)) } }
+}
+
+export function addEntry(draft) {
+  const entries = [...list(draft.parsedData?.experienceDetail), { title: '', company: '', start: '', end: '', bullets: [] }]
+  return { ...draft, parsedData: { ...draft.parsedData, experienceDetail: entries } }
+}
+
+/** Removes one entry and moves the later entries' confidence up with them. */
+export function removeEntry(draft, index) {
+  const entries = list(draft.parsedData?.experienceDetail).filter((_, i) => i !== index)
+  const confidence = {}
+  for (const [key, level] of Object.entries(draft.confidence || {})) {
+    const match = /^experienceDetail\.(\d+)$/.exec(key)
+    if (!match) confidence[key] = level
+    else if (Number(match[1]) < index) confidence[key] = level
+    else if (Number(match[1]) > index) confidence[entryConfidenceKey(Number(match[1]) - 1)] = level
+  }
+  return { ...draft, confidence, parsedData: { ...draft.parsedData, experienceDetail: entries, workExperience: deriveWorkExperience(cleanEntries(entries)) } }
 }

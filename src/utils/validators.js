@@ -56,8 +56,9 @@ export function validateStep(stepIndex, profile) {
   switch (stepIndex) {
     case 0: break
     case 1:
-      if (!profile.resume?.fileName) errors.push('Please upload a resume PDF.')
-      if (!isNonEmpty(profile.resume?.rawText)) errors.push('Resume text could not be extracted.')
+      if (!isNonEmpty(profile.resume?.rawText) && !isNonEmpty(profile.basicProfile?.fullName)) {
+        errors.push('Bring in your history first: upload a file, paste text, or choose "Enter manually".')
+      }
       break
     case 2: {
       const { fullName, email, phone, currentRole, experienceYears, targetRoles } = profile.basicProfile || {}
