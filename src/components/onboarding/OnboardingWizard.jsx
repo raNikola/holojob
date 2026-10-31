@@ -13,6 +13,10 @@ import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
 import { QUESTION_COUNT } from '../../data/questions'
 import { answeredQuestionIds, orderedQuestions } from '../../modules/profile/questionnaireStatus'
+import { checkFinishReadiness } from '../../modules/profile/finishReadiness'
+import { validateProfileForIntelligence } from '../../modules/intelligence/intelligenceValidators'
+import { regenerateIntelligence, saveIntelligence } from '../../modules/intelligence/intelligenceExport'
+import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
 import { validateStep } from '../../utils/validators'
 import { profileChangedSince, takeProfileSnapshot } from '../../utils/profileSnapshot'
 import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
@@ -35,7 +39,7 @@ const EDIT_START_STEP = 1
 
 export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   const isEdit = mode === 'edit'
-  const { currentStep, setStep, profile, restoreProfile } = useProfile()
+  const { currentStep, setStep, profile, restoreProfile, markOnboardingComplete } = useProfile()
   // The profile as it was when this edit began, for Cancel. Nothing is kept in onboarding.
   const [snapshot] = useState(() => (mode === 'edit' ? takeProfileSnapshot(profile) : null))
   const [errors, setErrors] = useState([])
@@ -99,6 +103,31 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
     setErrors([])
     clearFailed()
     if (currentStep < TOTAL_STEPS - 1) setStep(currentStep + 1)
+  }
+
+  // Finish completes onboarding with whatever is answered. If a required profile
+  // field or the résumé is missing it goes to that step instead and completes nothing.
+  const finish = async () => {
+    const readiness = checkFinishReadiness(profile)
+    if (!readiness.ready) {
+      setErrors(readiness.errors)
+      setFailed((f) => ({ key: `${readiness.step}:${questionnaireIndex}`, count: f.count + 1 }))
+      setStep(readiness.step)
+      scrollToTop()
+      return
+    }
+    const validation = validateProfileForIntelligence(profile)
+    if (!validation.valid) { fail(validation.errors); return }
+    try {
+      const generated = regenerateIntelligence(profile)
+      saveIntelligence(generated)
+      markOnboardingComplete()
+      void saveProfileToDataDir(profile)
+      void saveIntelligenceToDataDir(generated)
+      onComplete?.({ intelligenceGenerated: true })
+    } catch (e) {
+      fail([e.message || 'Failed to generate intelligence.'])
+    }
   }
 
   const goBack = () => {
@@ -227,6 +256,11 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
                     Done
                   </Button>
                 </>
+              )}
+              {!isEdit && (
+                <Button variant="secondary" onClick={finish} disabled={importBusy && currentStep === 1}>
+                  Finish
+                </Button>
               )}
               <Button onClick={goNext} disabled={importBusy && currentStep === 1}>
                 {skipsQuestion ? 'Skip' : 'Continue'} <ChevronRight className="h-4 w-4" />
