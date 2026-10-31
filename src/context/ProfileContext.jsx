@@ -5,7 +5,7 @@ import { extractProfileFromResume } from '../utils/profileExtractor'
 import { SKILLS_DICTIONARY } from '../data/skillsDictionary'
 import { addCv, ensureCvLibrary, registerActiveUpload, patchCvAnalysis, removeCv, renameCv, setCvAnalysis, setDefaultCv, syncDefaultEntry } from '../utils/cvLibrary'
 import { joinAnswerList, parseAnswerList } from '../utils/answerList'
-import { unansweredQuestionIds } from '../modules/profile/questionnaireStatus'
+import { derivedEntry, unansweredQuestionIds } from '../modules/profile/questionnaireStatus'
 
 // Seed Q2 and Q5 with resume skills so the questionnaire is pre-filled on arrival.
 const SKILL_QS = [2, 5]
@@ -21,7 +21,7 @@ function seedSkillAnswers(profile, skills) {
     const idx = answers.findIndex((a) => a.id === qid)
     const current = idx >= 0 ? answers[idx].answer || '' : ''
     if (parseAnswerList(current).length > 1) continue  // already answered
-    const entry = { id: qid, question: `Q${qid}`, answer: joinAnswerList(matched) }
+    const entry = derivedEntry(qid, `Q${qid}`, joinAnswerList(matched))
     if (idx >= 0) answers[idx] = entry
     else answers.push(entry)
   }

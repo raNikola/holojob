@@ -25,3 +25,11 @@ export function orderedQuestions() {
   }
   return QUESTIONS.map((q, i) => ({ q, i })).sort((a, b) => rank(a.q.id) - rank(b.q.id) || a.i - b.i).map(({ q }) => q)
 }
+
+// An answer filled in from the résumé rather than typed or chosen by the user.
+// Editing it replaces the entry without this field, which confirms it.
+export const DERIVED_FROM_RESUME = 'resume'
+
+export const derivedEntry = (id, question, answer) => ({ id, question, answer, source: DERIVED_FROM_RESUME })
+
+export const isDerivedAnswer = (entry) => entry?.source === DERIVED_FROM_RESUME
