@@ -1,0 +1,22 @@
+{
+  "sections": {
+    "summary": ["summary", "professional summary", "profile", "about", "about me", "objective", "career objective", "personal statement"],
+    "experience": ["experience", "work experience", "professional experience", "employment", "employment history", "work history", "career history", "relevant experience"],
+    "education": ["education", "academic background", "education and training", "qualifications", "academic qualifications"],
+    "skills": ["skills", "technical skills", "key skills", "core skills", "core competencies", "competencies", "technologies", "tools", "tech stack", "skills and tools", "skills and technologies"],
+    "certifications": ["certifications", "certificates", "licenses", "licences", "licenses and certifications", "certifications and licenses"],
+    "projects": ["projects", "personal projects", "selected projects", "key projects", "side projects"],
+    "languages": ["languages", "language skills"],
+    "links": ["links", "contact", "contact details", "contact information", "profiles", "online profiles"]
+  },
+  "unplacedSections": ["interests", "hobbies", "hobbies and interests", "references", "awards", "honors", "honours", "honors and awards", "publications", "volunteering", "volunteer experience", "courses", "training", "additional information", "other", "achievements", "activities"],
+  "roleWords": ["manager", "engineer", "developer", "designer", "analyst", "lead", "director", "head", "officer", "consultant", "specialist", "architect", "owner", "intern", "scientist", "administrator", "coordinator", "president", "founder", "cofounder", "executive", "associate", "assistant", "representative", "supervisor", "strategist", "researcher", "technician", "programmer", "tester", "writer", "editor", "teacher", "accountant", "advisor", "adviser", "partner", "principal", "freelancer", "contractor", "vp", "cto", "ceo", "cfo", "coo", "product", "software", "qa", "devops", "sre"],
+  "contactLabels": ["email", "e-mail", "phone", "tel", "telephone", "mobile", "cell", "linkedin", "github", "website", "web", "portfolio", "url", "contact", "address", "location"],
+  "languageLevels": {
+    "native": ["native", "mother tongue", "bilingual", "native or bilingual", "native or bilingual proficiency"],
+    "fluent": ["fluent"],
+    "advanced": ["advanced"],
+    "intermediate": ["intermediate"],
+    "basic": ["basic", "beginner", "elementary", "elementary proficiency"]
+  }
+}
