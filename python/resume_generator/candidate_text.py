@@ -31,8 +31,8 @@ _BANNED_RES = [
 
 # The questionnaire item that asks for a career summary in the candidate's own
 # words. The intelligence file's careerNarrative is not used: when this answer
-# is missing, the engine fills that field from a template, or with a
-# "Career narrative pending" placeholder.
+# is missing, the engine fills that field from a template, or leaves it empty
+# and lists it under candidateSummary.unknown.
 NARRATIVE_QUESTION_ID = 17
 
 

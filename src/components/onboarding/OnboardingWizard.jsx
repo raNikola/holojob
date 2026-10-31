@@ -11,8 +11,9 @@ import ReviewScreen from '../review/ReviewScreen'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
-import { QUESTIONS, QUESTION_COUNT } from '../../data/questions'
-import { validateStep, validateQuestionnaireSection, validateQuestion } from '../../utils/validators'
+import { QUESTION_COUNT } from '../../data/questions'
+import { answeredQuestionIds, orderedQuestions } from '../../modules/profile/questionnaireStatus'
+import { validateStep } from '../../utils/validators'
 import { profileChangedSince, takeProfileSnapshot } from '../../utils/profileSnapshot'
 import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
 import { deleteCvFile } from '../../modules/cvs/cvApi'
@@ -23,10 +24,11 @@ const STEP_CONFIG = [
   { title: 'Bring in your history', description: 'Import a resume or LinkedIn data, review what was found, then save it.' },
   { title: 'Your profile', description: 'Review and edit autofilled details from your resume.' },
   { title: 'Repositories', description: 'Add GitHub links and local project folder paths.' },
-  { title: 'Questionnaire', description: `Answer ${QUESTION_COUNT} interactive questions to build your candidate intelligence profile.` },
+  { title: 'Questionnaire', description: `Optional: answer what you like to improve your matches. Skip any question.` },
   { title: 'Review & export', description: 'Review everything and export your candidate-profile.json.' },
 ]
 
+const ORDERED_QUESTIONS = orderedQuestions()
 const QUESTIONNAIRE_STEP = 4
 const TOTAL_STEPS = STEP_CONFIG.length
 const EDIT_START_STEP = 1
@@ -78,23 +80,13 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
 
   const goNext = () => {
     if (currentStep === QUESTIONNAIRE_STEP) {
-      const currentQ = QUESTIONS[questionnaireIndex]
-      const { valid, errors: errs } = validateQuestion(profile, currentQ.id)
-      if (!valid) { fail(errs); return }
       if (questionnaireIndex < QUESTION_COUNT - 1) {
-        const nextIndex = questionnaireIndex + 1
-        if (currentQ.section === 1 && QUESTIONS[nextIndex].section === 2) {
-          const sectionCheck = validateQuestionnaireSection(1, profile)
-          if (!sectionCheck.valid) { fail(sectionCheck.errors); return }
-        }
         setErrors([])
         clearFailed()
-        setQuestionnaireIndex(nextIndex)
+        setQuestionnaireIndex(questionnaireIndex + 1)
         scrollToTop()
         return
       }
-      const { valid: allValid, errors: allErrs } = validateStep(QUESTIONNAIRE_STEP, profile)
-      if (!allValid) { fail(allErrs); return }
       setErrors([])
       clearFailed()
       setStep(currentStep + 1)
@@ -163,7 +155,6 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
       case 4: return <QuestionnaireForm
         questionIndex={questionnaireIndex}
         onJumpToQuestion={isEdit ? jumpToQuestion : undefined}
-        showErrors={showFieldErrors}
       />
       case 5: return (
         <ReviewScreen
@@ -177,12 +168,15 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   }
 
   const config = STEP_CONFIG[currentStep]
+  // An unanswered question is skipped, not blocked.
+  const skipsQuestion = currentStep === QUESTIONNAIRE_STEP
+    && !answeredQuestionIds(profile).includes(ORDERED_QUESTIONS[questionnaireIndex]?.id)
   const showNavFooter = currentStep < TOTAL_STEPS - 1
     && (isEdit ? currentStep >= EDIT_START_STEP : currentStep > 0)
 
   const questionnaireDescription =
     currentStep === QUESTIONNAIRE_STEP
-      ? `Question ${questionnaireIndex + 1} of ${QUESTION_COUNT} — ${QUESTIONS[questionnaireIndex]?.text.slice(0, 60)}…`
+      ? `Question ${questionnaireIndex + 1} of ${QUESTION_COUNT} — ${ORDERED_QUESTIONS[questionnaireIndex]?.text.slice(0, 60)}…`
       : config.description
 
   const headerTitle = isEdit ? 'Edit Profile' : 'Profile Setup'
@@ -235,7 +229,7 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
                 </>
               )}
               <Button onClick={goNext} disabled={importBusy && currentStep === 1}>
-                Continue <ChevronRight className="h-4 w-4" />
+                {skipsQuestion ? 'Skip' : 'Continue'} <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>

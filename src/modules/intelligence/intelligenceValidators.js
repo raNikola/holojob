@@ -1,4 +1,4 @@
-import { QUESTIONS } from '../../data/questions.js'
+import { unansweredQuestionIds } from '../profile/questionnaireStatus.js'
 import {
   isNonTechnicalPhrase,
   intersectsOptionSet,
@@ -27,22 +27,14 @@ export function validateProfileForIntelligence(profile) {
   const hasResume = isNonEmpty(resume.rawText) || (resume.parsedData?.skills?.length > 0)
   if (!hasResume) errors.push('Resume text or parsed skills are required.')
 
-  if (answers.length < QUESTIONS.length) {
-    errors.push(`Complete all ${QUESTIONS.length} questionnaire answers.`)
-  } else {
-    for (const q of QUESTIONS) {
-      const a = answers.find((ans) => ans.id === q.id)
-      if (!a || !isNonEmpty(a.answer)) {
-        errors.push(`Questionnaire answer missing for question ${q.id}.`)
-        break
-      }
-    }
-  }
-
   if (!bp.preferredLocations?.length) warnings.push('Preferred locations not set — search filters may be broad.')
   if (!bp.remotePreference) warnings.push('Remote preference not set.')
+  const unanswered = unansweredQuestionIds(profile)
+  if (unanswered.length) {
+    warnings.push(`${unanswered.length} questionnaire question${unanswered.length === 1 ? '' : 's'} unanswered: matching has less to go on until you answer.`)
+  }
   const q17 = answers.find((a) => a.id === 17)
-  if (!q17?.answer?.trim()) warnings.push('Career summary (Q17) is empty — narrative will use template fallback.')
+  if (!q17?.answer?.trim()) warnings.push('Career summary (Q17) is empty — the narrative is built from your role and résumé only.')
 
   return {
     valid: errors.length === 0,
