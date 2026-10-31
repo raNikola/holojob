@@ -11,6 +11,7 @@ import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
 import { VIEWS } from '../../modules/appNavigation'
 import { QUESTIONS } from '../../data/questions'
 import { describeAnswer } from '../../modules/profile/answerDisplay'
+import CompleteProfileCard from './CompleteProfileCard'
 import { answeredQuestionIds } from '../../modules/profile/questionnaireStatus'
 
 // Wizard steps, as numbered in OnboardingWizard.
@@ -32,7 +33,7 @@ function Field({ label, value }) {
 }
 
 export default function ProfileHome({ onNavigate }) {
-  const { profile, startProfileEdit } = useProfile()
+  const { profile, startProfileEdit, dismissCompleteProfile } = useProfile()
   const { basicProfile: bp, resume, repositories, questionnaire } = profile
   const pd = resume.parsedData
   const [regenerating, setRegenerating] = useState(false)
@@ -90,6 +91,8 @@ export default function ProfileHome({ onNavigate }) {
           Regenerate Intelligence
         </Button>
       </div>
+
+      <CompleteProfileCard profile={profile} onAnswer={() => editStep(QUESTIONNAIRE_STEP)} onDismiss={dismissCompleteProfile} />
 
       {status && <p className="text-xs text-teal-700 dark:text-teal-300">{status}</p>}
       {error && <Alert variant="error" title="Error">{error}</Alert>}
