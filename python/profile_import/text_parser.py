@@ -1,4 +1,4 @@
-"""Deterministic parser for pasted CV text (English only).
+"""Deterministic parser for pasted CV text.
 
 Turns plain text into an import draft: the existing profile fields plus what was
 found but could not be placed. Nothing is invented and nothing is dropped: a line
@@ -6,7 +6,8 @@ that fits no field goes to `unplaced`, and the full text is always kept in `rawT
 
 Contact details (e-mail, phone, links) are moved into their own fields and removed
 from every free-text field, so a bullet or an unplaced block never carries them.
-Headings are matched against the English vocabulary in `section_headers.json`.
+Headings and field labels come from the vocabulary in `src/data/sectionHeadings.json` (see `vocabulary.py`),
+so a new language is a data change there; role words are in `role_words.json`.
 
 Every regular expression runs on one line or one token of bounded length, so a
 hostile input of a single huge line cannot make the parse quadratic.
@@ -28,7 +29,17 @@ MAX_ENTRIES = 60
 MAX_SKILLS = 80
 MAX_LINKS = 30
 
-_VOCAB = json.loads(Path(__file__).with_name("section_headers.json").read_text(encoding="utf-8"))
+from profile_import.vocabulary import (  # noqa: E402
+    CONTACT_LABELS as _CONTACT_LABELS,
+    LEVEL_OF as _LEVEL_OF,
+    SECTION_OF as _SECTION_OF,
+    UNPLACED_HEADERS as _UNPLACED_HEADERS,
+    ends_with_label,
+    labeled_field,
+    normalize_phrase as _norm_phrase,
+)
+
+_ROLE_WORDS = set(json.loads(Path(__file__).with_name("role_words.json").read_text(encoding="utf-8"))["roleWords"])
 
 
 class TextImportError(Exception):
@@ -38,17 +49,6 @@ class TextImportError(Exception):
         super().__init__(code)
         self.code = code
 
-
-def _norm_phrase(text: str) -> str:
-    text = text.lower().replace("&", " and ")
-    return " ".join(re.sub(r"[^a-z\- ]", " ", text).split())
-
-
-_SECTION_OF = {_norm_phrase(p): key for key, phrases in _VOCAB["sections"].items() for p in phrases}
-_UNPLACED_HEADERS = {_norm_phrase(p) for p in _VOCAB["unplacedSections"]}
-_ROLE_WORDS = set(_VOCAB["roleWords"])
-_CONTACT_LABELS = {_norm_phrase(p) for p in _VOCAB["contactLabels"]}
-_LEVEL_OF = {_norm_phrase(p): level for level, phrases in _VOCAB["languageLevels"].items() for p in phrases}
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f​-‍⁠﻿]")
 _BULLET = re.compile(r"^(?:[•●▪◦‣∙·*]|[-–—](?=\s)|\d{1,2}[.)](?=\s))\s*")
@@ -66,12 +66,10 @@ _RANGE = re.compile(rf"(?<![\w/])({_DATE})\s*(?:-|–|—|to|until|till)\s*({_DA
 _BARE_LINK_RE = re.compile(r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.([a-z]{2,})/\S*")
 _NOT_A_TLD = {"js", "ts", "py", "rb", "rs", "go", "cs", "sh", "md", "ex"}
 _THOUSANDS = re.compile(r"\d{1,3}(?:[ .,]\d{3}){2,}")
-_PHONE_LABEL = re.compile(r"\b(?:phone|tel|telephone|mobile|mob|cell)\b", re.I)
-_LOCATION_LABEL = re.compile(r"^(?:location|address|based in|city)\s*:\s*(.+)$", re.I)
 _PLACE = re.compile(r"^[A-Z][A-Za-z.'’\- ]{1,30}(?:,\s*[A-Z][A-Za-z.'’\- ]{1,30}){1,2}$")
-_GROUP_LINE = re.compile(r"^([A-Za-z][A-Za-z &/+.#-]{1,40}):\s*(.+)$")
+_GROUP_LINE = re.compile(r"^([^\W\d_][\w &/+.#-]{1,40}):\s*(.+)$")
 _DURATION = re.compile(r"\(?\s*\b\d+\s*(?:years?|yrs?)\b(?:\s+\d+\s*(?:months?|mos?)\b)?\s*\)?|\(?\s*\b\d+\s*(?:months?|mos?)\b\s*\)?", re.I)
-_LANGUAGE = re.compile(r"^([A-Za-z]+(?: [A-Za-z]+)?)\s*(?:\(([^)]*)\)|[:\-–—]\s*(.+))?$")
+_LANGUAGE = re.compile(r"^([^\W\d_]+(?: [^\W\d_]+)?)\s*(?:\(([^)]*)\)|[:\-–—]\s*(.+))?$")
 
 
 def clean_text(text: object) -> str:
@@ -132,8 +130,8 @@ def _scrub_line(line: str, found: dict[str, list[str]]) -> tuple[str, bool]:
 
 
 def _labelled(line: str, start: int) -> bool:
-    """True when a phone label ("Phone:", "Tel") ends right before `start`."""
-    return any(re.fullmatch(r"[\s:.\-–]*", line[m.end():start]) for m in _PHONE_LABEL.finditer(line) if m.end() <= start)
+    """True when a phone label ("Phone:", "Telefon", "Tel") ends right before `start`."""
+    return ends_with_label(line[:start], "phone")
 
 
 def _plausible_phone(value: str) -> bool:
@@ -268,6 +266,11 @@ def _parse_languages(lines: list[str], unplaced: list[dict]) -> list[dict]:
     if levels_unmapped:
         unplaced.append({"label": "Language levels (not mapped)", "text": "\n".join(levels_unmapped)})
     return languages
+
+
+def _merge_languages(first: list[dict], second: list[dict]) -> list[dict]:
+    seen = {l["language"].lower() for l in first}
+    return first + [l for l in second if l["language"].lower() not in seen]
 
 
 def _heads_before(lines: list[str], index: int, floor: int) -> list[str]:
@@ -420,6 +423,10 @@ def parse_text(text: object) -> dict:
             current.append(line)
         else:
             preamble.append((index, line))
+    # "Personal details" holds the same labelled lines as the top of the document, so it is read the same way.
+    for kind, key, lines_in in sections:
+        if kind == "section" and key == "personal":
+            preamble.extend((-1, l) for l in lines_in)
 
     basic: dict[str, str] = {}
     name_line = None
@@ -430,6 +437,22 @@ def parse_text(text: object) -> dict:
             continue
         was_contact = index in changed_lines
         pieces = [p.strip() for p in re.split(_SEPARATORS, line) if p.strip()]
+        remaining = []
+        for piece in pieces:
+            labeled = labeled_field(piece)
+            if not labeled:
+                remaining.append(piece)
+                continue
+            field, value = labeled
+            if field == "fullName" and "fullName" not in basic and re.search(r"[^\W\d_]", value) and len(value) <= 60 and "@" not in value:
+                name_line = basic["fullName"] = value
+                confidence["fullName"] = "medium"
+            elif field in ("address", "location") and value and "location" not in basic:
+                basic["location"] = value
+                confidence["location"] = "medium"
+        pieces = remaining
+        if not pieces:
+            continue
         if name_line is None and pieces and _is_name(pieces[0]):
             name_line = pieces[0]
             basic["fullName"] = name_line
@@ -440,11 +463,7 @@ def parse_text(text: object) -> dict:
         elif name_line is None and not was_contact:
             name_line = ""
         for piece in pieces:
-            label = _LOCATION_LABEL.match(piece)
-            if label and "location" not in basic:
-                basic["location"] = label.group(1).strip()
-                confidence["location"] = "medium"
-            elif _norm_phrase(piece.rstrip(":")) in _CONTACT_LABELS:
+            if _norm_phrase(piece.rstrip(":")) in _CONTACT_LABELS:
                 continue
             elif "location" not in basic and _PLACE.match(piece) and not _has_role_word(piece):
                 basic["location"] = piece
@@ -476,11 +495,25 @@ def parse_text(text: object) -> dict:
                 unplaced.append({"label": "Summary", "text": text_block})
         elif key == "experience":
             entries, parsed["workExperience"] = _parse_experience(body, unplaced, confidence, warnings)
+        elif key == "personal":
+            continue  # read with the top of the document above
         elif key == "skills":
-            skills, groups = _parse_skills(body, unplaced, confidence)
+            # "Languages: English (fluent)" inside a skills block is a language line.
+            language_lines = []
+            skill_lines = []
+            for l in body:
+                grouped = _GROUP_LINE.match(_strip_bullet(l)) if l else None
+                if grouped and _SECTION_OF.get(_norm_phrase(grouped.group(1))) == "languages":
+                    language_lines.append(grouped.group(2))
+                else:
+                    skill_lines.append(l)
+            skills, groups = _parse_skills(skill_lines, unplaced, confidence)
             parsed["skills"] = skills
+            if language_lines:
+                languages = _merge_languages(languages, _parse_languages(language_lines, unplaced))
+                confidence["languages"] = "medium"
         elif key == "languages":
-            languages = _parse_languages(body, unplaced)
+            languages = _merge_languages(languages, _parse_languages(body, unplaced))
             confidence["languages"] = "medium" if languages else "low"
         elif key == "links":
             rest = "\n".join(l for l in body if l and _norm_phrase(l.rstrip(":")) not in _CONTACT_LABELS)
