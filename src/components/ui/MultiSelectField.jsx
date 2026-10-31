@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
+import RequiredMark from './RequiredMark'
 
 export default function MultiSelectField({
   label,
+  required = false,
+  error,
   hint,
   selected = [],
   onChange,
@@ -30,8 +33,12 @@ export default function MultiSelectField({
   const isSuggested = (opt) => suggested.includes(opt)
 
   return (
-    <div>
-      {label && <label className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">{label}</label>}
+    <div role="group" aria-label={label} tabIndex={-1} data-invalid={error ? 'true' : undefined} className="focus:outline-none">
+      {label && (
+        <span className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">
+          {label}{required && <><RequiredMark /><span className="sr-only"> (required)</span></>}
+        </span>
+      )}
       {hint && <p className="mb-2 text-xs text-stone-500 dark:text-stone-400">{hint}</p>}
 
       {suggested.length > 0 && (
@@ -87,6 +94,7 @@ export default function MultiSelectField({
       {selected.length > 0 && (
         <p className="mt-2 text-xs text-stone-500">{selected.length} selected</p>
       )}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   )
 }
