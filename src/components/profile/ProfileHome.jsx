@@ -11,6 +11,7 @@ import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
 import { VIEWS } from '../../modules/appNavigation'
 import { QUESTIONS } from '../../data/questions'
 import { describeAnswer } from '../../modules/profile/answerDisplay'
+import { answeredQuestionIds } from '../../modules/profile/questionnaireStatus'
 
 // Wizard steps, as numbered in OnboardingWizard.
 const RESUME_STEP = 1
@@ -38,7 +39,7 @@ export default function ProfileHome({ onNavigate }) {
   const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
 
-  const answeredCount = questionnaire.answers?.length || 0
+  const answeredCount = answeredQuestionIds(profile).length
   const validation = validateProfileForIntelligence(profile)
 
   const editStep = (step) => {

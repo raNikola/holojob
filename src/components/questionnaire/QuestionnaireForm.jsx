@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Loader2 } from 'lucide-react'
 import Card from '../ui/Card'
-import { RequiredNote } from '../ui/RequiredMark'
 import OperationConsole from '../ui/OperationConsole'
 import QuestionField from './QuestionField'
-import { QUESTIONS, QUESTION_COUNT, QUESTION_SECTIONS } from '../../data/questions'
+import { QUESTIONS, QUESTION_COUNT } from '../../data/questions'
+import { HIGH_IMPACT_QUESTION_IDS, orderedQuestions } from '../../modules/profile/questionnaireStatus'
 import { SKILLS_DICTIONARY } from '../../data/skillsDictionary'
 import { useProfile } from '../../context/ProfileContext'
 import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
@@ -72,7 +72,9 @@ async function fetchJson(url) {
   }
 }
 
-export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion, showErrors = false }) {
+const ORDERED_QUESTIONS = orderedQuestions()
+
+export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion }) {
   const { profile, updateProfile } = useProfile()
   const [projectIntel, setProjectIntel] = useState(null)
   const [candidateIntel, setCandidateIntel] = useState(null)
@@ -133,6 +135,11 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion,
     updateProfile((prev) => {
       const answers = [...prev.questionnaire.answers]
       const idx = answers.findIndex((a) => a.id === id)
+      // Clearing an answer removes it: an empty entry would read as an answer.
+      if (!isNonEmpty(answer)) {
+        if (idx >= 0) answers.splice(idx, 1)
+        return { ...prev, questionnaire: { answers } }
+      }
       const entry = { id, question, answer }
       if (idx >= 0) answers[idx] = entry
       else answers.push(entry)
@@ -175,9 +182,8 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion,
     }
   }
 
-  const currentQuestion = QUESTIONS[questionIndex]
-  const section = currentQuestion?.section ?? 1
-  const sectionMeta = QUESTION_SECTIONS.find((s) => s.id === section)
+  const currentQuestion = ORDERED_QUESTIONS[questionIndex]
+  const highImpact = HIGH_IMPACT_QUESTION_IDS.includes(currentQuestion?.id)
   const answeredCount = QUESTIONS.filter((q) => isNonEmpty(getAnswer(q.id))).length
   const repoProjects = buildRepoProjects(projectIntel)
   const allParsedSkills = buildAutoSkills(
@@ -190,10 +196,10 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion,
     <div className="space-y-6">
       <div>
         <p className="text-sm text-stone-600 dark:text-stone-400">
-          {QUESTION_COUNT} questions in 2 sections. Role, location, remote, and salary were already captured on the Profile step.
+          All of these are optional. Each one you answer gives matching more to go on; skip any and come back later. Role, location, remote and salary were captured on the Profile step.
         </p>
 
-        {section === 1 && hasRepos && (
+        {currentQuestion?.section === 1 && hasRepos && (
           <div className="mt-3 flex items-center gap-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 dark:border-teal-800 dark:bg-teal-900/20">
             <button
               type="button"
@@ -225,7 +231,7 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion,
             <span>{answeredCount}/{QUESTION_COUNT} answered</span>
           </div>
           <p className="mb-2 text-xs text-stone-500">
-            Section {section} of 2 — {sectionMeta?.title}
+            {highImpact ? 'High impact on matching' : 'Adds detail'}
           </p>
           <div className="h-1.5 overflow-hidden rounded-full bg-stone-200 dark:bg-stone-800">
             <div
@@ -238,7 +244,7 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion,
 
       {onJumpToQuestion && (
         <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-9" role="group" aria-label="Jump to question">
-          {QUESTIONS.map((q, i) => {
+          {ORDERED_QUESTIONS.map((q, i) => {
             const answered = isNonEmpty(getAnswer(q.id))
             const current = i === questionIndex
             return (
@@ -266,9 +272,7 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion,
 
       {currentQuestion && (
         <Card className="!p-4">
-          <RequiredNote />
           <QuestionField
-            error={showErrors && !isNonEmpty(getAnswer(currentQuestion.id)) ? 'Please answer this question.' : undefined}
             question={currentQuestion}
             answer={getAnswer(currentQuestion.id)}
             onChange={(answer) => setAnswer(currentQuestion.id, currentQuestion.text, answer)}

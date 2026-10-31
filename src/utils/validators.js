@@ -1,5 +1,3 @@
-import { QUESTIONS, getQuestionsBySection } from '../data/questions'
-
 export function isNonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0
 }
@@ -42,34 +40,6 @@ export function profileFieldErrors(basicProfile) {
   return errors
 }
 
-function validateQuestions(profile, questions) {
-  const errors = []
-  const answers = profile.questionnaire?.answers || []
-
-  for (const q of questions) {
-    const a = answers.find((ans) => ans.id === q.id)
-    if (!a || !isNonEmpty(a.answer)) {
-      errors.push(`Please answer question ${q.id}: ${q.text.slice(0, 50)}...`)
-      break
-    }
-  }
-
-  return errors
-}
-
-export function validateQuestion(profile, questionId) {
-  const q = QUESTIONS.find((item) => item.id === questionId)
-  if (!q) return { valid: true, errors: [] }
-  const errors = validateQuestions(profile, [q])
-  return { valid: errors.length === 0, errors }
-}
-
-export function validateQuestionnaireSection(sectionId, profile) {
-  const sectionQuestions = getQuestionsBySection(sectionId)
-  const errors = validateQuestions(profile, sectionQuestions)
-  return { valid: errors.length === 0, errors }
-}
-
 export function validateStep(stepIndex, profile) {
   const errors = []
   switch (stepIndex) {
@@ -88,13 +58,8 @@ export function validateStep(stepIndex, profile) {
         if (!isValidUrl(link)) errors.push('Invalid GitHub URL: ' + link)
       }
       break
-    case 4: {
-      const sectionErrors = validateQuestions(profile, QUESTIONS)
-      if (sectionErrors.length > 0) {
-        errors.push(`Please answer all ${QUESTIONS.length} questions across both sections.`)
-      }
-      break
-    }
+    // The questionnaire is optional: an unanswered question is unknown, never an error.
+    case 4: break
     case 5: break
   }
   return { valid: errors.length === 0, errors }
