@@ -37,11 +37,31 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   // The profile as it was when this edit began, for Cancel. Nothing is kept in onboarding.
   const [snapshot] = useState(() => (mode === 'edit' ? takeProfileSnapshot(profile) : null))
   const [errors, setErrors] = useState([])
+  // Counts failed Continue presses, so the form shows field errors and focus moves to the first one.
+  const [failed, setFailed] = useState({ key: null, count: 0 })
   const [importBusy, setImportBusy] = useState(false)
   const [questionnaireIndex, setQuestionnaireIndex] = useState(0)
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
 
   const minStep = isEdit ? EDIT_START_STEP : 0
+  const stepKey = `${currentStep}:${questionnaireIndex}`
+  const showFieldErrors = failed.key === stepKey
+
+  const fail = (errs) => {
+    setErrors(errs)
+    setFailed((f) => ({ key: stepKey, count: f.count + 1 }))
+  }
+  const clearFailed = () => setFailed((f) => ({ ...f, key: null }))
+
+  // After a failed Continue, focus the first field the form marked invalid.
+  useEffect(() => {
+    if (!failed.key) return
+    const first = document.querySelector('[aria-invalid="true"], [data-invalid="true"]')
+    if (first) {
+      first.focus()
+      first.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    }
+  }, [failed.count]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isEdit && currentStep < EDIT_START_STEP) {
@@ -60,41 +80,46 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
     if (currentStep === QUESTIONNAIRE_STEP) {
       const currentQ = QUESTIONS[questionnaireIndex]
       const { valid, errors: errs } = validateQuestion(profile, currentQ.id)
-      if (!valid) { setErrors(errs); return }
+      if (!valid) { fail(errs); return }
       if (questionnaireIndex < QUESTION_COUNT - 1) {
         const nextIndex = questionnaireIndex + 1
         if (currentQ.section === 1 && QUESTIONS[nextIndex].section === 2) {
           const sectionCheck = validateQuestionnaireSection(1, profile)
-          if (!sectionCheck.valid) { setErrors(sectionCheck.errors); return }
+          if (!sectionCheck.valid) { fail(sectionCheck.errors); return }
         }
         setErrors([])
+        clearFailed()
         setQuestionnaireIndex(nextIndex)
         scrollToTop()
         return
       }
       const { valid: allValid, errors: allErrs } = validateStep(QUESTIONNAIRE_STEP, profile)
-      if (!allValid) { setErrors(allErrs); return }
+      if (!allValid) { fail(allErrs); return }
       setErrors([])
+      clearFailed()
       setStep(currentStep + 1)
       scrollToTop()
       return
     }
 
     const { valid, errors: errs } = validateStep(currentStep, profile)
-    if (!valid) { setErrors(errs); return }
+    if (!valid) { fail(errs); return }
     setErrors([])
+    clearFailed()
     if (currentStep < TOTAL_STEPS - 1) setStep(currentStep + 1)
   }
 
   const goBack = () => {
     if (currentStep === QUESTIONNAIRE_STEP && questionnaireIndex > 0) {
       setErrors([])
+      clearFailed()
       setQuestionnaireIndex(questionnaireIndex - 1)
       scrollToTop()
       return
     }
 
     setErrors([])
+    clearFailed()
     if (currentStep > minStep) {
       if (currentStep === QUESTIONNAIRE_STEP) setQuestionnaireIndex(0)
       setStep(currentStep - 1)
@@ -117,12 +142,14 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
 
   const jumpToStep = (step) => {
     setErrors([])
+    clearFailed()
     setStep(step)
     scrollToTop()
   }
 
   const jumpToQuestion = (index) => {
     setErrors([])
+    clearFailed()
     setQuestionnaireIndex(index)
     scrollToTop()
   }
@@ -131,11 +158,12 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
     switch (currentStep) {
       case 0: return <WelcomeStep onNext={goNext} onDemoComplete={onComplete} />
       case 1: return <ImportWizard onBusyChange={setImportBusy} onManual={() => jumpToStep(2)} onSaved={() => jumpToStep(2)} />
-      case 2: return <ProfileForm />
+      case 2: return <ProfileForm showErrors={showFieldErrors} />
       case 3: return <RepositoryForm />
       case 4: return <QuestionnaireForm
         questionIndex={questionnaireIndex}
         onJumpToQuestion={isEdit ? jumpToQuestion : undefined}
+        showErrors={showFieldErrors}
       />
       case 5: return (
         <ReviewScreen

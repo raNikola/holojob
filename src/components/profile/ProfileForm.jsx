@@ -1,11 +1,13 @@
 import { Plus, Trash2 } from 'lucide-react'
 import Card from '../ui/Card'
+import { RequiredNote } from '../ui/RequiredMark'
 import Input from '../ui/Input'
 import TagInput from '../ui/TagInput'
 import RoleCombobox from '../ui/RoleCombobox'
 import ConfidenceTag from '../ui/ConfidenceTag'
 import SelectField from '../ui/SelectField'
 import { useProfile } from '../../context/ProfileContext'
+import { REQUIRED_PROFILE_FIELDS, profileFieldErrors } from '../../utils/validators'
 import { LANGUAGE_PROFICIENCIES } from '../../utils/languages'
 import { AUTHORIZATION_BASES, RELOCATION_OPTIONS, REMOTE } from '../../utils/workAuthorization'
 import { ROLE_FAMILY_IDS, ROLE_FAMILY_LABELS } from '../../utils/roleFamily'
@@ -173,11 +175,15 @@ function LanguageEditor({ languages = [], onChange }) {
   )
 }
 
-export default function ProfileForm() {
+// showErrors turns on after a failed Continue; until then no field is red.
+export default function ProfileForm({ showErrors = false }) {
   const { profile, updateProfile, markFieldEdited } = useProfile()
   const conf = profile._confidence || {}
   const bp = profile.basicProfile
   const pd = profile.resume.parsedData
+  const fieldErrors = showErrors ? profileFieldErrors(bp) : {}
+  // Props every field gets: its required mark and, after a failed Continue, its error.
+  const fieldProps = (field) => ({ required: REQUIRED_PROFILE_FIELDS.includes(field), error: fieldErrors[field] })
 
   const setBasic = (field, value) => {
     markFieldEdited(field)
@@ -200,14 +206,15 @@ export default function ProfileForm() {
 
   return (
     <div className="space-y-6">
+      <RequiredNote />
       <Card title="Basic information" description="Review autofilled fields from your resume. Edit anything that looks wrong.">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Input label="Full name" value={bp.fullName} onChange={(e) => setBasic('fullName', e.target.value)} confidenceTag={<ConfidenceTag fieldKey="fullName" confidence={conf.fullName} />} />
-          <Input label="Email" type="email" value={bp.email} onChange={(e) => setBasic('email', e.target.value)} confidenceTag={<ConfidenceTag fieldKey="email" confidence={conf.email} />} />
-          <Input label="Phone" value={bp.phone} onChange={(e) => setBasic('phone', e.target.value)} confidenceTag={<ConfidenceTag fieldKey="phone" confidence={conf.phone} />} />
+          <Input label="Full name" {...fieldProps('fullName')} value={bp.fullName} onChange={(e) => setBasic('fullName', e.target.value)} confidenceTag={<ConfidenceTag fieldKey="fullName" confidence={conf.fullName} />} />
+          <Input label="Email" {...fieldProps('email')} type="email" value={bp.email} onChange={(e) => setBasic('email', e.target.value)} confidenceTag={<ConfidenceTag fieldKey="email" confidence={conf.email} />} />
+          <Input label="Phone" {...fieldProps('phone')} value={bp.phone} onChange={(e) => setBasic('phone', e.target.value)} confidenceTag={<ConfidenceTag fieldKey="phone" confidence={conf.phone} />} />
           <Input label="Location" value={bp.location} onChange={(e) => setBasic('location', e.target.value)} confidenceTag={<ConfidenceTag fieldKey="location" confidence={conf.location} />} />
-          <Input label="Current role" value={bp.currentRole} onChange={(e) => setBasic('currentRole', e.target.value)} confidenceTag={<ConfidenceTag fieldKey="currentRole" confidence={conf.currentRole} />} />
-          <Input label="Experience (years)" value={bp.experienceYears} onChange={(e) => setBasic('experienceYears', e.target.value)} confidenceTag={<ConfidenceTag fieldKey="experienceYears" confidence={conf.experienceYears} />} />
+          <Input label="Current role" {...fieldProps('currentRole')} value={bp.currentRole} onChange={(e) => setBasic('currentRole', e.target.value)} confidenceTag={<ConfidenceTag fieldKey="currentRole" confidence={conf.currentRole} />} />
+          <Input label="Experience (years)" {...fieldProps('experienceYears')} value={bp.experienceYears} onChange={(e) => setBasic('experienceYears', e.target.value)} confidenceTag={<ConfidenceTag fieldKey="experienceYears" confidence={conf.experienceYears} />} />
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
@@ -242,6 +249,7 @@ export default function ProfileForm() {
         <div className="mt-4 space-y-4">
           <RoleCombobox
             label="Target roles"
+            {...fieldProps('targetRoles')}
             selected={bp.targetRoles}
             onChange={(v) => setBasic('targetRoles', v)}
             hint="Search and select from 600+ tech roles, or add custom titles."

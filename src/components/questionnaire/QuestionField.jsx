@@ -4,7 +4,7 @@ import Textarea from '../ui/Textarea'
 import { SKILLS_DICTIONARY } from '../../data/skillsDictionary'
 import { joinAnswerList as joinAnswer, parseAnswerList as parseAnswer } from '../../utils/answerList'
 
-export default function QuestionField({ question, answer, onChange, profile, allParsedSkills = [], repoProjects = [] }) {
+export default function QuestionField({ error, question, answer, onChange, profile, allParsedSkills = [], repoProjects = [] }) {
   const label = `${question.id}. ${question.text}`
   // allParsedSkills is the merged set from resume + candidate-intel + project-intel
   // Fall back to resume-only if the parent hasn't computed it yet
@@ -17,7 +17,10 @@ export default function QuestionField({ question, answer, onChange, profile, all
     case 'single':
       return (
         <SelectField
+          id={`question-${question.id}`}
           label={label}
+          required
+          error={error}
           value={answer || ''}
           onChange={onChange}
           options={question.options}
@@ -28,6 +31,8 @@ export default function QuestionField({ question, answer, onChange, profile, all
       return (
         <MultiSelectField
           label={label}
+          required
+          error={error}
           selected={parseAnswer(answer)}
           onChange={(vals) => onChange(joinAnswer(vals))}
           options={question.options}
@@ -38,6 +43,8 @@ export default function QuestionField({ question, answer, onChange, profile, all
       return (
         <MultiSelectField
           label={label}
+          required
+          error={error}
           hint="Skills from your resume and repositories are auto-selected. Deselect anything wrong, or add more."
           selected={parseAnswer(answer)}
           onChange={(vals) => onChange(joinAnswer(vals))}
@@ -56,6 +63,8 @@ export default function QuestionField({ question, answer, onChange, profile, all
       return (
         <MultiSelectField
           label={label}
+          required
+          error={error}
           hint={repoProjects.length
             ? 'Projects from your resume and GitHub repos. Select those you want featured.'
             : 'Select parsed projects from your resume and themes that describe why you\'re proud.'}
@@ -71,6 +80,8 @@ export default function QuestionField({ question, answer, onChange, profile, all
       return (
         <Textarea
           label={label}
+          required
+          error={error}
           value={answer || ''}
           onChange={(e) => onChange(e.target.value)}
           rows={4}
