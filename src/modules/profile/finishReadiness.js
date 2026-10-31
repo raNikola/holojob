@@ -14,7 +14,7 @@ export function checkFinishReadiness(profile) {
   const resume = profile?.resume || {}
   const hasResume = isNonEmpty(resume.rawText) || (resume.parsedData?.skills?.length > 0)
   if (!hasResume) {
-    return { ready: false, step: IMPORT_STEP, fieldErrors: {}, errors: ['Bring in your history first: upload a file, paste text, or add your skills.'] }
+    return { ready: false, step: IMPORT_STEP, fieldErrors: {}, errors: ['A résumé or at least one skill is needed before you can finish. Upload or paste your history on this step, or choose Enter manually and add skills under Parsed resume data on the Profile step.'] }
   }
   return { ready: true, step: null, fieldErrors: {}, errors: [] }
 }
