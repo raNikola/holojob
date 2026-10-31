@@ -19,7 +19,8 @@ Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intell
     "seniorityLevel": "<string>",
     "oneLinePitch": "<string>",
     "careerNarrative": "<string>",
-    "positioningStatement": "<string>"
+    "positioningStatement": "<string>",
+    "unknown": ["careerNarrative|positioningStatement"]
   },
   "roleStrategy": {
     "primaryTargetRoles": [
@@ -271,7 +272,8 @@ Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intell
       {
         "id": "<number>",
         "question": "<string>",
-        "answer": "<string>"
+        "answer": "<string>",
+        "source?": "resume"
       }
     ]
   },
@@ -282,7 +284,9 @@ Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intell
     "questionnaireVersion": "<string>",
     "lastStep": "<number>",
     "onboardingComplete": "<boolean>",
-    "completedAt": "<string>"
+    "completedAt": "<string>",
+    "onboardingFinishedEarly?": "<boolean>",
+    "completeProfileDismissedAt?": "<string>"
   }
 }
 ```
@@ -317,6 +321,8 @@ Fields that exist in the browser profile and appear in the disk mirror only afte
 ```
 
 `profile.resume` is always a copy of the default `cvLibrary` entry. List-type questionnaire answers are stored one entry per line with a trailing newline.
+
+The questionnaire is optional. A skipped question has no entry (an emptied answer removes its entry; an empty string is never stored), so the unknown list is derived: the 17 questions minus those with a non-empty `answer`. `source: "resume"` marks an answer seeded from the résumé (questions 2 and 5); editing it replaces the entry without `source`, which confirms it. `onboardingFinishedEarly` is set when onboarding completed with questions still unknown; `completeProfileDismissedAt` records "Not now" on the Complete your profile card. In the intelligence file, `candidateSummary.unknown` lists summary fields left empty because nothing answers them yet; no filler text is stored.
 
 
 ## Import draft (transient)
