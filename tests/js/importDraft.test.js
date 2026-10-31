@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   BASIC_FIELDS,
+  addEntry,
   applyImportDraft,
   defaultChoices,
   deriveWorkExperience,
   effectiveSectionChoice,
+  removeEntry,
+  willBeActive,
   withBasic,
+  withEntry,
   withSection,
 } from '../../src/modules/profile/importDraft.js'
 import { ensureCvLibrary } from '../../src/utils/cvLibrary.js'
@@ -202,5 +206,56 @@ describe('withSection', () => {
     const next = withSection(draft(), 'experience', ['Engineer at Acme'])
     expect(next.parsedData.experienceDetail).toEqual([])
     expect(next.parsedData.workExperience).toEqual(['Engineer at Acme'])
+  })
+})
+
+describe('experience entry helpers', () => {
+  const twoEntries = () => ({
+    ...draft(),
+    parsedData: { ...draft().parsedData, experienceDetail: [
+      { title: 'A', company: 'One', start: '2019', end: '2020', bullets: ['x'] },
+      { title: 'B', company: 'Two', start: '2020', end: '2021', bullets: ['y'] },
+      { title: 'C', company: 'Three', start: '2021', end: '2022', bullets: ['z'] },
+    ] },
+    confidence: { 'experienceDetail.0': 'medium', 'experienceDetail.1': 'low', 'experienceDetail.2': 'medium', skills: 'medium' },
+  })
+
+  it('withEntry drops the confidence of the edited entry only', () => {
+    const next = withEntry(twoEntries(), 1, { title: 'B2', company: 'Two', start: '2020', end: '2021', bullets: ['y'] })
+    expect(next.confidence).toEqual({ 'experienceDetail.0': 'medium', 'experienceDetail.2': 'medium', skills: 'medium' })
+    expect(next.parsedData.workExperience[1]).toBe('B2 — Two | 2020 – 2021 | y.')
+  })
+
+  it('removeEntry moves the later confidence up with its entry', () => {
+    const next = removeEntry(twoEntries(), 0)
+    expect(next.parsedData.experienceDetail.map((e) => e.title)).toEqual(['B', 'C'])
+    expect(next.confidence).toEqual({ 'experienceDetail.0': 'low', 'experienceDetail.1': 'medium', skills: 'medium' })
+  })
+
+  it('addEntry appends a blank entry that saving then leaves out', () => {
+    const added = addEntry(twoEntries())
+    expect(added.parsedData.experienceDetail).toHaveLength(4)
+    const profile = emptyProfile()
+    const next = applyImportDraft(profile, added, { basics: {}, sections: { experience: 'add' } }, options)
+    expect(next.resume.parsedData.experienceDetail.map((e) => e.title)).toEqual(['A', 'B', 'C'])
+  })
+})
+
+describe('saving cleans what the user typed', () => {
+  it('trims lines and drops empty ones and empty bullets', () => {
+    const typed = withSection(withSection(draft(), 'skills', ['  Rust ', '', 'Zig']), 'experience', [
+      { title: ' Lead ', company: '', start: '2020', end: '', bullets: ['', ' shipped ', ''] },
+    ])
+    const profile = emptyProfile()
+    const next = applyImportDraft(profile, typed, { basics: {}, sections: { skills: 'add', experience: 'add' } }, options)
+    expect(next.resume.parsedData.skills).toEqual(['Rust', 'Zig'])
+    expect(next.resume.parsedData.experienceDetail).toEqual([{ title: 'Lead', company: '', start: '2020', end: '', bullets: ['shipped'] }])
+  })
+})
+
+describe('willBeActive', () => {
+  it('is true only for a profile with no CV', () => {
+    expect(willBeActive(emptyProfile())).toBe(true)
+    expect(willBeActive(profileWithCv())).toBe(false)
   })
 })
