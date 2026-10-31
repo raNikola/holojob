@@ -276,7 +276,7 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion 
         <Card className="!p-4">
           {isDerived(currentQuestion.id) && (
             <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
-              Pre-filled from your résumé, not confirmed by you. Change it, or press Continue to keep it as a suggestion.
+              Pre-filled from your skills, not confirmed by you. Change it, or press Continue to keep it as a suggestion.
             </p>
           )}
           <QuestionField
