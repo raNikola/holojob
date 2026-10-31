@@ -124,6 +124,14 @@ export function ProfileProvider({ children }) {
     }))
   }, [])
 
+  // "Not now" on the Complete your profile card.
+  const dismissCompleteProfile = useCallback(() => {
+    setProfile((prev) => saveProfile({
+      ...prev,
+      meta: { ...prev.meta, completeProfileDismissedAt: new Date().toISOString() },
+    }))
+  }, [])
+
   const startProfileEdit = useCallback((step = 1) => {
     setCurrentStep(step)
     setProfile((prev) => saveProfile({ ...prev, meta: { ...prev.meta, lastStep: step } }))
@@ -146,6 +154,7 @@ export function ProfileProvider({ children }) {
       markFieldEdited,
       resetProfile,
       markOnboardingComplete,
+      dismissCompleteProfile,
       startProfileEdit,
       restoreProfile,
       cvActions,

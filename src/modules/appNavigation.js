@@ -21,6 +21,7 @@ export const VIEW_STORAGE_KEY = 'job-dashboard-active-view'
 export const JOBS_TAB_STORAGE_KEY = 'job-dashboard-jobs-tab'
 export const SETTINGS_CATEGORY_STORAGE_KEY = 'job-dashboard-settings-category'
 export const OPEN_SETTINGS_EVENT = 'holojob:open-settings'
+export const OPEN_QUESTIONNAIRE_EVENT = 'holojob:open-questionnaire'
 
 const SHELL_VIEWS = new Set([
   VIEWS.DASHBOARD,
@@ -147,6 +148,11 @@ export function openSettings(sectionId) {
     pendingSettingsSection = section.id
   }
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { sectionId } }))
+}
+
+/** Opens the profile editor on the questionnaire step; App listens. */
+export function openQuestionnaire() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(OPEN_QUESTIONNAIRE_EVENT))
 }
 
 export const NAV_ITEMS = [

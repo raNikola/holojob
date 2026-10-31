@@ -3,6 +3,7 @@ import { Copy, Download, Loader2, Search, Trash2, Upload } from 'lucide-react'
 import Card from '../ui/Card'
 import AISettingsPanel from '../ai/AISettingsPanel'
 import SecretsPanel from './SecretsPanel'
+import CompleteProfilePanel from './CompleteProfilePanel'
 import ScoringWeightsPanel from './ScoringWeightsPanel'
 import ApplicationMigrationPanel from './ApplicationMigrationPanel'
 import ApplicationSettingsPanel from './ApplicationSettingsPanel'
@@ -246,6 +247,7 @@ const RENDERERS = {
   'application-migration': () => <ApplicationMigrationPanel />,
   'ai-budget': () => <AISettingsPanel />,
   'secrets': () => <SecretsPanel />,
+  'complete-profile': () => <CompleteProfilePanel />,
   'backup-restore': (c) => (
     <Card title="Backup / restore">
       <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">
