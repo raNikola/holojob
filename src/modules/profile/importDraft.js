@@ -87,6 +87,47 @@ export function defaultChoices(profile, draft) {
   return { basics, sections, summary }
 }
 
+/**
+ * Whether the review screen has a decision to offer for a basic field: only when the profile holds a
+ * different value. An empty field (or a draft value equal to the current one) has nothing to decide.
+ */
+export function basicNeedsChoice(profile, draft, field) {
+  const incoming = text(draft?.basicProfile?.[field])
+  const current = text(profile.basicProfile?.[field])
+  return Boolean(incoming && current && norm(incoming) !== norm(current)) && !isEdited(profile, field)
+}
+
+/** The same for the summary. */
+export function summaryNeedsChoice(profile, draft) {
+  const incoming = text(draft?.summary)
+  const current = liveSummary(profile)
+  return Boolean(incoming && current && norm(incoming) !== norm(current)) && !isEdited(profile, 'summary')
+}
+
+/** A section has a decision to offer only when the profile already holds entries (or the user edited it). */
+export function sectionNeedsChoice(profile, id) {
+  const { editedKey } = SECTIONS.find((s) => s.id === id)
+  return liveCount(profile, id) > 0 || isEdited(profile, editedKey)
+}
+
+/**
+ * The choices to save with. Where the screen shows no dropdown because the profile has nothing there, the
+ * imported value is applied (use / add), whatever the choice stored at parse time said: the user may have
+ * typed into a field that was empty in the draft. Every other choice is passed through unchanged.
+ */
+export function resolveChoices(profile, draft, choices) {
+  const basics = { ...choices?.basics }
+  for (const field of BASIC_FIELDS) {
+    if (!text(profile.basicProfile?.[field]) && !isEdited(profile, field)) basics[field] = 'use'
+  }
+  const sections = { ...choices?.sections }
+  for (const { id } of SECTIONS) {
+    if (!sectionNeedsChoice(profile, id)) sections[id] = 'add'
+  }
+  const summary = !liveSummary(profile) && !isEdited(profile, 'summary') ? 'use' : choices?.summary
+  return { ...choices, basics, sections, summary }
+}
+
 /** A field or section the user edited is never replaced: the choice falls back to keeping it. */
 export function effectiveBasicChoice(profile, field, choice) {
   return isEdited(profile, field) ? 'keep' : choice === 'use' ? 'use' : 'keep'
