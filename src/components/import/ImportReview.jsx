@@ -22,8 +22,8 @@ import {
   withSection,
 } from '../../modules/profile/importDraft'
 
-const BASIC_LABELS = { fullName: 'Full name', email: 'Email', phone: 'Phone', location: 'Location', currentRole: 'Current role' }
-const LEVELS = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' }
+const BASIC_LABELS = { fullName: 'Full name', email: 'Email', phone: 'Phone', location: 'Location', currentRole: 'Current role', experienceYears: 'Experience (years)' }
+const LEVELS = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence', derived: 'Derived from the text' }
 const selectClass = 'rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm dark:border-stone-700 dark:bg-stone-950 dark:text-stone-50'
 
 function Confidence({ level }) {
@@ -94,9 +94,18 @@ function ExperienceEntries({ draft, onDraftChange }) {
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Title" id={`exp-title-${i}`} value={entry.title} onChange={(e) => change(i, { title: e.target.value })} />
             <Input label="Company" id={`exp-company-${i}`} value={entry.company} onChange={(e) => change(i, { company: e.target.value })} />
+            <Input label="Location" id={`exp-location-${i}`} value={entry.location || ''} onChange={(e) => change(i, { location: e.target.value })} />
             <Input label="Start" id={`exp-start-${i}`} value={entry.start} onChange={(e) => change(i, { start: e.target.value })} />
             <Input label="End" id={`exp-end-${i}`} value={entry.end} onChange={(e) => change(i, { end: e.target.value })} />
           </div>
+          <Textarea
+            className="mt-3"
+            label="Description"
+            id={`exp-description-${i}`}
+            rows={3}
+            value={entry.description || ''}
+            onChange={(e) => change(i, { description: e.target.value })}
+          />
           <Textarea
             className="mt-3"
             label="Bullets (one per line)"
@@ -121,7 +130,7 @@ function SectionBody({ id, draft, onDraftChange }) {
   return <LineList items={draftItems(draft, id)} placeholder="Entry" onChange={(items) => onDraftChange(withSection(draft, id, items))} />
 }
 
-export default function ImportReview({ draft, profile, choices, onDraftChange, onChoicesChange, onSave, onDiscard }) {
+export default function ImportReview({ draft, profile, choices, onDraftChange, onChoicesChange, onSave, onDiscard, saving = false }) {
   const source = IMPORT_SOURCES[draft.source] || { name: 'Imported text' }
   const setBasicChoice = (field, value) => onChoicesChange({ ...choices, basics: { ...choices.basics, [field]: value } })
   const setSectionChoice = (id, value) => onChoicesChange({ ...choices, sections: { ...choices.sections, [id]: value } })
@@ -170,6 +179,7 @@ export default function ImportReview({ draft, profile, choices, onDraftChange, o
             )
           })}
         </div>
+        {draft.headline && <p className="mt-4 text-xs text-stone-500 dark:text-stone-400">Headline in the document: "{draft.headline}". Target roles are not guessed from a CV; you choose them in your profile.</p>}
       </Card>
 
       {SECTIONS.map(({ id, label, editedKey }) => {
@@ -223,11 +233,11 @@ export default function ImportReview({ draft, profile, choices, onDraftChange, o
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4 dark:border-stone-800">
         <p className="text-sm text-stone-600 dark:text-stone-400">
-          Saved as "{source.name}" in My CVs. {willBeActive(profile) ? 'You have no CV yet, so it becomes your active CV.' : 'It does not become your active CV.'}
+          Saved as "{(source.pdf && draft.fileName) || source.name}" in My CVs. {willBeActive(profile) ? 'You have no CV yet, so it becomes your active CV.' : 'It does not become your active CV.'}
         </p>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={onDiscard}>Discard</Button>
-          <Button onClick={onSave}>Save to my profile</Button>
+          <Button variant="ghost" onClick={onDiscard} disabled={saving}>Discard</Button>
+          <Button onClick={onSave} disabled={saving}>{saving ? 'Saving...' : 'Save to my profile'}</Button>
         </div>
       </div>
     </div>

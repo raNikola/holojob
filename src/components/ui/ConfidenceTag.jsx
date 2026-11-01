@@ -1,7 +1,7 @@
 import Badge from './Badge'
 import { useProfile } from '../../context/ProfileContext'
 
-const LABELS = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' }
+const LABELS = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence', derived: 'Derived from the text' }
 
 export default function ConfidenceTag({ fieldKey, confidence }) {
   const { profile } = useProfile()
