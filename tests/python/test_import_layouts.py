@@ -151,3 +151,30 @@ def test_a_wrapped_title_case_line_inside_a_bullet_is_not_a_sub_heading():
     text = "EXPERIENCE\nHead of Product | Acme Corp\nJan 2020 – Present\n• Worked with the\nCustomer Success Team\n• Grew revenue by 10%."
     bullets = parse_text(text)["parsedData"]["experienceDetail"][0]["bullets"]
     assert bullets == ["Worked with the Customer Success Team", "Grew revenue by 10%."]
+
+
+SUMMARIES = {
+    "title_comma_company_pipe": "Product leader with 12 years in B2B software. Builds teams and ships platforms that customers pay for.",
+    "linkedin_pdf": "Product leader with 12 years in B2B software. Builds teams and ships platforms.",
+    "two_column_flattened": "Product leader with 12 years in B2B software.",
+    "company_dash_title_dates": "Product leader with 12 years in B2B software.",
+    "no_bullets": "Product leader with 12 years in B2B software.",
+}
+
+
+@pytest.mark.parametrize("name", [pytest.param(n, id=n) for n in SUMMARIES])
+def test_summary_fills_its_own_field_under_any_heading(name):
+    """Summary, Profile, About and About me all name the section; wrapped lines are one paragraph."""
+    draft = load(name)
+    assert draft["summary"] == SUMMARIES[name]
+    assert not [u for u in draft["unplaced"] if "product leader" in u["text"].lower()]
+
+
+def test_a_blank_line_is_a_paragraph_break_in_the_summary():
+    draft = parse_text("SUMMARY\nFirst paragraph line one\nline two.\n\nSecond paragraph.\n\nEXPERIENCE\nHead of Product | Acme Corp\nJan 2020 – Present\n• Did it.")
+    assert draft["summary"] == "First paragraph line one line two.\nSecond paragraph."
+
+
+def test_no_summary_section_means_an_empty_summary():
+    draft = load("date_first")
+    assert draft["summary"] == "" and "summary" not in draft["confidence"]
