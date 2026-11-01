@@ -66,6 +66,11 @@ export function liveCount(profile, id) {
   return list(parsed[id]).length
 }
 
+/** The summary text the profile holds now (`resume.parsedData.summary`); empty when it has none. */
+export function liveSummary(profile) {
+  return text(profile.resume?.parsedData?.summary)
+}
+
 /** Defaults: fill only what is empty and was not edited by the user; everything else is kept. */
 export function defaultChoices(profile, draft) {
   const basics = {}
@@ -78,12 +83,18 @@ export function defaultChoices(profile, draft) {
     const empty = liveCount(profile, id) === 0 && !isEdited(profile, editedKey)
     sections[id] = draftItems(draft, id).length && empty ? 'add' : 'keep'
   }
-  return { basics, sections }
+  const summary = text(draft?.summary) && !liveSummary(profile) && !isEdited(profile, 'summary') ? 'use' : 'keep'
+  return { basics, sections, summary }
 }
 
 /** A field or section the user edited is never replaced: the choice falls back to keeping it. */
 export function effectiveBasicChoice(profile, field, choice) {
   return isEdited(profile, field) ? 'keep' : choice === 'use' ? 'use' : 'keep'
+}
+
+/** The summary is one value, chosen like a basic field: filled, or kept as it is; an edited summary is never replaced. */
+export function effectiveSummaryChoice(profile, choice) {
+  return isEdited(profile, 'summary') ? 'keep' : choice === 'use' ? 'use' : 'keep'
 }
 
 export function effectiveSectionChoice(profile, id, choice) {
@@ -128,6 +139,7 @@ function entryParsedData(draft) {
   const parsed = draft.parsedData || {}
   const entries = cleanEntries(parsed.experienceDetail)
   return {
+    summary: text(draft.summary),
     skills: cleanLines(parsed.skills),
     projects: cleanLines(parsed.projects),
     education: cleanLines(parsed.education),
@@ -169,6 +181,11 @@ export function applyImportDraft(profile, draft, choices, { now = new Date(), ma
       basicProfile[field] = value
       note(field, true)
     }
+  }
+
+  if (incoming.summary && effectiveSummaryChoice(profile, choices?.summary) === 'use') {
+    parsedData.summary = incoming.summary
+    note('summary', true)
   }
 
   for (const { id, editedKey } of SECTIONS) {
@@ -222,6 +239,12 @@ export function applyImportDraft(profile, draft, choices, { now = new Date(), ma
 export function withBasic(draft, field, value) {
   const { [field]: _dropped, ...confidence } = draft.confidence || {}
   return { ...draft, basicProfile: { ...draft.basicProfile, [field]: value }, confidence }
+}
+
+/** A copy of the draft with the summary changed by the user; the parser's confidence for it no longer applies. */
+export function withSummary(draft, value) {
+  const { summary: _dropped, ...confidence } = draft.confidence || {}
+  return { ...draft, summary: value, confidence }
 }
 
 /** A copy of the draft with one section's items replaced by the user's edit. */
