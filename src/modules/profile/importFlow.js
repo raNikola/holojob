@@ -1,7 +1,7 @@
 // The two steps around the import review screen, with their effects passed in so they can be tested
 // without a browser: reading a source into a draft (writes nothing) and saving a reviewed draft.
 
-import { applyImportDraft, draftParsedData } from './importDraft.js'
+import { applyImportDraft, draftParsedData, resolveChoices } from './importDraft.js'
 
 export const PDF_SOURCES = ['resume_pdf', 'linkedin_pdf']
 
@@ -32,7 +32,7 @@ export async function saveReviewedDraft({ draft, choices, file, upload, updatePr
       if (id) stored = { id, filePath: `profile/cvs/${id}.pdf` }
     } catch { /* the entry is kept without a stored file */ }
   }
-  updateProfile((prev) => applyImportDraft(prev, draft, choices, stored ? { file: stored } : {}))
+  updateProfile((prev) => applyImportDraft(prev, draft, resolveChoices(prev, draft, choices), stored ? { file: stored } : {}))
   return { stored: Boolean(stored) }
 }
 

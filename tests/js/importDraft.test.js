@@ -3,6 +3,10 @@ import {
   BASIC_FIELDS,
   addEntry,
   applyImportDraft,
+  basicNeedsChoice,
+  resolveChoices,
+  sectionNeedsChoice,
+  summaryNeedsChoice,
   defaultChoices,
   deriveWorkExperience,
   educationReading,
@@ -351,5 +355,70 @@ describe('education reading', () => {
     const next = applyImportDraft(emptyProfile(), withDetail(), { basics: {}, sections: { education: 'add' } }, options)
     expect(next.resume.parsedData.education).toEqual(['BSc — Springfield University, 2012 - 2016'])
     expect(JSON.stringify(next)).not.toContain('educationDetail')
+  })
+})
+
+describe('when the review screen offers a decision', () => {
+  it('basic field: none for an empty profile field, one for a different value, none for an equal one', () => {
+    const d = draft()
+    expect(basicNeedsChoice(emptyProfile(), d, 'fullName')).toBe(false)
+    expect(basicNeedsChoice(profileWithCv(), d, 'fullName')).toBe(true)
+    const same = profileWithCv({ basicProfile: { ...profileWithCv().basicProfile, fullName: ' jane  sample ' } })
+    expect(basicNeedsChoice(same, d, 'fullName')).toBe(false)
+  })
+
+  it('summary follows the same rule', () => {
+    const d = { ...draft(), summary: 'New summary' }
+    const withSummary = (text) => ({ ...emptyProfile(), resume: { ...emptyProfile().resume, parsedData: { summary: text } } })
+    expect(summaryNeedsChoice(emptyProfile(), d)).toBe(false)
+    expect(summaryNeedsChoice(withSummary('Old summary'), d)).toBe(true)
+    expect(summaryNeedsChoice(withSummary('New summary'), d)).toBe(false)
+  })
+
+  it('section: none while the profile holds 0 entries, one once it holds some', () => {
+    expect(sectionNeedsChoice(emptyProfile(), 'skills')).toBe(false)
+    expect(sectionNeedsChoice(profileWithCv(), 'skills')).toBe(true)
+  })
+})
+
+describe('resolveChoices and the saved output', () => {
+  it('applies a value typed into a field that was empty in the draft, with no dropdown', () => {
+    const profile = emptyProfile()
+    const d = withBasic({ ...draft(), basicProfile: { ...draft().basicProfile, phone: '' } }, 'phone', '+381 60 000 000')
+    const stored = defaultChoices(profile, { ...d, basicProfile: { ...d.basicProfile, phone: '' } })
+    expect(stored.basics.phone).toBe('keep')
+    const next = applyImportDraft(profile, d, resolveChoices(profile, d, stored), options)
+    expect(next.basicProfile.phone).toBe('+381 60 000 000')
+  })
+
+  it('output for an empty profile equals the old "Fill" / "Add" output', () => {
+    const profile = emptyProfile()
+    const old = applyImportDraft(profile, draft(), defaultChoices(profile, draft()), options)
+    const now = applyImportDraft(profile, draft(), resolveChoices(profile, draft(), defaultChoices(profile, draft())), options)
+    expect(now).toEqual(old)
+  })
+
+  it('leaves the choice alone where there is a decision: keep stays keep, replace stays replace', () => {
+    const profile = profileWithCv()
+    const keep = defaultChoices(profile, draft())
+    // Only fields with nothing to decide change (empty in the profile); the saved output is the same.
+    expect(applyImportDraft(profile, draft(), resolveChoices(profile, draft(), keep), options)).toEqual(applyImportDraft(profile, draft(), keep, options))
+    expect(resolveChoices(profile, draft(), keep).basics).toMatchObject({ fullName: 'keep', email: 'keep', currentRole: 'keep' })
+    expect(resolveChoices(profile, draft(), keep).sections.skills).toBe('keep')
+    const replace = { ...keep, basics: { ...keep.basics, fullName: 'use' }, sections: { ...keep.sections, skills: 'replace' } }
+    expect(applyImportDraft(profile, draft(), resolveChoices(profile, draft(), replace), options))
+      .toEqual(applyImportDraft(profile, draft(), replace, options))
+    const next = applyImportDraft(profile, draft(), resolveChoices(profile, draft(), keep), options)
+    expect(next.basicProfile.fullName).toBe('Existing Person')
+  })
+
+  it('equal value: no decision, the default keeps the identical value', () => {
+    const base = profileWithCv()
+    const profile = { ...base, basicProfile: { ...base.basicProfile, fullName: 'Jane Sample' } }
+    expect(basicNeedsChoice(profile, draft(), 'fullName')).toBe(false)
+    const keep = defaultChoices(profile, draft())
+    expect(keep.basics.fullName).toBe('keep')
+    const next = applyImportDraft(profile, draft(), resolveChoices(profile, draft(), keep), options)
+    expect(next.basicProfile.fullName).toBe('Jane Sample')
   })
 })
