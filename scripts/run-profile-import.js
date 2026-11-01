@@ -72,9 +72,9 @@ function runPythonParser(runner, request) {
   })
 }
 
-const defaultRunners = {
-  paste: (request) => runPythonParser(TEXT_RUNNER, request),
-}
+export const IMPORT_SOURCES = ['paste', 'resume_pdf', 'linkedin_pdf']
+
+const defaultRunners = Object.fromEntries(IMPORT_SOURCES.map((source) => [source, (request) => runPythonParser(TEXT_RUNNER, request)]))
 let runners = defaultRunners
 
 /** Tests inject a runner per source; call with nothing to restore the real ones. */
@@ -84,11 +84,11 @@ export function setImportRunners(next) {
 
 /**
  * Parse one import source into a draft. Writes nothing. The text is checked here
- * (type, size in bytes) and again by the parser.
+ * (type, size in bytes) and again by the parser. A PDF is read in the browser; only its text arrives.
  */
 export async function parseImportSource(source, text) {
-  if (source !== 'paste' || typeof text !== 'string') return { ok: false, code: 'invalid_request' }
+  if (!IMPORT_SOURCES.includes(source) || typeof text !== 'string') return { ok: false, code: 'invalid_request' }
   if (Buffer.byteLength(text, 'utf8') > MAX_PASTE_BYTES) return { ok: false, code: 'too_large' }
   if (!text.trim()) return { ok: false, code: 'empty' }
-  return runners[source]({ text })
+  return runners[source]({ text, source })
 }

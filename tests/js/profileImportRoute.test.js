@@ -32,12 +32,11 @@ function post(body, { type = 'application/json', headers = {} } = {}) {
 
 beforeEach(async () => {
   seen = []
-  setImportRunners({
-    paste: async (request) => {
-      seen.push(request)
-      return { ok: true, draft: { source: 'paste', rawText: request.text } }
-    },
-  })
+  const runner = async (request) => {
+    seen.push(request)
+    return { ok: true, draft: { source: request.source, rawText: request.text } }
+  }
+  setImportRunners({ paste: runner, resume_pdf: runner, linkedin_pdf: runner })
   server = http.createServer(async (req, res) => {
     if (!(await handleApiRoutes(req, res))) { res.statusCode = 404; res.end('{}') }
   })
@@ -52,11 +51,18 @@ afterEach(async () => {
 })
 
 describe('POST /api/profile/import/parse', () => {
-  it('returns the draft the runner made, and gives the runner only the text', async () => {
+  it('returns the draft the runner made, and gives the runner only the text and the source', async () => {
     const res = await post({ source: 'paste', text: 'Jane Sample\nSKILLS\nPython' })
     expect(res.status).toBe(200)
     expect(res.json).toEqual({ ok: true, draft: { source: 'paste', rawText: 'Jane Sample\nSKILLS\nPython' } })
-    expect(seen).toEqual([{ text: 'Jane Sample\nSKILLS\nPython' }])
+    expect(seen).toEqual([{ text: 'Jane Sample\nSKILLS\nPython', source: 'paste' }])
+  })
+
+  it.each(['resume_pdf', 'linkedin_pdf'])('reads the text of a PDF as %s with the same parser and nothing else', async (source) => {
+    const res = await post({ source, text: 'JANE\nSAMPLE', fileName: 'secret-name.pdf', file: 'AAAA' })
+    expect(res.status).toBe(200)
+    expect(res.json.draft.source).toBe(source)
+    expect(seen).toEqual([{ text: 'JANE\nSAMPLE', source }])
   })
 
   it('writes nothing to disk', async () => {
