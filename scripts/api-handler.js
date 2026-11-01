@@ -13,6 +13,7 @@ import { getProjectScanStatus, runProjectScan } from './run-project-scan.js'
 import { runJobImport } from './run-job-import.js'
 import { checkClaudeAuth, ensureClaudeLogin } from './claude-auth.js'
 import { saveProfileToDisk, PROFILE_PATH } from './save-profile.js'
+import { runProfileReset, RESET_CONFIRM_WORD, RESET_ERRORS } from './profile-reset.js'
 import { saveIntelligenceToDisk, INTELLIGENCE_PATH } from './save-intelligence.js'
 import { checkAiFinding, runAiFeature, runAiFeatureStream, runAiChat, getAiStatus, getAiModels } from './run-ai.js'
 import { readAiUsage } from './ai-gate.js'
@@ -619,6 +620,29 @@ export async function handleApiRequest(req, res) {
     } catch (e) {
       sendJson(res, 400, { error: e.message })
     }
+    return true
+  }
+
+  // Moves the profile mirror, the stored CVs and the candidate intelligence into data/profile.bak-<time>.
+  // Fixed answers only; nothing from the body or the disk is echoed.
+  if (url === '/api/profile/reset' && req.method === 'POST') {
+    const fail = (code) => {
+      const { status, error } = RESET_ERRORS[code]
+      sendJson(res, status, { ok: false, code, error })
+    }
+    let body = null
+    try {
+      body = await readBody(req)
+    } catch {
+      body = null
+    }
+    if (body?.confirm !== RESET_CONFIRM_WORD) {
+      fail('not_confirmed')
+      return true
+    }
+    const result = runProfileReset()
+    if (!result.ok) fail(result.code)
+    else sendJson(res, 200, { ok: true, backup: result.backup ? `data/${result.backup}` : null })
     return true
   }
 
