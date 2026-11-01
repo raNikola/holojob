@@ -111,7 +111,14 @@
           "personal information",
           "personal info",
           "personal details",
-          "personal data"
+          "personal data",
+          "details"
+        ],
+        "educationCertifications": [
+          "education and certifications",
+          "education and certificates",
+          "education certifications and training",
+          "education and training and certifications"
         ]
       },
       "unplacedSections": [

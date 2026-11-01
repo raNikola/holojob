@@ -1,0 +1,54 @@
+JANE
+SAMPLE
+TECHNICAL PRODUCT LEADER FOR B2B SaaS PLATFORMS
+
+DETAILS
+Kraków, Poland
+jane.sample@example.com | +48 12 345 6789 | linkedin.com/in/jane-sample
+github.com/janesample | janesample.dev
+
+SUMMARY
+Technical product leader with 10+ years of experience building B2B SaaS platforms.
+Led cross-functional teams of up to 12 people across product, engineering and design.
+
+CORE COMPETENCIES
+Product Strategy, Roadmapping, Stakeholder Management; Discovery | Go-to-Market
+• Agile Delivery • OKRs
+Technical Leadership,
+Team Coaching
+
+TOOLS
+Jira, Monday.com, Node.js, SQL, Figma
+Analytics: Amplitude, Mixpanel, Looker
+Methods: Scrum, Kanban, Design Thinking
+
+WORK EXPERIENCE
+Head of Product
+Northwind Software, Remote
+April 2024 – Present
+Own the product portfolio for a multi-tenant billing platform and report to the CEO. Define
+strategy with the leadership team and align delivery across four squads.
+• Grew annual recurring revenue by 40% in 18 months by repackaging the pricing tiers and
+launching a self-service upgrade path.
+• Introduced quarterly OKRs across product and engineering.
+
+Senior Product Manager | Globex Corp, Belgrade, Serbia
+June 2021 – July 2023
+Led the payments squad through a migration from a monolith to services.
+• Cut checkout failures by 22%.
+• Mentored three junior product managers.
+
+Product Owner
+Initech
+2014 – 2021
+Maintained the backlog for an internal tooling suite used by 300 employees.
+
+EDUCATION & CERTIFICATIONS
+MSc Information Systems, University of Springfield, 2012
+BSc Computer Science
+University of Springfield, 2010
+Certified Scrum Product Owner (CSPO), Scrum Alliance, 2019
+Pragmatic Institute Certified, Pragmatic Institute 2017
+
+LANGUAGES
+English (fluent), Polish (native)
