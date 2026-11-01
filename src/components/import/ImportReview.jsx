@@ -273,7 +273,7 @@ export default function ImportReview({ draft, profile, choices, onDraftChange, o
       {draft.ignored?.length > 0 && (
         <Card title={`Ignored (${draft.ignored.length})`}>
           <ul className="list-inside list-disc text-sm text-stone-600 dark:text-stone-400">
-            {draft.ignored.map((item) => <li key={item.name}>{item.name}: {item.reason}</li>)}
+            {draft.ignored.map((item, i) => <li key={`${item.name}-${i}`}>{item.name}: {item.reason}</li>)}
           </ul>
         </Card>
       )}

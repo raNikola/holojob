@@ -385,7 +385,7 @@ def _take_location(text: str) -> tuple[str, str]:
     if len(parts) >= 2:
         if parts[-1].lower() in _REMOTE_WORDS:
             return ", ".join(parts[:-1]), parts[-1]
-        if len(parts) >= 3 and _place(", ".join(parts[-2:])):
+        if len(parts) >= 3 and not _legal_suffix(parts[-2]) and _place(", ".join(parts[-2:])):  # "Acme Corp, Belgrade" is a company and a city
             return ", ".join(parts[:-2]), ", ".join(parts[-2:])
     return text, ""
 
@@ -692,7 +692,7 @@ def _parse_experience(lines: list[str], unplaced: list[dict], confidence: dict, 
     def read(k: int, loose: bool) -> dict:
         i = starts[k]
         match, remainder, notes, note_place = _date_line_parts(lines[i])
-        candidates = [c for c in heads[k] + ([remainder] if remainder else []) if not _employment(c)]
+        candidates = [c for c in heads[k] + ([remainder] if remainder else []) if not _employment(c) and _tidy(_DURATION.sub(" ", c))]  # "3 years 5 months" is not a header
         location = note_place
         places = [c for c in candidates if _place(c) and len(candidates) > 1]
         if places:
@@ -829,7 +829,7 @@ def split_education(text: str) -> dict:
     "Degree, School, Year" or "School — Degree (2012 - 2016)". The year is the last date range, else the last
     year. A piece with a school word is the school; the piece with a degree word, with the field of study
     after it, is the degree; one unmarked piece beside a school is the degree. Text that does not fall into
-    those places stays whole in `degree` and the other fields stay empty: nothing is guessed."""
+    those places leaves `degree` and `school` empty (the text is in `text` and in the raw text); only the year is kept."""
     clean = " ".join(text.split())
     out = {"text": clean, "degree": "", "school": "", "year": ""}
     years = list(_RANGE.finditer(clean)) or list(_YEAR_IN_TEXT.finditer(clean))
@@ -861,8 +861,7 @@ def split_education(text: str) -> dict:
     if not degree and len(others) == 1 and schools:
         degree, others = others, []
     if others or not pieces or (not degree and not schools):
-        out["degree"] = " ".join(rest.split()).strip(" |·–—-,.;:")
-        out["undecided"] = True
+        out["undecided"] = True  # nothing is guessed: degree and school stay empty, the year (read without doubt) stays
         return out
     out["degree"], out["school"] = ", ".join(degree), schools[0] if schools else ""
     return out

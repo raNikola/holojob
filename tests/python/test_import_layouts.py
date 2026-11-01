@@ -62,9 +62,33 @@ LAYOUTS = {
             ("Senior Product Manager", "Globex Corp", "", "June 2021", "March 2024", 1),
         ],
     },
+    # Layouts the parser does not read yet. Each is a strict xfail below, so a fix shows up as a failure to remove the mark.
+    "linkedin_multi_role": {
+        "source": "linkedin_pdf",
+        "entries": [
+            ("Head of Product", "Northwind Software", "Remote", "April 2024", "Present", 1),
+            ("Senior Product Manager", "Northwind Software", "Remote", "June 2021", "March 2024", 1),
+        ],
+    },
+    "date_first_no_suffix": {
+        "entries": [
+            ("Product Manager", "Northwind", "", "2021", "Present", 1),
+            ("Business Analyst", "Globex", "", "2016", "2021", 1),
+        ],
+    },
+    "company_above_title_below": {
+        "entries": [
+            ("Head of Product", "Northwind Software", "", "April 2024", "Present", 1),
+            ("Senior Product Manager", "Globex Corp", "", "June 2021", "March 2024", 1),
+        ],
+    },
 }
 
-KNOWN_FAILING: dict[str, str] = {}
+KNOWN_FAILING: dict[str, str] = {
+    "linkedin_multi_role:entries": "several roles under one company: the company line is not repeated, so the later roles get no company (a duration line is no longer read as the company)",
+    "date_first_no_suffix:entries": "'Title, Company' beside the dates with no legal suffix and no pipe place stays whole in Title (low, warned): a bare comma is not enough evidence",
+    "company_above_title_below:entries": "company above the dates and title below them (a mixed layout): the title line under the dates is read as description",
+}
 
 
 def load(name: str) -> dict:
@@ -87,7 +111,7 @@ def test_entries(name):
     assert got == LAYOUTS[name]["entries"]
 
 
-@pytest.mark.parametrize("name", cases("entries"))
+@pytest.mark.parametrize("name", [n for n in cases("entries") if f"{n.values[0]}:entries" not in KNOWN_FAILING])
 def test_a_decided_layout_has_no_low_entries_and_no_header_warnings(name):
     draft = load(name)
     levels = [draft["confidence"][f"experienceDetail.{i}"] for i in range(len(LAYOUTS[name]["entries"]))]
@@ -224,12 +248,13 @@ def test_education_line_table(line, degree, school, year):
 
 
 @pytest.mark.parametrize("line", ["MSc Physics, MIT, 2014", "Some Course, Another Thing"])
-def test_an_education_line_that_does_not_fall_into_place_stays_whole(line):
+def test_an_education_line_that_does_not_fall_into_place_leaves_degree_and_school_empty(line):
     from profile_import.text_parser import split_education
 
     got = split_education(line)
-    assert got["undecided"] and got["school"] == ""
-    assert got["degree"].startswith(line.split(",")[0])
+    assert got["undecided"] and got["degree"] == "" and got["school"] == ""
+    assert got["text"] == line  # the line itself is kept as text
+    assert got["year"] == ("2014" if "2014" in line else "")
 
 
 def test_a_degree_with_spaced_initials_is_placed_under_a_combined_heading():
@@ -245,3 +270,8 @@ def test_an_undecided_education_line_warns_by_entry_number_without_quoting_it():
     assert draft["confidence"]["educationDetail.0"] == "low"
     assert any(w.startswith("Education entry 1") for w in draft["warnings"])
     assert not any("MIT" in w for w in draft["warnings"])
+
+
+def test_a_duration_line_is_not_a_company():
+    entries = load("linkedin_multi_role")["parsedData"]["experienceDetail"]
+    assert entries[0]["title"] == "Head of Product" and entries[0]["company"] == "Northwind Software"
