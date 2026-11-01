@@ -653,8 +653,12 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
     nonblank_rank = {i: n for n, i in enumerate(nonblank)}
     first_heading = next((i for i, l in enumerate(scrubbed) if l and _header(l)), len(scrubbed))
     for i in range(first_heading):
-        domainless = _scrub_domains(scrubbed[i], found)
-        if domainless != scrubbed[i]:
+        # Only on a contact line (it already held an e-mail or link) or a line of nothing but domains,
+        # so "socket.io" or "asp.net" in a headingless tech line stays text.
+        probe: dict[str, list[str]] = {"emails": [], "links": []}
+        domainless = _scrub_domains(scrubbed[i], probe)
+        if domainless != scrubbed[i] and (i in changed_lines or not domainless):
+            found["links"].extend(probe["links"])
             scrubbed[i] = domainless
             changed_lines.add(i)
     phone = ""
