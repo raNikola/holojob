@@ -409,6 +409,20 @@ def _heads_before(lines: list[str], index: int, floor: int) -> list[str]:
     return heads
 
 
+def _duration_above(lines: list[str], index: int, floor: int) -> bool:
+    """True when a duration-only line ("3 years 5 months") sits in the header block right above a date line:
+    the total LinkedIn prints under a company that holds several roles. Stops at a blank line or a bullet."""
+    for j in range(index - 1, max(floor, -1), -1):
+        line = lines[j]
+        if not line or _BULLET.match(line):
+            return False
+        if not _tidy(_DURATION.sub(" ", line)):
+            return True
+        if index - j > 4:
+            return False
+    return False
+
+
 def _heads_after(lines: list[str], index: int, limit: int) -> list[str]:
     """Header lines under a date line (the date-first and flattened two-column layouts): up to two lines
     that are not a bullet, a sentence or another date, plus a place line. The first one must name a role."""
@@ -740,7 +754,22 @@ def _parse_experience(lines: list[str], unplaced: list[dict], confidence: dict, 
     # Another entry split on a comma (a legal suffix, a place after a pipe): the same layout is read the same way.
     if any(r["comma"] == "split" for r in results):
         results = [read(k, True) if r["comma"] == "blocked" else r for k, r in enumerate(results)]
+    inherited: list[tuple[int, int]] = []
+    if company_first and side == "above":
+        # LinkedIn lists a company once, with a total duration, then each of its roles. A role with a title and no
+        # company of its own belongs to the group opened by the nearest company line above it.
+        group = -1
+        for k, r in enumerate(results):
+            entry = r["entry"]
+            if entry["company"]:
+                group = k if _duration_above(lines, starts[k], starts[k - 1] if k else -1) else -1
+            elif group >= 0 and entry["title"] and len(heads[k]) == 1 and not r["ambiguous"]:
+                entry["company"] = results[group]["entry"]["company"]
+                r["level"] = "medium"
+                inherited.append((k, group))
     entries = [r["entry"] for r in results]
+    for k, group in inherited:
+        warnings.append(f"Company of experience entry {k + 1} was taken from entry {group + 1} (roles grouped under one company). Check it.")
     for k, r in enumerate(results):
         confidence[f"experienceDetail.{k}"] = r["level"]
         if r["ambiguous"]:
