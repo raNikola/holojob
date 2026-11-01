@@ -1,0 +1,13 @@
+Jordan Example
+jordan.example@example.com
+
+EXPERIENCE
+2021 - Present  Product Manager, Northwind Corp
+• Own the roadmap for the billing platform.
+• Run weekly discovery with ten customers.
+2016 - 2021  Business Analyst, Globex Ltd
+• Wrote requirements for the checkout rebuild.
+• Trained the support team.
+
+EDUCATION
+Software Engineering, Springfield University, 2016
