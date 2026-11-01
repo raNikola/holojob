@@ -178,3 +178,70 @@ def test_a_blank_line_is_a_paragraph_break_in_the_summary():
 def test_no_summary_section_means_an_empty_summary():
     draft = load("date_first")
     assert draft["summary"] == "" and "summary" not in draft["confidence"]
+
+
+# (degree, school, year) of each education entry
+EDUCATION = {
+    "title_comma_company_pipe": [("B. Sc. Software Engineering", "", "2016"), ("M.Sc. Computer Science", "Springfield University", "2018")],
+    "linkedin_pdf": [("Bachelor of Science, Software Engineering", "Springfield University", "2012 - 2016")],
+    "date_first": [("Software Engineering", "Springfield University", "2016")],
+    "two_column_flattened": [("Bachelor of Science", "Springfield University", "2012 - 2016")],
+    "company_dash_title_dates": [("BSc Software Engineering", "Springfield University", "2016")],
+    "no_bullets": [("B.Sc. Software Engineering", "", "2016")],
+}
+
+
+@pytest.mark.parametrize("name", [pytest.param(n, id=n) for n in EDUCATION])
+def test_education_is_read_into_degree_school_and_year(name):
+    detail = load(name)["parsedData"]["educationDetail"]
+    assert [(d["degree"], d["school"], d["year"]) for d in detail] == EDUCATION[name]
+
+
+@pytest.mark.parametrize("name", [pytest.param(n, id=n) for n in EDUCATION])
+def test_every_education_line_is_kept_as_text_and_matches_its_detail(name):
+    parsed = load(name)["parsedData"]
+    assert [d["text"] for d in parsed["educationDetail"]] == parsed["education"]
+
+
+EDUCATION_LINES = [
+    ("B. Sc. Software Engineering | 2016", "B. Sc. Software Engineering", "", "2016"),
+    ("B.Sc. Software Engineering | 2016", "B.Sc. Software Engineering", "", "2016"),
+    ("BSc, Springfield University, 2016", "BSc", "Springfield University", "2016"),
+    ("MBA — Springfield Business School (2019)", "MBA", "Springfield Business School", "2019"),
+    ("Springfield University | BSc Software Engineering | 2012 - 2016", "BSc Software Engineering", "Springfield University", "2012 - 2016"),
+    ("Springfield University", "", "Springfield University", ""),
+    ("Master of Arts, Philosophy, Northwind College, 2011", "Master of Arts, Philosophy", "Northwind College", "2011"),
+]
+
+
+@pytest.mark.parametrize(("line", "degree", "school", "year"), EDUCATION_LINES)
+def test_education_line_table(line, degree, school, year):
+    from profile_import.text_parser import split_education
+
+    got = split_education(line)
+    assert (got["degree"], got["school"], got["year"]) == (degree, school, year)
+    assert "undecided" not in got
+
+
+@pytest.mark.parametrize("line", ["MSc Physics, MIT, 2014", "Some Course, Another Thing"])
+def test_an_education_line_that_does_not_fall_into_place_stays_whole(line):
+    from profile_import.text_parser import split_education
+
+    got = split_education(line)
+    assert got["undecided"] and got["school"] == ""
+    assert got["degree"].startswith(line.split(",")[0])
+
+
+def test_a_degree_with_spaced_initials_is_placed_under_a_combined_heading():
+    text = "EDUCATION & CERTIFICATIONS\nB. Sc. Software Engineering | 2016\nCertified Scrum Product Owner (CSPO), Scrum Alliance, 2019"
+    draft = parse_text(text)
+    assert draft["parsedData"]["education"] == ["B. Sc. Software Engineering | 2016"]
+    assert len(draft["parsedData"]["certifications"]) == 1
+    assert not [u for u in draft["unplaced"] if "Education" in u["label"]]
+
+
+def test_an_undecided_education_line_warns_by_entry_number_without_quoting_it():
+    draft = parse_text("EDUCATION\nMSc Physics, MIT, 2014")
+    assert draft["confidence"]["educationDetail.0"] == "low"
+    assert any(w.startswith("Education entry 1") for w in draft["warnings"])
+    assert not any("MIT" in w for w in draft["warnings"])
