@@ -11,6 +11,7 @@ import {
   IMPORT_SOURCES,
   SECTIONS,
   addEntry,
+  basicNeedsChoice,
   draftItems,
   educationReading,
   effectiveBasicChoice,
@@ -19,6 +20,8 @@ import {
   liveCount,
   liveSummary,
   removeEntry,
+  sectionNeedsChoice,
+  summaryNeedsChoice,
   willBeActive,
   withBasic,
   withEntry,
@@ -144,7 +147,6 @@ function SectionBody({ id, draft, onDraftChange }) {
 
 function SummaryCard({ draft, profile, choice, onDraftChange, onChoice }) {
   const current = liveSummary(profile)
-  const edited = Boolean(profile._editedFields?.summary)
   const value = draft.summary || ''
   return (
     <Card
@@ -153,9 +155,9 @@ function SummaryCard({ draft, profile, choice, onDraftChange, onChoice }) {
       action={(
         <div className="flex items-center gap-2">
           <Confidence level={draft.confidence?.summary} />
-          {value && !edited && (
+          {summaryNeedsChoice(profile, draft) && (
             <select value={choice} onChange={(e) => onChoice(e.target.value)} className={selectClass} aria-label="Summary: what to do">
-              <option value="use">{current ? 'Replace current' : 'Fill'}</option>
+              <option value="use">Replace current value</option>
               <option value="keep">Keep current</option>
             </select>
           )}
@@ -169,7 +171,7 @@ function SummaryCard({ draft, profile, choice, onDraftChange, onChoice }) {
         value={value}
         onChange={(e) => onDraftChange(withSummary(draft, e.target.value))}
       />
-      {current && value && !edited && <p className="mt-2 text-xs text-stone-500">Current: {current}</p>}
+      {summaryNeedsChoice(profile, draft) && <p className="mt-2 text-xs text-stone-500">Current: {current}</p>}
     </Card>
   )
 }
@@ -207,17 +209,15 @@ export default function ImportReview({ draft, profile, choices, onDraftChange, o
                   onChange={(e) => onDraftChange(withBasic(draft, field, e.target.value))}
                   confidenceTag={<Confidence level={draft.confidence?.[field]} />}
                 />
-                {value && (
+                {edited && value ? (
+                  <div className="text-xs text-stone-500"><span>You edited this field; it stays as it is.</span></div>
+                ) : basicNeedsChoice(profile, draft, field) && (
                   <div className="text-xs text-stone-500">
-                    {edited ? (
-                      <span>You edited this field; it stays as it is.</span>
-                    ) : (
-                      <select value={choice} onChange={(e) => setBasicChoice(field, e.target.value)} className={selectClass} aria-label={`${BASIC_LABELS[field]}: what to do`}>
-                        <option value="use">{current ? 'Replace current' : 'Fill'}</option>
-                        <option value="keep">Keep current</option>
-                      </select>
-                    )}
-                    {current && !edited && <span className="ml-2">Current: {current}</span>}
+                    <select value={choice} onChange={(e) => setBasicChoice(field, e.target.value)} className={selectClass} aria-label={`${BASIC_LABELS[field]}: what to do`}>
+                      <option value="use">Replace current value</option>
+                      <option value="keep">Keep current</option>
+                    </select>
+                    <span className="ml-2">Current: {current}</span>
                   </div>
                 )}
               </div>
@@ -241,11 +241,13 @@ export default function ImportReview({ draft, profile, choices, onDraftChange, o
             action={(
               <div className="flex items-center gap-2">
                 <Confidence level={draft.confidence?.[editedKey]} />
+                {sectionNeedsChoice(profile, id) && (
                 <select value={choice} onChange={(e) => setSectionChoice(id, e.target.value)} className={selectClass} aria-label={`${label}: what to do`}>
                   <option value="add">Add to current</option>
                   <option value="replace" disabled={edited}>Replace current</option>
                   <option value="keep">Keep current</option>
                 </select>
+                )}
               </div>
             )}
             description={`Currently in your profile: ${currentCount}.${edited ? ' You edited this section, so it cannot be replaced.' : ''}`}
