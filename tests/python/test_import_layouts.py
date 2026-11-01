@@ -62,7 +62,6 @@ LAYOUTS = {
             ("Senior Product Manager", "Globex Corp", "", "June 2021", "March 2024", 1),
         ],
     },
-    # Layouts the parser does not read yet. Each is a strict xfail below, so a fix shows up as a failure to remove the mark.
     "linkedin_multi_role": {
         "source": "linkedin_pdf",
         "entries": [
@@ -70,6 +69,23 @@ LAYOUTS = {
             ("Senior Product Manager", "Northwind Software", "Remote", "June 2021", "March 2024", 1),
         ],
     },
+    "linkedin_three_roles": {
+        "source": "linkedin_pdf",
+        "entries": [
+            ("Chief Product Officer", "Northwind Software", "Remote", "January 2025", "Present", 1),
+            ("Head of Product", "Northwind Software", "Remote", "April 2022", "December 2024", 1),
+            ("Product Manager", "Northwind Software", "Remote", "September 2019", "March 2022", 1),
+        ],
+    },
+    "linkedin_two_companies": {
+        "source": "linkedin_pdf",
+        "entries": [
+            ("Head of Product", "Northwind Software", "Remote", "April 2024", "Present", 1),
+            ("Senior Product Manager", "Globex Corp", "Belgrade, Serbia", "June 2021", "March 2024", 1),
+            ("Product Manager", "Globex Corp", "Belgrade, Serbia", "March 2020", "May 2021", 1),
+        ],
+    },
+    # Layouts the parser does not read yet. Each is a strict xfail below, so a fix shows up as a failure to remove the mark.
     "date_first_no_suffix": {
         "entries": [
             ("Product Manager", "Northwind", "", "2021", "Present", 1),
@@ -85,7 +101,6 @@ LAYOUTS = {
 }
 
 KNOWN_FAILING: dict[str, str] = {
-    "linkedin_multi_role:entries": "several roles under one company: the company line is not repeated, so the later roles get no company (a duration line is no longer read as the company)",
     "date_first_no_suffix:entries": "'Title, Company' beside the dates with no legal suffix and no pipe place stays whole in Title (low, warned): a bare comma is not enough evidence",
     "company_above_title_below:entries": "company above the dates and title below them (a mixed layout): the title line under the dates is read as description",
 }
@@ -275,3 +290,19 @@ def test_an_undecided_education_line_warns_by_entry_number_without_quoting_it():
 def test_a_duration_line_is_not_a_company():
     entries = load("linkedin_multi_role")["parsedData"]["experienceDetail"]
     assert entries[0]["title"] == "Head of Product" and entries[0]["company"] == "Northwind Software"
+
+
+@pytest.mark.parametrize(("name", "inherited"), [("linkedin_multi_role", [1]), ("linkedin_three_roles", [1, 2]), ("linkedin_two_companies", [2])])
+def test_an_inherited_company_is_medium_and_noted(name, inherited):
+    draft = load(name)
+    notes = [w for w in draft["warnings"] if w.startswith("Company of experience entry")]
+    assert len(notes) == len(inherited)
+    for k in inherited:
+        assert draft["confidence"][f"experienceDetail.{k}"] == "medium"
+        assert any(f"entry {k + 1} " in w for w in notes)
+
+
+def test_roles_without_a_duration_line_do_not_inherit_a_company():
+    text = "Experience\nNorthwind Software\nHead of Product\nApril 2024 - Present\n• A.\nSenior Product Manager\nJune 2021 - March 2024\n• B.\nLinkedIn"
+    entries = parse_text(text, "linkedin_pdf")["parsedData"]["experienceDetail"]
+    assert entries[1]["company"] == ""
