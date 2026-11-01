@@ -40,6 +40,8 @@ UNDECIDED = [
     "Acme Corp – Globex Ltd",  # two names, no role word
     "Product Manager - Engineering Manager",  # two roles
     "Product Manager, Acme",  # a bare comma with no other evidence
+    "Head of Product, Northwind Software, Belgrade",  # a one-word city cannot be told from a second company part
+    "Head of Product, Northwind Corp, Belgrade",  # "Northwind Corp, Belgrade" is a company and a city, not a place
 ]
 
 
