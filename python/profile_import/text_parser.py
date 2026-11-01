@@ -397,6 +397,9 @@ def _heads_before(lines: list[str], index: int, floor: int) -> list[str]:
     while j > floor and len(heads) < limit:
         line = lines[j]
         suffix = line.rstrip(" .").rsplit(" ", 1)[-1].lower() in _COMPANY_SUFFIX
+        if line and not _tidy(_DURATION.sub(" ", line)):
+            j -= 1  # "3 years 5 months" under a company name: not a header line, and not the end of the header
+            continue
         if not line or _BULLET.match(line) or len(line) > 80 or line.endswith(",") or (line.endswith(".") and not suffix) or not (line[0].isupper() or line[0].isdigit()):
             break
         if not heads and _place(line):
