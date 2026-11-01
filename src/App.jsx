@@ -23,6 +23,7 @@ import {
   VIEWS,
   isOnboardingComplete,
   OPEN_SETTINGS_EVENT,
+  OPEN_ONBOARDING_EVENT,
   OPEN_QUESTIONNAIRE_EVENT,
   loadDemoInitialView,
   persistView,
@@ -51,6 +52,12 @@ function AppContent() {
     const open = () => navigate(VIEWS.SETTINGS)
     window.addEventListener(OPEN_SETTINGS_EVENT, open)
     return () => window.removeEventListener(OPEN_SETTINGS_EVENT, open)
+  }, [navigate])
+
+  useEffect(() => {
+    const open = () => navigate(VIEWS.ONBOARDING)
+    window.addEventListener(OPEN_ONBOARDING_EVENT, open)
+    return () => window.removeEventListener(OPEN_ONBOARDING_EVENT, open)
   }, [navigate])
 
   useEffect(() => {

@@ -21,6 +21,7 @@ import { validateStep } from '../../utils/validators'
 import { profileChangedSince, takeProfileSnapshot } from '../../utils/profileSnapshot'
 import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
 import { deleteCvFile } from '../../modules/cvs/cvApi'
+import { takeResetNotice } from '../../modules/profile/profileReset'
 import { cvFilesToDiscard } from '../../utils/cvLibrary'
 
 const STEP_CONFIG = [
@@ -43,6 +44,7 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   // The profile as it was when this edit began, for Cancel. Nothing is kept in onboarding.
   const [snapshot] = useState(() => (mode === 'edit' ? takeProfileSnapshot(profile) : null))
   const [errors, setErrors] = useState([])
+  const [resetNotice] = useState(takeResetNotice)
   // Counts failed Continue presses, so the form shows field errors and focus moves to the first one.
   const [failed, setFailed] = useState({ key: null, count: 0 })
   const [importBusy, setImportBusy] = useState(false)
@@ -224,6 +226,7 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
       )}
 
       <main className={isEdit ? '' : 'mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12'}>
+        {resetNotice && <div className="mb-4"><Alert variant="success">{resetNotice}</Alert></div>}
         {(isEdit || currentStep > minStep) && <ProgressBar currentStep={currentStep} editMode={isEdit} onStepClick={isEdit ? jumpToStep : undefined} />}
 
         {currentStep > minStep || (isEdit && currentStep >= EDIT_START_STEP) ? (

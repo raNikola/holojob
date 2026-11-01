@@ -630,7 +630,7 @@ export async function handleApiRequest(req, res) {
       const { status, error } = RESET_ERRORS[code]
       sendJson(res, status, { ok: false, code, error })
     }
-    let body = null
+    let body
     try {
       body = await readBody(req)
     } catch {
