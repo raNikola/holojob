@@ -135,7 +135,8 @@ function cleanEntries(value) {
     .filter((e) => e.title || e.company || e.start || e.description || e.bullets.length)
 }
 
-function entryParsedData(draft) {
+/** The `parsedData` a draft gives a My CVs entry: the draft's lists and entries, trimmed, and no parser-only readings. */
+export function draftParsedData(draft) {
   const parsed = draft.parsedData || {}
   const entries = cleanEntries(parsed.experienceDetail)
   return {
@@ -162,7 +163,7 @@ export function willBeActive(profile) {
  * profile with no CV at all gets it as its first, and so as its active, CV.
  */
 export function applyImportDraft(profile, draft, choices, { now = new Date(), makeId = newCvId, file = null } = {}) {
-  const incoming = entryParsedData(draft)
+  const incoming = draftParsedData(draft)
   const basicProfile = { ...profile.basicProfile }
   const confidence = { ...profile._confidence }
   const parsedData = { ...(profile.resume?.parsedData || {}) }

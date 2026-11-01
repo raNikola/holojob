@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { readPdfDraft, saveReviewedDraft } from '../../src/modules/profile/importFlow.js'
+import { cvEntryParsedData, readPdfDraft, saveReviewedDraft } from '../../src/modules/profile/importFlow.js'
 import { defaultChoices } from '../../src/modules/profile/importDraft.js'
 import { ensureCvLibrary } from '../../src/utils/cvLibrary.js'
 
@@ -131,5 +131,38 @@ describe('saving a reviewed PDF draft', () => {
     const upload = vi.fn()
     await saveReviewedDraft({ draft: { ...draft, source: 'paste', fileName: '' }, choices, file: null, upload, updateProfile: () => {} })
     expect(upload).not.toHaveBeenCalled()
+  })
+})
+
+describe('cvEntryParsedData (My CVs > Add)', () => {
+  const draft = {
+    source: 'resume_pdf', summary: 'Product leader.',
+    parsedData: {
+      skills: ['SQL'], projects: [], education: ['BSc, Springfield University, 2016'], workExperience: [], certifications: [],
+      experienceDetail: [{ title: 'Head of Product', company: 'Acme', start: '2020', end: 'Present', bullets: ['Grew revenue.'] }],
+      educationDetail: [{ text: 'BSc, Springfield University, 2016', degree: 'BSc', school: 'Springfield University', year: '2016' }],
+      competencyGroups: [],
+    },
+    links: [],
+  }
+
+  it('uses the server parser and keeps its entries, but not the parser-only reading', async () => {
+    const parse = vi.fn().mockResolvedValue(draft)
+    const fallback = vi.fn()
+    const result = await cvEntryParsedData('cv text', { parse, fallback })
+    expect(parse).toHaveBeenCalledWith('resume_pdf', 'cv text')
+    expect(fallback).not.toHaveBeenCalled()
+    expect(result.usedFallback).toBe(false)
+    expect(result.parsedData.experienceDetail[0].title).toBe('Head of Product')
+    expect(result.parsedData.summary).toBe('Product leader.')
+    expect(result.parsedData.workExperience).toEqual(['Head of Product — Acme | 2020 – Present | Grew revenue.'])
+    expect(JSON.stringify(result.parsedData)).not.toContain('educationDetail')
+  })
+
+  it('falls back to the older reader, and says so, when the parser fails', async () => {
+    const parse = vi.fn().mockRejectedValue(new Error('offline'))
+    const fallback = vi.fn().mockReturnValue({ skills: ['Go'] })
+    expect(await cvEntryParsedData('cv text', { parse, fallback })).toEqual({ parsedData: { skills: ['Go'] }, usedFallback: true })
+    expect(fallback).toHaveBeenCalledWith('cv text')
   })
 })
