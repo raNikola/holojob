@@ -60,6 +60,16 @@ class TestHeader:
             assert value not in text
 
 
+class TestBareDomains:
+    def test_a_line_of_only_a_domain_is_a_link(self):
+        assert parse_text("Jane Sample\njanesample.dev\nSKILLS\nSQL")["links"] == ["janesample.dev"]
+
+    def test_a_tech_line_without_headings_keeps_its_names(self):
+        d = parse_text("Jane Sample\nBuilds with socket.io and asp.net daily\nSKILLS\nSQL")
+        assert d["links"] == []
+        assert "socket.io" in d["headline"]
+
+
 class TestYears:
     def test_stated_in_the_summary(self, draft):
         assert draft["basicProfile"]["experienceYears"] == "10"
