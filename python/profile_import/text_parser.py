@@ -751,11 +751,19 @@ def _parse_experience(lines: list[str], unplaced: list[dict], confidence: dict, 
     return entries, [_derived_line(e) for e in entries]
 
 
+_SPACED_INITIALS = re.compile(r"\b([A-Za-z])\.\s+(?=[A-Za-z]{1,3}\b)")
+
+
+def _unspaced_initials(text: str) -> str:
+    """"B. Sc." and "M. A." written as one degree word: "B.Sc.", "M.A."."""
+    return _SPACED_INITIALS.sub(r"\1.", text)
+
+
 def _kind(text: str) -> str:
     """cert, degree, institution, year or other, from the vocabulary in education_words.json."""
     if _YEAR_ONLY.match(text):
         return "year"
-    words = set(re.findall(r"[^\W_]+(?:-[^\W_]+)*", text.replace(".", "").lower()))
+    words = set(re.findall(r"[^\W_]+(?:-[^\W_]+)*", _unspaced_initials(text).replace(".", "").lower()))
     if words & _CERT_WORDS:
         return "cert"
     if words & _DEGREE_WORDS:
@@ -782,10 +790,18 @@ def _education_items(lines: list[str], mode: str) -> tuple[list[str], list[str],
         kind = _kind(text)
         previous = items[-1] if items else None
         open_item = previous is not None and not gap and not previous["done"]
+        # A school line followed by its degree line (the LinkedIn order): one entry, when the school line has no year.
+        school_first = previous is not None and not gap and previous["kind"] == "institution" and kind == "degree" and not re.search(r"(?:19|20)\d{2}", previous["text"])
         gap = False
-        if open_item and (kind in ("institution", "year") or (kind == "other" and previous["kind"] in ("degree", "cert") and len(text.split()) <= 8)):
+        if school_first:
             previous["text"] += " — " + text
-            previous["done"] = previous["kind"] == "degree" and kind != "other" or kind == "year" or previous["kind"] == "cert"
+            previous["done"] = True
+            continue
+        # A year line alone belongs to the degree or school line under it (a flattened two-column CV).
+        year_first = open_item and previous["kind"] == "year" and kind in ("degree", "institution", "other")
+        if year_first or (open_item and (kind in ("institution", "year") or (kind == "other" and previous["kind"] in ("degree", "cert") and len(text.split()) <= 8))):
+            previous["text"] += " — " + text
+            previous["done"] = year_first or previous["kind"] == "degree" and kind != "other" or kind == "year" or previous["kind"] == "cert"
             continue
         if mode == "both" and kind in ("other", "year"):
             left.append(text)
@@ -802,6 +818,54 @@ def _education_items(lines: list[str], mode: str) -> tuple[list[str], list[str],
         [i["text"] for i in items if i["target"] == "cert"],
         left,
     )
+
+
+_EDU_SEPARATORS = re.compile(r"\s[|·–—-]\s|,")
+_YEAR_IN_TEXT = re.compile(rf"(?<![\w/]){_YEAR}(?![\w/])")
+
+
+def split_education(text: str) -> dict:
+    """{"text", "degree", "school", "year"} read from one education line, such as "Degree | Year",
+    "Degree, School, Year" or "School — Degree (2012 - 2016)". The year is the last date range, else the last
+    year. A piece with a school word is the school; the piece with a degree word, with the field of study
+    after it, is the degree; one unmarked piece beside a school is the degree. Text that does not fall into
+    those places stays whole in `degree` and the other fields stay empty: nothing is guessed."""
+    clean = " ".join(text.split())
+    out = {"text": clean, "degree": "", "school": "", "year": ""}
+    years = list(_RANGE.finditer(clean)) or list(_YEAR_IN_TEXT.finditer(clean))
+    rest = clean
+    if years:
+        out["year"] = clean[years[-1].start() : years[-1].end()].strip()
+        rest = clean[: years[-1].start()] + " " + clean[years[-1].end() :]
+    rest = rest.replace("(", " ").replace(")", " ")
+    pieces = [p.strip(" .;:") for p in _EDU_SEPARATORS.split(rest)]
+    pieces = [p for p in pieces if p and not _employment(p)]
+    kinds = [_kind(p) for p in pieces]
+    has_school = "institution" in kinds
+    degree: list[str] = []
+    schools: list[str] = []
+    others: list[str] = []
+    last = ""
+    for piece, kind in zip(pieces, kinds):
+        if kind == "institution" and not schools:
+            schools.append(piece)
+            last = "school"
+        elif kind == "degree" and not degree:
+            degree.append(piece)
+            last = "degree"
+        elif kind == "other" and last == "degree" and has_school and not others:
+            degree.append(piece)  # the field of study right after the degree word, with the school named elsewhere
+        else:
+            others.append(piece)
+            last = "other"
+    if not degree and len(others) == 1 and schools:
+        degree, others = others, []
+    if others or not pieces or (not degree and not schools):
+        out["degree"] = " ".join(rest.split()).strip(" |·–—-,.;:")
+        out["undecided"] = True
+        return out
+    out["degree"], out["school"] = ", ".join(degree), schools[0] if schools else ""
+    return out
 
 
 def _years_stated(texts: list[str]) -> int:
@@ -1021,6 +1085,7 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
     summary_lines: list[str] = []
     summary = ""
     parsed = {"skills": [], "projects": [], "education": [], "workExperience": [], "certifications": []}
+    education_detail: list[dict] = []
     for kind, key, lines_in in sections:
         body = lines_in
         if kind == "unplaced":
@@ -1064,6 +1129,8 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
                     unplaced.append({"label": f"{field.title()} (beyond {MAX_ENTRIES} entries)", "text": "\n".join(items[MAX_ENTRIES:])})
                     items = items[:MAX_ENTRIES]
                 parsed[field] = parsed[field] + items
+                if field == "education":
+                    education_detail.extend(split_education(i) for i in items)
                 if items or mode != "both":
                     confidence[field] = "medium" if parsed[field] else "low"
             if left:
@@ -1078,6 +1145,13 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
 
     if summary:
         confidence["summary"] = "medium"
+    education_detail_out = []
+    for k, item in enumerate(education_detail):
+        undecided = item.pop("undecided", False)
+        education_detail_out.append(item)
+        confidence[f"educationDetail.{k}"] = "low" if undecided else "medium"
+        if undecided and re.search(r"[,|·–—]|\s-\s", item["text"]):
+            warnings.append(f"Education entry {k + 1}: the degree, school and year could not be told apart, so the line is kept whole in Degree. Check it.")
 
     # Current role: the most recent job, else the headline under the name (which is also kept as a hint).
     latest = _latest_entry(entries)
@@ -1133,7 +1207,7 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
         "headline": headline,
         "summary": summary,
         "basicProfile": basic,
-        "parsedData": {**parsed, "experienceDetail": entries, "competencyGroups": groups},
+        "parsedData": {**parsed, "experienceDetail": entries, "educationDetail": education_detail_out, "competencyGroups": groups},
         "languages": languages,
         "links": links,
         "confidence": confidence,
