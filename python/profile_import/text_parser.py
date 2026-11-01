@@ -248,6 +248,17 @@ def _groups(lines: list[str]) -> list[str]:
     return [" — ".join(b) for b in blocks]
 
 
+def _paragraphs(lines: list[str]) -> str:
+    """The lines of a prose section as text: wrapped lines joined with a space, a blank line kept as a paragraph break."""
+    paragraphs: list[list[str]] = [[]]
+    for line in lines:
+        if line:
+            paragraphs[-1].append(_strip_bullet(line))
+        elif paragraphs[-1]:
+            paragraphs.append([])
+    return "\n".join(" ".join(p) for p in paragraphs if p)
+
+
 def _split_items(text: str) -> list[str]:
     return [p.strip(" .") for p in re.split(r"[,;|•·]", text) if p.strip(" .")]
 
@@ -1008,6 +1019,7 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
     languages: list[dict] = []
     entries: list[dict] = []
     summary_lines: list[str] = []
+    summary = ""
     parsed = {"skills": [], "projects": [], "education": [], "workExperience": [], "certifications": []}
     for kind, key, lines_in in sections:
         body = lines_in
@@ -1016,10 +1028,8 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
             if text_block:
                 unplaced.append({"label": key.title() if key.isupper() else key, "text": text_block})
         elif key == "summary":
-            text_block = "\n".join(l for l in body if l)
             summary_lines.extend(l for l in body if l)
-            if text_block:
-                unplaced.append({"label": "Summary", "text": text_block})
+            summary = _paragraphs(body)
         elif key == "experience":
             entries, parsed["workExperience"] = _parse_experience(body, unplaced, confidence, warnings, source == "linkedin_pdf", ignored)
         elif key == "personal":
@@ -1065,6 +1075,9 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
                 items = items[:MAX_ENTRIES]
             parsed[key] = items
             confidence[key] = "medium" if items else "low"
+
+    if summary:
+        confidence["summary"] = "medium"
 
     # Current role: the most recent job, else the headline under the name (which is also kept as a hint).
     latest = _latest_entry(entries)
@@ -1118,6 +1131,7 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
         "fileName": "",
         "rawText": raw_text,
         "headline": headline,
+        "summary": summary,
         "basicProfile": basic,
         "parsedData": {**parsed, "experienceDetail": entries, "competencyGroups": groups},
         "languages": languages,
