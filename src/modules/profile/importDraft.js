@@ -241,6 +241,17 @@ export function withBasic(draft, field, value) {
   return { ...draft, basicProfile: { ...draft.basicProfile, [field]: value }, confidence }
 }
 
+/**
+ * How the parser read one education line: `{ degree, school, year }`, or null when the line was edited since
+ * (the reading belongs to the text it was made from), or was not read. Display only: it is not saved,
+ * the education lines are.
+ */
+export function educationReading(draft, line) {
+  const found = list(draft?.parsedData?.educationDetail).find((d) => d && d.text === line)
+  if (!found || !(found.degree || found.school || found.year)) return null
+  return { degree: text(found.degree), school: text(found.school), year: text(found.year) }
+}
+
 /** A copy of the draft with the summary changed by the user; the parser's confidence for it no longer applies. */
 export function withSummary(draft, value) {
   const { summary: _dropped, ...confidence } = draft.confidence || {}
