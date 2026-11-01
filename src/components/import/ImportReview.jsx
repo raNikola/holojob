@@ -200,24 +200,27 @@ export default function ImportReview({ draft, profile, choices, onDraftChange, o
             const edited = Boolean(profile._editedFields?.[field])
             const value = draft.basicProfile?.[field] || ''
             const choice = effectiveBasicChoice(profile, field, choices.basics?.[field])
+            const needsChoice = basicNeedsChoice(profile, draft, field)
             return (
               <div key={field} className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-                <Input
-                  label={BASIC_LABELS[field]}
-                  id={`basic-${field}`}
-                  value={value}
-                  onChange={(e) => onDraftChange(withBasic(draft, field, e.target.value))}
-                  confidenceTag={<Confidence level={draft.confidence?.[field]} />}
-                />
+                <div>
+                  <Input
+                    label={BASIC_LABELS[field]}
+                    id={`basic-${field}`}
+                    value={value}
+                    onChange={(e) => onDraftChange(withBasic(draft, field, e.target.value))}
+                    confidenceTag={<Confidence level={draft.confidence?.[field]} />}
+                  />
+                  {needsChoice && <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">Current: {current}</p>}
+                </div>
                 {edited && value ? (
                   <div className="text-xs text-stone-500"><span>You edited this field; it stays as it is.</span></div>
-                ) : basicNeedsChoice(profile, draft, field) && (
+                ) : needsChoice && (
                   <div className="text-xs text-stone-500">
                     <select value={choice} onChange={(e) => setBasicChoice(field, e.target.value)} className={selectClass} aria-label={`${BASIC_LABELS[field]}: what to do`}>
                       <option value="use">Replace current value</option>
                       <option value="keep">Keep current</option>
                     </select>
-                    <span className="ml-2">Current: {current}</span>
                   </div>
                 )}
               </div>
@@ -242,11 +245,11 @@ export default function ImportReview({ draft, profile, choices, onDraftChange, o
               <div className="flex items-center gap-2">
                 <Confidence level={draft.confidence?.[editedKey]} />
                 {sectionNeedsChoice(profile, id) && (
-                <select value={choice} onChange={(e) => setSectionChoice(id, e.target.value)} className={selectClass} aria-label={`${label}: what to do`}>
-                  <option value="add">Add to current</option>
-                  <option value="replace" disabled={edited}>Replace current</option>
-                  <option value="keep">Keep current</option>
-                </select>
+                  <select value={choice} onChange={(e) => setSectionChoice(id, e.target.value)} className={selectClass} aria-label={`${label}: what to do`}>
+                    <option value="add">Add to current</option>
+                    <option value="replace" disabled={edited}>Replace current</option>
+                    <option value="keep">Keep current</option>
+                  </select>
                 )}
               </div>
             )}
