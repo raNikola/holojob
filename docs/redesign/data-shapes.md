@@ -255,7 +255,8 @@ Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intell
       ],
       "links": [
         "<string>"
-      ]
+      ],
+      "summary?": "<string> (from an import; absent when the CV had none)"
     },
     "importSource": "<string>"
   },
@@ -337,16 +338,18 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
   "fileName": "<string>",
   "rawText": "<string>",
   "headline": "<string>",
+  "summary": "<string>",
   "basicProfile": { "fullName?": "<string>", "email?": "<string>", "phone?": "<string>", "location?": "<string>", "currentRole?": "<string>", "experienceYears?": "<string>" },
   "parsedData": {
     "skills": ["<string>"], "projects": ["<string>"], "education": ["<string>"],
     "workExperience": ["<string>"], "certifications": ["<string>"],
     "experienceDetail": [{ "title": "<string>", "company": "<string>", "location": "<string>", "start": "<string>", "end": "<string>", "description": "<string>", "bullets": ["<string>"] }],
+    "educationDetail": [{ "text": "<string>", "degree": "<string>", "school": "<string>", "year": "<string>" }],
     "competencyGroups": [{ "label": "<string>", "items": ["<string>"] }]
   },
   "languages": [{ "language": "<string>", "proficiency": "<string>" }],
   "links": ["<string>"],
-  "confidence": { "<field>": "high|medium|low|derived", "experienceDetail.<n>": "high|medium|low" },
+  "confidence": { "<field>": "high|medium|low|derived", "experienceDetail.<n>": "high|medium|low", "educationDetail.<n>": "medium|low", "summary": "medium" },
   "unplaced": [{ "label": "<string>", "text": "<string>" }],
   "ignored": [{ "name": "<string>", "reason": "<string>" }],
   "warnings": ["<string>"]
@@ -358,7 +361,11 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
 - `headline` is the title line under the name ("TECHNICAL PRODUCT LEADER ..."), shown as a hint. It is the `currentRole` only when the text has no experience entry; otherwise `currentRole` is the title of the current (else latest) entry. Target roles are never read from a CV: the draft has no such field.
 - `experienceYears` is `"derived"`: the largest "10+ years", "over 10 years" or "12 years of experience" in the summary and top lines, else the years since the earliest entry start (with a warning saying so).
 - An experience entry is a title / company (and place) line plus a date range; the lines under it are the `description` (before the first bullet) and `bullets`, with wrapped lines joined. `workExperience` is the derived `"Title — Company | start – end | description bullets"` line of each `experienceDetail` entry (JS `deriveWorkExperience` and Python `_derived_line` must stay identical); it is the plain lines of the section when no dated entry was recognised.
-- `unplaced` is text that fits no field (a summary, interests, lines the parser could not read). It is shown on the review screen and stays in `rawText`; nothing is dropped.
+- **Entry headers** are read by evidence, not by one layout (`split_entry_header` in `text_parser.py`). Dates anchor an entry; the header is the line(s) above the dates (the default, and LinkedIn's company-then-title), the remainder of the date line (date-first: "2020 – 2023  Title, Company"), or the lines under the dates when nothing sits above the first one and role-like lines sit under it (flattened two-column CVs; decided once per section). A single header string is split by its separator (`at`, `@`, `-`, `–`, `—`, `|`, `·`, a trailing `(Company)`, a comma); the side that names a role (`role_words.json`; `weakRoleWords` such as "software" count less) is the title. A bare comma splits only with a legal suffix ("Inc."), a place after a pipe, or when another entry of the same section was split on a comma. When the evidence does not decide (both or neither side names a role, "Product Manager, Payments"), the line stays whole in `title`, `confidence["experienceDetail.<n>"]` is `low` and a warning names the entry number (never the text). A parenthetical beside the dates ("(US-based startup)") is a note: it is the first line of `description`, never the company; a parenthetical place is the `location`. Employment words ("Full-time") beside a title are dropped from the header.
+- **Bullets and sub-headings:** a bullet starts only on a marker (•, -, *, –, a number; a marker alone on its line leads the next line); every unmarked line continues the bullet above it. Before the first bullet, lines are `description`. A short Title Case line without a full stop, followed by bullets, is a sub-heading: it ends the description, is not in any bullet, and is listed under `ignored` as "Sub-heading: ...". With no bullets in the CV, the text is the `description`.
+- `summary` is the text of a Summary / Profile / About section (wrapped lines joined, a blank line kept as a paragraph break), empty when there is none. It is shown on the review screen as a Summary card (Fill / Replace current / Keep current, like a basic field) and saved to `resume.parsedData.summary` and to the new My CVs entry's `parsedData.summary`; `choices.summary` is `"use"` or `"keep"`. It is no longer in `unplaced`.
+- `educationDetail` is how each education line was read: the last date range or year is `year`; the piece with a school word is `school`; the piece with a degree word (and the field of study after it, when the school is named elsewhere) is `degree`; one unmarked piece beside a school is the `degree`. A line that does not fall into those places stays whole in `degree` (`educationDetail.<n>` is `low`, with a warning). `text` is the education line it was read from. **Display only:** the review screen shows "Read as: ..." under a line while the line still equals `text`; saving writes the `education` lines and not `educationDetail`. School-then-degree (LinkedIn) and year-then-degree line pairs become one line.
+- `unplaced` is text that fits no field (interests, lines the parser could not read). It is shown on the review screen and stays in `rawText`; nothing is dropped.
 - Saving adds a `cvLibrary` entry with `importSource: "pasted_text"`, `filePath: null`, `fileName` and `label` of the form `Pasted text <YYYY-MM-DD>`. It is not the default CV unless the profile had none. For a PDF source (`importSource` `resume_pdf` or `linkedin_pdf`) the file is first stored through `POST /api/cvs` (best effort), the entry takes the stored id and `filePath`, and `fileName` / `label` come from the PDF's name.
 - "Education & Certifications" style sections are split by `python/profile_import/education_words.json` (certificate words first, then degree, then institution words); a line that is neither goes to `unplaced`.
 
