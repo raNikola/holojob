@@ -19,6 +19,7 @@ import json
 import re
 from datetime import date
 from pathlib import Path
+from typing import NamedTuple
 
 from cv_analysis.redact import EMAIL_RE, PHONE_RE, SCHEME_URL_RE, SOCIAL_RE
 from cv_analysis.redact import _is_phone as _looks_like_phone_number
@@ -40,7 +41,10 @@ from profile_import.vocabulary import (  # noqa: E402
     normalize_phrase as _norm_phrase,
 )
 
-_ROLE_WORDS = set(json.loads(Path(__file__).with_name("role_words.json").read_text(encoding="utf-8"))["roleWords"])
+_ROLE_DATA = json.loads(Path(__file__).with_name("role_words.json").read_text(encoding="utf-8"))
+_ROLE_WORDS = set(_ROLE_DATA["roleWords"])
+_WEAK_ROLE_WORDS = set(_ROLE_DATA["weakRoleWords"])
+_EMPLOYMENT_WORDS = set(_ROLE_DATA["employmentWords"])
 _EDU = json.loads(Path(__file__).with_name("education_words.json").read_text(encoding="utf-8"))
 _DEGREE_WORDS = set(_EDU["degreeWords"])
 _INSTITUTION_WORDS = set(_EDU["institutionWords"])
@@ -390,26 +394,140 @@ def _heads_before(lines: list[str], index: int, floor: int) -> list[str]:
     return heads
 
 
-def _split_title_company(candidates: list[str], company_first: bool = False) -> tuple[str, str, str]:
-    """(title, company, confidence) from one to two header strings.
+def _heads_after(lines: list[str], index: int, limit: int) -> list[str]:
+    """Header lines under a date line (the date-first and flattened two-column layouts): up to two lines
+    that are not a bullet, a sentence or another date, plus a place line. The first one must name a role."""
+    heads: list[str] = []
+    named = 0
+    j = index + 1
+    while j < limit and named < 2 and len(heads) < 3:
+        line = lines[j]
+        suffix = line.rstrip(" .").rsplit(" ", 1)[-1].lower() in _COMPANY_SUFFIX
+        if (not line or _BULLET.match(line) or len(line) > 80 or len(line.split()) > 8 or line.endswith(",") or _is_date_line(line)
+                or (line.endswith(".") and not suffix) or not (line[0].isupper() or line[0].isdigit())):
+            break
+        if _place(line) and heads:
+            heads.append(line)
+        else:
+            if not named and not _role_strength(line):
+                break
+            named += 1
+            heads.append(line)
+        j += 1
+    return heads
 
-    `company_first` is the LinkedIn PDF layout (company line, then title line), used when the role
-    words do not tell the two apart ("Northwind Software" / "Head of Product")."""
-    if len(candidates) >= 2:
-        first, second = candidates[0], candidates[1]
-        if _has_role_word(second) and not _has_role_word(first):
-            return second, first, "medium"
-        if company_first and (_has_role_word(first) == _has_role_word(second)):
-            return second, first, "medium" if _has_role_word(second) else "low"
-        return first, second, "medium" if _has_role_word(first) else "low"
-    text = candidates[0] if candidates else ""
-    for sep in (" at ", " @ ", " — ", " – ", " | ", " - "):
-        if sep in text:
-            left, right = (p.strip() for p in text.split(sep, 1))
-            if sep not in (" at ", " @ ") and _has_role_word(right) and not _has_role_word(left):
-                return right, left, "medium"
-            return left, right, "medium" if _has_role_word(left) or sep in (" at ", " @ ") else "low"
-    return text, "", "low"
+
+def _role_strength(text: str) -> int:
+    """2 when the text holds a role word that is not also a common company word ("Manager", "Head of ..."),
+    1 for such a word alone ("Product", "Software"), 0 for none."""
+    words = re.findall(r"[a-z]+", text.lower())
+    if any(w in _ROLE_WORDS and w not in _WEAK_ROLE_WORDS for w in words):
+        return 2
+    return 1 if any(w in _ROLE_WORDS for w in words) else 0
+
+
+def _legal_suffix(text: str) -> bool:
+    words = text.rstrip(" .").rsplit(" ", 1)
+    return len(words) > 1 and words[-1].lower() in _COMPANY_SUFFIX
+
+
+def _employment(text: str) -> bool:
+    return text.strip(" .()").lower() in _EMPLOYMENT_WORDS
+
+
+def _by_role(left: str, right: str) -> tuple[str, str] | None:
+    """(title, company) when exactly one side names a role more strongly than the other, else None."""
+    left_strength, right_strength = _role_strength(left), _role_strength(right)
+    if left_strength > right_strength:
+        return left, right
+    if right_strength > left_strength:
+        return right, left
+    return None
+
+
+_PIPE = re.compile(r"\s[|·]\s|\s[|·]$|^[|·]\s")
+_TRAILING_PAREN = re.compile(r"\(([^()]{2,60})\)\s*$")
+_DASH_SEPARATORS = (" – ", " — ", " - ")
+
+
+class Header(NamedTuple):
+    title: str
+    company: str
+    location: str
+    level: str
+    comma: str = ""
+
+
+def split_entry_header(text: str, loose_comma: bool = False) -> Header:
+    """The title, company, place and confidence of one header string, and how a comma took part.
+
+    Families: "Title, Company | Place", "Title at Company", "Title @ Company", "Title - Company"
+    (also with an en or em dash), "Title | Company", "Company | Title", "Title (Company)",
+    "Company (Title)", and "Title · Company · Full-time". The side that names a role is the title;
+    when both or neither side does, the line is kept whole in the title with confidence "low".
+    A bare comma is the weakest separator ("Product Manager, Payments" is a team, not a company): it
+    splits only with a legal suffix, a place after a pipe, or `loose_comma` (another entry in the same
+    section was split on a comma). `comma` is "split" when a comma separated title from company on its
+    own evidence, "blocked" when the comma rule alone kept the line whole, else ""."""
+    text = " ".join(text.split())
+    whole = Header(text, "", "", "low", "")
+    if not text:
+        return whole
+    segments = [p.strip() for p in _PIPE.split(text) if p.strip()]
+    segments = [p for p in segments if not _employment(p)]
+    location = ""
+    last_rest, last_place = _take_location(segments[-1]) if segments else ("", "")
+    if len(segments) >= 2 and last_place and last_rest:
+        segments[-1], location = last_rest, last_place  # "Title | Company, City, Country"
+    elif len(segments) >= 2 and _place(segments[-1]):
+        location = segments.pop()
+    elif len(segments) == 2 and "," in segments[0]:
+        head, _, tail = segments[0].partition(",")
+        if _role_strength(head) == 2 and _role_strength(tail) < 2 and tail.strip() and len(segments[1].split()) <= 3 and _role_strength(segments[1]) == 0:
+            location = segments.pop()  # "Title, Company | Place": the pipe closes with a place
+    if len(segments) == 2:
+        pair = _by_role(*segments)
+        if pair:
+            return Header(pair[0], pair[1], location, "medium", "")
+        return whole
+    if len(segments) != 1:
+        return whole
+    single = segments[0]
+    if not location:
+        single, location = _take_location(single)
+    paren = _TRAILING_PAREN.search(single)
+    if paren and not _place(paren.group(1)):
+        pair = _by_role(single[: paren.start()].strip(), paren.group(1).strip())
+        if pair:
+            return Header(pair[0], pair[1], location, "medium", "")
+    for sep in (" at ", " @ "):
+        if sep in single:
+            left, right = (p.strip() for p in single.split(sep, 1))
+            if left and right:
+                return Header(left, right, location, "medium", "")
+    for sep in _DASH_SEPARATORS:
+        if sep in single:
+            left, right = (p.strip() for p in single.split(sep, 1))
+            pair = _by_role(left, right) if left and right else None
+            if pair:
+                return Header(pair[0], pair[1], location, "medium", "")
+            return whole
+    if "," in single:
+        left, right = (p.strip() for p in single.split(",", 1))
+        if left and right and _role_strength(left) == 2 and _role_strength(right) < 2:
+            if _legal_suffix(right) or location or loose_comma:
+                return Header(left, right, location, "medium", "" if loose_comma and not (_legal_suffix(right) or location) else "split")
+            return Header(text, "", "", "low", "blocked")
+    return Header(single, "", location, "low", "")
+
+
+def _pair_lines(first: str, second: str, company_first: bool) -> tuple[str, str, str]:
+    """(title, company, confidence) from two header lines. The line that names a role is the title; with no
+    evidence the LinkedIn layout reads company first, any other layout title first, both as "low"."""
+    pair = _by_role(first, second)
+    if pair:
+        return pair[0], pair[1], "medium"
+    return (second, first, "low") if company_first else (first, second, "low")
 
 
 def _sentence(text: str) -> str:
@@ -424,11 +542,37 @@ def _derived_line(entry: dict) -> str:
     return " | ".join([head, period, text]) if text else " | ".join([head, period])
 
 
+_PAREN = re.compile(r"\(([^()]{0,120})\)")
+
+
+def _date_line_parts(line: str) -> tuple[re.Match | None, str, list[str], str]:
+    """(date match, header text left on the line, notes, place) of a line holding a date range.
+
+    Dates anchor the entry. A parenthetical beside them ("(US-based startup)") is a note, never a
+    company; a parenthetical place ("(Remote)") is the location. Empty brackets left by the range
+    ("(Jan 2020 – Present)") are dropped, and so is a duration ("5 yrs 3 mos")."""
+    match = _RANGE.search(line)
+    rest = _DURATION.sub(" ", _RANGE.sub(" ", line, count=1))
+    notes: list[str] = []
+    places: list[str] = []
+
+    def take(found: re.Match) -> str:
+        inner = " ".join(found.group(1).split())
+        if inner and _place(inner):
+            places.append(inner)
+        elif inner and not _employment(inner):
+            notes.append(inner)
+        return " "
+
+    rest = _PAREN.sub(take, rest).replace("(", " ").replace(")", " ")
+    return match, _tidy(rest), notes, places[0] if places else ""
+
+
 def _is_date_line(line: str) -> bool:
     """A line that opens an entry: a date range, with at most a short heading beside it."""
     if not line or len(line) > 200 or _BULLET.match(line) or not _RANGE.search(line):
         return False
-    rest = _tidy(_DURATION.sub(" ", _RANGE.sub(" ", line, count=1)))
+    rest = _date_line_parts(line)[1]
     return len(rest) <= 100 and not rest.endswith(".") and not rest[:1].islower()
 
 
@@ -471,6 +615,17 @@ def _parse_body(body: list[str]) -> tuple[str, str, list[str]]:
     return location, description, [t for k, t in blocks if k == "bullet"]
 
 
+def _header_side(lines: list[str], starts: list[int]) -> str:
+    """"below" when the title and company lines sit under the dates (date-first and flattened two-column
+    layouts), else "above". Decided once for the section, on its first entry: nothing above the first
+    date line, nothing beside the dates, and header-like lines right under them."""
+    first = starts[0]
+    if _heads_before(lines, first, -1) or _date_line_parts(lines[first])[1]:
+        return "above"
+    limit = starts[1] if len(starts) > 1 else len(lines)
+    return "below" if _heads_after(lines, first, limit) else "above"
+
+
 def _parse_experience(lines: list[str], unplaced: list[dict], confidence: dict, warnings: list[str], company_first: bool = False) -> tuple[list[dict], list[str]]:
     starts = [i for i, l in enumerate(lines) if _is_date_line(l)]
     if not starts:
@@ -480,38 +635,68 @@ def _parse_experience(lines: list[str], unplaced: list[dict], confidence: dict, 
         confidence["workExperience"] = "low"
         return [], raw
 
+    side = _header_side(lines, starts)
     heads = []
     for k, i in enumerate(starts):
-        heads.append(_heads_before(lines, i, starts[k - 1] if k else -1))
-    lead = [l for l in lines[: starts[0] - len(heads[0])] if l]
+        if side == "below":
+            heads.append(_heads_after(lines, i, starts[k + 1] if k + 1 < len(starts) else len(lines)))
+        else:
+            heads.append(_heads_before(lines, i, starts[k - 1] if k else -1))
+    lead_end = starts[0] if side == "below" else starts[0] - len(heads[0])
+    lead = [l for l in lines[:lead_end] if l]
     if lead:
         unplaced.append({"label": "Experience (before the first dated entry)", "text": "\n".join(lead)})
 
-    entries: list[dict] = []
-    for k, i in enumerate(starts):
-        match = _RANGE.search(lines[i])
-        remainder = _tidy(_DURATION.sub(" ", _RANGE.sub(" ", lines[i], count=1)))
-        candidates = heads[k] + ([remainder] if remainder else [])
-        location = ""
+    def read(k: int, loose: bool) -> dict:
+        i = starts[k]
+        match, remainder, notes, note_place = _date_line_parts(lines[i])
+        candidates = [c for c in heads[k] + ([remainder] if remainder else []) if not _employment(c)]
+        location = note_place
         places = [c for c in candidates if _place(c) and len(candidates) > 1]
         if places:
-            location = places[-1]
+            location = location or places[-1]
             candidates = [c for c in candidates if c is not places[-1]]
         if len(candidates) > 2:
             unplaced.append({"label": "Experience (extra heading lines)", "text": "\n".join(candidates[:-2])})
             candidates = candidates[-2:]
-        title, company, level = _split_title_company(candidates, company_first)
+        comma = ""
+        if len(candidates) == 2:
+            title, company, level = _pair_lines(candidates[0], candidates[1], company_first)
+            ambiguous = level == "low"
+        elif candidates:
+            header = split_entry_header(candidates[0], loose)
+            title, company, level, comma = header.title, header.company, header.level, header.comma
+            location = location or header.location
+            ambiguous = level == "low" and bool(re.search(r"[,|·@()]|\s[–—-]\s|\sat\s", title))
+        else:
+            title, company, level, ambiguous = "", "", "low", False
         if company and not location:
             company, location = _take_location(company)
-        end_index = (starts[k + 1] - len(heads[k + 1])) if k + 1 < len(starts) else len(lines)
-        body_location, description, bullets = _parse_body(lines[i + 1 : end_index])
-        entry = {
-            "title": title, "company": company, "location": location or body_location,
-            "start": match.group(1).strip(), "end": match.group(2).strip(),
-            "description": description, "bullets": bullets,
+        if side == "below":
+            body_start, end_index = i + 1 + len(heads[k]), (starts[k + 1] if k + 1 < len(starts) else len(lines))
+        else:
+            body_start, end_index = i + 1, (starts[k + 1] - len(heads[k + 1])) if k + 1 < len(starts) else len(lines)
+        body_location, description, bullets = _parse_body(lines[body_start:end_index])
+        if notes:
+            description = "\n".join(notes + ([description] if description else []))
+        return {
+            "entry": {
+                "title": title, "company": company, "location": location or body_location,
+                "start": match.group(1).strip(), "end": match.group(2).strip(),
+                "description": description, "bullets": bullets,
+            },
+            "level": level if title else "low", "comma": comma, "ambiguous": ambiguous,
         }
-        confidence[f"experienceDetail.{len(entries)}"] = level if title else "low"
-        entries.append(entry)
+
+    results = [read(k, False) for k in range(len(starts))]
+    # Another entry split on a comma (a legal suffix, a place after a pipe): the same layout is read the same way.
+    if any(r["comma"] == "split" for r in results):
+        results = [read(k, True) if r["comma"] == "blocked" else r for k, r in enumerate(results)]
+    entries = [r["entry"] for r in results]
+    for k, r in enumerate(results):
+        confidence[f"experienceDetail.{k}"] = r["level"]
+        if r["ambiguous"]:
+            warnings.append(f"Experience entry {k + 1}: the title and the company could not be told apart. Check Title and Company.")
 
     if len(entries) > MAX_ENTRIES:
         extra = entries[MAX_ENTRIES:]

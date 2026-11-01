@@ -50,5 +50,26 @@
     "qa",
     "devops",
     "sre"
-  ]
+  ],
+  "weakRoleWords": [
+    "product",
+    "software",
+    "qa",
+    "devops",
+    "sre"
+  ],
+  "employmentWords": [
+    "full-time",
+    "part-time",
+    "full time",
+    "part time",
+    "contract",
+    "freelance",
+    "internship",
+    "permanent",
+    "temporary",
+    "self-employed",
+    "seasonal"
+  ],
+  "_comment": "roleWords tell a job title from a company; weakRoleWords are role words that also appear in company names (\"Northwind Software\"), so they count for less; employmentWords are remarks beside a title (\"Acme · Full-time\"), not part of it."
 }
