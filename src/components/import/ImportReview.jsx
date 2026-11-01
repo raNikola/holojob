@@ -14,12 +14,15 @@ import {
   draftItems,
   effectiveBasicChoice,
   effectiveSectionChoice,
+  effectiveSummaryChoice,
   liveCount,
+  liveSummary,
   removeEntry,
   willBeActive,
   withBasic,
   withEntry,
   withSection,
+  withSummary,
 } from '../../modules/profile/importDraft'
 
 const BASIC_LABELS = { fullName: 'Full name', email: 'Email', phone: 'Phone', location: 'Location', currentRole: 'Current role', experienceYears: 'Experience (years)' }
@@ -130,9 +133,42 @@ function SectionBody({ id, draft, onDraftChange }) {
   return <LineList items={draftItems(draft, id)} placeholder="Entry" onChange={(items) => onDraftChange(withSection(draft, id, items))} />
 }
 
+function SummaryCard({ draft, profile, choice, onDraftChange, onChoice }) {
+  const current = liveSummary(profile)
+  const edited = Boolean(profile._editedFields?.summary)
+  const value = draft.summary || ''
+  return (
+    <Card
+      title="Summary"
+      description={current ? 'Your profile already has a summary.' : 'Your profile has no summary yet.'}
+      action={(
+        <div className="flex items-center gap-2">
+          <Confidence level={draft.confidence?.summary} />
+          {value && !edited && (
+            <select value={choice} onChange={(e) => onChoice(e.target.value)} className={selectClass} aria-label="Summary: what to do">
+              <option value="use">{current ? 'Replace current' : 'Fill'}</option>
+              <option value="keep">Keep current</option>
+            </select>
+          )}
+        </div>
+      )}
+    >
+      <Textarea
+        label="Summary text"
+        id="import-summary"
+        rows={4}
+        value={value}
+        onChange={(e) => onDraftChange(withSummary(draft, e.target.value))}
+      />
+      {current && value && !edited && <p className="mt-2 text-xs text-stone-500">Current: {current}</p>}
+    </Card>
+  )
+}
+
 export default function ImportReview({ draft, profile, choices, onDraftChange, onChoicesChange, onSave, onDiscard, saving = false }) {
   const source = IMPORT_SOURCES[draft.source] || { name: 'Imported text' }
   const setBasicChoice = (field, value) => onChoicesChange({ ...choices, basics: { ...choices.basics, [field]: value } })
+  const setSummaryChoice = (value) => onChoicesChange({ ...choices, summary: value })
   const setSectionChoice = (id, value) => onChoicesChange({ ...choices, sections: { ...choices.sections, [id]: value } })
 
   return (
@@ -181,6 +217,8 @@ export default function ImportReview({ draft, profile, choices, onDraftChange, o
         </div>
         {draft.headline && <p className="mt-4 text-xs text-stone-500 dark:text-stone-400">Headline in the document: "{draft.headline}". Target roles are not guessed from a CV; you choose them in your profile.</p>}
       </Card>
+
+      <SummaryCard draft={draft} profile={profile} choice={effectiveSummaryChoice(profile, choices.summary)} onDraftChange={onDraftChange} onChoice={setSummaryChoice} />
 
       {SECTIONS.map(({ id, label, editedKey }) => {
         const count = draftItems(draft, id).length

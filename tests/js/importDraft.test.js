@@ -11,6 +11,7 @@ import {
   withBasic,
   withEntry,
   withSection,
+  withSummary,
 } from '../../src/modules/profile/importDraft.js'
 import { ensureCvLibrary } from '../../src/utils/cvLibrary.js'
 
@@ -285,5 +286,47 @@ describe('willBeActive', () => {
   it('is true only for a profile with no CV', () => {
     expect(willBeActive(emptyProfile())).toBe(true)
     expect(willBeActive(profileWithCv())).toBe(false)
+  })
+})
+
+describe('summary', () => {
+  const withSummaryDraft = () => ({ ...draft(), summary: 'Product leader with 12 years in B2B software.', confidence: { ...draft().confidence, summary: 'medium' } })
+
+  it('is filled by default only when the profile has none', () => {
+    expect(defaultChoices(emptyProfile(), withSummaryDraft()).summary).toBe('use')
+    const has = emptyProfile()
+    has.resume.parsedData.summary = 'My own words.'
+    expect(defaultChoices(has, withSummaryDraft()).summary).toBe('keep')
+    expect(defaultChoices(emptyProfile(), draft()).summary).toBe('keep')
+  })
+
+  it('is saved to the profile and to the new My CVs entry like other fields', () => {
+    const profile = emptyProfile()
+    const next = applyImportDraft(profile, withSummaryDraft(), defaultChoices(profile, withSummaryDraft()), options)
+    expect(next.resume.parsedData.summary).toBe('Product leader with 12 years in B2B software.')
+    expect(next._confidence.summary).toBe('medium')
+    expect(next.cvLibrary.find((c) => c.id === 'cv-new').parsedData.summary).toBe('Product leader with 12 years in B2B software.')
+  })
+
+  it('keeps the current summary on keep and replaces it on use', () => {
+    const profile = emptyProfile()
+    profile.resume.parsedData.summary = 'My own words.'
+    const kept = applyImportDraft(profile, withSummaryDraft(), { basics: {}, sections: {}, summary: 'keep' }, options)
+    expect(kept.resume.parsedData.summary).toBe('My own words.')
+    const replaced = applyImportDraft(profile, withSummaryDraft(), { basics: {}, sections: {}, summary: 'use' }, options)
+    expect(replaced.resume.parsedData.summary).toBe('Product leader with 12 years in B2B software.')
+  })
+
+  it('never replaces a summary the user edited', () => {
+    const profile = { ...emptyProfile(), _editedFields: { summary: true } }
+    profile.resume.parsedData.summary = 'My own words.'
+    const next = applyImportDraft(profile, withSummaryDraft(), { basics: {}, sections: {}, summary: 'use' }, options)
+    expect(next.resume.parsedData.summary).toBe('My own words.')
+  })
+
+  it('an edit on the review screen drops the parser confidence', () => {
+    const next = withSummary(withSummaryDraft(), 'Edited.')
+    expect(next.summary).toBe('Edited.')
+    expect(next.confidence.summary).toBeUndefined()
   })
 })
