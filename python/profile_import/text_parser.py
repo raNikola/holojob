@@ -68,6 +68,7 @@ class TextImportError(Exception):
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f​-‍⁠﻿]")
 _BULLET = re.compile(r"^(?:[•●▪◦‣∙·*]|[-–—](?=\s)|\d{1,2}[.)](?=\s))\s*")
 _DECORATION = re.compile(r"^[^\w]*$")
+_LONE_MARKER = re.compile(r"^[•●▪◦‣∙]$")
 _TRAILING = ".,;:!?)]}>\"'"
 _SEPARATORS = r"[|•·;]"
 
@@ -406,7 +407,7 @@ def _heads_after(lines: list[str], index: int, limit: int) -> list[str]:
         if (not line or _BULLET.match(line) or len(line) > 80 or len(line.split()) > 8 or line.endswith(",") or _is_date_line(line)
                 or (line.endswith(".") and not suffix) or not (line[0].isupper() or line[0].isdigit())):
             break
-        if _place(line) and heads:
+        if _place(line) and not any(_place(h) for h in heads):
             heads.append(line)
         else:
             if not named and not _role_strength(line):
@@ -576,43 +577,73 @@ def _is_date_line(line: str) -> bool:
     return len(rest) <= 100 and not rest.endswith(".") and not rest[:1].islower()
 
 
-def _continues(previous: str, line: str) -> bool:
-    """A wrapped line: the line before it has no terminal punctuation and this one does not start a sentence
-    (lower case or a digit), or the line before it ran to the full width of the page."""
-    if _BULLET.match(line) or previous[-1:] in ".!?:;":
+_SMALL_WORDS = {"and", "of", "the", "for", "in", "to", "a", "an", "on", "with", "at", "or", "by", "&", "&amp;"}
+
+
+def _next_line(lines: list[str], index: int) -> str:
+    for line in lines[index + 1 :]:
+        if line:
+            return line
+    return ""
+
+
+def _is_subheading(lines: list[str], index: int, open_bullet: str | None) -> bool:
+    """A short unmarked line in Title Case that ends without a full stop and is followed by bullets:
+    a label such as "Key Outcomes & Leadership Impact", not text. A line that ends in a colon is one
+    whatever came before; otherwise the bullet above it must be finished (end in . ! ? or a closing
+    bracket), so a wrapped "Customer Success team" before the next bullet stays part of that bullet."""
+    text = lines[index]
+    if not text or _BULLET.match(text) or len(text) > 70 or not _BULLET.match(_next_line(lines, index)):
         return False
-    return not line[0].isupper() or len(previous) >= 72
+    words = text.rstrip(":").split()
+    if not 1 <= len(words) <= 8 or text[-1] in ".!?,;" or not (text[0].isupper() or text[0].isdigit()):
+        return False
+    if not all(w.lower() in _SMALL_WORDS or w[0].isupper() or w[0].isdigit() for w in words):
+        return False
+    if text.endswith(":") or open_bullet is None:
+        return True
+    return open_bullet[-1:] in ".!?)"
 
 
-def _parse_body(body: list[str]) -> tuple[str, str, list[str]]:
-    """(location, description, bullets) of the lines under an entry's date line."""
+def _parse_body(body: list[str]) -> tuple[str, str, list[str], list[str]]:
+    """(location, description, bullets, sub-headings) of the lines under an entry's date line.
+
+    A bullet starts only on a marker (a bullet character, a dash, a number); every other line continues
+    the bullet above it (a marker alone on its line is joined to the next line before this). Before
+    the first bullet, lines are description, wrapped lines joined. A sub-heading is a label, not text."""
     lines = list(body)
     while lines and not lines[0]:
         lines.pop(0)
     location = ""
     if lines and not _BULLET.match(lines[0]) and _place(lines[0]):
         location = lines.pop(0)
-    blocks: list[list[str]] = []
-    last: list[str] | None = None
-    seen_bullet = False
-    for line in lines:
+    paragraphs: list[str] = []
+    bullets: list[str] = []
+    subheadings: list[str] = []
+    open_bullet = False  # the last line was part of a bullet, with no blank line since
+    open_para = False
+    for index, line in enumerate(lines):
         if not line:
-            last = None
+            open_bullet = open_para = False
             continue
         text = _strip_bullet(line)
-        if not text:
-            continue
         if _BULLET.match(line):
-            blocks.append(["bullet", text])
-            seen_bullet = True
-            last = blocks[-1]
-        elif last is not None and _continues(last[1], text):
-            last[1] = f"{last[1]} {text}"
+            if text:
+                bullets.append(text)
+                open_bullet = True
+            open_para = False
+            continue
+        if _is_subheading(lines, index, bullets[-1] if open_bullet else None):
+            subheadings.append(line.rstrip(":").strip())
+            open_bullet = open_para = False
+        elif open_bullet:
+            bullets[-1] = f"{bullets[-1]} {text}"
+        elif open_para and paragraphs[-1][-1:] not in ".!?:;" and (not text[0].isupper() or len(paragraphs[-1]) >= 72):
+            paragraphs[-1] = f"{paragraphs[-1]} {text}"
         else:
-            blocks.append(["bullet" if seen_bullet else "para", text])
-            last = blocks[-1]
-    description = "\n".join(t for k, t in blocks if k == "para")
-    return location, description, [t for k, t in blocks if k == "bullet"]
+            paragraphs.append(text)
+            open_para = True
+    return location, "\n".join(paragraphs), bullets, subheadings
 
 
 def _header_side(lines: list[str], starts: list[int]) -> str:
@@ -626,7 +657,7 @@ def _header_side(lines: list[str], starts: list[int]) -> str:
     return "below" if _heads_after(lines, first, limit) else "above"
 
 
-def _parse_experience(lines: list[str], unplaced: list[dict], confidence: dict, warnings: list[str], company_first: bool = False) -> tuple[list[dict], list[str]]:
+def _parse_experience(lines: list[str], unplaced: list[dict], confidence: dict, warnings: list[str], company_first: bool = False, ignored: list[dict] | None = None) -> tuple[list[dict], list[str]]:
     starts = [i for i, l in enumerate(lines) if _is_date_line(l)]
     if not starts:
         raw = [_strip_bullet(l) for l in lines if l]
@@ -676,7 +707,10 @@ def _parse_experience(lines: list[str], unplaced: list[dict], confidence: dict, 
             body_start, end_index = i + 1 + len(heads[k]), (starts[k + 1] if k + 1 < len(starts) else len(lines))
         else:
             body_start, end_index = i + 1, (starts[k + 1] - len(heads[k + 1])) if k + 1 < len(starts) else len(lines)
-        body_location, description, bullets = _parse_body(lines[body_start:end_index])
+        body_location, description, bullets, subheadings = _parse_body(lines[body_start:end_index])
+        for label in subheadings:
+            if ignored is not None:
+                ignored.append({"name": f"Sub-heading: {label}", "reason": "A label above bullets, not part of any entry field; the text stays in the raw text"})
         if notes:
             description = "\n".join(notes + ([description] if description else []))
         return {
@@ -834,6 +868,10 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
         if changed:
             changed_lines.add(i)
 
+    # A bullet character alone on its line (PDF text often puts the marker and its text on two lines) leads the next line.
+    for i in range(len(scrubbed) - 1):
+        if _LONE_MARKER.match(scrubbed[i]) and scrubbed[i + 1] and not _LONE_MARKER.match(scrubbed[i + 1]):
+            scrubbed[i + 1], scrubbed[i] = f"{scrubbed[i]} {scrubbed[i + 1]}", ""
     nonblank = [i for i, l in enumerate(scrubbed) if l]
     nonblank_rank = {i: n for n, i in enumerate(nonblank)}
     first_heading = next((i for i, l in enumerate(scrubbed) if l and _header(l)), len(scrubbed))
@@ -983,7 +1021,7 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
             if text_block:
                 unplaced.append({"label": "Summary", "text": text_block})
         elif key == "experience":
-            entries, parsed["workExperience"] = _parse_experience(body, unplaced, confidence, warnings, source == "linkedin_pdf")
+            entries, parsed["workExperience"] = _parse_experience(body, unplaced, confidence, warnings, source == "linkedin_pdf", ignored)
         elif key == "personal":
             continue  # read with the top of the document above
         elif key == "skills":
