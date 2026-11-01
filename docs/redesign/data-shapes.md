@@ -314,7 +314,7 @@ Fields that exist in the browser profile and appear in the disk mirror only afte
       }
     }
   ],
-  "resume.parsedData.experienceDetail?": [{ "title": "<string>", "company": "<string>", "start": "<string>", "end": "<string>", "bullets": ["<string>"] }],
+  "resume.parsedData.experienceDetail?": [{ "title": "<string>", "company": "<string>", "location?": "<string>", "start": "<string>", "end": "<string>", "description?": "<string>", "bullets": ["<string>"] }],
   "resume.parsedData.competencyGroups?": [{ "label": "<string>", "items": ["<string>"] }],
   "resume.parsedData.toolGroups?": [{ "label": "<string>", "items": ["<string>"] }]
 }
@@ -329,23 +329,24 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
 
 - **Where:** in memory only, between the parse route and the Save button of the import wizard. Never written to `data/`, never put in `localStorage`; an unsaved draft is lost on a refresh.
 - **Purpose:** what one import source yielded, for the review screen. It is not a profile format: every field maps onto the profile shape above, and `applyImportDraft` (`src/modules/profile/importDraft.js`) is the only code that turns a reviewed draft into a profile.
-- **Made by:** `POST /api/profile/import/parse` (body `{ "source": "paste", "text": "<string>" }`, JSON, up to 200 KB of text), which runs `python/profile_import/text_parser.py` and writes nothing. Headings and field labels ("Education", "Obrazovanje", "Ime i prezime:", ...) come from `src/data/sectionHeadings.json`, one block per language, in Latin or Cyrillic script; the same file feeds the PDF path (`src/utils/profileExtractor.js`). A new language is a new block there, with no code change.
+- **Made by:** `POST /api/profile/import/parse` (body `{ "source": "paste" | "resume_pdf" | "linkedin_pdf", "text": "<string>" }`, JSON, up to 200 KB of text; a PDF is read to text in the browser and only the text is sent), which runs `python/profile_import/text_parser.py` and writes nothing. Headings and field labels ("Education", "Obrazovanje", "Ime i prezime:", ...) come from `src/data/sectionHeadings.json`, one block per language, in Latin or Cyrillic script; the same file feeds the CV library upload (`src/utils/profileExtractor.js`). The three sources go through the one parser; `linkedin_pdf` is a mode of it (the "Top Skills" heading, company-before-title entries, "Page N of M" footers listed under `ignored`). A new language is a new block there, with no code change.
 
 ```json
 {
-  "source": "paste",
+  "source": "paste|resume_pdf|linkedin_pdf",
   "fileName": "<string>",
   "rawText": "<string>",
-  "basicProfile": { "fullName?": "<string>", "email?": "<string>", "phone?": "<string>", "location?": "<string>", "currentRole?": "<string>" },
+  "headline": "<string>",
+  "basicProfile": { "fullName?": "<string>", "email?": "<string>", "phone?": "<string>", "location?": "<string>", "currentRole?": "<string>", "experienceYears?": "<string>" },
   "parsedData": {
     "skills": ["<string>"], "projects": ["<string>"], "education": ["<string>"],
     "workExperience": ["<string>"], "certifications": ["<string>"],
-    "experienceDetail": [{ "title": "<string>", "company": "<string>", "start": "<string>", "end": "<string>", "bullets": ["<string>"] }],
+    "experienceDetail": [{ "title": "<string>", "company": "<string>", "location": "<string>", "start": "<string>", "end": "<string>", "description": "<string>", "bullets": ["<string>"] }],
     "competencyGroups": [{ "label": "<string>", "items": ["<string>"] }]
   },
   "languages": [{ "language": "<string>", "proficiency": "<string>" }],
   "links": ["<string>"],
-  "confidence": { "<field>": "high|medium|low", "experienceDetail.<n>": "high|medium|low" },
+  "confidence": { "<field>": "high|medium|low|derived", "experienceDetail.<n>": "high|medium|low" },
   "unplaced": [{ "label": "<string>", "text": "<string>" }],
   "ignored": [{ "name": "<string>", "reason": "<string>" }],
   "warnings": ["<string>"]
@@ -354,9 +355,12 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
 
 - `email`, `phone` and `links` are the only places a contact detail appears; the parser removes them from every other string. `rawText` keeps the whole input, contact details included.
 - `links` becomes `resume.parsedData.links` on save, and GitHub links are also added to `repositories.githubLinks`. `languages` becomes `basicProfile.languages`, with a level only when it is one of the profile's levels.
-- `workExperience` is the derived `"Title — Company | start – end | text"` line of each `experienceDetail` entry; it is the plain lines of the section when no dated entry was recognised.
+- `headline` is the title line under the name ("TECHNICAL PRODUCT LEADER ..."), shown as a hint. It is the `currentRole` only when the text has no experience entry; otherwise `currentRole` is the title of the current (else latest) entry. Target roles are never read from a CV: the draft has no such field.
+- `experienceYears` is `"derived"`: the largest "10+ years", "over 10 years" or "12 years of experience" in the summary and top lines, else the years since the earliest entry start (with a warning saying so).
+- An experience entry is a title / company (and place) line plus a date range; the lines under it are the `description` (before the first bullet) and `bullets`, with wrapped lines joined. `workExperience` is the derived `"Title — Company | start – end | description bullets"` line of each `experienceDetail` entry (JS `deriveWorkExperience` and Python `_derived_line` must stay identical); it is the plain lines of the section when no dated entry was recognised.
 - `unplaced` is text that fits no field (a summary, interests, lines the parser could not read). It is shown on the review screen and stays in `rawText`; nothing is dropped.
-- Saving adds a `cvLibrary` entry with `importSource: "pasted_text"`, `filePath: null`, `fileName` and `label` of the form `Pasted text <YYYY-MM-DD>`. It is not the default CV unless the profile had none. `importSource` is otherwise `resume_pdf` or `linkedin_pdf`.
+- Saving adds a `cvLibrary` entry with `importSource: "pasted_text"`, `filePath: null`, `fileName` and `label` of the form `Pasted text <YYYY-MM-DD>`. It is not the default CV unless the profile had none. For a PDF source (`importSource` `resume_pdf` or `linkedin_pdf`) the file is first stored through `POST /api/cvs` (best effort), the entry takes the stored id and `filePath`, and `fileName` / `label` come from the PDF's name.
+- "Education & Certifications" style sections are split by `python/profile_import/education_words.json` (certificate words first, then degree, then institution words); a line that is neither goes to `unplaced`.
 
 ## CV files
 
