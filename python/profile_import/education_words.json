@@ -1,0 +1,6 @@
+{
+  "degreeWords": ["bsc", "msc", "ba", "ma", "mba", "phd", "bachelor", "bachelors", "master", "masters", "doctorate", "doctor", "diploma", "degree", "associate", "meng", "beng", "llb", "llm", "mphil", "bs", "ms"],
+  "institutionWords": ["university", "college", "institute", "school", "academy", "faculty", "polytechnic", "universität"],
+  "certificateWords": ["certified", "certificate", "certification", "certifications", "licensed", "license", "licence", "cspo", "pspo", "csm", "psm", "pmp", "prince2", "itil", "safe", "cissp", "ccna", "pmi-acp"],
+  "remoteWords": ["remote", "hybrid", "on-site", "onsite"]
+}

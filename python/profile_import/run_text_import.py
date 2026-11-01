@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read JSON stdin { text }, print { ok: true, draft } or { ok: false, code }.
+"""Read JSON stdin { text, source? }, print { ok: true, draft } or { ok: false, code }.
 
 The answer never carries the text: a failure prints only a fixed code, and nothing is
 written to stderr or to disk.
@@ -25,7 +25,7 @@ def main() -> int:
         payload = json.loads(sys.stdin.read(MAX_REQUEST_CHARS) or "{}")
         if not isinstance(payload, dict):
             raise TextImportError("invalid_request")
-        result = {"ok": True, "draft": parse_text(payload.get("text"))}
+        result = {"ok": True, "draft": parse_text(payload.get("text"), payload.get("source", "paste"))}
     except Exception as error:  # noqa: BLE001 - the answer is a fixed code, never the cause
         code = getattr(error, "code", None)
         result = {"ok": False, "code": code if isinstance(code, str) else "parse_failed"}
