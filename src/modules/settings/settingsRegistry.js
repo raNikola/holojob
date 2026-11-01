@@ -32,6 +32,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'complete-profile', category: 'general', title: 'Complete your profile', keywords: ['profile', 'questionnaire', 'questions', 'unanswered', 'complete', 'skipped'] },
   { id: 'pipeline-status', category: 'general', title: 'Pipeline API status', keywords: ['pipeline', 'api', 'status', 'health', 'offline'] },
   { id: 'cli-commands', category: 'general', title: 'Advanced — CLI commands', keywords: ['cli', 'commands', 'terminal', 'discover', 'score', 'tailor', 'advanced'] },
+  { id: 'reset-profile', category: 'danger-zone', title: 'Reset profile', risky: 'delete', keywords: ['reset', 'profile', 'onboarding', 'restart', 'start over', 'questionnaire', 'cv library'] },
   { id: 'clear-local-data', category: 'danger-zone', title: 'Clear local data', risky: 'delete', keywords: ['clear', 'reset', 'delete', 'wipe', 'local data'] },
 ]
 
