@@ -9,9 +9,11 @@ import { normalizeLanguages } from '../../utils/languages.js'
 
 export const IMPORT_SOURCES = {
   paste: { importSource: 'pasted_text', name: 'Pasted text' },
+  resume_pdf: { importSource: 'resume_pdf', name: 'Resume PDF', pdf: true },
+  linkedin_pdf: { importSource: 'linkedin_pdf', name: 'LinkedIn PDF', pdf: true },
 }
 
-export const BASIC_FIELDS = ['fullName', 'email', 'phone', 'location', 'currentRole']
+export const BASIC_FIELDS = ['fullName', 'email', 'phone', 'location', 'currentRole', 'experienceYears']
 
 /** `editedKey` is the name ProfileForm passes to markFieldEdited for the same data. */
 export const SECTIONS = [
@@ -37,7 +39,8 @@ export function deriveWorkExperience(entries) {
   return list(entries).map((entry) => {
     const head = [entry.title, entry.company].filter(Boolean).join(' — ')
     const period = [entry.start, entry.end].filter(Boolean).join(' – ')
-    const bullets = list(entry.bullets).map(text).filter(Boolean).map((b) => (/[.!?]$/.test(b) ? b : `${b}.`)).join(' ')
+    const description = text(entry.description).replace(/\s+/g, ' ')
+    const bullets = [description, ...list(entry.bullets).map(text)].filter(Boolean).map((b) => (/[.!?]$/.test(b) ? b : `${b}.`)).join(' ')
     return [head, period, bullets].filter((part, i) => i < 2 || part).join(' | ')
   })
 }
@@ -114,8 +117,11 @@ const cleanLines = (value) => list(value).map(text).filter(Boolean)
 /** Experience entries as saved: trimmed, empty bullets gone, and entries with nothing to say dropped. */
 function cleanEntries(value) {
   return list(value)
-    .map((e) => ({ title: text(e?.title), company: text(e?.company), start: text(e?.start), end: text(e?.end), bullets: cleanLines(e?.bullets) }))
-    .filter((e) => e.title || e.company || e.start || e.bullets.length)
+    .map((e) => ({
+      title: text(e?.title), company: text(e?.company), location: text(e?.location), start: text(e?.start), end: text(e?.end),
+      description: text(e?.description), bullets: cleanLines(e?.bullets),
+    }))
+    .filter((e) => e.title || e.company || e.start || e.description || e.bullets.length)
 }
 
 function entryParsedData(draft) {
@@ -143,7 +149,7 @@ export function willBeActive(profile) {
  * "My CVs" entry for the source. The entry is not made the active CV, with one exception: a
  * profile with no CV at all gets it as its first, and so as its active, CV.
  */
-export function applyImportDraft(profile, draft, choices, { now = new Date(), makeId = newCvId } = {}) {
+export function applyImportDraft(profile, draft, choices, { now = new Date(), makeId = newCvId, file = null } = {}) {
   const incoming = entryParsedData(draft)
   const basicProfile = { ...profile.basicProfile }
   const confidence = { ...profile._confidence }
@@ -193,11 +199,13 @@ export function applyImportDraft(profile, draft, choices, { now = new Date(), ma
 
   const source = IMPORT_SOURCES[draft.source] || { importSource: 'imported', name: 'Imported text' }
   const day = now.toISOString().slice(0, 10)
+  // A PDF source keeps its own file name; `file` carries the stored copy's id and path when the upload worked.
+  const named = source.pdf && text(draft.fileName)
   const entry = {
-    id: makeId(),
-    label: `${source.name} ${day}`,
-    fileName: `${source.name} ${day}`,
-    filePath: null,
+    id: file?.id || makeId(),
+    ...(named ? {} : { label: `${source.name} ${day}` }),
+    fileName: named || `${source.name} ${day}`,
+    filePath: file?.filePath || null,
     uploadedAt: now.toISOString(),
     rawText: draft.rawText || '',
     importSource: source.importSource,
@@ -247,7 +255,7 @@ export function withEntry(draft, index, entry) {
 }
 
 export function addEntry(draft) {
-  const entries = [...list(draft.parsedData?.experienceDetail), { title: '', company: '', start: '', end: '', bullets: [] }]
+  const entries = [...list(draft.parsedData?.experienceDetail), { title: '', company: '', location: '', start: '', end: '', description: '', bullets: [] }]
   return { ...draft, parsedData: { ...draft.parsedData, experienceDetail: entries } }
 }
 

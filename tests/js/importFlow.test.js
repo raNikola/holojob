@@ -1,0 +1,135 @@
+import { describe, expect, it, vi } from 'vitest'
+import { readPdfDraft, saveReviewedDraft } from '../../src/modules/profile/importFlow.js'
+import { defaultChoices } from '../../src/modules/profile/importDraft.js'
+import { ensureCvLibrary } from '../../src/utils/cvLibrary.js'
+
+const file = { name: 'jane-sample.pdf', type: 'application/pdf', size: 1234 }
+
+function emptyProfile() {
+  return ensureCvLibrary({
+    basicProfile: { fullName: '', email: '', phone: '', location: '', currentRole: '', experienceYears: '', languages: [] },
+    resume: { fileName: '', uploadedAt: '', rawText: '', parsedData: { skills: [], projects: [], education: [], workExperience: [], certifications: [], links: [] } },
+    repositories: { githubLinks: [], localRepoPaths: [] },
+    questionnaire: { answers: [] },
+    _confidence: {},
+    _editedFields: {},
+  })
+}
+
+const parsed = (source) => ({
+  source,
+  fileName: '',
+  rawText: 'JANE\nSAMPLE\n10+ years',
+  headline: 'TECHNICAL PRODUCT LEADER',
+  basicProfile: { fullName: 'Jane Sample', email: 'jane@example.com', currentRole: 'Head of Product', experienceYears: '10' },
+  confidence: { experienceYears: 'derived' },
+  parsedData: {
+    skills: ['Product Strategy', 'Node.js'], projects: [], education: ['MSc Information Systems, University of Springfield, 2012'], certifications: ['CSPO, Scrum Alliance, 2019'],
+    workExperience: [],
+    experienceDetail: [{ title: 'Head of Product', company: 'Northwind', location: 'Remote', start: 'April 2024', end: 'Present', description: 'Own the portfolio', bullets: ['Grew ARR by 40%.'] }],
+    competencyGroups: [],
+  },
+  languages: [],
+  links: ['github.com/janesample'],
+  unplaced: [],
+  ignored: [],
+  warnings: [],
+})
+
+describe('reading a PDF', () => {
+  it('extracts the text, parses it as the chosen source and writes nothing', async () => {
+    const extract = vi.fn(async () => 'JANE\nSAMPLE')
+    const parse = vi.fn(async (source) => parsed(source))
+    const upload = vi.fn()
+    const updateProfile = vi.fn()
+    const draft = await readPdfDraft(file, 'resume_pdf', { extract, parse })
+    expect(extract).toHaveBeenCalledWith(file)
+    expect(parse).toHaveBeenCalledWith('resume_pdf', 'JANE\nSAMPLE')
+    expect(draft.source).toBe('resume_pdf')
+    expect(draft.fileName).toBe('jane-sample.pdf')
+    expect(upload).not.toHaveBeenCalled()
+    expect(updateProfile).not.toHaveBeenCalled()
+  })
+
+  it('does the same for a LinkedIn PDF', async () => {
+    const parse = vi.fn(async (source) => parsed(source))
+    const draft = await readPdfDraft(file, 'linkedin_pdf', { extract: async () => 'x', parse })
+    expect(parse).toHaveBeenCalledWith('linkedin_pdf', 'x')
+    expect(draft.source).toBe('linkedin_pdf')
+  })
+
+  it('refuses a source that is not a PDF source before reading anything', async () => {
+    const extract = vi.fn()
+    await expect(readPdfDraft(file, 'paste', { extract, parse: vi.fn() })).rejects.toThrow()
+    expect(extract).not.toHaveBeenCalled()
+  })
+
+  it('passes a read or parse failure on and leaves no draft', async () => {
+    await expect(readPdfDraft(file, 'resume_pdf', { extract: async () => { throw new Error('No text could be extracted') }, parse: vi.fn() })).rejects.toThrow('No text')
+    const parse = vi.fn(async () => { throw new Error('The text could not be read.') })
+    await expect(readPdfDraft(file, 'resume_pdf', { extract: async () => 'x', parse })).rejects.toThrow('could not be read')
+  })
+})
+
+describe('saving a reviewed PDF draft', () => {
+  const NOW = { now: new Date('2026-11-01T09:00:00Z') }
+
+  async function review(source = 'resume_pdf') {
+    const draft = await readPdfDraft(file, source, { extract: async () => 'text', parse: async (s) => parsed(s) })
+    return { draft, choices: defaultChoices(emptyProfile(), draft) }
+  }
+
+  it('stores nothing and updates nothing until Save', async () => {
+    const upload = vi.fn(async () => 'cv-stored1')
+    const updateProfile = vi.fn()
+    await review()
+    expect(upload).not.toHaveBeenCalled()
+    expect(updateProfile).not.toHaveBeenCalled()
+  })
+
+  it('uploads the PDF first, then adds a My CVs entry that points at the stored file', async () => {
+    const { draft, choices } = await review()
+    const order = []
+    const upload = vi.fn(async (f) => { order.push('upload'); expect(f).toBe(file); return 'cv-stored1' })
+    let result = null
+    const updateProfile = vi.fn((fn) => { order.push('update'); result = fn(emptyProfile()) })
+    const done = await saveReviewedDraft({ draft, choices, file, upload, updateProfile })
+    expect(order).toEqual(['upload', 'update'])
+    expect(done).toEqual({ stored: true })
+    const entry = result.cvLibrary.find((c) => c.id === 'cv-stored1')
+    expect(entry).toMatchObject({ filePath: 'profile/cvs/cv-stored1.pdf', fileName: 'jane-sample.pdf', label: 'jane-sample', importSource: 'resume_pdf' })
+    expect(entry.rawText).toContain('10+ years')
+    expect(result.defaultCvId).toBe('cv-stored1') // the first CV of a profile is its active one
+  })
+
+  it('fills the basics, experience years and entry fields the review showed', async () => {
+    const { draft, choices } = await review('linkedin_pdf')
+    let result = null
+    await saveReviewedDraft({ draft, choices, file, upload: async () => 'cv-2', updateProfile: (fn) => { result = fn(emptyProfile()) } })
+    expect(result.basicProfile).toMatchObject({ fullName: 'Jane Sample', currentRole: 'Head of Product', experienceYears: '10' })
+    expect(result._confidence.experienceYears).toBe('derived')
+    expect(result.basicProfile.targetRoles).toBeUndefined()
+    const [entry] = result.resume.parsedData.experienceDetail
+    expect(entry).toMatchObject({ location: 'Remote', description: 'Own the portfolio', bullets: ['Grew ARR by 40%.'] })
+    expect(result.resume.parsedData.workExperience[0]).toBe('Head of Product — Northwind | April 2024 – Present | Own the portfolio. Grew ARR by 40%.')
+    expect(result.cvLibrary[0].importSource).toBe('linkedin_pdf')
+  })
+
+  it('keeps the entry without a file when the upload fails or the API is away', async () => {
+    for (const upload of [async () => { throw new Error('refused') }, async () => null]) {
+      const { draft, choices } = await review()
+      let result = null
+      const done = await saveReviewedDraft({ draft, choices, file, upload, updateProfile: (fn) => { result = fn(emptyProfile(), NOW) } })
+      expect(done).toEqual({ stored: false })
+      expect(result.cvLibrary[0].filePath).toBeNull()
+      expect(result.cvLibrary[0].fileName).toBe('jane-sample.pdf')
+    }
+  })
+
+  it('does not upload anything for a draft that did not come from a file', async () => {
+    const { draft, choices } = await review()
+    const upload = vi.fn()
+    await saveReviewedDraft({ draft: { ...draft, source: 'paste', fileName: '' }, choices, file: null, upload, updateProfile: () => {} })
+    expect(upload).not.toHaveBeenCalled()
+  })
+})

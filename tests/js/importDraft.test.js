@@ -70,10 +70,38 @@ describe('deriveWorkExperience', () => {
   })
 })
 
+describe('experience entries with a location and a description', () => {
+  it('writes the same line as the Python parser for the synthetic PDF fixture', () => {
+    const entries = [
+      { title: 'Product Owner', company: 'Initech', location: '', start: '2014', end: '2021', description: 'Maintained the backlog for an internal tooling suite used by 300 employees.', bullets: [] },
+      { title: 'Senior Product Manager', company: 'Globex Corp', location: 'Belgrade, Serbia', start: 'June 2021', end: 'July 2023', description: 'Led the payments squad through a migration from a monolith to services.', bullets: ['Cut checkout failures by 22%.', 'Mentored three junior product managers.'] },
+    ]
+    expect(deriveWorkExperience(entries)).toEqual([
+      'Product Owner — Initech | 2014 – 2021 | Maintained the backlog for an internal tooling suite used by 300 employees.',
+      'Senior Product Manager — Globex Corp | June 2021 – July 2023 | Led the payments squad through a migration from a monolith to services. Cut checkout failures by 22%. Mentored three junior product managers.',
+    ])
+  })
+
+  it('keeps location and description when a draft is saved', () => {
+    const d = draft()
+    d.parsedData.experienceDetail = [{ title: 'PM', company: 'Acme', location: 'Remote', start: '2020', end: '', description: 'Owned billing', bullets: [] }]
+    const next = applyImportDraft(emptyProfile(), d, { basics: {}, sections: { experience: 'add' } }, options)
+    expect(next.resume.parsedData.experienceDetail[0]).toMatchObject({ location: 'Remote', description: 'Owned billing' })
+    expect(next.resume.parsedData.workExperience).toEqual(['PM — Acme | 2020 | Owned billing.'])
+  })
+
+  it('never writes target roles', () => {
+    const d = draft()
+    d.basicProfile.targetRoles = ['Project Manager']
+    const next = applyImportDraft(emptyProfile(), d, { basics: { fullName: 'use' }, sections: {} }, options)
+    expect(next.basicProfile.targetRoles).toBeUndefined()
+  })
+})
+
 describe('defaultChoices', () => {
   it('fills only what is empty', () => {
     const choices = defaultChoices(profileWithCv(), draft())
-    expect(choices.basics).toEqual({ fullName: 'keep', email: 'keep', phone: 'use', location: 'use', currentRole: 'keep' })
+    expect(choices.basics).toEqual({ fullName: 'keep', email: 'keep', phone: 'use', location: 'use', currentRole: 'keep', experienceYears: 'keep' })
     expect(choices.sections).toMatchObject({ experience: 'keep', skills: 'keep', education: 'add', languages: 'add', links: 'add', projects: 'keep' })
   })
 
@@ -249,7 +277,7 @@ describe('saving cleans what the user typed', () => {
     const profile = emptyProfile()
     const next = applyImportDraft(profile, typed, { basics: {}, sections: { skills: 'add', experience: 'add' } }, options)
     expect(next.resume.parsedData.skills).toEqual(['Rust', 'Zig'])
-    expect(next.resume.parsedData.experienceDetail).toEqual([{ title: 'Lead', company: '', start: '2020', end: '', bullets: ['shipped'] }])
+    expect(next.resume.parsedData.experienceDetail).toEqual([{ title: 'Lead', company: '', location: '', start: '2020', end: '', description: '', bullets: ['shipped'] }])
   })
 })
 
