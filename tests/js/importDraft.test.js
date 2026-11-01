@@ -5,6 +5,7 @@ import {
   applyImportDraft,
   defaultChoices,
   deriveWorkExperience,
+  educationReading,
   effectiveSectionChoice,
   removeEntry,
   willBeActive,
@@ -328,5 +329,27 @@ describe('summary', () => {
     const next = withSummary(withSummaryDraft(), 'Edited.')
     expect(next.summary).toBe('Edited.')
     expect(next.confidence.summary).toBeUndefined()
+  })
+})
+
+describe('education reading', () => {
+  const withDetail = () => {
+    const d = draft()
+    d.parsedData.educationDetail = [{ text: 'BSc — Springfield University, 2012 - 2016', degree: 'BSc', school: 'Springfield University', year: '2012 - 2016' }]
+    return d
+  }
+
+  it('is shown for a line as the parser read it', () => {
+    expect(educationReading(withDetail(), 'BSc — Springfield University, 2012 - 2016')).toEqual({ degree: 'BSc', school: 'Springfield University', year: '2012 - 2016' })
+  })
+
+  it('is gone once the line is edited, so a stale reading is never shown', () => {
+    expect(educationReading(withDetail(), 'BSc — Springfield University, 2012 - 2017')).toBeNull()
+  })
+
+  it('is display only: saving keeps the lines and writes no reading', () => {
+    const next = applyImportDraft(emptyProfile(), withDetail(), { basics: {}, sections: { education: 'add' } }, options)
+    expect(next.resume.parsedData.education).toEqual(['BSc — Springfield University, 2012 - 2016'])
+    expect(JSON.stringify(next)).not.toContain('educationDetail')
   })
 })
