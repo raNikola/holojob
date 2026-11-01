@@ -4,6 +4,7 @@ import Card from '../ui/Card'
 import AISettingsPanel from '../ai/AISettingsPanel'
 import SecretsPanel from './SecretsPanel'
 import CompleteProfilePanel from './CompleteProfilePanel'
+import ResetProfilePanel from './ResetProfilePanel'
 import ScoringWeightsPanel from './ScoringWeightsPanel'
 import ApplicationMigrationPanel from './ApplicationMigrationPanel'
 import ApplicationSettingsPanel from './ApplicationSettingsPanel'
@@ -337,6 +338,7 @@ const RENDERERS = {
       </div>
     </details>
   ),
+  'reset-profile': () => <ResetProfilePanel />,
   'clear-local-data': (c) => (
     <Card title="Clear local data">
       <Button variant="ghost" onClick={c.handleClearAll} className="text-red-600 hover:text-red-700">
