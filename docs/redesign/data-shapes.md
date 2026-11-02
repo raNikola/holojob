@@ -1,10 +1,10 @@
 # Holojob - Data shapes (DS9)
 
-Structure of every data file the app reads or writes. Only shapes: `<string>`, `<number>`, `<boolean>`, `<null>` and `<x>|<y>` for mixed values, `[...]` for lists, `<id>` for a map keyed by ids, a trailing `?` on a key where some records omit it. No value is copied from candidate or profile data. Generated from the files on DS9 on 2026-10-25, plus the code for data that lives only in the browser.
+Structure of every data file the app reads or writes. Only shapes: `<string>`, `<number>`, `<boolean>`, `<null>` and `<x>|<y>` for mixed values, `[...]` for lists, `<id>` for a map keyed by ids, a trailing `?` on a key where some records omit it. No value is copied from candidate or profile data. Generated from the files on DS9 on 2026-10-25, plus the code for data that lives only in the browser; keys rechecked against the code and the files on 2026-11-02.
 
 Where data lives: the server as master is decided (DECISIONS.md principle 15) but **not built**. Until step 5 ([STEP5_SERVER_MASTER_PLAN.md](STEP5_SERVER_MASTER_PLAN.md)) ships, the profile, intelligence and job list live in the **browser's `localStorage`**; `data/profile/` and `data/intelligence/` are mirrors written by sync actions and read by the Python pipeline, and the pipeline files (`discovered_jobs.json`, `scored_jobs.json`, `job_history.json`) are written by the pipeline, not by sync. Applications (tracker) are already on the server: the [Application store](#application-store) under `data/applications/` is the master and the browser keeps a read cache (stored job records may still carry the old `applicationTracking` field, never written since the migration, until tracker step S4 removes it). Everything under `data/` except `data/examples/` is git-ignored and private.
 
-Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intelligence`, `job-dashboard-discovered-jobs`, `job-dashboard-pipeline-state`, `job-dashboard-outreach-index`, `job-dashboard-jobs-tab`, `job-dashboard-sidebar-collapsed`, `job-dashboard-ai-settings`, `job-dashboard-ai-cache`, `job-dashboard-ai-chat`, `job-dashboard-ai-memory`, `job-dashboard-ai-usage`.
+Browser keys (the list is `src/modules/browserStorage/allowlist.js`): `localStorage` `job-dashboard-candidate-profile`, `job-dashboard-candidate-intelligence`, `job-dashboard-discovered-jobs`, `job-dashboard-pipeline-state`, `job-dashboard-sidebar-collapsed`, `job-dashboard-theme`, `job-dashboard-ai-cache`, `job-dashboard-ai-memory`, `job-dashboard-ai-usage`; `sessionStorage` `job-dashboard-active-view`, `job-dashboard-jobs-tab`, `job-dashboard-settings-category`, `job-dashboard-ai-chat`, `holojob-demo-bootstrap-done`; legacy values only read once and removed: `job-dashboard-ai-settings`, `job-dashboard-discovery-options`, `linkedin_li_at`.
 
 ## Candidate intelligence
 
@@ -292,10 +292,12 @@ Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intell
 }
 ```
 
-Fields that exist in the browser profile and appear in the disk mirror only after the next sync (this mirror pre-dates them):
+More profile fields, in the browser and in the mirror:
 
 ```json
 {
+  "_confidence": { "<field>": "<string>" },
+  "_editedFields": { "<field>": "<boolean>" },
   "defaultCvId": "<string>|<null>",
   "cvLibrary": [
     {
@@ -309,6 +311,11 @@ Fields that exist in the browser profile and appear in the disk mirror only afte
       "importSource": "<string>",
       "analysis?": {
         "facts": "<same shape as cv_analysis facts below>",
+        "rejected": ["<string>"],
+        "fingerprint": "<string>",
+        "provider": "<string>",
+        "model": "<string>",
+        "promptVersion": "<string>",
         "analyzedAt": "<string>",
         "applied?": ["<string>"],
         "lastApply?": { "at": "<string>", "count": "<number>", "state": "<string>", "error?": "<string>" }
@@ -479,7 +486,8 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
       "workable": "<number>",
       "greenhouse": "<number>",
       "lever": "<number>",
-      "ashby": "<number>"
+      "ashby": "<number>",
+      "joberty?": "<number>"
     },
     "rawCount": "<number>",
     "dedupedCount": "<number>",
@@ -525,6 +533,16 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
         "roleTrackEvidence": "<null>|<string>",
         "seniority": "<string>",
         "yearsRequired": "<null>|<number>",
+        "requirements": [
+          {
+            "id": "<string>",
+            "text": "<string>",
+            "kind": "<string>",
+            "importance": "<string>",
+            "postingQuote": "<string>",
+            "provisional": "<boolean>"
+          }
+        ],
         "mustHaves": [
           "<string>"
         ],
@@ -549,7 +567,12 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
       "standardizedPosition?": "<string>",
       "tags?": [
         "<string>"
-      ]
+      ],
+      "seniority?": "<string> (Joberty)",
+      "domains?": ["<string>"],
+      "technologies?": ["<string>"],
+      "applyUrl?": "<string>",
+      "externalId?": "<string>"
     }
   ]
 }
@@ -565,8 +588,8 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
   normalised URL. Never written by discovery. In backups with the rest of `data/jobs/`.
 - **Written by:** `import_job_url.py --job-json` (called by `POST /api/jobs/manual/score` and `/sync`). Only the scoring fields
   (`SCORING_FIELDS` in `manual_jobs.py`) are stored: `jobId` (`manual-<uuid>`), `title`, `company`, `description`, `jobUrl`, `location`,
-  `salary` (text as typed), `site`, `provider: "manual"`, `manualEntry: true`, `sourceChoice`, `status`, `createdAt`, `firstSeen`,
-  `lastSeen`, `scrapedAt`. Notes and extra links are not stored here; they stay in the browser's job record.
+  `salary` (text as typed), `site`, `provider: "manual"`, `manualEntry: true`, `sourceChoice` (older records only), `status`, `createdAt`, `firstSeen`,
+  `lastSeen`, `scrapedAt`, `updatedAt`. Notes, extra links and the Source URL are not stored here; they stay in the browser's job record.
 
 ```json
 { "jobs": [ { "jobId": "manual-<uuid>", "title": "...", "company": "...", "description": "...", "jobUrl": "...", "provider": "manual", "manualEntry": true } ] }
@@ -603,8 +626,36 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
       "belowThreshold": "<number>",
       "closed": "<number>",
       "failed": "<number>",
-      "limit": "<null>",
+      "refused": "<number>",
+      "refusal": "<null>|<string>",
+      "limit": "<null>|<number>",
       "threshold": "<number>"
+    },
+    "engineShadow": {
+      "enabled": "<boolean>",
+      "matched?": "<number>",
+      "cached?": "<number>",
+      "uncached?": "<number>",
+      "beyondLimit?": "<number>",
+      "noRequirements?": "<number>",
+      "closed?": "<number>",
+      "failed?": "<number>",
+      "excluded?": "<number>",
+      "refused?": "<number>",
+      "refusal?": "<null>|<string>",
+      "limit?": "<null>|<number>"
+    },
+    "aiEnrichment": {
+      "jobsWithoutFacts": "<number>",
+      "jobs": "<number>"
+    },
+    "manualJobs": {
+      "count": "<number>",
+      "replacedRows": "<number>"
+    },
+    "quality": {
+      "reduced": "<boolean>",
+      "reason?": "<string>"
     },
     "jobCount": "<number>",
     "summary": {
@@ -646,6 +697,16 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
         "roleTrackEvidence": "<null>|<string>",
         "seniority": "<string>",
         "yearsRequired": "<null>|<number>",
+        "requirements": [
+          {
+            "id": "<string>",
+            "text": "<string>",
+            "kind": "<string>",
+            "importance": "<string>",
+            "postingQuote": "<string>",
+            "provisional": "<boolean>"
+          }
+        ],
         "mustHaves": [
           "<string>"
         ],
@@ -742,13 +803,22 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
       },
       "belowMinSalary": "<boolean>|<null>",
       "hardCapped": "<boolean>",
+      "manualEntry?": "<boolean>",
+      "createdAt?": "<string>",
+      "updatedAt?": "<string>",
+      "aiEnrichment?": "missing",
       "workMode?": "<string>",
       "expiresAt?": "<string>",
       "category?": "<string>",
       "standardizedPosition?": "<string>",
       "tags?": [
         "<string>"
-      ]
+      ],
+      "seniority?": "<string> (Joberty)",
+      "domains?": ["<string>"],
+      "technologies?": ["<string>"],
+      "applyUrl?": "<string>",
+      "externalId?": "<string>"
     }
   ]
 }
@@ -797,6 +867,16 @@ Fields added later, in the browser job store and not in this file until saved:
         "roleTrackEvidence": "<null>|<string>",
         "seniority": "<string>",
         "yearsRequired": "<null>|<number>",
+        "requirements": [
+          {
+            "id": "<string>",
+            "text": "<string>",
+            "kind": "<string>",
+            "importance": "<string>",
+            "postingQuote": "<string>",
+            "provisional": "<boolean>"
+          }
+        ],
         "mustHaves": [
           "<string>"
         ],
@@ -842,7 +922,12 @@ Fields added later, in the browser job store and not in this file until saved:
         "standardizedPosition?": "<string>",
         "tags?": [
           "<string>"
-        ]
+        ],
+        "seniority?": "<string> (Joberty)",
+        "domains?": ["<string>"],
+        "technologies?": ["<string>"],
+        "applyUrl?": "<string>",
+        "externalId?": "<string>"
       },
       "seeded?": "<boolean>"
     }
@@ -876,7 +961,8 @@ Fields added later, in the browser job store and not in this file until saved:
       "workable": "<number>",
       "greenhouse": "<number>",
       "lever": "<number>",
-      "ashby": "<number>"
+      "ashby": "<number>",
+      "joberty?": "<number>"
     },
     "raw": "<number>",
     "deduped": "<number>",
@@ -894,7 +980,14 @@ Fields added later, in the browser job store and not in this file until saved:
     "enrichedShare": "<number>",
     "extracted": "<number>",
     "cached": "<number>",
-    "failed": "<number>"
+    "failed": "<number>",
+    "notRead": "<number>",
+    "refused": "<number>"
+  },
+  "quality?": {
+    "reduced": "<boolean>",
+    "reason": "<string>",
+    "note": "<string>"
   },
   "scoring": {
     "jobs": "<number>",
@@ -1209,7 +1302,7 @@ missing `settings.json` is the defaults, and it is first written by the first ch
     "<appId>": {
       "id": "<appId>",
       "createdAt": "<ISO timestamp>",
-      "origin": "manual",
+      "origin": "manual|migration",
       "posting": {
         "jobId": "<string>|null", "postingKey": "job:<jobId> | url:<url> | tcl:<company>|<title>|<location>",
         "title": "<string>", "company": "<string>", "location": "<string>", "url": "<string>",
@@ -1228,18 +1321,18 @@ missing `settings.json` is the defaults, and it is first written by the first ch
         "previousApplicationId": "<appId>|null",
         "distinctReason": "reapply_after_outcome|different_channel|resubmitted_new_cv|null"
       },
-      "legacy": "<null>",
+      "legacy": "<null>|<the old applicationTracking object>",
       "events": [
         { "id": "<appId>:<seq>", "seq": 1, "type": "applied", "at": "<ISO timestamp>",
-          "date": "<YYYY-MM-DD>", "source": "user", "data": {} }
+          "date": "<YYYY-MM-DD>", "source": "user|migration", "data": {} }
       ]
     }
   }
 }
 ```
 
-- `appId` is `app-<16 hex>` for an application created in the app. (`mig-` and `csv-` ids come with the migration and
-  the CSV import, later steps.) `requests` keeps the last 200 create `requestId`s, so a retry returns the first result.
+- `appId` is `app-<16 hex>` for an application created in the app and `mig-<jobId>` for a migrated one (`csv-` ids are
+  for the CSV import, not built). `requests` keeps the last 200 create `requestId`s, so a retry returns the first result.
 - `posting`, `attempt`, `id`, `createdAt`, `origin` and `legacy` are frozen at creation. `events` only grows at the
   end; `seq` runs 1..n with no gap and the first event is `applied`. `assertAppendOnly` checks all of this before
   every write.
@@ -1377,5 +1470,5 @@ Posting fixture shape:
 
 ## Not stored by the app
 
-- AI provider keys live only in `.env` / container environment. Browser AI settings (provider, model, usage, chat, memory) are in `localStorage` only.
+- AI keys and the LinkedIn cookie are not in this list on purpose: `data/secrets/ai.json` and `data/secrets/linkedin.json` (Secret store in [CLAUDE.md](../../CLAUDE.md)), with `.env` as the fallback; never in the browser. The AI provider selection is `data/config/ai-settings.json` (AI provider selection in CLAUDE.md). Browser AI usage, chat and memory stay in the browser until step 5 (browser keys above).
 - The `claude-config/` folder holds the Claude Code CLI login used for tailoring; git-ignored.

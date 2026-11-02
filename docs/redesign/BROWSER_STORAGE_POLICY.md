@@ -371,7 +371,12 @@ X-Frame-Options: DENY
 
 ## 6. Test plan
 
-All tests run on the host (`npm test`), offline, no AI calls. Secrets in tests are a fixed canary string
+All tests run offline, with no AI calls: the JS tests in the throwaway node container (never `:Z`), the Python tests against the host `.venv`:
+
+    podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run test:js
+    .venv/bin/python -m pytest tests/python -q
+
+Secrets in tests are a fixed canary string
 `SECRET-CANARY-7f3a9c1d` (long enough to pass the last-4 rule, not matching any real key pattern).
 
 ### 6.1 No storage key outside the allowlist

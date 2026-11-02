@@ -416,7 +416,7 @@ All offline, on a temp data directory through the `root` parameter, no AI call, 
 | I18 | **A hit never duplicates memory.** | `mergeFeatureIntoMemory` is run twice with the same finding, and once more on a hit: `memory.json` is byte-identical after the first run. If this test cannot be made to pass, the merge is skipped on a hit (Q-O). |
 | I13 | **Allowlist.** | `browserStorageAllowlist.test.js` (exists) fails on any key or storage API outside the list; step 7 removes `TOLERATED_UNTIL_MIGRATED` entirely. |
 
-Verification once built (owner runs, commands proposed, not assumed): `npm test`; then per key `Settings > Privacy > Browser data`: run Preview, read counts against the browser's DevTools `localStorage` sizes, Move, and check that the `data/backups/step5-*` directory and `migration-step5.json` appear; clear site data, reload, confirm the same counts; open a second browser profile and confirm the banner and the `server-newer` / `identical` state.
+Verification once built (owner runs, commands proposed, not assumed): `podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run test:js` (the throwaway node container, never `:Z`) and `.venv/bin/python -m pytest tests/python -q`; then per key `Settings > Privacy > Browser data`: run Preview, read counts against the browser's DevTools `localStorage` sizes, Move, and check that the `data/backups/step5-*` directory and `migration-step5.json` appear; clear site data, reload, confirm the same counts; open a second browser profile and confirm the banner and the `server-newer` / `identical` state.
 
 ## 7. Smallest first slice and ordered, independently shippable steps (riskiest last)
 
