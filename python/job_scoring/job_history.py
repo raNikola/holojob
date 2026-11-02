@@ -124,12 +124,12 @@ def _annotate(job: dict, entry: dict, *, now: datetime, closed: bool) -> dict:
     }
 
 
-def _board_failed(entry: dict, failed_boards: dict[str, set[str] | None]) -> bool:
-    """Whether this entry's board went unread this run. An entry with no board name counts as unread when in doubt."""
+def _board_listed(entry: dict, by_provider: dict[str, set[str] | None]) -> bool:
+    """Whether this entry's board is in the map (None: all of the provider's). An entry with no board name counts as in it."""
     provider = entry.get("provider")
-    if provider not in failed_boards:
+    if provider not in by_provider:
         return False
-    boards = failed_boards[provider]
+    boards = by_provider[provider]
     board = (entry.get("job") or {}).get("source")
     return boards is None or not board or board in boards
 
@@ -145,6 +145,7 @@ def apply_run(
     previous_facts: dict[str, dict] | None = None,
     seen_before: dict[str, str] | None = None,
     failed_boards: dict[str, set[str] | None] | None = None,
+    empty_boards: dict[str, set[str]] | None = None,
 ) -> tuple[list[dict], dict]:
     """Record one discovery run; return the jobs to write and what changed.
 
@@ -159,16 +160,19 @@ def apply_run(
     takes that date as firstSeen and is never flagged new.
     `failed_boards` maps a provider to the boards it could not read this run (None: it failed before naming any). Their
     ads say nothing about what is listed, so they are not closed, and stay in the output unchanged instead of dropping
-    out of it. Only CLOSURE_PROVIDERS read this: a search-based provider's missing ad is not closed anyway.
+    out of it. `empty_boards` maps a provider to the boards that answered with no jobs at all: held the same way, since
+    a board losing every ad at once is more likely a glitch than a hiring freeze. Only CLOSURE_PROVIDERS read these: a
+    search-based provider's missing ad is not closed anyway.
     """
     moment = _parse(now) or datetime.now(timezone.utc)
     entries = ledger["jobs"]
     previous_facts = previous_facts or {}
     seen_before = seen_before or {}
     failed_boards = failed_boards or {}
+    empty_boards = empty_boards or {}
     stats = {
         "new": 0, "known": 0, "reopened": 0, "changed": 0, "carriedFacts": 0, "closed": 0,
-        "keptFullerDescription": 0, "keptFailedBoard": 0,
+        "keptFullerDescription": 0, "keptFailedBoard": 0, "keptEmptyBoard": 0,
     }
     found_ids = set()
     found_roles = set()
@@ -231,12 +235,17 @@ def apply_run(
             or entry.get("roleKey") in found_roles  # still listed under another copy
         ):
             continue
-        if _board_failed(entry, failed_boards):
+        held_by = (
+            "keptFailedBoard" if _board_listed(entry, failed_boards)
+            else "keptEmptyBoard" if _board_listed(entry, empty_boards)
+            else None
+        )
+        if held_by:
             record = _annotate(entry["job"], entry, now=moment, closed=False)
             if entry.get("llmFacts"):
                 record["llmFacts"] = entry["llmFacts"]
             out.append(record)
-            stats["keptFailedBoard"] += 1
+            stats[held_by] += 1
         elif providers_returned.get(provider, 0) > 0:
             entry["closedAt"] = now
             stats["closed"] += 1

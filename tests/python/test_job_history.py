@@ -519,3 +519,72 @@ def test_from_a_failing_board_to_the_ledger_nothing_of_that_board_closes(monkeyp
     jobs = fetch(provider)
     _, stats = run_failed(ledger, jobs, {"greenhouse": set(provider.last_outcome.boards_failed)}, returned={"greenhouse": len(jobs)})
     assert stats["closed"] == 0 and ledger["jobs"]["b1"]["closedAt"] is None
+
+
+# --- a board that answers with no jobs holds its ads ---------------------------------------------
+
+
+def run_empty(ledger, jobs, empty, day=1, returned=None, failed=None, key=KEY):
+    return jh.apply_run(ledger, jobs, now=iso(day), providers_returned=returned or {"greenhouse": 1}, key=key,
+                        role_key=_crosspost_key, failed_boards=failed, empty_boards=empty)
+
+
+def test_an_empty_board_holds_its_ads_while_another_board_returns_jobs():
+    ledger, jobs = two_boards()
+    before = copy.deepcopy(ledger["jobs"]["b1"])
+    out, stats = run_empty(ledger, [jobs[0]], {"greenhouse": {"bad"}})
+    assert ledger["jobs"]["b1"] == before, "an empty board's ledger entry must not change"
+    assert stats["closed"] == 0 and stats["keptEmptyBoard"] == 1 and stats["keptFailedBoard"] == 0
+    held = next(j for j in out if j["jobId"] == "b1")
+    assert held["isClosed"] is False and held["closedAt"] is None and held["lastSeen"] == iso(0)
+    assert held["llmFacts"] == facts_for(jobs[1])
+
+
+def test_a_non_empty_board_still_closes_its_absent_ads_while_another_board_is_empty():
+    ledger, jobs = two_boards()
+    gone = board_job("g2", "good")
+    run(ledger, [*jobs, gone], day=0)
+    out, stats = run_empty(ledger, [jobs[0]], {"greenhouse": {"bad"}})
+    assert stats["closed"] == 1 and ledger["jobs"]["g2"]["closedAt"] == iso(1)
+    assert next(j for j in out if j["jobId"] == "g2")["isClosed"] is True
+    assert ledger["jobs"]["b1"]["closedAt"] is None
+
+
+def test_all_boards_empty_never_mass_closes_and_keeps_every_ad():
+    ledger, _ = two_boards()
+    out, stats = run_empty(ledger, [], {"greenhouse": {"good", "bad"}}, returned={"greenhouse": 0})
+    assert stats["closed"] == 0 and stats["keptEmptyBoard"] == 2
+    assert {j["jobId"] for j in out} == {"g1", "b1"} and not any(j["isClosed"] for j in out)
+
+
+def test_a_failed_board_and_an_empty_board_in_one_run_are_counted_apart():
+    ledger, jobs = two_boards()
+    third = board_job("e1", "empty")
+    run(ledger, [*jobs, third], day=0)
+    _, stats = run_empty(ledger, [jobs[0]], {"greenhouse": {"empty"}}, failed={"greenhouse": {"bad"}})
+    assert (stats["closed"], stats["keptFailedBoard"], stats["keptEmptyBoard"]) == (0, 1, 1)
+
+
+def test_an_empty_boards_ad_is_not_held_after_the_search_changed():
+    ledger, jobs = two_boards()
+    out, stats = run_empty(ledger, [jobs[0]], {"greenhouse": {"bad"}}, key="search-b")
+    assert "b1" not in {j["jobId"] for j in out} and stats["keptEmptyBoard"] == 0
+
+
+@pytest.mark.parametrize("provider", ["jobspy", "infostud", "workable", "joberty"])
+def test_search_based_providers_are_untouched_by_an_empty_board(provider):
+    ledger, jobs = two_boards(provider)
+    out, stats = run_empty(ledger, [jobs[0]], {provider: {"bad"}}, returned={provider: 1})
+    assert stats["closed"] == 0 and stats["keptEmptyBoard"] == 0 and {j["jobId"] for j in out} == {"g1"}
+
+
+@pytest.mark.parametrize("name", ["greenhouse", "ashby", "lever"])
+def test_a_provider_names_the_board_that_answered_empty(monkeypatch, name):
+    empty = [] if name == "lever" else {"jobs": []}
+    provider = provider_with(
+        monkeypatch, name, lambda board, url: FakeResponse(body=empty if board == "bad" else GOOD_BODY[name])
+    )
+    assert [j["source"] for j in fetch(provider)] == ["good"]
+    assert provider.last_outcome.boards_empty == ["bad"] and provider.last_outcome.boards_failed == []
+    assert provider.last_outcome.status == "ok"
+    assert any("bad" in warning for warning in provider.last_outcome.warnings)

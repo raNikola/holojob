@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ProviderOutcome:
-    """How a fetch went, beside the jobs it returned. run_discovery passes boards_failed to the ledger, so an unread
-    board's ads are not taken for ads that were removed, and the rest to the run log.
+    """How a fetch went, beside the jobs it returned. run_discovery passes boards_failed and boards_empty to the ledger,
+    so ads of an unread or empty board are not taken for ads that were removed, and the rest to the run log.
 
     read: ads parsed before the search, role and location filters. kept: the ones returned.
     An unsupported country and a source not built yet are status ok with read 0, explained in warnings.
@@ -37,6 +37,7 @@ class ProviderOutcome:
     kept: int = 0
     error: str | None = None
     boards_failed: list[str] = field(default_factory=list)
+    boards_empty: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -54,7 +55,8 @@ def parts_outcome(
         kept=kept,
         error="; ".join(f"{part}: {error}" for part, error in failures.items()) or None,
         boards_failed=list(failures) if named else [],
-        warnings=[f"board {board} answered with 0 ads" for board in empty or []],
+        boards_empty=list(empty or []),
+        warnings=[f"board {board} answered with 0 ads; its open ads were kept" for board in empty or []],
     )
 
 
