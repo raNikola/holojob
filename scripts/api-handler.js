@@ -30,7 +30,6 @@ import {
   loadQualityReport,
   runQualityAudit,
 } from './run-quality-audit.js'
-import { importLinkedInText } from './run-linkedin-import.js'
 import { IMPORT_ERRORS, MAX_IMPORT_BODY_BYTES, parseImportSource } from './run-profile-import.js'
 import { handleAiSettingsRequest } from './ai-settings-handler.js'
 import { handleSecretsRequest } from './secrets-handler.js'
@@ -618,17 +617,6 @@ export async function handleApiRequest(req, res) {
       serveResumeFile(res, parts[0], parts[1])
       return true
     }
-  }
-
-  if (url === '/api/profile/import-linkedin' && req.method === 'POST') {
-    try {
-      const body = await readBody(req)
-      const result = await importLinkedInText(body.rawText || '')
-      sendJson(res, result.ok ? 200 : 400, result)
-    } catch (e) {
-      sendJson(res, 400, { error: e.message })
-    }
-    return true
   }
 
   // Stateless: parses pasted text into an import draft and writes nothing. Every answer is fixed text; the text is never echoed.

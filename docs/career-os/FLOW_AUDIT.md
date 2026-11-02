@@ -28,6 +28,8 @@ Three copies of the truth exist:
 
 There are two separate entry points, and they behave differently.
 
+**No longer current:** the Edit Profile upload (`ResumeUpload.jsx`, `applyResumeExtraction`, the LinkedIn-PDF route below) was removed; the import wizard (`src/components/import/`, `python/profile_import/`) replaced it.
+
 | | Edit Profile → "Upload resume" (`ResumeUpload.jsx`) | My CVs → "Upload new CV" (`CvLibrary.jsx`) |
 |---|---|---|
 | Text | pdfjs in the browser (`extractTextFromPdf`) | same |
@@ -156,7 +158,8 @@ Path: `JobTailorActions` → `/api/tailor/*` → `run_tailor.py`.
 1. **Edit Profile re-upload overwrites your edits.** `applyResumeExtraction` merges the
    extracted `basicProfile` over yours, including empty strings, and the extracted `parsedData`
    lists replace your edited lists. `_editedFields` only hides the confidence tags and
-   protects nothing.
+   protects nothing. **No longer applies to this code:** `applyResumeExtraction` was removed
+   with the old upload chain.
 2. **The phone extractor has Indian defaults.** `profileExtractor.js` has `+91` and
    `[6-9]\d{9}` patterns, against the "no hard-coded markets" rule.
 3. **Applied analysis suggestions do nothing for scoring until intelligence is regenerated and
