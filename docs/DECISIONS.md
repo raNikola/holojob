@@ -155,12 +155,43 @@ is an exception to that rule ([plan, section 2.3](redesign/STEP5_SERVER_MASTER_P
 - Data lost before this change is not restored; only rows still in the browser are protected.
 - A row kept under another browser or profile is not shared: the data still lives in one browser's `localStorage`.
 - When the list does not fit `localStorage`, `saveJobs` stores it without `description`, `llmFacts` and `engineShadow` (`slimJob`). A
-  scored row gets them back from the file; an `offList` row does not, so its Job Details can show no ad text. The ledger still has it.
+  scored row gets them back from the file; an `offList` row gets its ad text from the ledger or its application's posting when Job Details opens.
 - Carry-over still matches on `jobId` or URL only. A status on one copy of a role is not moved to another copy with a different URL; the
   old copy is kept `offList` instead.
-- Job Details does not yet say a job is absent from current results, and an ad whose row was dropped still cannot be opened.
-- Stat cards count only rows in current results, so an application whose ad is `offList` is not in the "Applied" card; Application
-  Statistics reads the application store and still counts it.
+- Job Details saying a job is absent from current results, opening an ad whose row was dropped, and counting an application whose ad is
+  `offList` are solved by [the next decision](#applications-open-without-the-ad-history-read-path-2026-11-03).
+
+## Applications open without the ad; history read path (2026-11-03)
+
+**Rule:** an application is an independent record. It opens, and its notes, follow-ups and history work, from its own frozen posting,
+whatever discovery returns.
+
+- **Read path:** `GET /api/jobs/history/<jobId>` (`scripts/job-history-read.js`) returns one job's snapshot from `job_history.json` with
+  `firstSeen`, `lastSeen` and `closedAt`, and never another job, `llmFacts`, `roleKey` or `seenUnder`. It is read-only: it writes, renames and creates nothing,
+  so even a corrupt ledger stays where it is (503). The file is parsed once into a `Map`, and again when its inode, size or mtime changes. The id must match the
+  store's job id rule. An unknown id, a missing ledger and an entry with no snapshot are 404 `{ found: false }`.
+- **Job Details order** (`modules/jobs/jobResolve.js`): stored row, scored or discovered file, ledger, the application's frozen posting (latest non-voided attempt, else the
+  latest). Missing ad text on a stored row is filled from the ledger, then the posting, except on a hand-entered job.
+- **Notice "Not in the latest run":** shown for an `offList` row or a job the read file lacks, with the last-seen date. A posting's capture date is reported as such, never as last seen.
+  When no file could be read the page says nothing unless the row is already marked. It says nothing about the ad being closed. Hand-entered jobs never show it.
+- **Fallbacks are display only:** a ledger or posting record is never written to the browser's list. A saved row would count as an active job in stats, exports and AI
+  contexts, and Step 5 would migrate it as one. A job with no stored row therefore hides tailoring, AI tools and contacts, which write to a row; the tracker panel
+  writes to the application store and needs none.
+- **Opening:** a board card or tracker table row uses the drawer when a row exists, otherwise Job Details by job id. The drawer's "Open full details" is enabled by a stored row, an application
+  or a ledger entry.
+- **Counting:** the tracker stat cards (Applications, Dashboard, Jobs screen) and the AI `jobStats` count from the store (`trackerStats`): one per non-voided application, as the board and
+  Application Statistics do, so two attempts at one job count twice. `computeJobStats` keeps counting rows. Until the store loads, the Dashboard shows "…"; the other screens and the AI context use the row count.
+- **AI:** the application context holds an application with no row through the same `summarizeJob` whitelist. `topJobs` and the skill gap read only rows in current results. Nothing in
+  `aiContextBuilder.js` reads the ledger, so an ad known only to the ledger reaches no context. Scoring and exports are unchanged.
+- **Not the long-term source:** `localStorage` still holds the job list, and this path works around that rather than replacing it. Step 5 follows
+  ([plan](redesign/STEP5_SERVER_MASTER_PLAN.md)).
+
+**Limits of this step:**
+
+- A voided application stays out of the board, the table and the counts (TRACKER S4 is unchanged). Its Job Details opens only by link, showing Restore; its notes and follow-ups are editable after a restore.
+- An application saved with no job id has no route, so its card shows a notice. The UI always sends a job id, so none is known to exist.
+- A row with legacy `applicationTracking` that was never migrated no longer counts in the tracker stat cards once the store has loaded. It stays in the tracker table, and the migration moves it into the store.
+- Per-job AI tools on a stored `offList` row are unchanged: they run only when the owner opens that job and asks.
 
 ## Ad lifecycle rules (narrowed 2026-11-02)
 
