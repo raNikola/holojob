@@ -1,0 +1,90 @@
+#!/bin/sh
+# Tracked pre-push hook, enabled by scripts/install-git-hooks.sh (core.hooksPath).
+# Bypass, skipping the remote guard as well: git push --no-verify
+#
+# $1 is the remote name, $2 its URL; each stdin line is one ref being pushed:
+# <local ref> <local sha> <remote ref> <remote sha>
+set -u
+
+# Personal job-search data must never leave the owner's accounts: the only allowed
+# target is origin at the owner's private repo. The URL is pinned too, because a remote
+# can be renamed or repointed (a fresh clone of upstream calls upstream "origin").
+# It comes first: it also covers deletions and tag pushes, which skip the checks below.
+case "${1:-}:${2:-}" in
+  origin:git@github.com:raNikola/holojob.git) ;;
+  *)
+    echo "Refusing push to ${1:-} (${2:-}): only origin (git@github.com:raNikola/holojob.git) is allowed." >&2
+    exit 1 ;;
+esac
+
+# The commits that would land on a branch. Deleted branches (an all-zero local sha)
+# and tags are not checked.
+shas=
+while read -r _local_ref local_sha remote_ref _remote_sha; do
+  case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
+  case "$local_sha" in *[!0]*) ;; *) continue ;; esac
+  case " $shas " in *" $local_sha "*) ;; *) shas="$shas $local_sha" ;; esac
+done
+[ -n "$shas" ] || exit 0
+
+die() {
+  echo "pre-push: $1" >&2
+  echo "pre-push: push stopped. To push anyway (also skips the remote guard): git push --no-verify" >&2
+  exit 1
+}
+
+top=$(git rev-parse --show-toplevel 2>/dev/null) || die "cannot find the repository root"
+# Git may export these to the hook; the checks must not inherit them.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
+command -v podman >/dev/null 2>&1 || die "podman not found"
+[ -d "$top/node_modules" ] || die "node_modules missing (see Tests in CLAUDE.md)"
+[ -x "$top/.venv/bin/python" ] || die ".venv/bin/python missing (see Tests in CLAUDE.md)"
+
+work=$(mktemp -d) || die "cannot create a temp directory"
+trap 'rm -rf "$work"' EXIT
+trap 'exit 130' HUP INT TERM
+
+in_node() {
+  podman run --rm --security-opt label=disable -e NPM_CONFIG_UPDATE_NOTIFIER=false \
+    -v "$tree:/work" -v "$top/node_modules:/work/node_modules" -w /work \
+    docker.io/library/node:20-bookworm "$@"
+}
+
+run_pytest() {
+  (cd "$tree" && "$top/.venv/bin/python" -m pytest -m "not network" -q)
+}
+
+step() {
+  name=$1
+  shift
+  started=$(date +%s)
+  if "$@" >"$work/log" 2>&1 </dev/null; then
+    printf 'pre-push: PASS %-8s %ss\n' "$name" "$(($(date +%s) - started))"
+  else
+    printf 'pre-push: FAIL %-8s %ss\n' "$name" "$(($(date +%s) - started))"
+    tail -n 60 "$work/log"
+    die "$name failed for ${sha%"${sha#???????}"}"
+  fi
+}
+
+total_started=$(date +%s)
+for sha in $shas; do
+  # Check the commit being pushed, not the working tree: a file left out of the
+  # commit passes in the working tree and still breaks what gets pushed.
+  tree="$work/tree"
+  mkdir "$tree"
+  git -C "$top" archive -o "$work/tree.tar" "$sha" && tar -xf "$work/tree.tar" -C "$tree" || die "cannot export $sha"
+  # Git-ignored and generated from the profile; without it the scoring snapshot tests skip.
+  if [ -f "$top/data/engine-snapshot.json" ]; then
+    mkdir -p "$tree/data"
+    cp "$top/data/engine-snapshot.json" "$tree/data/"
+  fi
+
+  step lint in_node npm run lint
+  step js-tests in_node npm run test:js
+  step pytest run_pytest
+  step build in_node npm run build
+  rm -rf "$tree"
+done
+echo "pre-push: all checks passed in $(($(date +%s) - total_started))s"
