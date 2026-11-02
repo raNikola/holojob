@@ -65,6 +65,29 @@ Deferred (TODO, not scheduled):
   ads without a call.
 - Local embeddings as an extra mapping step, only if the mapping proves noisy in the audit.
 
+## Fix scoring: skill extraction scope, requirement weighting, domain transferability - TODO
+
+Found 2026-11-02 on a real posting (a PM role at a B2B-adjacent consumer marketplace): the tool gave 45 / Weak / P3 /
+"Maybe"; the owner's manual review put the real fit near 6/10, with the mismatch mainly on remote / location, not on
+skills or domain. GitHub Issues are disabled on this repo, so the work is tracked here. Not started.
+
+- [ ] **Skill extraction covers the whole work history.** JavaScript, React, PHP, HTML, CSS, Git, Figma and REST APIs
+  were flagged missing although they are explicit in an earlier role (Senior Web Programmer, 2014-2021). Today only
+  recent roles are read.
+- [ ] **Hard vs. nice-to-have requirements.** A "plus if you have X" line was weighted like a must-have. The model
+  tags each requirement hard or soft as a fact; `scorer.py` decides the weight (architectural rule in CLAUDE.md).
+- [ ] **Domain transferability.** "No clear industry match" was emitted for B2B two-sided dynamics (carrier / shipper)
+  that are structurally similar to the posting's marketplace (host / guest). Judge structural similarity, not a flat
+  mismatch.
+- [ ] **Low-confidence reasons only when the signal is absent.** "seniority not stated" and "no strong culture
+  signals" fired on a posting that lists salary bands per seniority tier and 3-month / 6-month onboarding milestones.
+  Guard each string with a check of the source text.
+- **Must NOT change: location mismatch detection.** It worked correctly in this test; the location cap rules, the
+  "Verify location" flag and the location gate stay untouched, and their tests must keep passing.
+
+Each item gets a fixture-based regression test; the Phase 1 stability test must keep passing. Related: "Recalibrate
+`TARGET_COVERAGE` and fix the flat scoring dimensions" under Later.
+
 ## Later
 
 - Multi-device access with server-side storage as the master.
