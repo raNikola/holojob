@@ -3,7 +3,7 @@ import { Moon, Sun, ChevronLeft, ChevronRight } from 'lucide-react'
 import ProgressBar from './ProgressBar'
 import StepLayout from './StepLayout'
 import WelcomeStep from './WelcomeStep'
-import ResumeUpload from '../resume/ResumeUpload'
+import ImportWizard from '../import/ImportWizard'
 import ProfileForm from '../profile/ProfileForm'
 import RepositoryForm from '../repositories/RepositoryForm'
 import QuestionnaireForm from '../questionnaire/QuestionnaireForm'
@@ -11,36 +11,65 @@ import ReviewScreen from '../review/ReviewScreen'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
-import { QUESTIONS, QUESTION_COUNT } from '../../data/questions'
-import { validateStep, validateQuestionnaireSection, validateQuestion } from '../../utils/validators'
+import { QUESTION_COUNT } from '../../data/questions'
+import { answeredQuestionIds, orderedQuestions } from '../../modules/profile/questionnaireStatus'
+import { checkFinishReadiness } from '../../modules/profile/finishReadiness'
+import { validateProfileForIntelligence } from '../../modules/intelligence/intelligenceValidators'
+import { regenerateIntelligence, saveIntelligence } from '../../modules/intelligence/intelligenceExport'
+import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
+import { validateStep } from '../../utils/validators'
 import { profileChangedSince, takeProfileSnapshot } from '../../utils/profileSnapshot'
 import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
 import { deleteCvFile } from '../../modules/cvs/cvApi'
+import { takeResetNotice } from '../../modules/profile/profileReset'
 import { cvFilesToDiscard } from '../../utils/cvLibrary'
 
 const STEP_CONFIG = [
   { title: 'Welcome', description: '' },
-  { title: 'Upload resume', description: 'Upload your PDF resume for local text extraction and autofill.' },
+  { title: 'Bring in your history', description: 'Import a resume or LinkedIn data, review what was found, then save it.' },
   { title: 'Your profile', description: 'Review and edit autofilled details from your resume.' },
   { title: 'Repositories', description: 'Add GitHub links and local project folder paths.' },
-  { title: 'Questionnaire', description: 'Answer 17 interactive questions to build your candidate intelligence profile.' },
+  { title: 'Questionnaire', description: `Optional: answer what you like to improve your matches. Skip any question.` },
   { title: 'Review & export', description: 'Review everything and export your candidate-profile.json.' },
 ]
 
+const ORDERED_QUESTIONS = orderedQuestions()
 const QUESTIONNAIRE_STEP = 4
 const TOTAL_STEPS = STEP_CONFIG.length
 const EDIT_START_STEP = 1
 
 export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   const isEdit = mode === 'edit'
-  const { currentStep, setStep, profile, restoreProfile } = useProfile()
+  const { currentStep, setStep, profile, restoreProfile, markOnboardingComplete } = useProfile()
   // The profile as it was when this edit began, for Cancel. Nothing is kept in onboarding.
   const [snapshot] = useState(() => (mode === 'edit' ? takeProfileSnapshot(profile) : null))
   const [errors, setErrors] = useState([])
+  const [resetNotice] = useState(takeResetNotice)
+  // Counts failed Continue presses, so the form shows field errors and focus moves to the first one.
+  const [failed, setFailed] = useState({ key: null, count: 0 })
+  const [importBusy, setImportBusy] = useState(false)
   const [questionnaireIndex, setQuestionnaireIndex] = useState(0)
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
 
   const minStep = isEdit ? EDIT_START_STEP : 0
+  const stepKey = `${currentStep}:${questionnaireIndex}`
+  const showFieldErrors = failed.key === stepKey
+
+  const fail = (errs) => {
+    setErrors(errs)
+    setFailed((f) => ({ key: stepKey, count: f.count + 1 }))
+  }
+  const clearFailed = () => setFailed((f) => ({ ...f, key: null }))
+
+  // After a failed Continue, focus the first field the form marked invalid.
+  useEffect(() => {
+    if (!failed.key) return
+    const first = document.querySelector('[aria-invalid="true"], [data-invalid="true"]')
+    if (first) {
+      first.focus()
+      first.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    }
+  }, [failed.count]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isEdit && currentStep < EDIT_START_STEP) {
@@ -57,43 +86,63 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
 
   const goNext = () => {
     if (currentStep === QUESTIONNAIRE_STEP) {
-      const currentQ = QUESTIONS[questionnaireIndex]
-      const { valid, errors: errs } = validateQuestion(profile, currentQ.id)
-      if (!valid) { setErrors(errs); return }
       if (questionnaireIndex < QUESTION_COUNT - 1) {
-        const nextIndex = questionnaireIndex + 1
-        if (currentQ.section === 1 && QUESTIONS[nextIndex].section === 2) {
-          const sectionCheck = validateQuestionnaireSection(1, profile)
-          if (!sectionCheck.valid) { setErrors(sectionCheck.errors); return }
-        }
         setErrors([])
-        setQuestionnaireIndex(nextIndex)
+        clearFailed()
+        setQuestionnaireIndex(questionnaireIndex + 1)
         scrollToTop()
         return
       }
-      const { valid: allValid, errors: allErrs } = validateStep(QUESTIONNAIRE_STEP, profile)
-      if (!allValid) { setErrors(allErrs); return }
       setErrors([])
+      clearFailed()
       setStep(currentStep + 1)
       scrollToTop()
       return
     }
 
     const { valid, errors: errs } = validateStep(currentStep, profile)
-    if (!valid) { setErrors(errs); return }
+    if (!valid) { fail(errs); return }
     setErrors([])
+    clearFailed()
     if (currentStep < TOTAL_STEPS - 1) setStep(currentStep + 1)
+  }
+
+  // Finish completes onboarding with whatever is answered. If a required profile
+  // field or the résumé is missing it goes to that step instead and completes nothing.
+  const finish = async () => {
+    const readiness = checkFinishReadiness(profile)
+    if (!readiness.ready) {
+      setErrors(readiness.errors)
+      setFailed((f) => ({ key: `${readiness.step}:${questionnaireIndex}`, count: f.count + 1 }))
+      setStep(readiness.step)
+      scrollToTop()
+      return
+    }
+    const validation = validateProfileForIntelligence(profile)
+    if (!validation.valid) { fail(validation.errors); return }
+    try {
+      const generated = regenerateIntelligence(profile)
+      saveIntelligence(generated)
+      markOnboardingComplete()
+      void saveProfileToDataDir(profile)
+      void saveIntelligenceToDataDir(generated)
+      onComplete?.({ intelligenceGenerated: true })
+    } catch (e) {
+      fail([e.message || 'Failed to generate intelligence.'])
+    }
   }
 
   const goBack = () => {
     if (currentStep === QUESTIONNAIRE_STEP && questionnaireIndex > 0) {
       setErrors([])
+      clearFailed()
       setQuestionnaireIndex(questionnaireIndex - 1)
       scrollToTop()
       return
     }
 
     setErrors([])
+    clearFailed()
     if (currentStep > minStep) {
       if (currentStep === QUESTIONNAIRE_STEP) setQuestionnaireIndex(0)
       setStep(currentStep - 1)
@@ -116,12 +165,14 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
 
   const jumpToStep = (step) => {
     setErrors([])
+    clearFailed()
     setStep(step)
     scrollToTop()
   }
 
   const jumpToQuestion = (index) => {
     setErrors([])
+    clearFailed()
     setQuestionnaireIndex(index)
     scrollToTop()
   }
@@ -129,8 +180,8 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   const renderStep = () => {
     switch (currentStep) {
       case 0: return <WelcomeStep onNext={goNext} onDemoComplete={onComplete} />
-      case 1: return <ResumeUpload />
-      case 2: return <ProfileForm />
+      case 1: return <ImportWizard onBusyChange={setImportBusy} onManual={() => jumpToStep(2)} onSaved={() => jumpToStep(2)} />
+      case 2: return <ProfileForm showErrors={showFieldErrors} />
       case 3: return <RepositoryForm />
       case 4: return <QuestionnaireForm
         questionIndex={questionnaireIndex}
@@ -148,12 +199,15 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   }
 
   const config = STEP_CONFIG[currentStep]
+  // An unanswered question is skipped, not blocked.
+  const skipsQuestion = currentStep === QUESTIONNAIRE_STEP
+    && !answeredQuestionIds(profile).includes(ORDERED_QUESTIONS[questionnaireIndex]?.id)
   const showNavFooter = currentStep < TOTAL_STEPS - 1
     && (isEdit ? currentStep >= EDIT_START_STEP : currentStep > 0)
 
   const questionnaireDescription =
     currentStep === QUESTIONNAIRE_STEP
-      ? `Question ${questionnaireIndex + 1} of ${QUESTION_COUNT} — ${QUESTIONS[questionnaireIndex]?.text.slice(0, 60)}…`
+      ? `Question ${questionnaireIndex + 1} of ${QUESTION_COUNT} — ${ORDERED_QUESTIONS[questionnaireIndex]?.text.slice(0, 60)}…`
       : config.description
 
   const headerTitle = isEdit ? 'Edit Profile' : 'Profile Setup'
@@ -172,6 +226,7 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
       )}
 
       <main className={isEdit ? '' : 'mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12'}>
+        {resetNotice && <div className="mb-4"><Alert variant="success">{resetNotice}</Alert></div>}
         {(isEdit || currentStep > minStep) && <ProgressBar currentStep={currentStep} editMode={isEdit} onStepClick={isEdit ? jumpToStep : undefined} />}
 
         {currentStep > minStep || (isEdit && currentStep >= EDIT_START_STEP) ? (
@@ -205,8 +260,13 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
                   </Button>
                 </>
               )}
-              <Button onClick={goNext}>
-                Continue <ChevronRight className="h-4 w-4" />
+              {!isEdit && (
+                <Button variant="secondary" onClick={finish} disabled={importBusy && currentStep === 1}>
+                  Finish
+                </Button>
+              )}
+              <Button onClick={goNext} disabled={importBusy && currentStep === 1}>
+                {skipsQuestion ? 'Skip' : 'Continue'} <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>

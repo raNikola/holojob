@@ -129,10 +129,8 @@ function buildCareerNarrative(ctx, skillsMap) {
     parts.push(`A highlight project: ${project}.`)
   }
 
-  return trimToMaxSentences(
-    parts.join(' ') || 'Career narrative pending — complete questionnaire Q17 for a personal summary.',
-    3,
-  )
+  // Nothing to say stays empty; buildCandidateSummary flags it as unknown.
+  return trimToMaxSentences(parts.join(' '), 3)
 }
 
 export function buildCandidateSummary(ctx, skillsMap) {
@@ -152,7 +150,6 @@ export function buildCandidateSummary(ctx, skillsMap) {
   const perceptions = ctx.questionnaire.recruiterPerception.slice(0, 3).join(', ')
   const diffs = ctx.questionnaire.candidateStrengths.slice(0, 2).join(', ')
   const positioningStatement = [perceptions, diffs].filter(Boolean).join('. ')
-    || 'Positioning statement will improve with questionnaire answers on perception and differentiators.'
 
   return {
     candidateType,
@@ -160,6 +157,11 @@ export function buildCandidateSummary(ctx, skillsMap) {
     oneLinePitch,
     careerNarrative,
     positioningStatement,
+    // Fields left empty because nothing answers them yet; never filled with filler text.
+    unknown: [
+      ...(careerNarrative ? [] : ['careerNarrative']),
+      ...(positioningStatement ? [] : ['positioningStatement']),
+    ],
   }
 }
 

@@ -15,6 +15,7 @@ import { getProjectScanStatus, runProjectScan } from './run-project-scan.js'
 import { runJobImport } from './run-job-import.js'
 import { checkClaudeAuth, ensureClaudeLogin } from './claude-auth.js'
 import { saveProfileToDisk, PROFILE_PATH } from './save-profile.js'
+import { runProfileReset, RESET_CONFIRM_WORD, RESET_ERRORS } from './profile-reset.js'
 import { saveIntelligenceToDisk, INTELLIGENCE_PATH } from './save-intelligence.js'
 import { checkAiFinding, runAiFeature, runAiFeatureStream, runAiChat, getAiStatus, getAiModels } from './run-ai.js'
 import { readAiUsage } from './ai-gate.js'
@@ -30,6 +31,7 @@ import {
   runQualityAudit,
 } from './run-quality-audit.js'
 import { importLinkedInText } from './run-linkedin-import.js'
+import { IMPORT_ERRORS, MAX_IMPORT_BODY_BYTES, parseImportSource } from './run-profile-import.js'
 import { handleAiSettingsRequest } from './ai-settings-handler.js'
 import { handleSecretsRequest } from './secrets-handler.js'
 import { handleSourcesRequest } from './sources-handler.js'
@@ -629,6 +631,30 @@ export async function handleApiRequest(req, res) {
     return true
   }
 
+  // Stateless: parses pasted text into an import draft and writes nothing. Every answer is fixed text; the text is never echoed.
+  if (url === '/api/profile/import/parse' && req.method === 'POST') {
+    const fail = (code) => {
+      const { status, error } = IMPORT_ERRORS[code] ?? IMPORT_ERRORS.parse_failed
+      sendJson(res, status, { ok: false, code, error })
+    }
+    if (Number(req.headers['content-length'] ?? 0) > MAX_IMPORT_BODY_BYTES) {
+      res.setHeader('Connection', 'close')
+      fail('too_large')
+      return true
+    }
+    let body
+    try {
+      body = JSON.parse((await readLimitedBody(req, MAX_IMPORT_BODY_BYTES)).toString('utf-8') || '{}')
+    } catch (e) {
+      fail(/too large/.test(String(e?.message)) ? 'too_large' : 'invalid_request')
+      return true
+    }
+    const result = await parseImportSource(body?.source, body?.text)
+    if (result.ok) sendJson(res, 200, { ok: true, draft: result.draft })
+    else fail(result.code)
+    return true
+  }
+
   if (url === '/api/profile/save' && req.method === 'POST') {
     try {
       const body = await readBody(req)
@@ -637,6 +663,29 @@ export async function handleApiRequest(req, res) {
     } catch (e) {
       sendJson(res, 400, { error: e.message })
     }
+    return true
+  }
+
+  // Moves the profile mirror, the stored CVs and the candidate intelligence into data/profile.bak-<time>.
+  // Fixed answers only; nothing from the body or the disk is echoed.
+  if (url === '/api/profile/reset' && req.method === 'POST') {
+    const fail = (code) => {
+      const { status, error } = RESET_ERRORS[code]
+      sendJson(res, status, { ok: false, code, error })
+    }
+    let body
+    try {
+      body = await readBody(req)
+    } catch {
+      body = null
+    }
+    if (body?.confirm !== RESET_CONFIRM_WORD) {
+      fail('not_confirmed')
+      return true
+    }
+    const result = runProfileReset()
+    if (!result.ok) fail(result.code)
+    else sendJson(res, 200, { ok: true, backup: result.backup ? `data/${result.backup}` : null })
     return true
   }
 

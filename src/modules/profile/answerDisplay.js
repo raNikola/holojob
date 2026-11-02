@@ -14,12 +14,13 @@ export function describeAnswer(answer, profile) {
   const text = (answer.answer || '').trim()
   const label = question?.text || answer.question
   if (!text) return null
+  const derived = answer.source === 'resume'
   if (question && LIST_TYPES.has(question.type)) {
     const known = question.type === 'projects' ? profile?.resume?.parsedData?.projects || [] : []
     const items = splitListAnswer(text, known)
     // A project entry is a sentence, a tag is a word or two.
     const kind = items.some((i) => i.length > 60) ? 'bullets' : 'chips'
-    return { id: answer.id, label, kind, items }
+    return { id: answer.id, label, kind, items, derived }
   }
-  return { id: answer.id, label, kind: question?.type === 'textarea' ? 'prose' : 'text', text }
+  return { id: answer.id, label, kind: question?.type === 'textarea' ? 'prose' : 'text', text, derived }
 }

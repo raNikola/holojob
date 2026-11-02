@@ -7,6 +7,8 @@ import Button from '../ui/Button'
 import { useProfile } from '../../context/ProfileContext'
 import { extractTextFromPdf } from '../../utils/resumeParser'
 import { extractProfileFromResume } from '../../utils/profileExtractor'
+import { parseImportText } from '../../modules/profile/importApi'
+import { cvEntryParsedData } from '../../modules/profile/importFlow'
 import { cvDownloadUrl, deleteCvFile, uploadCvFile } from '../../modules/cvs/cvApi'
 import { canRemoveCv } from '../../utils/cvLibrary'
 import { regenerateAndSync } from '../../modules/cvs/regenerateAfterApply'
@@ -158,7 +160,7 @@ export default function CvLibrary() {
     setUploading(true)
     try {
       const rawText = await extractTextFromPdf(file)
-      const extracted = extractProfileFromResume(rawText)
+      const { parsedData, usedFallback } = await cvEntryParsedData(rawText, { parse: parseImportText, fallback: (text) => extractProfileFromResume(text).parsedData })
       const id = await uploadCvFile(file)
       if (!id) throw new Error('The local API is not reachable, so the PDF could not be saved.')
       cvActions.addCv({
@@ -167,10 +169,10 @@ export default function CvLibrary() {
         uploadedAt: new Date().toISOString(),
         filePath: `profile/cvs/${id}.pdf`,
         rawText,
-        parsedData: extracted.parsedData,
+        parsedData,
         importSource: 'resume_pdf',
       })
-      setNotice(`Added ${file.name}. It is not the default; use "Set as default" to make it the CV the app reads.`)
+      setNotice(`Added ${file.name}. It is not the default; use "Set as default" to make it the CV the app reads.${usedFallback ? ' The server reader could not be used, so the older in-browser reader filled its data; check it.' : ''}`)
     } catch (e) {
       setError(e.message || 'Failed to read this PDF.')
     } finally {

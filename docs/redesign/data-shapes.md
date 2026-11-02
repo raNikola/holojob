@@ -19,7 +19,8 @@ Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intell
     "seniorityLevel": "<string>",
     "oneLinePitch": "<string>",
     "careerNarrative": "<string>",
-    "positioningStatement": "<string>"
+    "positioningStatement": "<string>",
+    "unknown": ["careerNarrative|positioningStatement"]
   },
   "roleStrategy": {
     "primaryTargetRoles": [
@@ -254,7 +255,8 @@ Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intell
       ],
       "links": [
         "<string>"
-      ]
+      ],
+      "summary?": "<string> (from an import; absent when the CV had none)"
     },
     "importSource": "<string>"
   },
@@ -271,7 +273,8 @@ Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intell
       {
         "id": "<number>",
         "question": "<string>",
-        "answer": "<string>"
+        "answer": "<string>",
+        "source?": "resume"
       }
     ]
   },
@@ -282,7 +285,9 @@ Browser keys: `job-dashboard-candidate-profile`, `job-dashboard-candidate-intell
     "questionnaireVersion": "<string>",
     "lastStep": "<number>",
     "onboardingComplete": "<boolean>",
-    "completedAt": "<string>"
+    "completedAt": "<string>",
+    "onboardingFinishedEarly?": "<boolean>",
+    "completeProfileDismissedAt?": "<string>"
   }
 }
 ```
@@ -310,7 +315,7 @@ Fields that exist in the browser profile and appear in the disk mirror only afte
       }
     }
   ],
-  "resume.parsedData.experienceDetail?": [{ "title": "<string>", "company": "<string>", "start": "<string>", "end": "<string>", "bullets": ["<string>"] }],
+  "resume.parsedData.experienceDetail?": [{ "title": "<string>", "company": "<string>", "location?": "<string>", "start": "<string>", "end": "<string>", "description?": "<string>", "bullets": ["<string>"] }],
   "resume.parsedData.competencyGroups?": [{ "label": "<string>", "items": ["<string>"] }],
   "resume.parsedData.toolGroups?": [{ "label": "<string>", "items": ["<string>"] }]
 }
@@ -318,6 +323,52 @@ Fields that exist in the browser profile and appear in the disk mirror only afte
 
 `profile.resume` is always a copy of the default `cvLibrary` entry. List-type questionnaire answers are stored one entry per line with a trailing newline.
 
+The questionnaire is optional. A skipped question has no entry (an emptied answer removes its entry; an empty string is never stored), so the unknown list is derived: the 17 questions minus those with a non-empty `answer`. `source: "resume"` marks an answer seeded from the résumé (questions 2 and 5); editing it replaces the entry without `source`, which confirms it. `onboardingFinishedEarly` is set when onboarding completed with questions still unknown; `completeProfileDismissedAt` records "Not now" on the Complete your profile card. In the intelligence file, `candidateSummary.unknown` lists summary fields left empty because nothing answers them yet; no filler text is stored.
+
+
+## Import draft (transient)
+
+- **Where:** in memory only, between the parse route and the Save button of the import wizard. Never written to `data/`, never put in `localStorage`; an unsaved draft is lost on a refresh.
+- **Purpose:** what one import source yielded, for the review screen. It is not a profile format: every field maps onto the profile shape above, and `applyImportDraft` (`src/modules/profile/importDraft.js`) is the only code that turns a reviewed draft into a profile.
+- **Made by:** `POST /api/profile/import/parse` (body `{ "source": "paste" | "resume_pdf" | "linkedin_pdf", "text": "<string>" }`, JSON, up to 200 KB of text; a PDF is read to text in the browser and only the text is sent), which runs `python/profile_import/text_parser.py` and writes nothing. Headings and field labels ("Education", "Obrazovanje", "Ime i prezime:", ...) come from `src/data/sectionHeadings.json`, one block per language, in Latin or Cyrillic script; the same file feeds the CV library upload (`src/utils/profileExtractor.js`). The three sources go through the one parser; `linkedin_pdf` is a mode of it (the "Top Skills" heading, company-before-title entries, "Page N of M" footers listed under `ignored`). A new language is a new block there, with no code change.
+
+```json
+{
+  "source": "paste|resume_pdf|linkedin_pdf",
+  "fileName": "<string>",
+  "rawText": "<string>",
+  "headline": "<string>",
+  "summary": "<string>",
+  "basicProfile": { "fullName?": "<string>", "email?": "<string>", "phone?": "<string>", "location?": "<string>", "currentRole?": "<string>", "experienceYears?": "<string>" },
+  "parsedData": {
+    "skills": ["<string>"], "projects": ["<string>"], "education": ["<string>"],
+    "workExperience": ["<string>"], "certifications": ["<string>"],
+    "experienceDetail": [{ "title": "<string>", "company": "<string>", "location": "<string>", "start": "<string>", "end": "<string>", "description": "<string>", "bullets": ["<string>"] }],
+    "educationDetail": [{ "text": "<string>", "degree": "<string>", "school": "<string>", "year": "<string>" }],
+    "competencyGroups": [{ "label": "<string>", "items": ["<string>"] }]
+  },
+  "languages": [{ "language": "<string>", "proficiency": "<string>" }],
+  "links": ["<string>"],
+  "confidence": { "<field>": "high|medium|low|derived", "experienceDetail.<n>": "high|medium|low", "educationDetail.<n>": "medium|low", "summary": "medium" },
+  "unplaced": [{ "label": "<string>", "text": "<string>" }],
+  "ignored": [{ "name": "<string>", "reason": "<string>" }],
+  "warnings": ["<string>"]
+}
+```
+
+- `email`, `phone` and `links` are the only places a contact detail appears; the parser removes them from every other string. `rawText` keeps the whole input, contact details included.
+- `links` becomes `resume.parsedData.links` on save, and GitHub links are also added to `repositories.githubLinks`. `languages` becomes `basicProfile.languages`, with a level only when it is one of the profile's levels.
+- `headline` is the title line under the name ("TECHNICAL PRODUCT LEADER ..."), shown as a hint. It is the `currentRole` only when the text has no experience entry; otherwise `currentRole` is the title of the current (else latest) entry. Target roles are never read from a CV: the draft has no such field.
+- `experienceYears` is `"derived"`: the largest "10+ years", "over 10 years" or "12 years of experience" in the summary and top lines, else the years since the earliest entry start (with a warning saying so).
+- An experience entry is a title / company (and place) line plus a date range; the lines under it are the `description` (before the first bullet) and `bullets`, with wrapped lines joined. `workExperience` is the derived `"Title — Company | start – end | description bullets"` line of each `experienceDetail` entry (JS `deriveWorkExperience` and Python `_derived_line` must stay identical); it is the plain lines of the section when no dated entry was recognised.
+- **Entry headers** are read by evidence, not by one layout (`split_entry_header` in `text_parser.py`). Dates anchor an entry; the header is the line(s) above the dates (the default, and LinkedIn's company-then-title), the remainder of the date line (date-first: "2020 – 2023  Title, Company"), or the lines under the dates when nothing sits above the first one and role-like lines sit under it (flattened two-column CVs; decided once per section). A single header string is split by its separator (`at`, `@`, `-`, `–`, `—`, `|`, `·`, a trailing `(Company)`, a comma); the side that names a role (`role_words.json`; `weakRoleWords` such as "software" count less) is the title. A bare comma splits only with a legal suffix ("Inc."), a place after a pipe, or when another entry of the same section was split on a comma. When the evidence does not decide (both or neither side names a role, "Product Manager, Payments"), the line stays whole in `title`, `confidence["experienceDetail.<n>"]` is `low` and a warning names the entry number (never the text). A parenthetical beside the dates ("(US-based startup)") is a note: it is the first line of `description`, never the company; a parenthetical place is the `location`. Employment words ("Full-time") beside a title are dropped from the header.
+- **Bullets and sub-headings:** a bullet starts only on a marker (•, -, *, –, a number; a marker alone on its line leads the next line); every unmarked line continues the bullet above it. Before the first bullet, lines are `description`. A short Title Case line without a full stop, followed by bullets, is a sub-heading: it ends the description, is not in any bullet, and is listed under `ignored` as "Sub-heading: ...". With no bullets in the CV, the text is the `description`.
+- `summary` is the text of a Summary / Profile / About section (wrapped lines joined, a blank line kept as a paragraph break), empty when there is none. It is shown on the review screen as a Summary card (Fill / Replace current / Keep current, like a basic field) and saved to `resume.parsedData.summary` and to the new My CVs entry's `parsedData.summary`; `choices.summary` is `"use"` or `"keep"`. It is no longer in `unplaced`.
+- `educationDetail` is how each education line was read: the last date range or year is `year`; the piece with a school word is `school`; the piece with a degree word (and the field of study after it, when the school is named elsewhere) is `degree`; one unmarked piece beside a school is the `degree`. A line that does not fall into those places leaves `degree` and `school` empty and keeps only the year (`educationDetail.<n>` is `low`, with a warning); the line itself stays in `education` and `text`. `text` is the education line it was read from. **Display only:** the review screen shows "Read as: ..." under a line while the line still equals `text`; saving writes the `education` lines and not `educationDetail`. School-then-degree (LinkedIn) and year-then-degree line pairs become one line.
+- `unplaced` is text that fits no field (interests, lines the parser could not read).
+- **My CVs > Add** reads the PDF text in the browser and sends it to the same parse route (`source: "resume_pdf"`); the entry's `parsedData` is the draft's lists and entries (`draftParsedData`, no `educationDetail`). If the route cannot be reached or refuses the text, the older in-browser reader (`profileExtractor.js`) fills it and the notice says so. It is shown on the review screen and stays in `rawText`; nothing is dropped.
+- Saving adds a `cvLibrary` entry with `importSource: "pasted_text"`, `filePath: null`, `fileName` and `label` of the form `Pasted text <YYYY-MM-DD>`. It is not the default CV unless the profile had none. For a PDF source (`importSource` `resume_pdf` or `linkedin_pdf`) the file is first stored through `POST /api/cvs` (best effort), the entry takes the stored id and `filePath`, and `fileName` / `label` come from the PDF's name.
+- "Education & Certifications" style sections are split by `python/profile_import/education_words.json` (certificate words first, then degree, then institution words); a line that is neither goes to `unplaced`.
 
 ## CV files
 

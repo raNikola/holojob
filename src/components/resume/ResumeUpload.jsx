@@ -9,12 +9,12 @@ import { importLinkedInProfile } from '../../modules/profile/linkedinImport'
 import { uploadCvFile } from '../../modules/cvs/cvApi'
 import { newCvId } from '../../utils/cvLibrary'
 
-export default function ResumeUpload() {
+export default function ResumeUpload({ initialMode = 'resume' }) {
   const { profile, updateProfile, applyResumeExtraction, cvActions } = useProfile()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [dragOver, setDragOver] = useState(false)
-  const [importMode, setImportMode] = useState('resume')
+  const [importMode, setImportMode] = useState(initialMode)
 
   const processFile = useCallback(async (file, mode = importMode) => {
     setError(null)

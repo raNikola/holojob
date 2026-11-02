@@ -3,6 +3,8 @@ import path from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  // Components are .jsx without a React import; render them with the automatic runtime.
+  esbuild: { jsx: 'automatic' },
   test: {
     include: ['tests/js/**/*.test.js'],
     environment: 'node',

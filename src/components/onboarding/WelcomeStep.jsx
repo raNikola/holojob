@@ -5,9 +5,10 @@ import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
 import { useAppConfig } from '../../hooks/useAppConfig'
+import { QUESTION_COUNT } from '../../data/questions'
 import { loadDemoData, isDemoProfileLoaded } from '../../modules/demo/loadDemoData'
 
-const STEPS_PREVIEW = ['Upload resume', 'Review profile', 'Add repositories', 'Answer 17 questions', 'Export JSON']
+const STEPS_PREVIEW = ['Bring in your history', 'Review profile', 'Add repositories', `Answer ${QUESTION_COUNT} questions`, 'Export JSON']
 
 export default function WelcomeStep({ onNext, onDemoComplete }) {
   const { profile, updateProfile, markOnboardingComplete } = useProfile()
@@ -44,7 +45,7 @@ export default function WelcomeStep({ onNext, onDemoComplete }) {
         <p className="mx-auto mt-3 max-w-lg text-stone-600 dark:text-stone-400">
           {demoMode
             ? 'Explore the full job hunt pipeline with demo data — onboarding, scoring, tailoring, and outreach in one app.'
-            : 'Build your candidate profile in 6 guided steps. Upload your resume, refine your details, and export a structured JSON profile — all stored locally in your browser.'}
+            : 'Build your candidate profile in guided steps. Bring in your resume or LinkedIn data, review what was found, and export a structured JSON profile. Your data stays on your own server.'}
         </p>
       </div>
 

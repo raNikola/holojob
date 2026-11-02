@@ -347,3 +347,16 @@ only for section names that move.
 - Not verified: the remaining screens that may hold settings I did not open (Intelligence screen filters, Quality
   Audit run options, Outreach run options, `JobFilters`). Slice 1 should start with a grep for `localStorage` and
   "Save" in those to confirm the inventory is complete.
+
+## Reset profile (as built, 2026-11-01)
+
+Danger zone > Reset profile (`ResetProfilePanel.jsx`). A dialog lists what is removed and kept (`RESET_REMOVES` / `RESET_KEEPS` in
+`modules/profile/profileReset.js`), offers "Download backup (JSON)" (profile and intelligence as the browser holds them; the CV PDFs are
+only in the server folder) and enables the button when `RESET` is typed exactly. `POST /api/profile/reset` with `{"confirm":"RESET"}`
+(`scripts/profile-reset.js`) copies `data/profile/*` (except `.gitkeep`) and `data/intelligence/candidate-intelligence.json` into
+`data/profile.bak-YYYYMMDD-HHMMSS/{profile,intelligence}/`, checks the sizes, and only then removes the originals; a failed copy deletes
+the partial backup and keeps everything (`backup_failed`). Nothing to move answers ok with no backup (idempotent). Answers are fixed
+codes; no profile text is echoed. Only after the server says ok does the browser clear `job-dashboard-candidate-profile` and
+`job-dashboard-candidate-intelligence`, reset the context, and open onboarding. Jobs, applications, AI data, secrets, config and
+`project-intelligence.json` are not touched. Scoring weights live inside the intelligence file, so they go back to the defaults (the
+backup keeps them). A second open tab still holds the old profile in memory until it reloads.

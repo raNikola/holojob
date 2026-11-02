@@ -23,12 +23,14 @@ import {
   VIEWS,
   isOnboardingComplete,
   OPEN_SETTINGS_EVENT,
+  OPEN_ONBOARDING_EVENT,
+  OPEN_QUESTIONNAIRE_EVENT,
   loadDemoInitialView,
   persistView,
 } from './modules/appNavigation'
 
 function AppContent() {
-  const { profile } = useProfile()
+  const { profile, startProfileEdit } = useProfile()
   const { demoMode, demoReady } = useDemoBootstrapContext()
   const [view, setViewState] = useState(() => loadDemoInitialView(profile, demoMode))
 
@@ -51,6 +53,21 @@ function AppContent() {
     window.addEventListener(OPEN_SETTINGS_EVENT, open)
     return () => window.removeEventListener(OPEN_SETTINGS_EVENT, open)
   }, [navigate])
+
+  useEffect(() => {
+    const open = () => navigate(VIEWS.ONBOARDING)
+    window.addEventListener(OPEN_ONBOARDING_EVENT, open)
+    return () => window.removeEventListener(OPEN_ONBOARDING_EVENT, open)
+  }, [navigate])
+
+  useEffect(() => {
+    const open = () => {
+      startProfileEdit(4)
+      navigate(VIEWS.PROFILE_EDIT)
+    }
+    window.addEventListener(OPEN_QUESTIONNAIRE_EVENT, open)
+    return () => window.removeEventListener(OPEN_QUESTIONNAIRE_EVENT, open)
+  }, [navigate, startProfileEdit])
 
   const handleOnboardingComplete = useCallback(() => {
     setView(demoMode ? VIEWS.JOBS : VIEWS.DASHBOARD)
