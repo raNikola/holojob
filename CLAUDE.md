@@ -23,6 +23,7 @@ Area rules load only when matching files are touched: `.claude/rules/scoring.md`
 
 ## Conventions
 
+- Work only inside /srv/career-os. Do not read other projects under /srv (e.g. applypack, jobapply). Never print secret values (passwords, keys, tokens) from any file; refer to them by name only.
 - All code and comments in English.
 - The repo lives at `/srv/career-os`. The container is `career-os`.
 - `./data` is bind-mounted to `/app/data`, so data edits need no copying.
