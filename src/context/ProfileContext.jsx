@@ -1,33 +1,8 @@
 import { createContext, useContext, useCallback, useEffect, useState } from 'react'
 import { loadProfile, saveProfile, restoreProfile as restoreStorage, clearProfile as clearStorage, getDefaultProfile } from '../utils/storage'
 import { applyToDefaultCv } from '../utils/cvAnalysis'
-import { extractProfileFromResume } from '../utils/profileExtractor'
-import { SKILLS_DICTIONARY } from '../data/skillsDictionary'
-import { addCv, ensureCvLibrary, registerActiveUpload, patchCvAnalysis, removeCv, renameCv, setCvAnalysis, setDefaultCv, syncDefaultEntry } from '../utils/cvLibrary'
-import { joinAnswerList, parseAnswerList } from '../utils/answerList'
-import { derivedEntry, unansweredQuestionIds } from '../modules/profile/questionnaireStatus'
-
-// Seed Q2 and Q5 with resume skills so the questionnaire is pre-filled on arrival.
-const SKILL_QS = [2, 5]
-function seedSkillAnswers(profile, skills) {
-  if (!skills?.length) return profile
-  const dictLower = new Map(SKILLS_DICTIONARY.map((s) => [s.toLowerCase(), s]))
-  const matched = [...new Set(
-    skills.map((s) => dictLower.get(s.toLowerCase())).filter(Boolean)
-  )]
-  if (!matched.length) return profile
-  const answers = [...profile.questionnaire.answers]
-  for (const qid of SKILL_QS) {
-    const idx = answers.findIndex((a) => a.id === qid)
-    const current = idx >= 0 ? answers[idx].answer || '' : ''
-    if (parseAnswerList(current).length > 1) continue  // already answered
-    const entry = derivedEntry(qid, `Q${qid}`, joinAnswerList(matched))
-    if (idx >= 0) answers[idx] = entry
-    else answers.push(entry)
-  }
-  answers.sort((a, b) => a.id - b.id)
-  return { ...profile, questionnaire: { answers } }
-}
+import { addCv, registerActiveUpload, patchCvAnalysis, removeCv, renameCv, setCvAnalysis, setDefaultCv } from '../utils/cvLibrary'
+import { unansweredQuestionIds } from '../modules/profile/questionnaireStatus'
 
 const ProfileContext = createContext(null)
 
@@ -53,34 +28,9 @@ export function ProfileProvider({ children }) {
     setProfile((prev) => saveProfile({ ...prev, meta: { ...prev.meta, lastStep: step } }))
   }, [])
 
-  const applyResumeExtraction = useCallback((rawText) => {
-    const extracted = extractProfileFromResume(rawText)
-    setProfile((prev) => {
-      const githubLinks = [...(prev.repositories?.githubLinks || [])]
-      if (extracted.githubUrl && !githubLinks.includes(extracted.githubUrl)) {
-        githubLinks.push(extracted.githubUrl)
-      }
-      let next = {
-        ...prev,
-        basicProfile: { ...prev.basicProfile, ...extracted.basicProfile },
-        resume: {
-          ...prev.resume,
-          parsedData: { ...prev.resume.parsedData, ...extracted.parsedData },
-        },
-        repositories: { ...prev.repositories, githubLinks },
-        _confidence: { ...prev._confidence, ...extracted.confidence },
-      }
-      next = seedSkillAnswers(next, extracted.parsedData?.skills || [])
-      return saveProfile(next)
-    })
-    return extracted
-  }, [])
-
   // CV library actions (profile.cvLibrary). All are pure profile updates; the
   // files themselves are stored and deleted through modules/cvs/cvApi.
   const cvActions = {
-    // Before an Edit Profile upload replaces profile.resume: keep its edits in the library.
-    beforeActiveUpload: () => setProfile((prev) => saveProfile(syncDefaultEntry(ensureCvLibrary(prev)))),
     registerActiveUpload: (entry) => setProfile((prev) => saveProfile(registerActiveUpload(prev, entry))),
     addCv: (entry, options) => setProfile((prev) => saveProfile(addCv(prev, entry, options))),
     setDefaultCv: (id) => setProfile((prev) => saveProfile(setDefaultCv(prev, id))),
@@ -150,7 +100,6 @@ export function ProfileProvider({ children }) {
       currentStep,
       updateProfile,
       setStep,
-      applyResumeExtraction,
       markFieldEdited,
       resetProfile,
       markOnboardingComplete,

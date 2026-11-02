@@ -10,19 +10,17 @@ now come from the language-keyed table `src/data/sectionHeadings.json` (English 
 Latin and Cyrillic), and skill names are matched as whole terms (`src/utils/termMatch.js`)
 instead of as substrings.
 
-## 1. Two parsers still match English headings only
+## 1. One parser still matches English headings only
 
-Neither reads `src/data/sectionHeadings.json`.
+It does not read `src/data/sectionHeadings.json`.
 
 - `python/resume_generator/resume_parser.py`: finds headings by English stems (`SECTION_STEMS`,
   `STOP_STEMS`). Believed to be correct under the current CV rules (`.claude/rules/resume.md`),
   but that was assumed, not re-checked. Re-check if the rules change, or if a Serbian CV goes
   through tailoring.
-- `python/profile_import/linkedin_pdf_mapper.py`: English-only heading patterns. Not verified
-  whether it is on an active user-facing path or effectively dead code.
 
-Needs investigation (is it reachable, what does it receive) before deciding whether to port
-either one to the shared table.
+Needs investigation (what does it receive) before deciding whether to port it to the shared
+table.
 
 ## 2. Case-insensitive matching still finds "Go" in prose
 
