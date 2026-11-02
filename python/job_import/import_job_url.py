@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python" / "llm"))
 sys.path.insert(0, str(ROOT / "python" / "job_scoring"))
 
+from atomic_write import write_text_atomic  # noqa: E402
 import claude_code  # noqa: E402
 import manual_jobs  # noqa: E402
 import safe_fetch  # noqa: E402
@@ -228,7 +229,7 @@ def merge_into_scored(scored_new: list[dict], scored_path: Path, *, keep=("tailo
     scored_doc.setdefault("meta", {})["jobCount"] = len(scored_doc["jobs"])
     scored_doc["meta"][meta_key] = datetime.now(timezone.utc).isoformat()
     scored_path.parent.mkdir(parents=True, exist_ok=True)
-    scored_path.write_text(json.dumps(scored_doc, indent=2), encoding="utf-8")
+    write_text_atomic(scored_path, json.dumps(scored_doc, indent=2))
 
 
 def _read_job_json(source: str):

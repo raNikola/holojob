@@ -5,8 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import stat
 import sys
 import uuid
 from collections import Counter
@@ -21,6 +19,7 @@ if str(SCRIPT_DIR) not in sys.path:
 if str(ROOT / "python") not in sys.path:
     sys.path.append(str(ROOT / "python"))
 
+from atomic_write import write_text_atomic  # noqa: E402
 from llm_client import LlmUnavailable, active_provider, judge_model, peek_provider  # noqa: E402
 from llm_enhancer import (  # noqa: E402
     DEFAULT_JUDGE_LIMIT,
@@ -102,24 +101,6 @@ def parse_args() -> argparse.Namespace:
         help="run_pipeline.py: the ads were not (all) read by the model, and why; recorded in the meta",
     )
     return p.parse_args()
-
-
-def _write_text_atomic(path: Path, text: str) -> None:
-    """Temp file next to the target, then rename: a crash leaves the old file or the new one, never half of one.
-
-    A rename would give the file the temp file's mode, so an existing file's mode is carried over.
-    """
-    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        with open(tmp, "w", encoding="utf-8") as handle:
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-        if path.exists():
-            os.chmod(tmp, stat.S_IMODE(path.stat().st_mode))
-        os.replace(tmp, path)
-    finally:
-        tmp.unlink(missing_ok=True)
 
 
 def main() -> int:
@@ -294,7 +275,7 @@ def main() -> int:
     }
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    _write_text_atomic(args.output, json.dumps(payload, indent=2))
+    write_text_atomic(args.output, json.dumps(payload, indent=2))
 
     shown = args.output.relative_to(ROOT) if args.output.is_relative_to(ROOT) else args.output
     print(f"Scored {len(scored)} jobs -> {shown}")
