@@ -26,15 +26,14 @@ class GreenhouseProvider(JobProvider):
         return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 
     def _fetch_board(self, board: str) -> list[dict]:
-        url = API_URL.format(board=board)
-        try:
-            resp = requests.get(url, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("jobs") or []
-        except Exception as exc:
-            logger.warning("Greenhouse board %s failed: %s", board, exc)
-            return []
+        """The board's postings; raises when it cannot be read, since an empty list means the board is empty."""
+        resp = requests.get(API_URL.format(board=board), timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        jobs = data.get("jobs") if isinstance(data, dict) else None
+        if not isinstance(jobs, list):
+            raise ValueError("the answer has no jobs list")
+        return jobs
 
     def _normalize_posting(
         self,
@@ -87,13 +86,19 @@ class GreenhouseProvider(JobProvider):
         all_jobs: list[dict] = []
         primary_term = search_terms[0] if search_terms else ""
         primary_loc = locations[0] if locations else ""
+        self.failed_boards = []
 
         for entry in boards:
             company = entry.get("company") or entry.get("board") or ""
             board = entry.get("board") or ""
             if not board:
                 continue
-            postings = self._fetch_board(board)
+            try:
+                postings = self._fetch_board(board)
+            except Exception as exc:
+                logger.warning("Greenhouse board %s failed: %s", board, exc)
+                self.failed_boards.append(board)
+                continue
             for posting in postings:
                 job = self._normalize_posting(posting, company, board, primary_term, primary_loc)
                 if job["title"]:

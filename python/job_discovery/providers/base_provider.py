@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 
 class JobProvider(ABC):
     provider_name = "base"
+    # Boards this fetch could not read. A board provider sets it in fetch_jobs; run_discovery passes it to the
+    # ledger, so an unread board's ads are not taken for ads that were removed.
+    failed_boards: list[str] = []
 
     @abstractmethod
     def fetch_jobs(

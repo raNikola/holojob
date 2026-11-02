@@ -27,15 +27,14 @@ class AshbyProvider(JobProvider):
         return [c for c in data if isinstance(c, str) and c.strip()]
 
     def _fetch_company(self, slug: str) -> list[dict]:
-        url = API_URL.format(slug=slug)
-        try:
-            resp = requests.get(url, params={"includeCompensation": "true"}, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("jobs") or []
-        except Exception as exc:
-            logger.warning("Ashby company %s failed: %s", slug, exc)
-            return []
+        """The board's postings; raises when it cannot be read, since an empty list means the board is empty."""
+        resp = requests.get(API_URL.format(slug=slug), params={"includeCompensation": "true"}, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        jobs = data.get("jobs") if isinstance(data, dict) else None
+        if not isinstance(jobs, list):
+            raise ValueError("the answer has no jobs list")
+        return jobs
 
     def _format_salary(self, compensation: dict | None) -> str:
         if not compensation:
@@ -94,9 +93,15 @@ class AshbyProvider(JobProvider):
         all_jobs: list[dict] = []
         primary_term = search_terms[0] if search_terms else ""
         primary_loc = locations[0] if locations else ""
+        self.failed_boards = []
 
         for slug in companies:
-            postings = self._fetch_company(slug)
+            try:
+                postings = self._fetch_company(slug)
+            except Exception as exc:
+                logger.warning("Ashby company %s failed: %s", slug, exc)
+                self.failed_boards.append(slug)
+                continue
             for posting in postings:
                 job = self._normalize_posting(posting, slug, primary_term, primary_loc)
                 if job and job.get("title"):

@@ -31,6 +31,8 @@ class LeverProvider(JobProvider):
         return [c for c in data if isinstance(c, str) and c.strip()]
 
     def _fetch_company(self, company: str) -> list[dict]:
+        """The board's postings; raises when neither host can read it, since an empty list means the board is empty."""
+        last_error: Exception = LookupError("404 on both Lever hosts")
         for url in (API_URL.format(company=company), EU_API_URL.format(company=company)):
             try:
                 resp = requests.get(url, timeout=30)
@@ -38,10 +40,13 @@ class LeverProvider(JobProvider):
                     continue
                 resp.raise_for_status()
                 data = resp.json()
-                return data if isinstance(data, list) else []
+                if not isinstance(data, list):
+                    raise ValueError("the answer is not a list of postings")
+                return data
             except Exception as exc:
                 logger.warning("Lever company %s failed on %s: %s", company, url, exc)
-        return []
+                last_error = exc
+        raise last_error
 
     def _normalize_posting(
         self,
@@ -87,9 +92,15 @@ class LeverProvider(JobProvider):
         all_jobs: list[dict] = []
         primary_term = search_terms[0] if search_terms else ""
         primary_loc = locations[0] if locations else ""
+        self.failed_boards = []
 
         for company in companies:
-            postings = self._fetch_company(company)
+            try:
+                postings = self._fetch_company(company)
+            except Exception as exc:
+                logger.warning("Lever company %s failed: %s", company, exc)
+                self.failed_boards.append(company)
+                continue
             for posting in postings:
                 job = self._normalize_posting(posting, company, primary_term, primary_loc)
                 if job["title"]:

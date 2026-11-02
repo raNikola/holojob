@@ -1,15 +1,18 @@
 """The job history ledger: what survives between discovery runs."""
 
+import copy
 import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import requests
 
 import enrich_jobs
 from conftest import fail_replacing, select_provider
 import job_history as jh
 from dedupe_jobs import _crosspost_key
 from job_fingerprint import job_fingerprint
+from providers import ashby_provider, greenhouse_provider, lever_provider
 
 # These tests cover the work around a model call, not the AI budget gate (test_ai_gate.py).
 pytestmark = pytest.mark.usefixtures("open_ai_budget")
@@ -328,3 +331,191 @@ def test_jobs_inherited_from_the_replaced_file_are_not_new_but_truly_new_ones_ar
 def run_seeded(ledger, jobs, seen_before, day=0):
     return jh.apply_run(ledger, jobs, now=iso(day), providers_returned={"greenhouse": 1}, key=KEY,
                         role_key=_crosspost_key, seen_before=seen_before)
+
+
+# --- a failed board closes nothing --------------------------------------------------------------
+
+
+def board_job(job_id, board, provider="greenhouse", key_title=None):
+    return {**job(job_id, provider=provider, title=key_title or f"Product Manager {job_id}"), "source": board}
+
+
+def two_boards(provider="greenhouse"):
+    """A ledger holding one open ad on board "good" and one on board "bad", both with stored facts."""
+    ledger = jh.empty_ledger()
+    jobs = [board_job("g1", "good", provider), board_job("b1", "bad", provider)]
+    run(ledger, jobs, day=0)
+    ledger["jobs"]["b1"]["llmFacts"] = facts_for(jobs[1])
+    return ledger, jobs
+
+
+def run_failed(ledger, jobs, failed, day=1, returned=None, key=KEY):
+    return jh.apply_run(ledger, jobs, now=iso(day), providers_returned=returned or {"greenhouse": 1}, key=key,
+                        role_key=_crosspost_key, failed_boards=failed)
+
+
+def test_a_failed_board_changes_nothing_while_another_board_succeeds():
+    ledger, jobs = two_boards()
+    before = copy.deepcopy(ledger["jobs"]["b1"])
+    out, stats = run_failed(ledger, [jobs[0]], {"greenhouse": {"bad"}})
+    assert ledger["jobs"]["b1"] == before, "the failed board's ledger entry must not change at all"
+    assert stats["closed"] == 0 and stats["keptFailedBoard"] == 1
+    # Still in the file the scorer reads, still open, with what enrichment already learned.
+    held = next(j for j in out if j["jobId"] == "b1")
+    assert held["isClosed"] is False and held["closedAt"] is None and held["lastSeen"] == iso(0)
+    assert held["llmFacts"] == facts_for(jobs[1])
+
+
+def test_without_the_fix_signal_the_same_run_would_close_the_ad():
+    """The bug this guards against: other boards succeed, so the provider count is above zero."""
+    ledger, jobs = two_boards()
+    out, stats = run_failed(ledger, [jobs[0]], None)
+    assert stats["closed"] == 1 and ledger["jobs"]["b1"]["closedAt"] == iso(1)
+    assert next(j for j in out if j["jobId"] == "b1")["isClosed"] is True
+
+
+def test_a_successful_board_still_closes_its_absent_ads_while_another_board_failed():
+    ledger, jobs = two_boards()
+    gone = board_job("g2", "good")
+    run(ledger, [*jobs, gone], day=0)
+    out, stats = run_failed(ledger, [jobs[0]], {"greenhouse": {"bad"}})
+    assert stats["closed"] == 1 and ledger["jobs"]["g2"]["closedAt"] == iso(1)
+    assert ledger["jobs"]["b1"]["closedAt"] is None
+
+
+def test_a_provider_returning_no_ads_never_mass_closes():
+    ledger, jobs = two_boards()
+    for failed in (None, {}, {"greenhouse": {"bad"}}, {"greenhouse": {"good", "bad"}}):
+        _, stats = run_failed(ledger, [], failed, returned={"greenhouse": 0})
+        assert stats["closed"] == 0
+    assert all(entry["closedAt"] is None for entry in ledger["jobs"].values())
+
+
+def test_a_provider_that_failed_before_naming_a_board_holds_all_its_ads():
+    ledger, jobs = two_boards()
+    out, stats = run_failed(ledger, [], {"greenhouse": None}, returned={"greenhouse": 0})
+    assert stats["closed"] == 0 and {j["jobId"] for j in out} == {"g1", "b1"}
+
+
+def test_an_entry_with_no_board_name_is_held_when_its_provider_has_a_failed_board():
+    ledger, jobs = two_boards()
+    del ledger["jobs"]["b1"]["job"]["source"]
+    _, stats = run_failed(ledger, [jobs[0]], {"greenhouse": {"other"}})
+    assert stats["closed"] == 0 and ledger["jobs"]["b1"]["closedAt"] is None
+
+
+def test_a_failed_boards_ad_is_not_held_after_the_search_changed_or_when_listed_under_another_copy():
+    ledger, jobs = two_boards()
+    out, _ = run_failed(ledger, [jobs[0]], {"greenhouse": {"bad"}}, key="search-b")
+    assert "b1" not in {j["jobId"] for j in out}  # as for any ad of another search
+
+    ledger, jobs = two_boards()
+    copy_elsewhere = {**board_job("l9", "acme", "lever"), "title": jobs[1]["title"]}
+    out, stats = run_failed(ledger, [jobs[0], copy_elsewhere], {"greenhouse": {"bad"}})
+    assert "b1" not in {j["jobId"] for j in out} and stats["keptFailedBoard"] == 0
+    assert ledger["jobs"]["b1"]["closedAt"] is None
+
+
+@pytest.mark.parametrize("provider", ["jobspy", "infostud", "workable", "joberty"])
+def test_search_based_providers_are_untouched_by_a_failed_board(provider):
+    ledger, jobs = two_boards(provider)
+    for failed in (None, {provider: {"bad"}}, {provider: None}):
+        out, stats = run_failed(ledger, [jobs[0]], failed, returned={provider: 1})
+        assert stats["closed"] == 0 and stats["keptFailedBoard"] == 0
+        assert {j["jobId"] for j in out} == {"g1"}  # missing from a search: neither closed nor carried
+
+
+def greenhouse_posting(pid):
+    return {"id": pid, "title": "Product Manager", "absolute_url": f"https://x/{pid}", "location": {"name": "Remote"},
+            "content": "Own the roadmap."}
+
+
+class FakeResponse:
+    def __init__(self, status=200, body=None):
+        self.status_code, self.body = status, body
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"{self.status_code} error")
+
+    def json(self):
+        return self.body
+
+
+def provider_with(monkeypatch, name, answers):
+    """A real board provider with two boards, "good" and "bad", against a fake HTTP layer."""
+    module = {"greenhouse": greenhouse_provider, "lever": lever_provider, "ashby": ashby_provider}[name]
+    monkeypatch.setattr(module.requests, "get", lambda url, **kw: answers("bad" if "bad" in url else "good", url))
+    if name == "greenhouse":
+        provider = greenhouse_provider.GreenhouseProvider()
+        provider._load_boards = lambda: [{"company": "Good", "board": "good"}, {"company": "Bad", "board": "bad"}]
+    else:
+        provider = {"lever": lever_provider.LeverProvider, "ashby": ashby_provider.AshbyProvider}[name]()
+        provider._load_companies = lambda: ["good", "bad"]
+    return provider
+
+
+GOOD_BODY = {
+    "greenhouse": {"jobs": [greenhouse_posting(1)]},
+    "ashby": {"jobs": [{"title": "Product Manager", "jobUrl": "https://x/1", "location": "Remote",
+                        "descriptionPlain": "Own the roadmap."}]},
+    "lever": [{"text": "Product Manager", "hostedUrl": "https://x/1", "descriptionPlain": "Own the roadmap.",
+               "categories": {"location": "Remote"}}],
+}
+
+
+def fetch(provider):
+    return provider.fetch_jobs(["product manager"], ["Remote"], ["remote"], "Serbia")
+
+
+@pytest.mark.parametrize("name", ["greenhouse", "lever", "ashby"])
+def test_a_board_that_raises_is_named_and_the_others_still_return_their_jobs(monkeypatch, name):
+    def answers(board, url):
+        if board == "bad":
+            raise requests.ConnectionError("boom")
+        return FakeResponse(body=GOOD_BODY[name])
+
+    provider = provider_with(monkeypatch, name, answers)
+    assert [j["source"] for j in fetch(provider)] == ["good"]
+    assert provider.failed_boards == ["bad"]
+
+
+@pytest.mark.parametrize("name", ["greenhouse", "lever", "ashby"])
+@pytest.mark.parametrize("bad", [FakeResponse(500), FakeResponse(200, {"unexpected": True}), FakeResponse(200, "text")],
+                         ids=["http-500", "no-jobs-list", "not-json-shape"])
+def test_a_board_with_an_error_status_or_an_unreadable_answer_is_failed_not_empty(monkeypatch, name, bad):
+    provider = provider_with(monkeypatch, name, lambda board, url: bad if board == "bad" else FakeResponse(body=GOOD_BODY[name]))
+    fetch(provider)
+    assert provider.failed_boards == ["bad"]
+
+
+def test_lever_counts_a_404_on_both_hosts_as_failed_and_still_tries_the_eu_host(monkeypatch):
+    def answers(board, url):
+        if board == "bad":
+            return FakeResponse(404)
+        return FakeResponse(body=GOOD_BODY["lever"]) if "api.eu." in url else FakeResponse(404)
+
+    provider = provider_with(monkeypatch, "lever", answers)
+    assert [j["source"] for j in fetch(provider)] == ["good"]
+    assert provider.failed_boards == ["bad"]
+
+
+@pytest.mark.parametrize("name", ["greenhouse", "ashby", "lever"])
+def test_a_board_that_really_is_empty_is_not_failed(monkeypatch, name):
+    empty = [] if name == "lever" else {"jobs": []}
+    provider = provider_with(monkeypatch, name, lambda board, url: FakeResponse(body=empty))
+    assert fetch(provider) == [] and provider.failed_boards == []
+
+
+def test_from_a_failing_board_to_the_ledger_nothing_of_that_board_closes(monkeypatch):
+    def answers(board, url):
+        if board == "bad":
+            raise requests.Timeout("slow")
+        return FakeResponse(body=GOOD_BODY["greenhouse"])
+
+    ledger = jh.empty_ledger()
+    run(ledger, [board_job("b1", "bad")], day=0)
+    provider = provider_with(monkeypatch, "greenhouse", answers)
+    jobs = fetch(provider)
+    _, stats = run_failed(ledger, jobs, {"greenhouse": set(provider.failed_boards)}, returned={"greenhouse": len(jobs)})
+    assert stats["closed"] == 0 and ledger["jobs"]["b1"]["closedAt"] is None
