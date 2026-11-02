@@ -1327,8 +1327,8 @@ onto them as below, and nothing of the old content is dropped:
   - `unfiled catches the rest`;
   - `invalid settings are not overwritten`;
   - `registry restore merges by key`, plus `restore without a current settings file writes the backup's`.
-- **Not in S1:** the archiver import fix in the uncommitted `backup-handler.js` diff is unrelated to the tracker. It
-  ships later as its own commit, apart from the S1 commit.
+- **Not in S1:** the archiver import fix in `backup-handler.js` is unrelated to the tracker. It shipped as its own commit,
+  `549d42f`.
 
 ## 8. What this plan does not do
 
@@ -1418,7 +1418,6 @@ stays as history; the new entry supersedes it.
 - the routes (3.1) and the backup merge (3.1);
 - the tests (6a-6f, 6h).
 
-Two things remain, and neither is an open question:
-- **The uncommitted S1 code:** whether to build on it or start from the plan is the owner's call. Section 1.8 lists
-  what it needs.
-- **The data-shapes.md update** is a documentation task that ships with S1 (S0).
+Two follow-ups were listed here, and both are closed:
+- **The S1 code** is committed as `5e549a4` (section 1.8).
+- **The data-shapes.md update** is done: Application store in [data-shapes.md](data-shapes.md).

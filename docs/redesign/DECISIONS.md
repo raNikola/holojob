@@ -36,6 +36,8 @@ Evidence-based job matching. The score measures evidence of what the candidate h
 The phase list, status and acceptance criteria live in one place: [../ROADMAP.md](../ROADMAP.md).
 
 ## Owner decisions log
+Later entries, recorded from 2026-11-02: [../DECISIONS.md](../DECISIONS.md).
+
 - 2026-10-25 - Privacy: matching may send redacted work history (principle 14), behind the same explicit confirm as the judge.
 - 2026-10-25 - Budget: matching keeps the judge's limit, the top 50 jobs per run by local score, everything cached.
 - 2026-10-25 - Shadow mode: the new Fit is computed and shown next to the current matchScore and changes no ranking until the owner has compared the two on real runs.
