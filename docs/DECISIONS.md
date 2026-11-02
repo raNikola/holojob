@@ -51,12 +51,13 @@ of a shared file could lose a record.
   "sources": [
     {
       "name": "greenhouse",
-      "status": "ok | partial | failed",
+      "status": "ok | partial | failed | skipped",
       "read": 120,
       "kept": 8,
       "new": 1,
       "error": "<string or null>",
-      "boardsFailed": ["<board or feed>"]
+      "boardsFailed": ["<board or feed>"],
+      "skipReason": "<string or null>"
     }
   ],
   "issues": [
@@ -70,8 +71,9 @@ of a shared file could lose a record.
   `meta.history.new`.
 - **Extensible:** scored, closed, missing and expired are left out, because discovery does not know them yet. A later slice adds
   fields; a reader ignores what it does not know and treats a missing field as unknown. A breaking change raises `version`.
-- **Run status:** `failed` when the exit code is not 0, no source ran, or every source failed. `partial` when some source is not `ok`.
-  Warnings alone leave it `ok`.
+- **Run status:** `failed` when the exit code is not 0, no source ran, or every source that searched failed. `partial` when some
+  searching source is not `ok`. A `skipped` source does not count, and warnings alone leave it `ok`. If every source was skipped the
+  run is `ok` with one run-level warning, since nothing was searched at all.
 - **Providers:** `fetch_jobs` still returns a list. The outcome is `provider.last_outcome` (`ProviderOutcome`, `base_provider.py`).
 
 **Decisions made while building, beyond the brief:**
@@ -88,21 +90,26 @@ of a shared file could lose a record.
   --skip-discovery` and a pipeline refused by its lock or setup write none: discovery did not run.
 - **`--trigger` is passed by the caller:** `run_pipeline.py` passes `pipeline`, everything else defaults to `manual`. Cron goes through
   `run_pipeline.py`, so cron runs log as `pipeline` until a scheduler passes `scheduled`.
-- **No fourth status:** an unsupported country (Infostud, Joberty) and a source not built yet (Wellfound) are `ok`, read 0, with a
-  warning that says why, on top of the 0-ads warning.
-- **A board that answers successfully with no jobs** still closes its absent ads when other boards return jobs, as before (the brief
-  says not to change closing otherwise), and now gets a warning naming it. The lifecycle rule "0 ads never closes everything" is read
-  per provider, as the code check below reads it. **Open for slice 4:** whether it should also hold per board.
+- **Status `skipped` (owner correction, done):** a source that did not search because it does not apply (Infostud or Joberty on an
+  unsupported country, Wellfound not built) is `skipped`, not `ok`, with `skipReason` saying why and no warning. `skipReason` is an
+  addition to the requested shape, so the reason is not lost. A failed Joberty `fetch_cities` can be told apart, because the board
+  always lists places: an empty list is `failed`, not `skipped`.
+- **An empty board holds (owner correction, done):** a Greenhouse, Lever or Ashby board that answers 200 with no jobs does not close
+  its ads, even when other boards return jobs. They stay open in `discovered_jobs.json`, counted in `meta.history.keptEmptyBoard`, and
+  the record gets a warning naming the board. A board that lists at least one posting closes its absent ads as before, even if the
+  filters kept none of them. A board that really has emptied therefore keeps its ads open, with the warning, on every run.
 - **Scoring:** `scored_jobs.json` meta gains `discoveryRunId`; `sourceRunId` stays scoring's own. No scored counts are attached: a
   Re-score runs on its own, several times per discovery run, so it would overwrite an older record's counts.
 - **Backups:** `data/analytics/` is not in `DATA_DIRS` in `scripts/backup-handler.js`, so run history is not backed up (nor is
   `skill_gap.json`, already there), though `PRIVATE_RESTORE` accepts the folder. Left as it is: a 90-day report is not clearly worth
   backing up.
 
-**Known gaps, failures that still look like "0 ads" (`ok` plus the 0-ads warning, closing nothing; none of them closes ads):**
+**Known limitations (none of these closes an ad):**
 
-- `jobspy_adapter.fetch_jobs` never raises, so a blocked LinkedIn search looks empty. Only an exception reaching the provider counts.
-- `joberty_client.fetch_listing` keeps the pages it read and drops the rest, and a failed `fetch_cities` looks like an unsupported country.
+- **`jobspy_adapter` can report a blocked LinkedIn search as a successful fetch with 0 ads,** because `jobspy_adapter.fetch_jobs` never
+  raises. The source then shows `ok` with the 0-ads warning, so run statistics for `jobspy` are unreliable. It never closes ads
+  automatically.
+- `joberty_client.fetch_listing` keeps the pages it read and drops the rest, so a listing cut short still shows `ok`.
 
 ## Ad lifecycle rules (narrowed 2026-11-02)
 
@@ -120,7 +127,8 @@ Missing or Expired.
 
 - One absence closes a job, not two.
 - No provider reads an explicit "closed" from the source.
-- A provider that returned 0 jobs closes nothing, which matches the rule. The run log gives it a warning (slice 1).
+- A provider that returned 0 jobs closes nothing, and neither does a Greenhouse, Lever or Ashby board that answered with no jobs,
+  which matches the rule. The run log gives each a warning (slice 1).
 - The UI's "Closed" badge means "No longer listed since ...", which under these rules would be Missing or Expired.
 
 ## AI in scraping - pending, needs separate approval with cost

@@ -100,8 +100,13 @@ A new screen named Activity, in the nav group System, built in this repo. Decisi
 | 3 | The Activity screen: one row per run, Details with per-site stats plus errors and warnings with their level. Top-of-page statistics belong to Analytics (later) | Not built |
 | 4 | Ad lifecycle changes, last ([rules](DECISIONS.md#ad-lifecycle-rules-narrowed-2026-11-02)) | Not built |
 
-Left for a later slice from slice 1: scored, closed, missing and expired counts on the record; failures `jobspy_adapter.py` and
-`joberty_client.py` still swallow (listed in the decision).
+Owner corrections to slice 1, both done: an empty board holds its ads, and a source that does not apply is `skipped`.
+
+Left for a later slice from slice 1: scored, closed, missing and expired counts on the record.
+
+**Known limitation:** `jobspy_adapter` can report a blocked LinkedIn search as a successful fetch with 0 ads, so run statistics for that
+source are unreliable. It never closes ads automatically. `joberty_client.py` also drops listing pages it could not read
+([details](DECISIONS.md#activity-slice-1-as-built-2026-11-02)).
 
 ## Import redesign - in progress
 
