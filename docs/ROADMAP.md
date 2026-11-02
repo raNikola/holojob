@@ -1,6 +1,6 @@
 # Holojob - Roadmap
 
-Principles and decisions: [redesign/DECISIONS.md](redesign/DECISIONS.md).
+Principles and decisions: [redesign/DECISIONS.md](redesign/DECISIONS.md) and [DECISIONS.md](DECISIONS.md).
 Current-state audit and module decisions: [redesign/PHASE0_AUDIT.md](redesign/PHASE0_AUDIT.md).
 Engine contract (draft): [redesign/ENGINE_CONTRACT.md](redesign/ENGINE_CONTRACT.md). Terms: [GLOSSARY.md](GLOSSARY.md). How the system works today: [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -11,7 +11,7 @@ This is the only phase list; DECISIONS.md, CLAUDE.md and the README link here.
 | 0 | Audit: what exists, per-module Reuse / Adapt / Build / Skip, engine contract | Done |
 | 1 | Scoring core: role-family config, requirement extraction with quotes and canonical ids, evidence index, evidence matcher + deterministic Fit, confidence, gates. Shadow mode next to the current score; stability test on fixtures | Steps 1-8c built (role families, requirements, evidence index, matcher, Fit and gates, stability test, shadow mode, privacy test); acceptance criteria pending owner confirmation; stable-id follow-up in progress (below) |
 | 2 | Evidence profile: restructured optional questionnaire (story bank, skills with evidence, preferences, gates), AI prefill from the CV through the review screen, ask-user loop that stores confirmed facts | Planned |
-| 3 | Application tracker independent of discovery: own store with a posting snapshot, append-only event history, channel, CV version, outcomes, follow-up nudges, import of past applications | In progress. Built: store with event history and configurable stages, migration from job records, Job Details tracker (Mark Applied, CV used, history, void and restore), Board with drag, Statistics, Settings > Applications (tracking switch, columns). Not built: posting snapshot view, Closed panel, "Show voided", removal of the legacy `applicationTracking` field (S4), follow-up nudges and the reminders switch's UI (S5), CSV import of past applications (S6). See [redesign/TRACKER_PLAN.md](redesign/TRACKER_PLAN.md) |
+| 3 | Application tracker independent of discovery: own store with a posting snapshot, append-only event history, channel, CV version, outcomes, follow-up nudges, import of past applications | In progress. Built: store with event history and configurable stages, migration from job records, Job Details tracker (Mark Applied, CV used, history, void and restore), Board with drag, Statistics, Settings > Applications (tracking switch, columns). Not built: posting snapshot view, Closed panel, "Show voided", removal of the legacy `applicationTracking` field (S4), follow-up nudges and the reminders switch's UI (S5), CSV import of past applications (S6), several contacts. See [redesign/TRACKER_PLAN.md](redesign/TRACKER_PLAN.md) |
 | 3b | Sources as user configuration: Settings > Sources with an on/off switch per job board, watched companies added from a pasted careers or board URL and probed live, stored server-side in `data/config/sources.json`; replaces the hard-coded `serbia` group and the repo's `companies/*.json` as runtime config (principle 16). Spec: [redesign/SOURCES_SPEC.md](redesign/SOURCES_SPEC.md). Independent of Phases 1-2; built next to Phase 3 because both are user-owned data that must persist | First slice built: `data/config/sources.json` and Settings > Sources > Job boards, with the Joberty opt-in only. Not built: a switch for the other boards (they still follow the provider groups, `serbia` is still the default), watched companies from a pasted URL with a live probe (providers still read `companies/*.json`) |
 | 4 | Interview prep from requirement statuses and the story bank; CV and cover letter tailoring behind a fact gate; market report of requirements per role family | Planned |
 | 5 | Feedback loop: conversion by channel and Fit band, calibration of Fit against real outcomes (report only, never auto-tuning) | Planned |
@@ -88,6 +88,48 @@ skills or domain. GitHub Issues are disabled on this repo, so the work is tracke
 Each item gets a fixture-based regression test; the Phase 1 stability test must keep passing. Related: "Recalibrate
 `TARGET_COVERAGE` and fix the flat scoring dimensions" under Later.
 
+## Runs screen extension - planned
+
+Extend the existing Runs screen (Search funnel, By source, Run history) instead of adding a new Jobs tab.
+
+- Every manual Re-scrape and every scheduled fetch is one row with its start time. Paused fetches are not logged.
+- Each row has a Details dropdown: per-site stats (read, past filter, new, scored, closed / missing / expired) plus the errors
+  and warnings of that run, with their level. There is no separate issues list.
+- Retention 90 days, written per source, atomic, private modes (0600 files, 0700 folders), no AI.
+- Top-of-page statistics belong to Analytics (later).
+- The legacy "Search history" screen (openai gpt-4o-mini) looks dead: verify and note.
+
+**Code check 2026-11-02, the owner needs to clarify this first:**
+
+- No screen named Runs, Search funnel, By source or Run history is in `src`, `scripts` or `python`, on `main` or any other local
+  or remote branch. The closest in this repo is the Pipeline tab on the Jobs screen (`PipelineHealthPanel`,
+  `PipelineOrchestrator`, one file `data/jobs/pipeline_last_run.json`), which keeps the last run only.
+- "Search history" is not found either, so it could not be verified. `gpt-4o-mini` appears only in the price estimate
+  (`aiCostEstimator.js`) and as a fallback model name (`openrouterProvider.js`).
+- Re-scrape exists ("Re-scrape jobs"). Scheduled fetches do not ("Scheduled discovery" under Later), and neither does a paused state.
+- Closed, missing and expired depend on the [ad lifecycle rules](DECISIONS.md#ad-lifecycle-rules---decided-not-built), which
+  are not built.
+
+## Ad lifecycle rules - planned
+
+Build the rules in [DECISIONS.md](DECISIONS.md#ad-lifecycle-rules---decided-not-built); that entry lists what differs in the code
+today.
+
+## Import redesign - in progress
+
+Sources and design: [DECISIONS.md](DECISIONS.md#import-redesign).
+
+| Slice | Content | Status on 2026-11-02 |
+|---|---|---|
+| 1a | Wizard, paste step, review screen | Done |
+| 1b | TXT / MD and DOCX | Not built ("Other file types are coming"). `python-docx` is already pinned |
+| 3 | PDF and LinkedIn PDF | Listed after 1b, but both are already in the code (`PdfStep`, `4f2cd7e`). Real-file test below still open |
+| 2 | LinkedIn data ZIP. Needs real export file names and headers | Not built |
+| 4 | JSON Resume | Not built |
+| 5 | Structured experience editors | Not verified |
+
+Also later: the Continue / Save wizard flow fix, the score 60/58 fix, and a LinkedIn PDF test on a real file.
+
 ## Tech debt leftovers
 
 Known and left open on purpose. Checked against the code on 2026-11-02.
@@ -137,6 +179,26 @@ Known and left open on purpose. Checked against the code on 2026-11-02.
   each, and confirms with one explicit action. Server behaviour stays as is: opt-in default off, the server stores its
   own `consentAcceptedAt`, switching off keeps history, switching on again asks for consent again. UI-only change.
   Reason: the inline checkbox under the chips looks bad and does not scale to more opt-in sources.
+- Jobs table: Applied button to the tracker, and the shadow badge off the table ([open direction](DECISIONS.md#jobs-table---open-discussion-not-final)).
+- Settings follow-ups:
+  - Usage & cost. Code check 2026-11-02: a section "AI budget, provider and usage" exists; what is still missing is not recorded.
+  - Clear cache. Code check: `AISettingsPanel.jsx` has a button for the browser AI cache.
+  - Remove the OpenAI key from `.env` after moving it to the store. Code check: `.env` still has `OPENAI_API_KEY`, and
+    `data/secrets/` has no `ai.json` yet, so the move comes first.
+  - Rotate the OpenAI key and `li_at`. Not verifiable from the repo.
+- Job Details: tabs and AI spend per job.
+- Step 6: browser AI confirm dialog ([redesign/BROWSER_STORAGE_POLICY.md](redesign/BROWSER_STORAGE_POLICY.md)).
+- Next big scoring task: [Fix scoring](#fix-scoring-skill-extraction-scope-requirement-weighting-domain-transferability---todo).
+
+## Ideas (not scheduled)
+
+- **Prompt templates (business idea).** When AI writes answers to application questions, offer a template picker. Starter
+  "humanizer" family, each wrapping a pasted text: Professional AI Humanizer; Natural Human Tone Converter; AI-Detection Safe
+  Rewrite; Conversational Human Rewrite; Emotion & Flow Humanizer; Human Language Converter; Human Rhythm & Style Fixer; Final
+  Humanized Master Edit. Any template run is an AI call, so the gate, redaction and confirm rules apply. Nothing is built.
+- **"Fill from ad" (AI field extraction).** Needs the allowlist plus owner confirmation. Code check 2026-11-02: both steps are
+  already built (Manual jobs in [CLAUDE.md](../CLAUDE.md)), and the AI step stays refused because `job-import` is not in
+  `claudeCodeSubscription.features`.
 
 ## Inherited from Holojob
 

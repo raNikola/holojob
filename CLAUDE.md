@@ -11,6 +11,7 @@ Docs (read on demand, not loaded automatically):
 - `docs/ARCHITECTURE.md` — pipeline, scoring dimensions and why, fit judgement, salary flag, My CVs, CV analysis, open problems.
 - `docs/ROADMAP.md` — phases and Phase 1 acceptance criteria (the only phase list).
 - `docs/redesign/DECISIONS.md` — principles and owner decisions.
+- `docs/DECISIONS.md` — later decisions, each with a code check.
 - `docs/redesign/ENGINE_CONTRACT.md` — draft JSON contract of the scoring engine.
 - `docs/redesign/data-shapes.md` — data files and their shapes.
 - `docs/GLOSSARY.md` — the terms used above (Fit, gate, evidence strength, ledger, ...).
@@ -123,9 +124,9 @@ provider, each behind an explicit confirm; the browser AI features send redacted
   if it cannot run, or a final check still finds an identifier, the call is refused and logged
   (`ai_gate.py refuse`). No confirm dialog yet for these features (principle 14 asks for one).
   `tests/js/aiRedaction.test.js` checks each feature at the provider.
-- **AI findings store** (`scripts/ai-findings-store.js`, first slice: `jobAnalysis` only): keeps the parsed answer and the redacted
-  prompt under `data/ai/findings/job/` (700 / 600, git-ignored), looked up before the budget gate; nothing leaves the server. Never
-  stored: keys, base URLs, an answer in which `ai-redact.js` (`findLeaks`) still finds an identifier. Details in
+- **AI findings store** (`scripts/ai-findings-store.js`, features `jobAnalysis` and `companyIntelligence`): keeps the parsed answer,
+  the cache key and the input hash under `data/ai/findings/<job|company>/` (700 / 600, git-ignored), looked up before the budget gate;
+  nothing leaves the server. Never stored: the prompt, keys, base URLs, an answer in which `ai-redact.js` (`findLeaks`) still finds an identifier. Details in
   `docs/redesign/STEP5_SERVER_MASTER_PLAN.md` section 2.8.
 - **Known gap:** LLM tailoring (`resume_generator/llm_tailor.py`, Claude Code CLI) also
   sends candidate data (parsed CV sections about_me, experience, skill_categories,
