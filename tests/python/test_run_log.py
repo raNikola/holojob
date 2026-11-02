@@ -267,10 +267,35 @@ def test_the_warning_says_when_ads_were_read_and_all_filtered_out(discovery):
     assert (source["read"], source["kept"]) == (1, 0) and "read 1, all filtered out" in message
 
 
-def test_a_board_answering_empty_is_warned_about_by_name(discovery):
+def test_an_empty_board_is_warned_about_by_name_and_its_ad_stays_open(discovery, tmp_path):
+    first = {"greenhouse": greenhouse({"good": [posting(1)], "empty": [posting(2, "Senior Product Manager")]})}
+    assert discovery(first) == 0
     assert discovery({"greenhouse": greenhouse({"good": [posting(1)], "empty": []})}) == 0
-    assert messages(only_record(), "warning") == ["board empty answered with 0 ads"]
-    assert source_of(only_record(), "greenhouse")["status"] == "ok"
+
+    record = records()[-1]
+    assert source_of(record, "greenhouse")["status"] == "ok" and record["status"] == "ok"
+    [message] = messages(record, "warning")
+    assert "board empty answered with 0 ads" in message
+
+    payload = discovered(tmp_path)
+    assert {j["title"]: j["isClosed"] for j in payload["jobs"]} == {"Product Manager": False, "Senior Product Manager": False}
+    assert payload["meta"]["history"]["closed"] == 0 and payload["meta"]["history"]["keptEmptyBoard"] == 1
+
+
+def test_an_ad_gone_from_a_non_empty_board_still_closes_when_another_board_is_empty(discovery, tmp_path):
+    first = {"greenhouse": greenhouse({"good": [posting(1), posting(3, "Lead Product Manager")], "empty": [posting(2, "Senior Product Manager")]})}
+    discovery(first)
+    discovery({"greenhouse": greenhouse({"good": [posting(1)], "empty": []})})
+    states = {j["title"]: j["isClosed"] for j in discovered(tmp_path)["jobs"]}
+    assert states == {"Product Manager": False, "Senior Product Manager": False, "Lead Product Manager": True}
+
+
+def test_all_boards_empty_in_a_real_run_closes_nothing_and_keeps_the_ads(discovery, tmp_path):
+    discovery({"greenhouse": greenhouse({"a": [posting(1)], "b": [posting(2, "Senior Product Manager")]})})
+    assert discovery({"greenhouse": greenhouse({"a": [], "b": []})}) == 0
+    payload = discovered(tmp_path)
+    assert len(payload["jobs"]) == 2 and not any(j["isClosed"] for j in payload["jobs"])
+    assert payload["meta"]["history"]["closed"] == 0 and payload["meta"]["history"]["keptEmptyBoard"] == 2
 
 
 def test_read_counts_what_the_filter_saw_and_kept_what_passed(discovery):
