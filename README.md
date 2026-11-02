@@ -65,10 +65,14 @@ Changing `.env` needs `podman-compose up -d --force-recreate`; a restart does no
 
 ## Data and storage
 
-- The browser's `localStorage` is the master for the profile, the intelligence, the job list and application
-  tracking.
-- The files under `data/` are mirrors: written when the app syncs, and read by the Python pipeline. Everything
-  there except `data/examples/` is git-ignored and private.
+- The server as master is decided but not built. Until step 5 of
+  [the migration plan](docs/redesign/STEP5_SERVER_MASTER_PLAN.md) ships, the profile, the intelligence and the job list live in the browser's
+  `localStorage`.
+- Applications (the tracker) are already on the server: `data/applications/` is the master and the browser keeps a
+  read cache.
+- `data/profile/` and `data/intelligence/` are mirrors, written when the app syncs and read by the Python pipeline;
+  the pipeline writes its own files under `data/jobs/`. Everything under `data/` except `data/examples/` is
+  git-ignored and private.
 - Edit profile data in the profile form, not in the disk file: a correction made only in
   `data/profile/candidate-profile.json` is overwritten at the next sync.
 - Shapes of every file: [docs/redesign/data-shapes.md](docs/redesign/data-shapes.md).

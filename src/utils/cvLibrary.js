@@ -100,24 +100,6 @@ export function removeCv(profile, id) {
 }
 
 /**
- * A normal upload (Edit Profile) has already replaced profile.resume with the new
- * CV. List it as the default entry. The outgoing default must have been synced
- * (`syncDefaultEntry`) before that replacement, so its form edits are kept.
- */
-export function registerActiveUpload(profile, { id, filePath = null }) {
-  const lib = Array.isArray(profile.cvLibrary) ? profile.cvLibrary : []
-  const resume = profile.resume
-  const entry = {
-    id,
-    label: labelFromFileName(resume.fileName),
-    filePath,
-    ...Object.fromEntries(RESUME_FIELDS.map((k) => [k, resume[k]])),
-    importSource: resume.importSource || 'resume_pdf',
-  }
-  return { ...profile, cvLibrary: [...lib, entry], defaultCvId: id }
-}
-
-/**
  * Ids of stored PDFs that only the discarded state references: entries in
  * `current` that are not in `snapshot`. Anything the snapshot already had stays,
  * whatever happened to it during the session (renamed, made default).

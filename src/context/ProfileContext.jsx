@@ -1,7 +1,7 @@
 import { createContext, useContext, useCallback, useEffect, useState } from 'react'
 import { loadProfile, saveProfile, restoreProfile as restoreStorage, clearProfile as clearStorage, getDefaultProfile } from '../utils/storage'
 import { applyToDefaultCv } from '../utils/cvAnalysis'
-import { addCv, registerActiveUpload, patchCvAnalysis, removeCv, renameCv, setCvAnalysis, setDefaultCv } from '../utils/cvLibrary'
+import { addCv, patchCvAnalysis, removeCv, renameCv, setCvAnalysis, setDefaultCv } from '../utils/cvLibrary'
 import { unansweredQuestionIds } from '../modules/profile/questionnaireStatus'
 
 const ProfileContext = createContext(null)
@@ -31,7 +31,6 @@ export function ProfileProvider({ children }) {
   // CV library actions (profile.cvLibrary). All are pure profile updates; the
   // files themselves are stored and deleted through modules/cvs/cvApi.
   const cvActions = {
-    registerActiveUpload: (entry) => setProfile((prev) => saveProfile(registerActiveUpload(prev, entry))),
     addCv: (entry, options) => setProfile((prev) => saveProfile(addCv(prev, entry, options))),
     setDefaultCv: (id) => setProfile((prev) => saveProfile(setDefaultCv(prev, id))),
     renameCv: (id, label) => setProfile((prev) => saveProfile(renameCv(prev, id, label))),

@@ -5,7 +5,7 @@ paths:
 
 # Frontend rules
 
-- The browser's `localStorage` is the master for profile, intelligence, job list and tracking. `data/` files are mirrors written on sync and read by Python; a disk-only fix is overwritten at the next sync. Fix profile data in the profile form.
+- The server as master is decided (DECISIONS.md principle 15) but NOT built. Until step 5 (`docs/redesign/STEP5_SERVER_MASTER_PLAN.md`) ships, the profile, intelligence and job list live in the browser's `localStorage`. `data/profile/` and `data/intelligence/` are mirrors written on sync and read by Python, so a disk-only fix is overwritten at the next sync; fix profile data in the profile form. The pipeline files (`discovered_jobs.json`, `scored_jobs.json`, `job_history.json`) are written by the Python pipeline, not by sync. Applications (tracker) are already on the server: `data/applications/` is the master and the browser keeps a read cache.
 - Missing profile, intelligence or scored-jobs files are an empty state. Never fill them from `data/examples/` outside the explicit demo mode (`src/modules/demo/`).
 - No default country, market or role anywhere in the UI; search country comes from the profile or intelligence.
 - Scoring weights default from `src/data/scoringWeights.json` only; saved weights win, and every regenerate goes through `regenerateIntelligence()`.
