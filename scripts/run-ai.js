@@ -17,9 +17,11 @@ import { PROVIDER_DEFAULTS } from '../src/modules/ai/aiSettings.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
-const INTERVIEWS_ROOT = path.join(ROOT, 'data/interviews')
-const RESUMES_ROOT = path.join(ROOT, 'data/resumes')
-const ANALYTICS_ROOT = path.join(ROOT, 'data/analytics')
+
+/** A folder for saved AI answers: under data/, or under HOLOJOB_AI_OUTPUT_DIR (tests set it, so they never write the real files). */
+function outputDir(folder) {
+  return path.join(process.env.HOLOJOB_AI_OUTPUT_DIR || path.join(ROOT, 'data'), folder)
+}
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -30,7 +32,7 @@ function sanitizeKey(key) {
 }
 
 export function writeInterviewPrep(jobId, data) {
-  const dir = path.join(INTERVIEWS_ROOT, path.basename(jobId))
+  const dir = path.join(outputDir('interviews'), path.basename(jobId))
   ensureDir(dir)
   const filePath = path.join(dir, 'interview_prep.json')
   fs.writeFileSync(filePath, JSON.stringify({ ...data, generatedAt: new Date().toISOString() }, null, 2))
@@ -38,7 +40,7 @@ export function writeInterviewPrep(jobId, data) {
 }
 
 export function writeCoverLetter(jobId, variants) {
-  const dir = path.join(RESUMES_ROOT, path.basename(jobId))
+  const dir = path.join(outputDir('resumes'), path.basename(jobId))
   ensureDir(dir)
   const content = [
     '# AI Cover Letter Variants',
@@ -58,8 +60,9 @@ export function writeCoverLetter(jobId, variants) {
 }
 
 export function writeSkillGap(data) {
-  ensureDir(ANALYTICS_ROOT)
-  const filePath = path.join(ANALYTICS_ROOT, 'skill_gap.json')
+  const dir = outputDir('analytics')
+  ensureDir(dir)
+  const filePath = path.join(dir, 'skill_gap.json')
   fs.writeFileSync(filePath, JSON.stringify({ ...data, generatedAt: new Date().toISOString() }, null, 2))
   return filePath
 }
