@@ -7,8 +7,11 @@ margins are zero. Includes the single-page overflow ladder from Part 2.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Callable
+
+from atomic_write import PRIVATE_FILE_MODE, make_private_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +42,8 @@ def render_pdf(html: str, output_path: Path, *, paper_format: str = "A4", footer
         logger.warning("Playwright not installed; skipping PDF generation")
         return False
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    make_private_dirs(output_path.parent)
+    existed = output_path.exists()
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -63,6 +67,8 @@ def render_pdf(html: str, output_path: Path, *, paper_format: str = "A4", footer
                 )
             page.pdf(**options)
             browser.close()
+        if not existed:
+            os.chmod(output_path, PRIVATE_FILE_MODE)  # Playwright writes the file itself; rewriting one keeps its mode
         return True
     except Exception as exc:
         logger.warning("PDF render failed: %s", exc)

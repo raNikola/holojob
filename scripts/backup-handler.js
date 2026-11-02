@@ -16,7 +16,7 @@ const AdmZip = require('adm-zip')
 
 // Restored files new to these folders are private; an existing file keeps its mode. Application entries go through
 // the store's own private writes. Same list: scripts/tighten-data-permissions.sh.
-const PRIVATE_RESTORE = /^data\/(profile|profile\.bak-[^/]+|ai\/findings|config|backups)\//
+const PRIVATE_RESTORE = /^data\/(profile|profile\.bak-[^/]+|ai|config|backups|intelligence|outreach|interviews|analytics|resumes)\//
 
 const DATA_DIRS = ['profile', 'intelligence', 'jobs', 'resumes', 'outreach', 'audits', 'cache', 'applications']
 

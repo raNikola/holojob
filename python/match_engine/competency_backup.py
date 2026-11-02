@@ -141,7 +141,7 @@ def restore(source: Path, root: Path = ROOT) -> list[str]:
     manifest = verify(source)
     for rel, meta in manifest["files"].items():
         dest = root / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        make_private_dirs(dest.parent)
         _copy_atomic(source / rel, dest, meta.get("mode"))
     for rel in manifest["absent"]:
         (root / rel).unlink(missing_ok=True)

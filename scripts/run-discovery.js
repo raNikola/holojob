@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeProfileFile } from './save-profile.js'
+import { writeIntelligenceFile } from './save-intelligence.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -16,15 +17,6 @@ const PROFILE_PATH = path.join(ROOT, 'data/profile/candidate-profile.json')
 const JOBS_PATH = path.join(ROOT, 'data/jobs/discovered_jobs.json')
 const VENV_PYTHON = process.platform === 'win32' ? path.join(ROOT, '.venv/Scripts/python.exe') : path.join(ROOT, '.venv/bin/python')
 const RUN_DISCOVERY = path.join(ROOT, 'python/job_discovery/run_discovery.py')
-
-function ensureDir(filePath) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
-}
-
-function writeJson(filePath, data) {
-  ensureDir(filePath)
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
-}
 
 function venvReady() {
   return fs.existsSync(VENV_PYTHON)
@@ -70,7 +62,7 @@ export function runDiscovery(opts = {}) {
   }
 
   if (opts.intelligence) {
-    writeJson(INTELLIGENCE_PATH, opts.intelligence)
+    writeIntelligenceFile(opts.intelligence)
   } else if (!fs.existsSync(INTELLIGENCE_PATH)) {
     return Promise.resolve({
       ok: false,

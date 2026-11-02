@@ -186,7 +186,7 @@ def save(patch, confirm: bool = False) -> dict:
         if increases and not confirm:
             return {"ok": False, "needsConfirm": True, "increases": increases}
         path = selection_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
+        ai_gate._atomic_module.make_private_dirs(path.parent)
         ai_gate._atomic_write(path, merged)
     return {"ok": True, "selection": merged, "class": price["class"], "increases": increases}
 
