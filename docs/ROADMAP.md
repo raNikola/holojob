@@ -100,7 +100,12 @@ A new screen named Activity, in the nav group System, built in this repo. Decisi
 | 3 | The Activity screen: one row per run, Details with per-site stats plus errors and warnings with their level. Top-of-page statistics belong to Analytics (later) | Not built |
 | 4 | Ad lifecycle changes, last ([rules](DECISIONS.md#ad-lifecycle-rules-narrowed-2026-11-02)) | Not built |
 
-Owner corrections to slice 1, both done: an empty board holds its ads, and a source that does not apply is `skipped`.
+Owner corrections to slice 1, all done: an empty board holds its ads; a source that does not apply is `skipped`; a run where every
+source was skipped is `skipped`; a source that skipped or failed keeps its ads in `discovered_jobs.json`.
+
+**For slice 4, unchanged so far:** a search-based ad that a successful run did not return leaves the file, the scored list and the
+browser list with no badge, while the ledger keeps it open, and the status and notes on that browser row are lost. A skipped source's
+ads, on the other hand, stay active with no time limit. [Details](DECISIONS.md#activity-slice-1-as-built-2026-11-02).
 
 Left for a later slice from slice 1: scored, closed, missing and expired counts on the record.
 

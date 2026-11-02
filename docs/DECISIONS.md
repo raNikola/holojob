@@ -47,7 +47,7 @@ of a shared file could lose a record.
   "trigger": "manual | pipeline | scheduled",
   "startedAt": "<ISO>",
   "finishedAt": "<ISO>",
-  "status": "ok | partial | failed",
+  "status": "ok | partial | failed | skipped",
   "sources": [
     {
       "name": "greenhouse",
@@ -72,8 +72,9 @@ of a shared file could lose a record.
 - **Extensible:** scored, closed, missing and expired are left out, because discovery does not know them yet. A later slice adds
   fields; a reader ignores what it does not know and treats a missing field as unknown. A breaking change raises `version`.
 - **Run status:** `failed` when the exit code is not 0, no source ran, or every source that searched failed. `partial` when some
-  searching source is not `ok`. A `skipped` source does not count, and warnings alone leave it `ok`. If every source was skipped the
-  run is `ok` with one run-level warning, since nothing was searched at all.
+  searching source is not `ok`. A `skipped` source does not count, and warnings alone leave it `ok`. **`skipped` (owner correction,
+  done):** every source was skipped, so nothing was searched; the record carries one run-level issue saying so. A non-zero exit
+  still makes it `failed`.
 - **Providers:** `fetch_jobs` still returns a list. The outcome is `provider.last_outcome` (`ProviderOutcome`, `base_provider.py`).
 
 **Decisions made while building, beyond the brief:**
@@ -98,6 +99,16 @@ of a shared file could lose a record.
   its ads, even when other boards return jobs. They stay open in `discovered_jobs.json`, counted in `meta.history.keptEmptyBoard`, and
   the record gets a warning naming the board. A board that lists at least one posting closes its absent ads as before, even if the
   filters kept none of them. A board that really has emptied therefore keeps its ads open, with the warning, on every run.
+- **A source that did not run keeps its ads (owner correction, done):** the open ads of a source with status `skipped` or `failed`
+  stay in `discovered_jobs.json`, with no change to the ledger entry: no `closedAt`, no new `lastSeen`. `meta.history.keptSourceNotRun`
+  counts them. This covers search-based sources too, and it ignores the "same search" condition: a source skipped for an unsupported
+  country is by definition on a different search from the one that found its ads. A role now listed under another copy is still not
+  carried. So after a permanent country change, Infostud's Serbian ads stay active until slice 4 decides otherwise.
+- **Unchanged on purpose:** a source that ran successfully and did not return an ad. A search-based ad then leaves
+  `discovered_jobs.json`, `scored_jobs.json` and the browser list with no badge, while the ledger keeps it open; a Greenhouse, Lever or
+  Ashby ad closes and shows the badge for 14 days. A source that was not asked to run at all (not in `--providers`, or an opt-in source
+  switched off) has no status, so its ads leave the file too. A browser list import keeps only rows in the file, so the status, AI
+  insights, tailored assets and outreach stored on a row that left are gone from the browser copy. **For slice 4.**
 - **Scoring:** `scored_jobs.json` meta gains `discoveryRunId`; `sourceRunId` stays scoring's own. No scored counts are attached: a
   Re-score runs on its own, several times per discovery run, so it would overwrite an older record's counts.
 - **Backups:** `data/analytics/` is not in `DATA_DIRS` in `scripts/backup-handler.js`, so run history is not backed up (nor is
@@ -120,6 +131,7 @@ of a shared file could lose a record.
 - **Search-based sources** (LinkedIn / JobSpy, Infostud, Workable, Joberty) show Missing and never become Expired automatically.
 - **What is not a miss:** a failed or partial fetch, and a changed search.
 - **0 ads** is a warning and never closes everything.
+- **A source that did not run** (`skipped` or `failed`) keeps its ads as they were (slice 1 correction).
 - **`expiresAt`** (Infostud, Joberty) is a deadline: displayed only, never used as Closed or Expired.
 
 **Code check, differs, built last (slice 4):** `python/job_scoring/job_history.py` has one state, `closedAt` / `isClosed`, and no
