@@ -121,7 +121,9 @@ describe('re-import of the scored-jobs file', () => {
     const next = importJobsFromFile({ meta: null, jobs: [{ jobId: 'z', title: 'From file' }] }, loadJobs())
     const kept = next.jobs.find((j) => j.jobId === 'manual-3')
     expect(kept).toMatchObject({ notes: 'call Mia', extraLinks: [{ url: 'https://acme.example/about', label: 'About' }], manualEntry: true })
-    expect(next.jobs.map((j) => j.jobId)).toEqual(['z', 'manual-3'])
+    // the fixture's discovered row has a saved status, so it stays too, out of current results
+    expect(next.jobs.filter((j) => !j.offList).map((j) => j.jobId)).toEqual(['z', 'manual-3'])
+    expect(next.jobs.filter((j) => j.offList).map((j) => j.jobId)).toEqual(['a'])
   })
 
   it('keeps the manual row, with its notes, when the file has the same address under another id', () => {

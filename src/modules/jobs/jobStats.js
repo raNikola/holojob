@@ -1,9 +1,15 @@
 import { isFollowUpDue } from './followUps'
 import { TERMINAL_STAGES } from './applicationTracking'
 import { isActionable } from './jobHistory'
+import { onListJobs } from './jobFilters.js'
+
+/** The Dashboard's count of jobs with a tailored resume, among current results. */
+export function countTailoredResumes(jobs) {
+  return onListJobs(jobs).filter((j) => j.tailoredAssets?.resumeMd || j.tailoredAssets?.resumePdf).length
+}
 
 export function computeJobStats(jobs) {
-  const list = jobs || []
+  const list = onListJobs(jobs)
   const stats = {
     total: list.length,
     new: 0,

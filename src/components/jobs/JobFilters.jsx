@@ -62,7 +62,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
   const chips = activeFilterChips(filters)
   const salary = salaryRangeOf(filters)
   // Chips of filters that are not rendered (score filters without scores) are not counted in the toggle.
-  const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider', 'company', 'hideNoLongerListed'].includes(c.key)))
+  const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider', 'company', 'hideNoLongerListed', 'showOffList'].includes(c.key)))
   const priorityOptions = useMemo(
     () => countByValue(jobs, 'priority', SHOWN_PRIORITIES).map(({ value, count }) => ({ value, label: `${value} (${count})` })),
     [jobs],
@@ -214,7 +214,14 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                   />
                 </div>
               )}
-              <div className="flex items-center min-[1280px]:flex-1 min-[1280px]:justify-end">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-[1280px]:flex-1 min-[1280px]:justify-end">
+                <Checkbox
+                  className=""
+                  label="Show jobs absent from current results"
+                  help={tip('showOffList', 'Show jobs absent from current results')}
+                  checked={Boolean(filters.showOffList)}
+                  onChange={(v) => onChange({ showOffList: v })}
+                />
                 <Checkbox
                   className=""
                   label="Hide jobs no longer listed"

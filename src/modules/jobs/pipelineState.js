@@ -1,3 +1,4 @@
+import { onListJobs } from './jobFilters.js'
 export const PIPELINE_STATE_KEY = 'job-dashboard-pipeline-state'
 
 export function getDefaultPipelineState() {
@@ -34,7 +35,8 @@ export function updatePipelineState(patch) {
   return savePipelineState(next)
 }
 
-export function derivePipelineStateFromHealth(health, jobs = []) {
+export function derivePipelineStateFromHealth(health, allJobs = []) {
+  const jobs = onListJobs(allJobs)
   const scoredCount = jobs.filter((j) => typeof j.matchScore === 'number').length
   const resumeCount = jobs.filter((j) => j.tailoredAssets?.resumeMd).length
   return {

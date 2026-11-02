@@ -19,6 +19,7 @@ import { overlayTracking } from '../../modules/applications/trackingView'
 import { scheduleFollowUp } from '../../modules/applications/trackerController'
 import { useApplications } from '../../hooks/useApplications'
 import { computeOutreachMetrics, aggregateAllContacts } from '../../modules/outreach/outreachMetrics'
+import { onListJobs } from '../../modules/jobs/jobFilters'
 import { downloadContactsCsv, downloadOutreachJson } from '../../modules/outreach/outreachExport'
 import { addOutreachContact } from '../../modules/outreach/outreachStorage'
 import { probePipelineApi } from '../../modules/jobs/pipelineRunner'
@@ -157,7 +158,7 @@ export default function OutreachDashboard() {
                 {appliedJobs.map((j) => (
                   <option key={j.jobId} value={j.jobId}>{j.company} — {j.title}</option>
                 ))}
-                {appliedJobs.length === 0 && state.jobs.slice(0, 20).map((j) => (
+                {appliedJobs.length === 0 && onListJobs(state.jobs).slice(0, 20).map((j) => (
                   <option key={j.jobId} value={j.jobId}>{j.company} — {j.title}</option>
                 ))}
               </select>

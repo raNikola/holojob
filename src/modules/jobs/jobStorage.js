@@ -16,6 +16,7 @@ const DEFAULT_FILTERS = {
   remoteOnly: false,
   hideNeedsVisa: false,
   hideNoLongerListed: false,
+  showOffList: false,
   status: '',
   matchLabel: '',
   priority: [],
@@ -105,6 +106,29 @@ function jobMatchKey(job) {
   return `tcl:${(job.title || '').toLowerCase()}|${(job.company || '').toLowerCase()}|${(job.location || '').toLowerCase()}`
 }
 
+// Stamps and placeholders a record gets without the owner having done anything.
+const BOOKKEEPING_FIELDS = new Set(['updatedAt', 'lastUpdated', 'generatedAt'])
+
+function hasContent(value) {
+  if (Array.isArray(value)) return value.some(hasContent)
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(([key, inner]) => !BOOKKEEPING_FIELDS.has(key) && hasContent(inner))
+  }
+  return value !== null && value !== undefined && value !== '' && value !== false
+}
+
+/** Whether the row holds something only the owner's work put there: a triage status, AI insights, tailored assets, outreach or legacy tracking. */
+export function hasUserData(job) {
+  if (!job) return false
+  const { status: outreachStatus, ...outreach } = job.outreach || {}
+  return Boolean(job.status && job.status !== 'new')
+    || hasContent(job.aiInsights)
+    || hasContent(job.tailoredAssets)
+    || (Boolean(outreachStatus) && outreachStatus !== 'none')
+    || hasContent(outreach)
+    || hasContent(job.applicationTracking)
+}
+
 export function mergeStatusOnImport(existingJobs, incomingJobs) {
   const preservedByKey = new Map()
   const preservedById = new Map()
@@ -124,8 +148,10 @@ export function mergeStatusOnImport(existingJobs, incomingJobs) {
   return incomingJobs.map((job) => {
     const key = jobMatchKey(job)
     const preserved = preservedById.get(job.jobId) ?? preservedByKey.get(key)
+    // A row in the file is in current results, whatever a copy of it said.
+    const { offList: _inResults, ...fresh } = job
     return {
-      ...job,
+      ...fresh,
       ...preserved?.manual,
       status: preserved?.status || job.status || 'new',
       applicationTracking: preserved?.applicationTracking || job.applicationTracking,
@@ -161,9 +187,16 @@ export function importJobsFromFile(json, existingState = null) {
   // A hand-entered job the file lacks (saved while the server was away) is not dropped by a re-import.
   const present = new Set(merged.map((job) => job.jobId))
   const kept = prior.filter((job) => job.manualEntry && !present.has(job.jobId))
+  // Discovery finds ads and never deletes what the owner did: a row the file lacks stays, marked, if it holds their work.
+  // "In the file" is every row of the file, with the id and address the merge matches on.
+  const fileIds = new Set(jobs.map((job) => job.jobId))
+  const fileKeys = new Set(jobs.map(jobMatchKey))
+  const offList = prior
+    .filter((job) => !job.manualEntry && !fileIds.has(job.jobId) && !fileKeys.has(jobMatchKey(job)) && hasUserData(job))
+    .map((job) => ({ ...job, offList: true }))
   return {
     meta: meta || existingState?.meta || null,
-    jobs: [...merged, ...kept],
+    jobs: [...merged, ...kept, ...offList],
     filters: existingState?.filters || { ...DEFAULT_FILTERS },
     importedAt: new Date().toISOString(),
   }

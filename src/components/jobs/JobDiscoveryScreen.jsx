@@ -18,7 +18,7 @@ import JobTable from './JobTable'
 import JobDetailDrawer from './JobDetailDrawer'
 import JobEmptyState from './JobEmptyState'
 import { appliedJobIds } from '../../modules/applications/appliedFilter'
-import { filterJobs, getUniqueProviders, getUniqueSites } from '../../modules/jobs/jobFilters'
+import { filterJobs, getUniqueProviders, getUniqueSites, listedJobs, onListJobs } from '../../modules/jobs/jobFilters'
 import { computeJobStats } from '../../modules/jobs/jobStats'
 import { probePipelineApi, runTailor } from '../../modules/jobs/pipelineRunner'
 import { searchCountry } from '../../utils/searchCountry'
@@ -80,7 +80,7 @@ export default function JobDiscoveryScreen() {
       if (cancelled) return
       if (source !== 'local') {
         setState(next)
-        setAutoLoadNote(`Loaded ${next.jobs.length} jobs from ${source} file`)
+        setAutoLoadNote(`Loaded ${onListJobs(next.jobs).length} jobs from ${source} file`)
       }
     })
     probePipelineApi().then((probe) => {
@@ -116,8 +116,9 @@ export default function JobDiscoveryScreen() {
   const stats = useMemo(() => computeJobStats(viewJobs), [viewJobs])
   const applicationStore = applications.status === 'ready' ? applications.store : null
   const appliedIds = useMemo(() => appliedJobIds(applicationStore), [applicationStore])
-  const sites = useMemo(() => getUniqueSites(state.jobs), [state.jobs])
-  const providers = useMemo(() => getUniqueProviders(state.jobs), [state.jobs])
+  const listed = useMemo(() => listedJobs(state.jobs, state.filters), [state.jobs, state.filters])
+  const sites = useMemo(() => getUniqueSites(listed), [listed])
+  const providers = useMemo(() => getUniqueProviders(listed), [listed])
   const effectiveFilters = useMemo(() => withProfileSalaryDefaults(state.filters, profile?.basicProfile), [state.filters, profile?.basicProfile])
   const filteredJobs = useMemo(() => {
     return filterJobs(viewJobs, effectiveFilters, { appliedJobIds: appliedIds })
@@ -256,14 +257,14 @@ export default function JobDiscoveryScreen() {
   const handleExportJson = () => {
     downloadJobsJson({
       meta: state.meta,
-      jobs: state.jobs,
+      jobs: listed,
       exportedAt: new Date().toISOString(),
     })
     setExportOpen(false)
   }
 
   const handleExportCsv = () => {
-    downloadJobsCsv(state.jobs)
+    downloadJobsCsv(listed)
     setExportOpen(false)
   }
 
@@ -322,7 +323,7 @@ export default function JobDiscoveryScreen() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-3">
                   <p className="text-sm text-stone-600 dark:text-stone-400">
-                    {filteredJobs.length} of {state.jobs.length} jobs shown
+                    {filteredJobs.length} of {listed.length} jobs shown
                   </p>
                 </div>
                   <div className="relative">
@@ -343,7 +344,7 @@ export default function JobDiscoveryScreen() {
                   </div>
               </div>
 
-              <JobFilters filters={effectiveFilters} sites={sites} providers={providers} jobs={state.jobs} applicationStore={applicationStore} basicProfile={profile?.basicProfile} onChange={handleFilterChange} />
+              <JobFilters filters={effectiveFilters} sites={sites} providers={providers} jobs={listed} applicationStore={applicationStore} basicProfile={profile?.basicProfile} onChange={handleFilterChange} />
               <BulkActionsBar
                 selectedCount={selectedJobIds.length}
                 running={bulkRunning}

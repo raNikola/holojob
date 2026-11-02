@@ -205,7 +205,7 @@ describe('an edit after the migration survives', () => {
 
     // a re-import that lacks the job, then one that carries it changed
     browser = importJobsFromFile({ jobs: [slim(id16('other'))] }, browser)
-    expect(browser.jobs.find((j) => j.jobId === LEGACY)).toBeUndefined()
+    expect(browser.jobs.find((j) => j.jobId === LEGACY)?.offList).toBe(true) // a row with tracking is kept, marked
     browser = importJobsFromFile({ jobs: [{ ...legacy, title: 'Retitled', description: 'new ad' }] }, browser)
     expect(storeBytes()).toEqual(bytes)
 

@@ -14,6 +14,7 @@ import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
 import { clearIntelligence, saveIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { JOBS_STORAGE_KEY, importJobsFromFile, loadJobs, saveJobs } from '../../modules/jobs/jobStorage'
+import { onListJobs } from '../../modules/jobs/jobFilters'
 import {
   buildDiscoveryCommand,
   buildScoringCommand,
@@ -120,7 +121,7 @@ export default function SettingsHome() {
       const json = JSON.parse(await file.text())
       const next = importJobsFromFile(json, loadJobs())
       saveJobs(next)
-      setStatus(`Imported ${next.jobs.length} jobs.`)
+      setStatus(`Imported ${onListJobs(next.jobs).length} jobs.`)
     } catch (e) {
       setImportError(e.message)
     }
