@@ -12,12 +12,13 @@ browser: `sanitize` drops anything else without echoing it, so it cannot reach a
 from __future__ import annotations
 
 import json
-import os
 import posixpath
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
+
+from atomic_write import write_text_atomic
 
 ROOT = Path(__file__).resolve().parents[2]
 MANUAL_PATH = ROOT / "data" / "jobs" / "manual_jobs.json"
@@ -155,9 +156,7 @@ def load(path: Path = MANUAL_PATH) -> list[dict]:
 def save(jobs: list[dict], path: Path = MANUAL_PATH) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps({"jobs": jobs}, indent=2), encoding="utf-8")
-    os.replace(tmp, path)
+    write_text_atomic(path, json.dumps({"jobs": jobs}, indent=2))
 
 
 def upsert(jobs: list[dict], stored: list[dict]) -> list[dict]:

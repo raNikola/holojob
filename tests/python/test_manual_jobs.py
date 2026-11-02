@@ -3,6 +3,7 @@
 import importlib.util
 import io
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -404,3 +405,39 @@ def test_the_same_id_under_a_new_address_is_not_a_clash_with_itself():
     stored = [manual_jobs.sanitize({"jobId": MANUAL_ID, "title": "PM", "company": "Acme", "description": "x", "jobUrl": "https://acme.example/1"})]
     assert manual_jobs.find_clash(MANUAL_ID, "https://acme.example/1?utm_source=a", stored) is None
     assert manual_jobs.find_clash(OTHER_ID, "https://acme.example/1", stored)["jobId"] == MANUAL_ID
+
+
+def _failing_fsync(directory, on_disk_at_failure):
+    def fail(*_args, **_kwargs):
+        on_disk_at_failure.extend(p.name for p in directory.iterdir())
+        raise OSError("disk full")
+    return fail
+
+
+def test_a_failed_manual_save_keeps_the_previous_file_and_leaves_no_temp_file(tmp_path, monkeypatch):
+    path = tmp_path / "manual_jobs.json"
+    path.write_text('{"previous": true}', encoding="utf-8")
+    on_disk_at_failure = []
+    monkeypatch.setattr(os, "fsync", _failing_fsync(tmp_path, on_disk_at_failure))
+
+    with pytest.raises(OSError, match="disk full"):
+        manual_jobs.save([_manual()], path)
+
+    assert any(name.endswith(".tmp") for name in on_disk_at_failure)  # it failed with the temp file there
+    assert path.read_text(encoding="utf-8") == '{"previous": true}'
+    assert [p.name for p in tmp_path.iterdir()] == ["manual_jobs.json"]
+
+
+def test_a_failed_merge_keeps_the_previous_scored_file_and_leaves_no_temp_file(tmp_path, monkeypatch):
+    path = tmp_path / "scored_jobs.json"
+    before = json.dumps({"meta": {}, "jobs": [{"jobId": "a"}]})
+    path.write_text(before, encoding="utf-8")
+    on_disk_at_failure = []
+    monkeypatch.setattr(os, "fsync", _failing_fsync(tmp_path, on_disk_at_failure))
+
+    with pytest.raises(OSError, match="disk full"):
+        importer.merge_into_scored([{"jobId": "b"}], path)
+
+    assert any(name.endswith(".tmp") for name in on_disk_at_failure)  # it failed with the temp file there
+    assert path.read_text(encoding="utf-8") == before
+    assert [p.name for p in tmp_path.iterdir()] == ["scored_jobs.json"]
