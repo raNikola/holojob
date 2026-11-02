@@ -11,6 +11,9 @@ paths:
 - Scoring weights default from `src/data/scoringWeights.json` only; saved weights win, and every regenerate goes through `regenerateIntelligence()`.
 - Geography and work-authorization data are shared with Python (`src/data/geography.json`); keep both sides in step.
 - Judged runs, CV analysis and the Add job form's AI extraction (`/api/jobs/ad/ai-extract`) need their confirm dialog; never call those routes without `"confirm": true`. The extraction's request is the token and field names only.
-- Code and comments in English. Run `npm run lint` and `npm run test:js` after changes.
+- Code and comments in English. After changes, run lint and JS tests in a throwaway node container (`node` and `npm` are not on the host's PATH; always `--security-opt label=disable`, never `:Z`). In fish or bash:
+
+      podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run lint
+      podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run test:js
 
 Data shapes: `docs/redesign/data-shapes.md`. Architecture: `docs/ARCHITECTURE.md`.

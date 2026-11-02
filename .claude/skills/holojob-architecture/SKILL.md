@@ -16,7 +16,7 @@ Depth: `docs/ARCHITECTURE.md`. Terms: `docs/GLOSSARY.md`. Phases: `docs/ROADMAP.
     enrich_jobs.py   -> llmFacts on each job
     run_scoring.py   -> data/jobs/scored_jobs.json   (--judge is opt-in, confirmed)
     run_tailor.py    -> data/resumes/<jobId>/
-    python/run_pipeline.py chains discovery -> enrich -> score (npm run pipeline)
+    python/run_pipeline.py chains discovery -> enrich -> score (podman exec career-os npm run pipeline)
 
 ## Where things live
 
@@ -34,7 +34,18 @@ Depth: `docs/ARCHITECTURE.md`. Terms: `docs/GLOSSARY.md`. Phases: `docs/ROADMAP.
 
 ## Commands
 
-`npm run lint`, `npm run test:js`, `npm run test:python` (host `.venv`, Python 3.12), `npm test`, `npm run build`, `npm run pipeline`, `npm run discover:jobs`, `npm run score:jobs`.
+`node` and `npm` are not on the host's PATH. Lint, JS tests and build run in a throwaway node container (always `--security-opt label=disable`, never `:Z`); pytest runs on the host against `.venv` (Python 3.12). `npm test` and `npm run test:python` work on neither side. In fish or bash:
+
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run lint
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run test:js
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run build
+    .venv/bin/python -m pytest tests/python -q
+
+The pipeline scripts run inside the app container:
+
+    podman exec career-os npm run pipeline
+    podman exec career-os npm run discover:jobs
+    podman exec career-os npm run score:jobs
 
 ## Rules
 
