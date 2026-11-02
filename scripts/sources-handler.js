@@ -15,6 +15,7 @@ import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskErrorField } from './secret-mask.js'
+import { readJsonObject } from './read-body.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const VENV_PYTHON = process.platform === 'win32' ? path.join(ROOT, '.venv/Scripts/python.exe') : path.join(ROOT, '.venv/bin/python')
@@ -47,31 +48,8 @@ export function setSourcesRunner(fn) {
   runner = fn || runSourcesCli
 }
 
-function readJson(req) {
-  return new Promise((resolve, reject) => {
-    let size = 0
-    const chunks = []
-    req.on('data', (c) => {
-      size += c.length
-      if (size > MAX_BODY) {
-        reject(new Error('Body too large'))
-        req.destroy()
-      } else chunks.push(c)
-    })
-    req.on('end', () => {
-      try {
-        const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
-        if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('not an object')
-        resolve(body)
-      } catch {
-        reject(new Error('Body must be a JSON object'))
-      }
-    })
-    req.on('error', reject)
-  })
-}
-
 function send(res, status, data) {
+  if (res.writableEnded) return // read-body.js has already answered 413
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
   res.setHeader('Cache-Control', 'no-store')
@@ -97,7 +75,7 @@ export async function handleSourcesRequest(req, res) {
     }
     let body
     try {
-      body = await readJson(req)
+      body = await readJsonObject(req, res, { limit: MAX_BODY })
     } catch (e) {
       send(res, 400, { error: e.message })
       return true

@@ -65,8 +65,8 @@ describe('PUT /api/ai/settings', () => {
     expect((await fetch(`${base}/api/ai/settings`)).status).toBe(405)
     const bad = await fetch(`${base}/api/ai/settings`, { method: 'PUT', body: '[1]' })
     expect(bad.status).toBe(400)
-    const huge = await fetch(`${base}/api/ai/settings`, { method: 'PUT', body: JSON.stringify({ x: 'a'.repeat(70000) }) }).catch(() => ({ status: 0 }))
-    expect([0, 400]).toContain(huge.status)
+    const huge = await fetch(`${base}/api/ai/settings`, { method: 'PUT', body: JSON.stringify({ x: 'a'.repeat(70000) }) })
+    expect(huge.status).toBe(413)
     expect(calls).toEqual([])
   })
 

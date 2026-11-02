@@ -110,8 +110,9 @@ describe('the secret routes', () => {
       expect(res.status).toBe(status)
       expect(await text(res)).not.toContain(CANARY)
     }
-    const huge = await call('PUT', '/api/secrets/ai/openai', { key: CANARY, pad: 'a'.repeat(20000) }).catch(() => ({ status: 0, text: async () => '' }))
-    expect([0, 400]).toContain(huge.status)
+    const huge = await call('PUT', '/api/secrets/ai/openai', { key: CANARY, pad: 'a'.repeat(20000) })
+    expect(huge.status).toBe(413)
+    expect(await text(huge)).not.toContain(CANARY)
     expect(fs.existsSync(path.join(store.dir, 'ai.json'))).toBe(false)
   })
 

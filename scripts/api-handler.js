@@ -35,6 +35,7 @@ import { handleAiSettingsRequest } from './ai-settings-handler.js'
 import { handleSecretsRequest } from './secrets-handler.js'
 import { handleSourcesRequest } from './sources-handler.js'
 import { guardApiRequest } from './request-guard.js'
+import { MAX_LARGE_BODY_BYTES, readJsonBody, readRawBody } from './read-body.js'
 import { maskErrorField } from './secret-mask.js'
 import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
@@ -150,50 +151,8 @@ export function getPipelineHealth() {
   }
 }
 
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = []
-    req.on('data', (c) => chunks.push(c))
-    req.on('end', () => {
-      try {
-        const raw = Buffer.concat(chunks).toString('utf-8')
-        resolve(raw ? JSON.parse(raw) : {})
-      } catch (e) {
-        reject(e)
-      }
-    })
-    req.on('error', reject)
-  })
-}
-
-function readRawBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = []
-    req.on('data', (c) => chunks.push(c))
-    req.on('end', () => resolve(Buffer.concat(chunks)))
-    req.on('error', reject)
-  })
-}
-
-function readLimitedBody(req, limit) {
-  return new Promise((resolve, reject) => {
-    const chunks = []
-    let size = 0
-    req.on('data', (c) => {
-      size += c.length
-      if (size > limit) {
-        reject(new Error('File is too large. Maximum size is 10 MB.'))
-        req.destroy()
-        return
-      }
-      chunks.push(c)
-    })
-    req.on('end', () => resolve(Buffer.concat(chunks)))
-    req.on('error', reject)
-  })
-}
-
 function sendJson(res, status, data) {
+  if (res.writableEnded) return // read-body.js has already answered 413
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify(maskErrorField(data)))
@@ -279,7 +238,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/discovery/run' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = await runDiscovery({
         providers: body.providers || 'serbia',
         country: body.country,
@@ -298,7 +257,7 @@ export async function handleApiRequest(req, res) {
   // Never judges; the judged run keeps its own confirmed route.
   if (url === '/api/pipeline/run' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = await runPipeline({
         providers: body.providers || 'serbia',
         country: body.country,
@@ -346,7 +305,7 @@ export async function handleApiRequest(req, res) {
   // judged run has its own route below.
   if (url === '/api/scoring/run' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = await runScoring({ minScore: body.minScore })
       sendJson(res, result.ok ? 200 : 500, result)
     } catch (e) {
@@ -365,7 +324,7 @@ export async function handleApiRequest(req, res) {
   // explicit confirmation in the body, which only the confirm dialog sends.
   if (url === '/api/scoring/judge' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       if (body.confirm !== true) {
         sendJson(res, 400, { error: 'A judged run needs { "confirm": true }.' })
         return true
@@ -389,7 +348,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/tailor/stream' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       await runTailorStream(res, {
         jobId: body.jobId,
         jobIds: body.jobIds,
@@ -407,7 +366,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/tailor/run' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = await runTailor({
         jobId: body.jobId,
         jobIds: body.jobIds,
@@ -427,7 +386,7 @@ export async function handleApiRequest(req, res) {
   // Fill from ad (Add job): the server reads one job page. No model, no candidate data; the body is the address only.
   if (url === '/api/jobs/ad/fetch' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = await fetchAd(body.url)
       sendJson(res, result.status, result.body)
     } catch {
@@ -440,7 +399,7 @@ export async function handleApiRequest(req, res) {
   // sends the (redacted) page text to Claude Code and needs `"confirm": true`. Both take a token and field names, nothing else.
   if ((url === '/api/jobs/ad/ai-preview' || url === '/api/jobs/ad/ai-extract') && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = url.endsWith('/ai-preview') ? await previewAdAi(body) : await extractAdAi(body)
       sendJson(res, result.status, result.body)
     } catch {
@@ -453,7 +412,7 @@ export async function handleApiRequest(req, res) {
   // next scoring run has them. Local scoring; no model, no network.
   if ((url === '/api/jobs/manual/score' || url === '/api/jobs/manual/check' || url === '/api/jobs/manual/sync') && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res, url.endsWith('/sync') ? { limit: MAX_LARGE_BODY_BYTES } : undefined)
       const single = !url.endsWith('/sync')
       const mode = url.endsWith('/score') ? 'score' : url.endsWith('/check') ? 'check' : 'store'
       const result = await runManualJobs(single ? (body.job ? [body.job] : []) : body.jobs, { mode })
@@ -466,7 +425,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/jobs/import-url' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = await runJobImport({
         urls: body.urls || (body.url ? [body.url] : []),
         tailor: Boolean(body.tailor),
@@ -481,7 +440,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/projects/scan' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = await runProjectScan({ noLlm: body.noLlm, repos: body.repos })
       sendJson(res, result.ok ? 200 : 500, result)
     } catch (e) {
@@ -544,7 +503,7 @@ export async function handleApiRequest(req, res) {
   // explicit confirmation in the body, which only the confirm dialog sends.
   if (url === '/api/ai/cv-analyze/preview' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = await previewCvAnalysis(body)
       sendJson(res, result.ok ? 200 : 400, result)
     } catch (e) {
@@ -555,7 +514,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/ai/cv-analyze' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       if (body.confirm !== true) {
         sendJson(res, 400, { error: 'A CV analysis needs { "confirm": true }.' })
         return true
@@ -576,7 +535,7 @@ export async function handleApiRequest(req, res) {
   // Uploaded CVs (data/profile/cvs). The client names a CV only by its id.
   if (url === '/api/cvs' && req.method === 'POST') {
     try {
-      const saved = saveCvFile(await readLimitedBody(req, MAX_CV_BYTES))
+      const saved = saveCvFile(await readRawBody(req, res, { limit: MAX_CV_BYTES, tooLarge: { error: 'File is too large. Maximum size is 10 MB.' } }))
       sendJson(res, 200, { ok: true, id: saved.id, size: saved.size })
     } catch (e) {
       sendJson(res, 400, { error: e.message })
@@ -625,16 +584,15 @@ export async function handleApiRequest(req, res) {
       const { status, error } = IMPORT_ERRORS[code] ?? IMPORT_ERRORS.parse_failed
       sendJson(res, status, { ok: false, code, error })
     }
-    if (Number(req.headers['content-length'] ?? 0) > MAX_IMPORT_BODY_BYTES) {
-      res.setHeader('Connection', 'close')
-      fail('too_large')
-      return true
-    }
     let body
     try {
-      body = JSON.parse((await readLimitedBody(req, MAX_IMPORT_BODY_BYTES)).toString('utf-8') || '{}')
-    } catch (e) {
-      fail(/too large/.test(String(e?.message)) ? 'too_large' : 'invalid_request')
+      const raw = await readRawBody(req, res, {
+        limit: MAX_IMPORT_BODY_BYTES,
+        tooLarge: { ok: false, code: 'too_large', error: IMPORT_ERRORS.too_large.error },
+      })
+      body = JSON.parse(raw.toString('utf-8') || '{}')
+    } catch {
+      fail('invalid_request')
       return true
     }
     const result = await parseImportSource(body?.source, body?.text)
@@ -645,7 +603,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/profile/save' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = saveProfileToDisk(body.profile)
       sendJson(res, 200, { ok: true, ...result })
     } catch (e) {
@@ -663,7 +621,7 @@ export async function handleApiRequest(req, res) {
     }
     let body
     try {
-      body = await readBody(req)
+      body = await readJsonBody(req, res)
     } catch {
       body = null
     }
@@ -679,7 +637,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/intelligence/save' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = saveIntelligenceToDisk(body.intelligence)
       sendJson(res, 200, { ok: true, ...result })
     } catch (e) {
@@ -691,7 +649,7 @@ export async function handleApiRequest(req, res) {
   if (url === '/api/backup/export' && req.method === 'POST') {
     try {
       const { createBackupStream } = await import('./backup-handler.js')
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res, { limit: MAX_LARGE_BODY_BYTES })
       res.statusCode = 200
       res.setHeader('Content-Type', 'application/zip')
       res.setHeader('Content-Disposition', 'attachment; filename="career-os-backup.zip"')
@@ -709,7 +667,7 @@ export async function handleApiRequest(req, res) {
   if (url === '/api/backup/import' && req.method === 'POST') {
     try {
       const { importBackupZip } = await import('./backup-handler.js')
-      const zipBuffer = await readRawBody(req)
+      const zipBuffer = await readRawBody(req, res, { limit: MAX_LARGE_BODY_BYTES })
       if (!zipBuffer.length) {
         sendJson(res, 400, { error: 'Empty backup file' })
         return true
@@ -749,7 +707,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/ai/models' && (req.method === 'GET' || req.method === 'POST')) {
     try {
-      const body = req.method === 'POST' ? await readBody(req) : {}
+      const body = req.method === 'POST' ? await readJsonBody(req, res) : {}
       const result = await getAiModels(body.settings || {})
       sendJson(res, 200, result)
     } catch (e) {
@@ -761,7 +719,7 @@ export async function handleApiRequest(req, res) {
   // Read-only: is there a stored finding for these inputs? Makes no call and reserves no budget.
   if (url === '/api/ai/findings/check' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       sendJson(res, 200, await checkAiFinding({ feature: body.feature, context: body.context }))
     } catch (e) {
       sendJson(res, 500, { error: e.message })
@@ -771,7 +729,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/ai/chat' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = await runAiChat({
         context: body.context,
         message: body.message || body.context?.message,
@@ -785,7 +743,7 @@ export async function handleApiRequest(req, res) {
 
   if (AI_ROUTES[url] && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const feature = body.feature || AI_ROUTES[url]
       if (body.stream) {
         await runAiFeatureStream(res, {
@@ -809,7 +767,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/outreach/discover' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       if (body.deep === true && body.acceptTosRisk !== true) {
         sendJson(res, 400, {
           error: 'Deep LinkedIn mode requires acceptTosRisk: true. See README — LinkedIn deep mode risks.',
@@ -832,7 +790,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/outreach/generate' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = await runOutreachGenerate({
         job: body.job,
         contact: body.contact,
@@ -886,7 +844,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/quality/run' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const body = await readJsonBody(req, res)
       const result = await runQualityAudit({
         sampleMe: Boolean(body.sampleMe),
         limit: body.limit || 0,

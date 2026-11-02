@@ -14,36 +14,13 @@
 
 import { SecretStoreError, clearAiSecret, clearLinkedInSecret, describeSecrets, setAiSecret, setLinkedInSecret } from './secret-store.js'
 import { maskErrorField } from './secret-mask.js'
+import { readJsonObject } from './read-body.js'
 
 const MAX_BODY = 8 * 1024
 const AI_ROUTE = /^\/api\/secrets\/ai\/([a-z0-9-]{1,32})$/
 
-function readJson(req) {
-  return new Promise((resolve, reject) => {
-    let size = 0
-    const chunks = []
-    req.on('data', (c) => {
-      size += c.length
-      if (size > MAX_BODY) {
-        reject(new Error('Body too large'))
-        req.destroy()
-      } else chunks.push(c)
-    })
-    req.on('end', () => {
-      try {
-        const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
-        if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('not an object')
-        resolve(body)
-      } catch {
-        // Not the parser's own message: it can quote the start of the input.
-        reject(new Error('Body must be a JSON object'))
-      }
-    })
-    req.on('error', () => reject(new Error('Body could not be read')))
-  })
-}
-
 function send(res, status, data) {
+  if (res.writableEnded) return // read-body.js has already answered 413
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
   res.setHeader('Cache-Control', 'no-store')
@@ -83,7 +60,7 @@ export async function handleSecretsRequest(req, res) {
       }
       let body
       try {
-        body = await readJson(req)
+        body = await readJsonObject(req, res, { limit: MAX_BODY })
       } catch (e) {
         send(res, 400, { error: e.message })
         return true
@@ -111,7 +88,7 @@ export async function handleSecretsRequest(req, res) {
 
     let body
     try {
-      body = await readJson(req)
+      body = await readJsonObject(req, res, { limit: MAX_BODY })
     } catch (e) {
       send(res, 400, { error: e.message })
       return true
