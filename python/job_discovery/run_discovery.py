@@ -161,6 +161,7 @@ def discover(args: argparse.Namespace, record: dict) -> int:
     provider_counts: dict[str, int] = {}
     failed_boards: dict[str, set[str] | None] = {}
     empty_boards: dict[str, set[str]] = {}
+    sources_not_run: set[str] = set()
     raw_df = pd.DataFrame()
 
     for name in provider_names:
@@ -176,6 +177,8 @@ def discover(args: argparse.Namespace, record: dict) -> int:
             logger.warning("Provider %s could not read: %s", name, ", ".join(outcome.boards_failed))
         elif outcome.status == "failed":
             failed_boards[name] = None  # it stopped before naming any board
+        if outcome.status in ("skipped", "failed"):
+            sources_not_run.add(name)
         if outcome.boards_empty:
             empty_boards[name] = set(outcome.boards_empty)
 
@@ -220,6 +223,7 @@ def discover(args: argparse.Namespace, record: dict) -> int:
         seen_before=seen_before,
         failed_boards=failed_boards,
         empty_boards=empty_boards,
+        sources_not_run=sources_not_run,
     )
     job_history.save(ledger_file, ledger)
 
@@ -264,8 +268,9 @@ def discover(args: argparse.Namespace, record: dict) -> int:
     print(f"  facts carried over {history_stats['carriedFacts']}, "
           f"ads changed since last run {history_stats['changed']}, "
           f"fuller description kept over a throttled one {history_stats['keptFullerDescription']}")
-    held = history_stats["keptFailedBoard"] + history_stats["keptEmptyBoard"]
-    print(f"  ads kept open: {history_stats['keptFailedBoard']} of unread boards, {history_stats['keptEmptyBoard']} of empty boards")
+    held = history_stats["keptFailedBoard"] + history_stats["keptEmptyBoard"] + history_stats["keptSourceNotRun"]
+    print(f"  ads kept open: {history_stats['keptFailedBoard']} of unread boards, {history_stats['keptEmptyBoard']} of empty boards, "
+          f"{history_stats['keptSourceNotRun']} of sources that did not run")
     closed_written = len(to_write) - found_count - held
     print(f"  jobs written: {len(to_write)} ({closed_written} closed, kept {job_history.CLOSED_KEEP_DAYS} days)")
     print("")

@@ -196,7 +196,8 @@ def test_a_run_that_crashes_still_writes_a_failed_record_and_the_crash_is_not_hi
     (["partial", "skipped"], "partial"),
     (["ok", "failed", "skipped"], "partial"),
     (["failed", "skipped"], "failed"),
-    (["skipped", "skipped"], "ok"),
+    (["skipped", "skipped"], "skipped"),
+    (["skipped"], "skipped"),
 ])
 def test_the_run_status_follows_its_sources(statuses, expected):
     record = run_log.new_record("x", "manual")
@@ -219,21 +220,95 @@ def test_a_skipped_source_has_its_reason_no_warning_and_does_not_make_the_run_pa
     assert source["error"] is None
 
 
-def test_a_run_where_every_source_skipped_says_nothing_was_searched():
+def test_a_run_where_every_source_skipped_is_itself_skipped_and_says_why():
     record = run_log.new_record("x", "manual")
     run_log.add_source(record, "wellfound", skipped())
-    assert run_log.finish(record, exit_ok=True)["status"] == "ok"
-    assert [(i["level"], i["source"]) for i in record["issues"]] == [("warning", None)]
-    assert "no source searched" in record["issues"][0]["message"]
+    assert run_log.finish(record, exit_ok=True)["status"] == "skipped"
+    [issue] = record["issues"]
+    assert issue["source"] is None and "no source searched" in issue["message"]
+    assert issue["level"] in ("error", "warning")
 
 
-def test_a_skipped_source_closes_nothing_and_its_ads_are_left_as_a_missing_search_leaves_them(discovery, tmp_path):
-    discovery({"infostud": Fake([{"jobId": "i1", "provider": "infostud", "source": "infostud", "title": "Product Lead",
-                                  "company": "A", "location": "Remote", "description": "Own it.", "jobUrl": "https://i/1"}],
-                                ProviderOutcome(read=1, kept=1))})
-    discovery({"infostud": Fake(outcome=skipped())})
+def test_a_run_that_crashed_is_failed_even_if_every_source_skipped():
+    record = run_log.new_record("x", "manual")
+    run_log.add_source(record, "wellfound", skipped())
+    assert run_log.finish(record, exit_ok=False)["status"] == "failed"
+
+
+def test_the_allowed_run_statuses():
+    assert run_log.RUN_STATUSES == ("ok", "partial", "failed", "skipped")
+
+
+def infostud_job(job_id="i1", title="Product Lead"):
+    return {"jobId": job_id, "provider": "infostud", "source": "infostud", "title": title, "company": "A",
+            "location": "Remote", "description": "Own it.", "jobUrl": f"https://i/{job_id}"}
+
+
+def ledger_entry(tmp_path, job_id):
+    return json.loads((tmp_path / "data" / "jobs" / "job_history.json").read_text())["jobs"][job_id]
+
+
+def test_a_skipped_source_keeps_its_ads_in_the_file_with_nothing_changed(discovery, tmp_path):
+    discovery({"infostud": Fake([infostud_job()], ProviderOutcome(read=1, kept=1))})
+    first_seen = ledger_entry(tmp_path, "i1")
+    assert discovery({"infostud": Fake(outcome=skipped())}) == 0
+
     payload = discovered(tmp_path)
-    assert payload["meta"]["history"]["closed"] == 0 and payload["jobs"] == []
+    assert [j["jobId"] for j in payload["jobs"]] == ["i1"]
+    assert payload["jobs"][0]["isClosed"] is False and payload["jobs"][0]["closedAt"] is None
+    assert payload["meta"]["history"]["closed"] == 0 and payload["meta"]["history"]["keptSourceNotRun"] == 1
+    assert ledger_entry(tmp_path, "i1") == first_seen
+    assert records()[-1]["status"] == "skipped"
+
+
+def test_the_real_infostud_skip_for_another_country_keeps_its_ads(discovery, tmp_path, monkeypatch):
+    row = {"title": "Product Manager", "company": "A", "location": "Remote", "jobUrl": "https://i/1",
+           "description": "Own it.", "isRemote": True}
+    monkeypatch.setattr(infostud_client, "fetch_jobs", lambda **kwargs: [row])
+    provider = {"infostud": infostud_provider.InfostudProvider()}
+    assert discovery(provider, "--country", "Serbia") == 0
+    assert discovery(provider, "--country", "Germany") == 0
+    assert source_of(records()[-1], "infostud")["status"] == "skipped"
+    jobs = discovered(tmp_path)["jobs"]
+    assert [j["jobUrl"] for j in jobs] == ["https://i/1"] and jobs[0]["isClosed"] is False
+
+
+def test_a_failed_search_source_keeps_its_ads_in_the_file_with_nothing_changed(discovery, tmp_path):
+    discovery({"infostud": Fake([infostud_job()], ProviderOutcome(read=1, kept=1))})
+    first_seen = ledger_entry(tmp_path, "i1")
+    assert discovery({"infostud": Fake(boom=RuntimeError("Infostud unreachable"))}) == 0
+
+    payload = discovered(tmp_path)
+    assert [j["jobId"] for j in payload["jobs"]] == ["i1"] and payload["jobs"][0]["isClosed"] is False
+    assert payload["meta"]["history"]["keptSourceNotRun"] == 1
+    assert ledger_entry(tmp_path, "i1") == first_seen
+    assert source_of(records()[-1], "infostud")["status"] == "failed"
+
+
+def test_a_search_source_that_ran_and_lost_an_ad_behaves_as_before(discovery, tmp_path):
+    discovery({"infostud": Fake([infostud_job(), infostud_job("i2", "Head of Product")], ProviderOutcome(read=2, kept=2))})
+    discovery({"infostud": Fake([infostud_job()], ProviderOutcome(read=1, kept=1))})
+    payload = discovered(tmp_path)
+    assert [j["jobId"] for j in payload["jobs"]] == ["i1"]
+    assert payload["meta"]["history"]["keptSourceNotRun"] == 0
+    assert ledger_entry(tmp_path, "i2")["closedAt"] is None  # out of the file, still open in the ledger
+
+
+def test_a_board_source_that_ran_and_lost_an_ad_still_closes_it(discovery, tmp_path):
+    discovery({"greenhouse": greenhouse({"a": [posting(1), posting(2, "Senior Product Manager")]})})
+    discovery({"greenhouse": greenhouse({"a": [posting(1)]})})
+    payload = discovered(tmp_path)
+    assert {j["title"]: j["isClosed"] for j in payload["jobs"]} == {"Product Manager": False, "Senior Product Manager": True}
+    assert payload["meta"]["history"]["closed"] == 1
+
+
+def test_a_skipped_source_beside_one_that_ran_leaves_the_run_ok_and_keeps_both_sets_of_ads(discovery, tmp_path):
+    providers = {"greenhouse": greenhouse({"a": [posting(1)]}),
+                 "infostud": Fake([infostud_job()], ProviderOutcome(read=1, kept=1))}
+    discovery(providers)
+    assert discovery({"greenhouse": greenhouse({"a": [posting(1)]}), "infostud": Fake(outcome=skipped())}) == 0
+    assert records()[-1]["status"] == "ok" and records()[-1]["issues"] == []
+    assert {j["title"] for j in discovered(tmp_path)["jobs"]} == {"Product Manager", "Product Lead"}
 
 
 def test_only_the_allowed_source_statuses_reach_a_record():

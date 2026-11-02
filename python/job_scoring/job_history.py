@@ -146,6 +146,7 @@ def apply_run(
     seen_before: dict[str, str] | None = None,
     failed_boards: dict[str, set[str] | None] | None = None,
     empty_boards: dict[str, set[str]] | None = None,
+    sources_not_run: set[str] | None = None,
 ) -> tuple[list[dict], dict]:
     """Record one discovery run; return the jobs to write and what changed.
 
@@ -163,6 +164,9 @@ def apply_run(
     out of it. `empty_boards` maps a provider to the boards that answered with no jobs at all: held the same way, since
     a board losing every ad at once is more likely a glitch than a hiring freeze. Only CLOSURE_PROVIDERS read these: a
     search-based provider's missing ad is not closed anyway.
+    `sources_not_run` are the providers that skipped or failed this run, of any kind. They looked at nothing, so their
+    open ads stay in the output unchanged. The search does not have to match: a source skipped for an unsupported country
+    is by definition on a different search from the one that found its ads.
     """
     moment = _parse(now) or datetime.now(timezone.utc)
     entries = ledger["jobs"]
@@ -170,9 +174,10 @@ def apply_run(
     seen_before = seen_before or {}
     failed_boards = failed_boards or {}
     empty_boards = empty_boards or {}
+    sources_not_run = sources_not_run or set()
     stats = {
         "new": 0, "known": 0, "reopened": 0, "changed": 0, "carriedFacts": 0, "closed": 0,
-        "keptFullerDescription": 0, "keptFailedBoard": 0, "keptEmptyBoard": 0,
+        "keptFullerDescription": 0, "keptFailedBoard": 0, "keptEmptyBoard": 0, "keptSourceNotRun": 0,
     }
     found_ids = set()
     found_roles = set()
@@ -229,14 +234,13 @@ def apply_run(
         if job_id in found_ids or entry.get("closedAt"):
             continue
         provider = entry.get("provider")
-        if (
-            provider not in CLOSURE_PROVIDERS
-            or entry.get("seenUnder") != key
-            or entry.get("roleKey") in found_roles  # still listed under another copy
-        ):
+        if entry.get("roleKey") in found_roles:  # still listed under another copy
+            continue
+        if provider not in sources_not_run and (provider not in CLOSURE_PROVIDERS or entry.get("seenUnder") != key):
             continue
         held_by = (
-            "keptFailedBoard" if _board_listed(entry, failed_boards)
+            "keptSourceNotRun" if provider in sources_not_run
+            else "keptFailedBoard" if _board_listed(entry, failed_boards)
             else "keptEmptyBoard" if _board_listed(entry, empty_boards)
             else None
         )

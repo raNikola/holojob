@@ -588,3 +588,67 @@ def test_a_provider_names_the_board_that_answered_empty(monkeypatch, name):
     assert provider.last_outcome.boards_empty == ["bad"] and provider.last_outcome.boards_failed == []
     assert provider.last_outcome.status == "ok"
     assert any("bad" in warning for warning in provider.last_outcome.warnings)
+
+
+# --- a source that did not run keeps its ads ------------------------------------------------------
+
+
+def run_not_run(ledger, jobs, not_run, day=1, returned=None, key=KEY):
+    return jh.apply_run(ledger, jobs, now=iso(day), providers_returned=returned or {}, key=key,
+                        role_key=_crosspost_key, sources_not_run=not_run)
+
+
+@pytest.mark.parametrize("provider", ["infostud", "joberty", "workable", "jobspy", "wellfound", "greenhouse"])
+def test_a_source_that_did_not_run_keeps_its_ads_exactly_as_they_were(provider):
+    ledger, jobs = two_boards(provider)
+    before = copy.deepcopy(ledger["jobs"])
+    out, stats = run_not_run(ledger, [], {provider})
+    assert ledger["jobs"] == before, "no field of the entry may change: no closedAt, no new lastSeen"
+    assert stats["closed"] == 0 and stats["keptSourceNotRun"] == 2
+    assert {j["jobId"] for j in out} == {"g1", "b1"}
+    for record in out:
+        assert record["isClosed"] is False and record["closedAt"] is None and record["lastSeen"] == iso(0)
+    assert next(j for j in out if j["jobId"] == "b1")["llmFacts"] == facts_for(jobs[1])
+
+
+def test_a_source_skipped_for_another_country_keeps_its_ads_though_the_search_changed():
+    """An unsupported country is by definition a different search from the one that found the ad."""
+    ledger, _ = two_boards("infostud")
+    out, stats = run_not_run(ledger, [], {"infostud"}, key="search-germany")
+    assert {j["jobId"] for j in out} == {"g1", "b1"} and stats["keptSourceNotRun"] == 2
+
+
+def test_a_board_provider_that_did_not_run_never_closes_even_with_a_count_above_zero():
+    ledger, _ = two_boards()
+    _, stats = run_not_run(ledger, [], {"greenhouse"}, returned={"greenhouse": 5})
+    assert stats["closed"] == 0 and all(e["closedAt"] is None for e in ledger["jobs"].values())
+
+
+def test_an_ad_of_a_source_that_did_not_run_is_not_kept_when_listed_under_another_copy():
+    ledger, jobs = two_boards("infostud")
+    copy_elsewhere = {**board_job("l9", "acme", "lever"), "title": jobs[1]["title"]}
+    out, stats = run_not_run(ledger, [copy_elsewhere], {"infostud"})
+    assert "b1" not in {j["jobId"] for j in out} and stats["keptSourceNotRun"] == 1
+
+
+def test_a_closed_ad_of_a_source_that_did_not_run_stays_closed():
+    ledger, _ = two_boards()
+    ledger["jobs"]["b1"]["closedAt"] = iso(0)
+    out, stats = run_not_run(ledger, [], {"greenhouse"})
+    assert ledger["jobs"]["b1"]["closedAt"] == iso(0) and stats["keptSourceNotRun"] == 1
+    assert next(j for j in out if j["jobId"] == "b1")["isClosed"] is True
+
+
+@pytest.mark.parametrize("provider", ["infostud", "workable", "joberty", "jobspy"])
+def test_a_search_source_that_ran_and_did_not_return_an_ad_behaves_as_before(provider):
+    ledger, jobs = two_boards(provider)
+    out, stats = run_not_run(ledger, [jobs[0]], {"another-source"}, returned={provider: 1})
+    assert {j["jobId"] for j in out} == {"g1"}  # gone from the file
+    assert ledger["jobs"]["b1"]["closedAt"] is None and stats["closed"] == 0 and stats["keptSourceNotRun"] == 0
+
+
+def test_a_board_source_that_ran_and_lost_an_ad_still_closes_it():
+    ledger, jobs = two_boards()
+    out, stats = run_not_run(ledger, [jobs[0]], {"another-source"}, returned={"greenhouse": 1})
+    assert stats["closed"] == 1 and ledger["jobs"]["b1"]["closedAt"] == iso(1)
+    assert next(j for j in out if j["jobId"] == "b1")["isClosed"] is True
