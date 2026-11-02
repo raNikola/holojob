@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  addCv, canRemoveCv, cvFilesToDiscard, ensureCvLibrary, registerActiveUpload, removeCv, renameCv, setDefaultCv, syncDefaultEntry,
+  addCv, canRemoveCv, cvFilesToDiscard, ensureCvLibrary, removeCv, renameCv, setDefaultCv,
 } from '../../src/utils/cvLibrary'
 
 const parsed = (skill) => ({ skills: [skill], projects: [], education: [], workExperience: [], certifications: [], links: [] })
@@ -67,20 +67,6 @@ describe('library actions', () => {
   })
 })
 
-describe('an Edit Profile upload', () => {
-  it('lists the new active CV as default and keeps the outgoing one with its edits', () => {
-    let p = ensureCvLibrary(profile())
-    p = { ...p, resume: { ...p.resume, parsedData: parsed('edited') } }
-    p = syncDefaultEntry(p)
-    p = { ...p, resume: { fileName: 'New.pdf', uploadedAt: '2026-10-24T00:00:00Z', rawText: 'new', parsedData: parsed('New'), importSource: 'resume_pdf' } }
-    p = registerActiveUpload(p, { id: 'n', filePath: 'profile/cvs/n.pdf' })
-    expect(p.defaultCvId).toBe('n')
-    expect(p.cvLibrary).toHaveLength(2)
-    expect(p.cvLibrary[0].parsedData).toEqual(parsed('edited'))
-    expect(p.cvLibrary[1]).toMatchObject({ id: 'n', fileName: 'New.pdf', rawText: 'new' })
-  })
-})
-
 describe('loadProfile migration', () => {
   it('lists the stored résumé on load when the profile has no library yet', async () => {
     const store = new Map()
@@ -100,10 +86,7 @@ describe('cvFilesToDiscard (Cancel in Edit Profile)', () => {
   it('names only the PDFs of CVs added during the session', () => {
     const before = addCv(ensureCvLibrary(profile()), second)
     let during = renameCv(setDefaultCv(before, 'b'), 'b', 'Renamed')
-    during = registerActiveUpload(
-      { ...during, resume: { fileName: 'New.pdf', rawText: 'n', parsedData: parsed('n') } },
-      { id: 'n', filePath: 'profile/cvs/n.pdf' },
-    )
+    during = addCv(during, { id: 'n', fileName: 'New.pdf', rawText: 'n', parsedData: parsed('n'), filePath: 'profile/cvs/n.pdf' }, { makeDefault: true })
     expect(cvFilesToDiscard(before, during)).toEqual(['n'])
   })
   it('deletes nothing when no CV was added, and skips an entry with no file', () => {

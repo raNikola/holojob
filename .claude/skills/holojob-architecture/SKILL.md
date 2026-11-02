@@ -9,7 +9,9 @@ Depth: `docs/ARCHITECTURE.md`. Terms: `docs/GLOSSARY.md`. Phases: `docs/ROADMAP.
 
 ## Data flow
 
-    browser (localStorage = master) --sync--> data/profile, data/intelligence (mirrors)
+    browser localStorage (profile, intelligence, job list; server master decided, NOT built until step 5)
+        --sync--> data/profile, data/intelligence (mirrors)
+    applications: already on the server, data/applications/ is the master (browser: read cache)
     run_discovery.py -> data/jobs/discovered_jobs.json (+ job_history.json ledger)
     enrich_jobs.py   -> llmFacts on each job
     run_scoring.py   -> data/jobs/scored_jobs.json   (--judge is opt-in, confirmed)

@@ -40,7 +40,7 @@ Area rules load only when matching files are touched: `.claude/rules/scoring.md`
 
 - Bare `python` in the container is the venv (`/app/.venv`, via `ENV PATH` in the
   Dockerfile); images built before that line need a rebuild.
-- The image carries no tests (`tests/` is not copied, no `pytest`). Run the suite on the host.
+- The image carries no tests (`tests/` is not copied, no `pytest`). Run the checks outside it, as in Tests below.
 - **Builds:** dependencies are layered before code, so a code-only `podman-compose build` takes about 10 s; pip and the
   Playwright browsers rerun only when `requirements.txt` or `scripts/setup-job-discovery.sh` changes. `.dockerignore`
   allows only `data/examples` from `data/`. Never remove those lines.
@@ -53,10 +53,17 @@ Detail: `docs/ARCHITECTURE.md` (Container gotchas).
 
 ## Tests
 
-Against the host `.venv` (Python 3.12: `uv venv -p 3.12 .venv`, `uv pip install -r requirements.txt`), never inside the image:
+`node` and `npm` are not on the host's PATH, so lint, vitest and build run in a throwaway node container (always
+`--security-opt label=disable`, never `:Z`, which would relabel the repo). pytest runs directly against the host `.venv`
+(Python 3.12: `uv venv -p 3.12 .venv`, `uv pip install -r requirements.txt`), never inside the image. In fish or bash:
 
-    npm run test:python        # or: .venv/bin/python -m pytest
-    npm test                   # vitest, then the same pytest run
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run lint
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run test:js
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run build
+    .venv/bin/python -m pytest tests/python -q
+
+`npm test` and `npm run test:python` work on neither side: the host has no npm, and `.venv/bin/python` does not resolve
+in the container (it links to a Python outside the repo).
 
 `pytest.ini` limits collection to `tests/python`. Two `network` tests hit live
 Infostud and Workable and skip when unreachable; `-m "not network"` runs offline.

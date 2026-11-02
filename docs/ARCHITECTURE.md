@@ -310,7 +310,7 @@ Carried over from the former "Next, in order" list (nothing else from it is stil
   current `requirements.txt`. The app itself was never affected: it spawns
   `.venv/bin/python` directly. Images built before that ENV line need a rebuild.
 - **The image carries no tests.** The Dockerfile does not copy `tests/`, and a
-  bare `pytest` is not on the runtime PATH. Run the suite on the host instead.
+  bare `pytest` is not on the runtime PATH. Run the checks outside it, as in Tests (full text).
 - **Build layers and the build context.** Dependencies come before code: `npm ci`, the global Claude Code
   install and `scripts/setup-job-discovery.sh` (pip plus the Playwright browsers, about 75 s and a 1.5 GB layer)
   rerun only when `package*.json`, `requirements.txt` or that script changes. A change to `python/`, `scripts/` or
@@ -342,11 +342,20 @@ Carried over from the former "Next, in order" list (nothing else from it is stil
 
 ### Tests (full text)
 
-Tests run against the host `.venv` (Python 3.12, from `uv venv -p 3.12 .venv`
-and `uv pip install -r requirements.txt`), never inside the image:
+`node` and `npm` are not on the host's PATH, so lint, vitest and build run in a
+throwaway node container (always `--security-opt label=disable`, never `:Z`,
+which would relabel the repo). pytest runs directly against the host `.venv`
+(Python 3.12, from `uv venv -p 3.12 .venv` and
+`uv pip install -r requirements.txt`), never inside the image. In fish or bash:
 
-    npm run test:python        # or: .venv/bin/python -m pytest
-    npm test                   # vitest, then the same pytest run
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run lint
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run test:js
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run build
+    .venv/bin/python -m pytest tests/python -q
+
+`npm test` and `npm run test:python` work on neither side: the host has no npm,
+and `.venv/bin/python` does not resolve in the container (it links to a Python
+outside the repo).
 
 `pytest.ini` limits collection to `tests/python`, so a bare `pytest` from the
 repo root does not walk `node_modules` or other third-party trees. The suite includes two `network` tests
@@ -409,7 +418,11 @@ A missing profile, intelligence or scored-jobs file is an empty state: the app
 never fills it from `data/examples/` outside an explicit demo mode. Keep it
 that way: a default is a decision made for the candidate without asking.
 
-The browser copy of the profile is the master (`localStorage`, mirrored to
-`data/profile/candidate-profile.json` on sync), so a correction made only in
+The server as master is decided (DECISIONS.md principle 15) but not built.
+Until step 5 ([redesign/STEP5_SERVER_MASTER_PLAN.md](redesign/STEP5_SERVER_MASTER_PLAN.md))
+ships, the profile, intelligence and job list live in the browser's
+`localStorage`. The profile is mirrored to
+`data/profile/candidate-profile.json` on sync, so a correction made only in
 the disk file is overwritten at the next sync. Fix profile data in the
-profile form.
+profile form. Applications (tracker) are already on the server:
+`data/applications/` is the master and the browser keeps a read cache.
