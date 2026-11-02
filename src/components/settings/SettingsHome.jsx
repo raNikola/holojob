@@ -84,8 +84,8 @@ export default function SettingsHome() {
     setBackupLoading(true)
     setImportError(null)
     try {
-      await downloadBackupZip(profile)
-      setStatus('Downloaded holojob-backup.zip')
+      const name = await downloadBackupZip(profile)
+      setStatus(`Downloaded ${name}`)
     } catch (e) {
       setImportError(e.message)
     } finally {
@@ -259,7 +259,7 @@ const RENDERERS = {
       <div className="flex flex-col gap-3">
         <Button variant="secondary" onClick={c.handleExportBackup} disabled={c.backupLoading}>
           {c.backupLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          Download holojob-backup.zip
+          Download backup ZIP
         </Button>
         <div>
           <input

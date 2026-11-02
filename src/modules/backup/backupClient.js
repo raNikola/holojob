@@ -2,6 +2,14 @@ import { ensureApiAvailable } from '../../utils/apiAvailability.js'
 import { loadIntelligence } from '../intelligence/intelligenceExport.js'
 import { loadJobs } from '../jobs/jobStorage.js'
 
+/** The download name, with the date and time on the owner's clock (the container runs on UTC, so the browser names it). */
+export function backupFileName(now = new Date()) {
+  const two = (n) => String(n).padStart(2, '0')
+  const date = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`
+  return `holojob-backup-${date}_${two(now.getHours())}-${two(now.getMinutes())}.zip`
+}
+
+/** Returns the name the file was saved under. */
 export async function downloadBackupZip(profile) {
   if (!(await ensureApiAvailable())) {
     throw new Error('Backup requires the local API server (npm run dev or npm run start)')
@@ -25,11 +33,13 @@ export async function downloadBackupZip(profile) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = 'holojob-backup.zip'
+  const name = backupFileName()
+  anchor.download = name
   document.body.appendChild(anchor)
   anchor.click()
   document.body.removeChild(anchor)
   URL.revokeObjectURL(url)
+  return name
 }
 
 export async function importBackupZip(file) {
