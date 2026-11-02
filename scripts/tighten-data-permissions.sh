@@ -7,6 +7,7 @@
 #
 # Run it as the owner of data/ (on the host, the user who runs rootless podman).
 # Same folder list as PRIVATE_RESTORE in scripts/backup-handler.js, plus data/applications.
+# data/jobs and data/cache are left out on purpose.
 
 set -u
 
@@ -55,7 +56,8 @@ count_all() {
   echo "$total"
 }
 
-set -- "$data/profile" "$data/applications" "$data/ai/findings" "$data/config" "$data/backups" "$data"/profile.bak-*
+set -- "$data/profile" "$data/applications" "$data/ai" "$data/config" "$data/backups" "$data/intelligence" \
+  "$data/outreach" "$data/interviews" "$data/analytics" "$data/resumes" "$data"/profile.bak-*
 for dir in "$@"; do
   shift
   if [ -L "$dir" ]; then

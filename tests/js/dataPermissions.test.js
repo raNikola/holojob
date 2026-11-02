@@ -284,17 +284,29 @@ describe('tighten-data-permissions.sh', () => {
     'data/applications/applications.json',
     'data/applications/files/app-1/cv.pdf',
     'data/ai/findings/job/a.json',
+    'data/ai/settings.json',
+    'data/ai/pricing-overrides.json',
+    'data/ai/usage-ledger.jsonl',
+    'data/ai/.ledger.lock',
     'data/config/ai-settings.json',
     'data/backups/x/a.json',
     'data/profile.bak-1/a.json',
+    'data/intelligence/candidate-intelligence.json',
+    'data/outreach/job-1/contacts.json',
+    'data/interviews/job-1/interview_prep.json',
+    'data/analytics/skill_gap.json',
+    'data/resumes/job-1/cv.pdf',
   ]
-  const OPEN_DIRS = ['data/profile', 'data/profile/cvs', 'data/applications/files/app-1', 'data/config', 'data/backups/x', 'data/profile.bak-1']
+  const OPEN_DIRS = [
+    'data/profile', 'data/profile/cvs', 'data/applications/files/app-1', 'data/ai', 'data/config', 'data/backups/x', 'data/profile.bak-1',
+    'data/intelligence', 'data/outreach', 'data/outreach/job-1', 'data/interviews/job-1', 'data/analytics', 'data/resumes/job-1',
+  ]
 
   beforeEach(() => {
     for (const rel of OPEN_FILES) put(rel, 'x', 0o644)
     for (const rel of OPEN_DIRS) fs.chmodSync(abs(rel), 0o755)
     put('data/jobs/scored_jobs.json', 'x', 0o644)
-    put('data/ai/settings.json', 'x', 0o644)
+    put('data/cache/engine.json', 'x', 0o644)
     put('data/config/read-only.json', 'x', 0o400)
     put('outside.json', 'x', 0o644)
     fs.symlinkSync(abs('outside.json'), abs('data/profile/link.json'))
@@ -316,10 +328,24 @@ describe('tighten-data-permissions.sh', () => {
     for (const rel of OPEN_DIRS) expect(modeOf(rel)).toBe(0o700)
     expect(modeOf('data/config/read-only.json')).toBe(0o400) // never widened
     expect(modeOf('data/jobs/scored_jobs.json')).toBe(0o644)
-    expect(modeOf('data/ai/settings.json')).toBe(0o644)
+    expect(modeOf('data/cache/engine.json')).toBe(0o644)
+    expect(modeOf('data/jobs')).not.toBe(0o700)
+    expect(modeOf('data/cache')).not.toBe(0o700)
     expect(modeOf('outside.json')).toBe(0o644) // a symlink is not followed
     expect(run().stdout).toContain('Dry run: 0 files and 0 directories')
     expect(run('--apply').stdout).toContain('Changed 0 files and 0 directories')
+  })
+
+  it('skips a covered folder that is a symlink, and leaves what it points at alone', () => {
+    fs.rmSync(abs('data/outreach'), { recursive: true })
+    put('elsewhere/contacts.json', 'x', 0o644)
+    fs.chmodSync(abs('elsewhere'), 0o755)
+    fs.symlinkSync(abs('elsewhere'), abs('data/outreach'))
+    const result = run('--apply')
+    expect(result.status).toBe(0)
+    expect(result.stderr).toContain('Skipped, a symlink')
+    expect(modeOf('elsewhere/contacts.json')).toBe(0o644)
+    expect(modeOf('elsewhere')).toBe(0o755)
   })
 
   it('works when a folder is missing, and refuses an unknown argument', () => {
