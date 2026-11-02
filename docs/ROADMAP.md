@@ -50,7 +50,7 @@ could never be reused. Built in four phases, each measured by the share of provi
    proposes new competencies or aliases, and the audit tool for the accuracy gate (a sample of about 100 real
    requirements: correct, wrong, legitimately provisional). The owner sets the acceptable wrong-merge rate after
    the first measurement.
-   Seed, validator (`python/match_engine/competencies.py`) and report (`npm run competencies:report`, writes
+   Seed, validator (`python/match_engine/competencies.py`) and report (`podman exec holojob npm run competencies:report`, writes
    `data/competency-report.json`) exist; the audit tool does not yet.
 2. **Mapping in extraction.** The model picks a `competencyId` from the list or NONE; code accepts only listed ids;
    precedence previous frame > alias > dictionary > model suggestion > provisional; pending aliases and the
@@ -87,6 +87,42 @@ skills or domain. GitHub Issues are disabled on this repo, so the work is tracke
 
 Each item gets a fixture-based regression test; the Phase 1 stability test must keep passing. Related: "Recalibrate
 `TARGET_COVERAGE` and fix the flat scoring dimensions" under Later.
+
+## Tech debt leftovers
+
+Known and left open on purpose. Checked against the code on 2026-11-02.
+
+**Step 5 (server master), [STEP5_SERVER_MASTER_PLAN.md](redesign/STEP5_SERVER_MASTER_PLAN.md):**
+
+- `applied_manually` vs the tracker: "Mark as applied" still sets the old job status beside the application store's record.
+- Whole-list save: the Jobs, Applications and Outreach screens still save their whole list from memory (`saveJobs`).
+- Hard-coded `serbia` provider group: `scripts/run-discovery.js`, `run-pipeline.js`, `api-handler.js`, `PipelineOrchestrator.jsx`, `JobDiscoveryScreen.jsx` and `npm run discover:jobs`.
+
+**Phase 4, strict xfails in `tests/python/test_llm_tailor.py`:**
+
+- The fact gate only sees metric-shaped numbers, so "47 engineers" passes.
+- Refusal and rejection reasons are stored in `tailoredAssets.llmIssues` but not shown to the owner.
+- Identifiers inside the sections LLM tailoring sends are not redacted.
+- LLM tailoring has no confirm step.
+
+**Untested:**
+
+- `scripts/run-tailor.js` and the `/api/tailor/*` routes.
+- A bulk tailoring run that aborts. A malformed draft in a bulk run is covered; a failure outside the draft is not (below).
+- Empty stdout with a non-zero exit from the Claude Code CLI: `claude_code._call` does not read the exit code, and the tests only use exit 0.
+- "dynamic": the tailoring prompt bans it, but it is not in `BANNED_PHRASES` (`candidate_text.py`), so code does not enforce it and no test covers it.
+- Project intelligence metrics are not a fact source: `build_canonical_facts` does not read that file, so a draft that uses a metric from it is rejected. Nothing tests this.
+
+**Tailoring and audit behaviour:**
+
+- `provenance_auditor.py`: the metric, degree and certification checks match whole tokens, but the company check still uses `cl in k or k in cl`, so a short known name can vouch for a longer company name. A severe finding comes from it, so changing it can move jobs to `needs_review`.
+- A failure outside the draft (disk full, render crash) still stops `run_tailor.main()` before `scored_jobs.json` is saved. There is deliberately no catch-all, because it would hide real errors.
+
+**Manual owner steps:**
+
+- `chmod 600` the top-level files of `data/` (`competency-*`, `competencies-review.md`, `discovery-test.log`, `engine-snapshot.json`, `requirement-remap.json`). `scripts/tighten-data-permissions.sh` covers folders only, not these. Command: `find data -maxdepth 1 -type f -perm /077 -exec chmod 600 {} +`.
+- `chmod 700` the `audits`, `chat` and `data` folders. Already 700 on DS9 on 2026-11-02, with nothing inside `audits` or `chat` open to group or other; nothing is left to run.
+- Clean up the hourly "Fetching is paused" log noise. The text is not in this repo, nor in the last 24 hours of any running container's log or the user journal, so its source still has to be found.
 
 ## Later
 

@@ -40,7 +40,8 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [CLAUDE.md](CLAUDE.md) (r
 
 ## Quick start
 
-Requirements: Node.js 20+, Python 3.11-3.12, Git.
+Requirements: Node.js 20+, Python 3.11-3.12, Git. This is for a machine with Node on its PATH. DS9 has none: use the
+Container steps below.
 
 ```bash
 npm run setup          # Node deps + Python venv + Playwright browsers
@@ -80,10 +81,10 @@ Changing `.env` needs `podman-compose up -d --force-recreate`; a restart does no
 ## Pipeline
 
 ```bash
-npm run discover:jobs      # discovery, providers group "serbia"
-npm run pipeline           # discovery -> enrichment -> scoring (python/run_pipeline.py)
-npm run score:jobs         # re-score only
-npm run tailor:resumes     # tailored CVs and cover letters
+podman exec holojob npm run discover:jobs      # discovery, providers group "serbia"
+podman exec holojob npm run pipeline           # discovery -> enrichment -> scoring (python/run_pipeline.py)
+podman exec holojob npm run score:jobs         # re-score only
+podman exec holojob npm run tailor:resumes     # tailored CVs and cover letters
 ```
 
 Discovery providers in the `serbia` group: LinkedIn (JobSpy), Infostud, Workable, Greenhouse,
@@ -149,14 +150,14 @@ podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work dock
 |---|---|
 | `npm run setup` fails on Python | Use Python 3.11 or 3.12 with `python3` on PATH. 3.15 cannot install the pinned pandas 2.3.3 |
 | Discovery stops with a message about the country | Set the country in the candidate intelligence (regenerate it from the profile form) or pass `--country`; there is no default country |
-| Discovery returns few jobs | Check the network and the slugs in `companies/*.json` (`npm run validate:companies`); LinkedIn rate-limits and Serbia is unsupported by Indeed and Glassdoor |
+| Discovery returns few jobs | Check the network and the slugs in `companies/*.json` (`podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run validate:companies`); LinkedIn rate-limits and Serbia is unsupported by Indeed and Glassdoor |
 | Playwright errors | Re-run `npm run setup`, or `.venv/bin/python -m playwright install chromium` |
 | Tailoring fails without an AI provider | `python python/resume_generator/run_tailor.py --job-id <id> --no-llm` still produces the rule-based CV and cover letter |
 | Port in use | Outside the container set `PORT` in `.env` and restart. In the container the app listens on 5173; change the host port in `docker-compose.yml` (`3073:5173`) |
 | `.env` change has no effect in the container | `podman-compose up -d --force-recreate`; a restart does not re-read it |
 | `import pandas` fails with `podman exec holojob python` | The image predates the `ENV PATH` line in the Dockerfile; rebuild it (`podman-compose build`) |
 | `pytest` not found in the container | The image carries no tests; run `.venv/bin/python -m pytest tests/python -q` on the host |
-| Jobs not showing in the UI | Run discovery and scoring (`npm run pipeline`); check the Pipeline health card on the Jobs screen |
+| Jobs not showing in the UI | Run discovery and scoring (`podman exec holojob npm run pipeline`); check the Pipeline health card on the Jobs screen |
 
 ## Documentation
 

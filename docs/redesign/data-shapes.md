@@ -1453,6 +1453,155 @@ the dry run returned (sha256 of the canonical JSON of `jobs`). The backup is
 store existed, its `applications.json`. Migrated records have `origin: "migration"`, id `mig-<jobId>`, the original
 `applicationTracking` object in `legacy`, and events with `source: "migration"`.
 
+## Source switches
+
+`data/config/sources.json`, the owner's switches for opt-in job boards ([SOURCES_SPEC.md](SOURCES_SPEC.md), first slice). A
+missing file, a missing entry or an unreadable file means off.
+
+```json
+{
+  "version": 1,
+  "updatedAt": "<ISO timestamp>|null",
+  "boards": {
+    "<source name>": {
+      "active": "<boolean>",
+      "consentAcceptedAt": "<ISO timestamp>|null",
+      "disabledAt": "<ISO timestamp>|null",
+      "migratedFrom": "<string>, only on an entry moved from the old browser checkbox",
+      "history": [ { "at": "<ISO timestamp>", "event": "enabled|disabled", "consentAcceptedAt": "<ISO timestamp>, on enabled", "note": "<string>, on a migrated entry" } ]
+    }
+  },
+  "migrations": { "job-dashboard-discovery-options": "<ISO timestamp>" }
+}
+```
+
+A source counts as on only with `active: true` and a consent time. `history` keeps the last 50 events.
+
+- **Writer:** only `python/job_discovery/source_settings.py`, under a lock, through `GET` / `PUT /api/sources` and `POST /api/sources/migrate-legacy` (`scripts/sources-handler.js` runs its CLI). `run_discovery.py` reads it. A file with a newer `version` or another shape is an error: it is left as it is and every opt-in source counts as off.
+- **Modes:** the file is set to 600 on every write, also when it already existed. New folder 700. Lock file `.sources.json.lock`, 600.
+- Not in the backup export.
+
+## AI provider selection
+
+`data/config/ai-settings.json`, the one selection the browser path and the Python pipeline both read. There is no default: a missing file means nothing is selected, and an unreadable or invalid file refuses every call. It never holds a key.
+
+```json
+{
+  "provider": "claude-code|mock|ollama|openai|openrouter|claude|gemini|deepseek|groq",
+  "model": "<string>",
+  "temperature": "<number, 0 to 2>",
+  "maxTokens": "<number, 1 to 200000>",
+  "baseUrl": "<string>, empty except for ollama",
+  "features": { "jobAnalysis": "<boolean>", "resumeEnhancement": "<boolean>", "coverLetter": "<boolean>", "interviewPrep": "<boolean>", "outreach": "<boolean>", "careerStrategy": "<boolean>", "skillGap": "<boolean>", "applicationStrategy": "<boolean>", "companyIntelligence": "<boolean>" }
+}
+```
+
+- **Writer:** only `python/llm/ai_selection.py`, under the AI gate's lock, through `GET` / `PUT /api/ai/selection` (`scripts/ai-settings-handler.js`, then `ai_gate.py selection-get` / `selection-put`). Unknown keys are refused.
+- **Modes:** a new file 600 (an existing file keeps its mode, atomic write). New folder 700.
+- Not in the backup export.
+
+## AI budget gate
+
+`data/ai/`, the files of `python/llm/ai_gate.py`. It is the only writer; Node reaches it through its CLI (`scripts/ai-gate.js`), so there is one lock and one ledger.
+
+| Path | Content | Modes |
+|---|---|---|
+| `data/ai/` | Folder | new 700 |
+| `data/ai/settings.json` | Budget, limits, automation switch. Missing = budget 0, automation off | new 600, an existing file keeps its mode |
+| `data/ai/pricing-overrides.json` | The owner's price edits, merged over `src/data/aiPricing.json` by provider and model | new 600, an existing file keeps its mode |
+| `data/ai/usage-ledger.jsonl` | Append-only, one JSON object per line. No route writes or deletes a row | new 600 |
+| `data/ai/.ledger.lock` | Lock for all of the above and for `data/config/ai-settings.json` | new 600 |
+| `data/ai/findings/` | AI findings store (below) | below |
+
+`settings.json` (`PUT /api/ai/settings`; raising what the gate allows needs `"confirm": true`):
+
+```json
+{
+  "currency": "<string, three letters>",
+  "dailyLimit": "<number>",
+  "monthlyLimit": "<number>",
+  "maxCallsDaily": "<number>|null",
+  "maxCallsMonthly": "<number>|null",
+  "estimatedOutputTokens": "<number>",
+  "timezone": "<IANA name>",
+  "automation": { "enabled": "<boolean>" },
+  "claudeCodeSubscription": { "enabled": "<boolean>", "maxCallsDaily": "<number>", "features": [ "<feature name>" ] }
+}
+```
+
+`pricing-overrides.json` (`PUT /api/ai/pricing`; the request replaces the whole list, at most 200 entries):
+
+```json
+{
+  "entries": [
+    { "provider": "<string>", "model": "<string>|*", "class": "free|local|paid|unknown", "inputPerMTok": "<number>|null", "outputPerMTok": "<number>|null", "source": "<string>|null", "checkedAt": "<YYYY-MM-DD>|null" }
+  ]
+}
+```
+
+`usage-ledger.jsonl` has two row types, read with `GET /api/ai/usage`. A call that goes ahead has a `call` row before it and a `result` row with the same `id` after it; a refusal or a findings hit has the `call` row only. Costs are estimates.
+
+```json
+{
+  "v": 1, "type": "call", "id": "<string>", "ts": "<ISO timestamp>",
+  "feature": "<string>", "trigger": "manual|automation", "provider": "<string>", "model": "<string>|null",
+  "class": "free|local|paid|unknown|subscription", "jobId": "<string>|null", "cache": "miss|hit",
+  "decision": "allowed|refused|cache-hit", "reason": "<string>|null", "skipped": "<number>, on a refusal found before a batch",
+  "inputTokens": "<number>", "outputTokens": "<number>", "tokensAreEstimate": "<boolean>",
+  "cost": "<number>|null", "currency": "<string>|null", "costIsEstimate": true, "priceKnown": "<boolean>, not on a findings hit"
+}
+```
+
+```json
+{
+  "v": 1, "type": "result", "id": "<id of the call row>", "ts": "<ISO timestamp>", "ok": "<boolean>", "error": "<string>|null",
+  "inputTokens": "<number>", "outputTokens": "<number>", "tokensAreEstimate": "<boolean>",
+  "cost": "<number>|null", "currency": "<string>|null", "costIsEstimate": true,
+  "attempts": "<number>, if given", "providerReportedCostUsd": "<number>, if given"
+}
+```
+
+None of `data/ai/` is in the backup export.
+
+### AI findings store
+
+`data/ai/findings/<job|company>/<entityKey>.json`, stored model answers for `jobAnalysis` (entity `job`) and `companyIntelligence` (entity `company`). The entity key is the first 16 hex of a sha256, of the job id or of the normalized company name; the file name holds no title or company.
+
+```json
+{
+  "version": 1,
+  "entity": { "type": "job|company", "key": "<entityKey>" },
+  "findings": [
+    {
+      "id": "<entityKey>:<seq>", "seq": "<number, 1..n>", "at": "<ISO timestamp>", "feature": "<string>",
+      "provider": "<string>", "model": "<string>", "promptVersion": "<string>", "inputHash": "<sha256>",
+      "cacheKey": "<model>|<promptVersion>|<inputHash>", "finding": "<the parsed answer>", "source": "model"
+    }
+  ]
+}
+```
+
+- **Writer:** only the Node server (`scripts/ai-findings-store.js`, called from `run-ai.js`), not `ai_gate.py`. Append-only: a finding is never edited or removed, and a file that cannot be read is never overwritten. The prompt is not stored, and neither is an answer with credential-like text.
+- **Modes:** every write is 600, also over an existing file; folders are forced to 700 (`chmod` when another mode is found).
+
+## Secret store
+
+`data/secrets/`, AI keys and the LinkedIn cookie. No route returns a value: `GET /api/secrets` gives set / not set, source, the last 4 characters and the base URL.
+
+```json
+{ "<openai|openrouter|claude|gemini>": { "key": "<string>", "baseUrl": "<string>, only if one was set", "setAt": "<ISO timestamp>" } }
+```
+
+`data/secrets/ai.json`, above. `data/secrets/linkedin.json`:
+
+```json
+{ "li_at": "<string>", "setAt": "<ISO timestamp>" }
+```
+
+- **Writer:** only `scripts/secret-store.js`, through `PUT` / `DELETE /api/secrets/ai/<provider>` and `/api/secrets/linkedin` (`scripts/secrets-handler.js`). Removing the last AI key, or the cookie, deletes the file. `python/llm/secret_store.py` reads `ai.json` read-only, and refuses the call if the file is not a private regular file or not valid JSON.
+- **Modes:** every write is 600, also over an existing file; the folder is forced to 700 on every write.
+- Never in a backup, export or restore (`scripts/secret-paths.js`); git-ignored like all of `data/`.
+
 ## Examples and fixtures (tracked)
 
 - `data/examples/candidate-profile.example.json`, `candidate-intelligence.example.json`, `scored_jobs.example.json` - fictional data in the shapes above, used only in an explicit demo mode.
@@ -1470,5 +1619,5 @@ Posting fixture shape:
 
 ## Not stored by the app
 
-- AI keys and the LinkedIn cookie are not in this list on purpose: `data/secrets/ai.json` and `data/secrets/linkedin.json` (Secret store in [CLAUDE.md](../../CLAUDE.md)), with `.env` as the fallback; never in the browser. The AI provider selection is `data/config/ai-settings.json` (AI provider selection in CLAUDE.md). Browser AI usage, chat and memory stay in the browser until step 5 (browser keys above).
+- AI keys and the LinkedIn cookie are never in the browser: Secret store above, with `.env` as the fallback. Browser AI usage, chat and memory stay in the browser until step 5 (browser keys above).
 - The `claude-config/` folder holds the Claude Code CLI login used for tailoring; git-ignored.
