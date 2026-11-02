@@ -63,6 +63,7 @@ one account's jobs.
   text hash that reports "changed" and never claims to know the jobs. No headless browser.
 - **Keyed sources** (for example Adzuna), following ADR 0034: gated until the key is pasted, stored server-side,
   masked in the UI, redacted from logs and errors, with the vendor's terms implemented as code.
+- **Consent modal** for opt-in job boards, replacing the inline terms checkbox (UI only): see "Sources consent UI" under Later in [ROADMAP.md](../ROADMAP.md).
 
 ## Storage
 
