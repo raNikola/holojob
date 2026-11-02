@@ -473,9 +473,6 @@ def test_a_missing_cli_sends_nothing_and_says_why(cli, tmp_path, monkeypatch):
     assert ledger_calls() == []
 
 
-CRASH = "BUG: _validate and _apply_llm_content trust the inner shapes of the model's JSON, so this draft raises out of " \
-        "tailor_job instead of falling back to the rule-based CV, and main() stops, so later jobs of a bulk run are lost"
-
 BAD_SHAPES = {
     "experience-string": {"experience": "none"},
     "experience-number": {"experience": 3},
@@ -490,12 +487,66 @@ BAD_SHAPES = {
 }
 
 
-@pytest.mark.xfail(strict=True, raises=(AttributeError, TypeError), reason=CRASH)
 @pytest.mark.parametrize("case", list(BAD_SHAPES))
 def test_a_draft_with_the_wrong_inner_shape_falls_back_instead_of_crashing(allowed, tmp_path, case):
     allowed.reply = json.dumps(good_output(**BAD_SHAPES[case]))
     assets, _ = tailor(tmp_path)
     assert assets["contentEngine"] == "rule-based"
+    assert assets["llmIssues"]
+
+
+@pytest.mark.parametrize(("change", "expected"), [
+    ({"experience": [{"company": 5, "bullets": ["x"]}]}, "unknown company in experience: 5"),
+    ({"experience": [{"company": COMPANY, "bullets": [1, 2]}]}, "must be text"),
+    ({"skills": [{"label": "Delivery", "skills": "SQL"}]}, "skills items must be a list"),
+    ({"projects": [{"name": "P", "line": 7}]}, "project name and line must be text"),
+], ids=["company-number", "bullet-numbers", "skill-items-string", "project-line-number"])
+def test_more_wrong_shapes_fall_back_with_their_reason(allowed, tmp_path, change, expected):
+    allowed.reply = json.dumps(good_output(**change))
+    assets, _ = tailor(tmp_path)
+    assert assets["contentEngine"] == "rule-based"
+    assert any(expected in issue for issue in assets["llmIssues"])
+
+
+def test_a_shape_the_checks_did_not_foresee_still_costs_only_the_draft(allowed, tmp_path, monkeypatch):
+    def unforeseen(*_):
+        raise TypeError("unforeseen shape")
+    monkeypatch.setattr(run_tailor, "_apply_llm_content", unforeseen)
+    assets, written = tailor(tmp_path)
+    assert assets["contentEngine"] == "rule-based"
+    assert any("malformed draft" in issue and "unforeseen shape" in issue for issue in assets["llmIssues"])
+    assert SUMMARY_TEXT in written["tailored_resume.md"]
+
+
+def test_null_or_absent_optional_sections_are_still_a_valid_draft(allowed, tmp_path):
+    draft = good_output(skills=None, projects=None)
+    del draft["experience"]
+    allowed.reply = json.dumps(draft)
+    assets, _ = tailor(tmp_path)
+    assert assets["contentEngine"] == "claude-code", assets["llmIssues"]
+
+
+def test_a_malformed_draft_does_not_stop_a_bulk_run_or_lose_other_jobs(allowed, tmp_path, monkeypatch, capsys):
+    prof, intel, scored = tmp_path / "p.json", tmp_path / "i.json", tmp_path / "s.json"
+    prof.write_text(json.dumps(profile()), encoding="utf-8")
+    intel.write_text(json.dumps(intelligence()), encoding="utf-8")
+    jobs = [{**JOB, "jobId": f"job-{n}"} for n in (1, 2, 3)]
+    scored.write_text(json.dumps({"jobs": jobs}), encoding="utf-8")
+    replies = iter([json.dumps(good_output()), json.dumps(good_output(skills="SQL")), json.dumps(good_output())])
+    real_call = allowed.__call__
+
+    def answer(args, *rest, **kwargs):
+        allowed.reply = next(replies)
+        return real_call(args, *rest, **kwargs)
+
+    monkeypatch.setattr(claude_code.subprocess, "run", answer)
+    monkeypatch.setattr("sys.argv", ["run_tailor.py", "--job-ids", "job-1,job-2,job-3", "--profile", str(prof),
+                                     "--intelligence", str(intel), "--scored", str(scored)])
+    assert run_tailor.main() == 0
+    saved = {j["jobId"]: j["tailoredAssets"] for j in json.loads(scored.read_text(encoding="utf-8"))["jobs"]}
+    assert {k: v["contentEngine"] for k, v in saved.items()} == {
+        "job-1": "claude-code", "job-2": "rule-based", "job-3": "claude-code"}
+    assert any("skills must be a list" in issue for issue in saved["job-2"]["llmIssues"])
 
 
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG: `bullets` as a string passes _validate and the template loops over it, so the "
