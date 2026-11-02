@@ -61,8 +61,8 @@ export function SkillChips({ skills, variant }) {
   )
 }
 
-/** The job's facts, scores, fit, AI tools and contacts. The drawer turns the last two off; the full-details page keeps them. */
-export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatusChange, includeTracker = true, includeAiTools = true, includeContacts = true }) {
+/** The job's facts, scores, fit, AI tools and contacts. The drawer turns the last two off; the full-details page keeps them, unless the job has no stored row to write to. */
+export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatusChange, includeTracker = true, includeAiTools = true, includeContacts = true, includeTailor = true }) {
   const showScores = hasMatchScores([job])
   const limits = (job.reasons || []).filter(isCapReason)
   const positiveReasons = (job.reasons || []).filter((r) => !r.startsWith('Red flag:') && !isCapReason(r) && !isFitReason(r))
@@ -151,7 +151,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
               </ul>
             </div>
           )}
-          <JobTailorActions job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} />
+          {includeTailor && <JobTailorActions job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} />}
         </>
       )}
 

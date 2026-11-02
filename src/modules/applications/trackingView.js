@@ -6,6 +6,7 @@
 
 import { foldApplication, isActive } from './foldApplication.js'
 import { defaultSettings, labelFor } from './stageRegistry.js'
+import { countTracking } from '../jobs/jobStats.js'
 
 const OUTCOME_STAGE = {
   rejected: 'Rejected',
@@ -60,4 +61,46 @@ export function overlayTracking(jobs, store, settings) {
     const current = latestActiveApplication(apps)
     return { ...job, applicationTracking: current ? trackingFromApplication(current, settings) : null }
   })
+}
+
+/** A frozen posting in the job shape the detail screens read. Only ad fields: no capture data, nothing of the application. */
+export function jobFromPosting(posting) {
+  const { jobId, title, company, location, url, source, provider, datePosted, salary, employmentType, workMode, isRemote, description } = posting
+  return { jobId, title, company, location, jobUrl: url, source, provider, datePosted, salary, employmentType, workMode, isRemote, description }
+}
+
+/**
+ * The crm counts of the stat cards, from the application store alone: an application counts whether or not its ad is
+ * still in the browser's list. One per non-voided application, as the board and Application Statistics count (two
+ * attempts at one job are two). Null before the store is loaded.
+ */
+export function trackerStats(store, settings) {
+  if (!store) return null
+  const stats = { crmApplied: 0, crmInterviewing: 0, crmOffers: 0, crmRejected: 0, crmFollowUpsDue: 0 }
+  for (const app of Object.values(store.applications ?? {})) {
+    if (isActive(app)) countTracking(stats, trackingFromApplication(app, settings))
+  }
+  return stats
+}
+
+/**
+ * Jobs with an active application and no browser row, one per job, in the shape of an overlaid row, for display and
+ * the application context. Derived on every call and never to be saved into the job list (`offList` keeps the same
+ * rule): a saved row would count as an active job.
+ */
+export function applicationOnlyJobs(jobs, store, settings) {
+  if (!store) return []
+  const rows = new Set((jobs ?? []).map((job) => job.jobId))
+  const latest = new Map()
+  const sorted = Object.values(store.applications ?? {}).sort((a, b) => (a.createdAt === b.createdAt ? (a.id < b.id ? -1 : 1) : a.createdAt < b.createdAt ? -1 : 1))
+  for (const app of sorted) {
+    const jobId = app.posting?.jobId ?? null
+    if (app.posting && !rows.has(jobId) && isActive(app)) latest.set(jobId ?? app.id, app)
+  }
+  return [...latest.values()].map((app) => ({
+    ...jobFromPosting(app.posting),
+    status: 'applied_manually',
+    applicationId: app.id,
+    applicationTracking: trackingFromApplication(app, settings),
+  }))
 }

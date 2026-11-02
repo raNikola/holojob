@@ -27,9 +27,19 @@ export function findRoutedJob(jobs, jobId) {
   return job ? { status: 'found', job } : { status: 'missing', jobId }
 }
 
-/** The full page reads the stored job list, so a job that list no longer holds has nothing to open. */
-export const canOpenJobPage = (storedJob) => Boolean(storedJob)
+/** The full page opens a stored job, or one with a fallback: an application for it, or a ledger entry (`jobResolve.js`). */
+export const canOpenJobPage = (storedJob, { hasFallback = false } = {}) => Boolean(storedJob) || hasFallback
 export const MISSING_JOB_HINT = 'This posting is no longer in your jobs list'
+
+/**
+ * Where opening an application goes: the quick view on its browser row, else Job Details by job id, which needs no row.
+ * An application saved with no job id has no route.
+ */
+export function applicationOpenTarget(jobs, jobId) {
+  if (!jobId) return { kind: 'none' }
+  const job = (jobs ?? []).find((j) => j.jobId === jobId)
+  return job ? { kind: 'drawer', job } : { kind: 'page', jobId }
+}
 
 function notify() {
   window.dispatchEvent(new CustomEvent(JOB_ROUTE_EVENT))

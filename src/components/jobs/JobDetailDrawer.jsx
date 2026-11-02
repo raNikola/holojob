@@ -1,11 +1,14 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Maximize2, X } from 'lucide-react'
 import JobDetailBody from './JobDetailBody'
 import Button from '../ui/Button'
 import { dirtyDraftLabels, leaveDecision } from '../../modules/jobs/draftGuard'
 import ApplicationTrackingSummary from './ApplicationTrackingSummary'
 import { canOpenJobPage, MISSING_JOB_HINT, openJobPage } from '../../modules/jobs/jobRoute'
+import { hasFallback } from '../../modules/jobs/jobResolve'
 import { mergeLive } from '../../modules/jobs/jobsStore'
+import { loadJobHistory } from '../../modules/jobs/pipelineRunner'
+import { useApplications } from '../../hooks/useApplications'
 import { useStoredJob } from '../../hooks/useJobs'
 import { useJobPatcher } from '../../hooks/useJobPatcher'
 
@@ -17,10 +20,23 @@ export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
   const stored = useStoredJob(row?.jobId)
   const job = useMemo(() => (row ? mergeLive(row, stored) : null), [row, stored])
   const { onJobUpdated, onStatusChange } = useJobPatcher(job)
+  const applications = useApplications()
+  const jobId = row?.jobId
+  const [ledger, setLedger] = useState(null)
+  const needsLedger = Boolean(jobId) && !stored
+
+  useEffect(() => {
+    if (!needsLedger) return undefined
+    let cancelled = false
+    loadJobHistory(jobId).then((found) => { if (!cancelled) setLedger(found) })
+    return () => { cancelled = true }
+  }, [jobId, needsLedger])
+
   if (!job) return null
 
   // The drawer stays open when the owner declines, so nothing typed is lost.
-  const canOpen = canOpenJobPage(stored)
+  const store = applications.status === 'ready' ? applications.store : null
+  const canOpen = canOpenJobPage(stored, { hasFallback: hasFallback(job.jobId, store, ledger?.jobId === job.jobId ? ledger : null) })
   const openFullDetails = () => {
     if (!canOpen) return
     const question = leaveDecision(dirtyDraftLabels())

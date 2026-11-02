@@ -8,6 +8,21 @@ export function countTailoredResumes(jobs) {
   return onListJobs(jobs).filter((j) => j.tailoredAssets?.resumeMd || j.tailoredAssets?.resumePdf).length
 }
 
+/** Adds one application's tracking to the crm counts of `stats`. */
+export function countTracking(stats, tracking) {
+  if (tracking?.applied) stats.crmApplied += 1
+  if (tracking?.interviewStage === 'Offer') stats.crmOffers += 1
+  if (tracking?.interviewStage === 'Rejected') stats.crmRejected += 1
+  if (
+    tracking?.interviewStage
+    && !TERMINAL_STAGES.has(tracking.interviewStage)
+    && tracking.interviewStage !== 'Applied'
+  ) {
+    stats.crmInterviewing += 1
+  }
+  if (isFollowUpDue(tracking)) stats.crmFollowUpsDue += 1
+}
+
 export function computeJobStats(jobs) {
   const list = onListJobs(jobs)
   const stats = {
@@ -52,18 +67,7 @@ export function computeJobStats(jobs) {
     if (open && job.priority === 'P2') stats.p2 += 1
     if (job.priority === 'P3') stats.p3 += 1
 
-    const tracking = job.applicationTracking
-    if (tracking?.applied) stats.crmApplied += 1
-    if (tracking?.interviewStage === 'Offer') stats.crmOffers += 1
-    if (tracking?.interviewStage === 'Rejected') stats.crmRejected += 1
-    if (
-      tracking?.interviewStage
-      && !TERMINAL_STAGES.has(tracking.interviewStage)
-      && tracking.interviewStage !== 'Applied'
-    ) {
-      stats.crmInterviewing += 1
-    }
-    if (isFollowUpDue(tracking)) stats.crmFollowUpsDue += 1
+    countTracking(stats, job.applicationTracking)
   }
 
   if (scoreCount > 0) {

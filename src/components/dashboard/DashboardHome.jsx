@@ -8,6 +8,8 @@ import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { loadJobs } from '../../modules/jobs/jobStorage'
 import { computeJobStats, countTailoredResumes } from '../../modules/jobs/jobStats'
 import { computeOutreachMetrics } from '../../modules/outreach/outreachMetrics'
+import { trackerStats } from '../../modules/applications/trackingView'
+import { useApplications } from '../../hooks/useApplications'
 import { probePipelineApi } from '../../modules/jobs/pipelineRunner'
 import { isApiAvailable } from '../../utils/apiAvailability'
 import { JOBS_TAB_STORAGE_KEY, VIEWS } from '../../modules/appNavigation'
@@ -19,7 +21,14 @@ export default function DashboardHome({ onNavigate }) {
   const validation = useMemo(() => validateProfileForIntelligence(profile), [profile])
   const intelligence = useMemo(() => loadIntelligence(), [])
   const jobState = useMemo(() => loadJobs(), [])
-  const stats = useMemo(() => computeJobStats(jobState.jobs), [jobState.jobs])
+  const applications = useApplications()
+  const storeReady = applications.status === 'ready'
+  const stats = useMemo(
+    // The tracker cards count applications from the store, whether or not their ad still has a row.
+    () => ({ ...computeJobStats(jobState.jobs), ...trackerStats(storeReady ? applications.store : null, applications.settings) }),
+    [jobState.jobs, storeReady, applications.store, applications.settings],
+  )
+  const trackerLoading = applications.status === 'idle' || applications.status === 'loading'
   const outreachMetrics = useMemo(() => computeOutreachMetrics(jobState.jobs), [jobState.jobs])
 
   const resumeCount = useMemo(
@@ -65,10 +74,10 @@ export default function DashboardHome({ onNavigate }) {
         <StatCard label="Jobs discovered" value={stats.total} />
         <StatCard label="Jobs scored" value={stats.scored} subtext={stats.avgScore != null ? `Avg score ${stats.avgScore}` : undefined} />
         <StatCard label="Resumes generated" value={resumeCount} />
-        <StatCard label="Applications" value={stats.crmApplied} />
+        <StatCard label="Applications" value={trackerLoading ? '…' : stats.crmApplied} />
         <StatCard
           label="Follow-ups due"
-          value={stats.crmFollowUpsDue + outreachMetrics.followUpsDue}
+          value={trackerLoading ? '…' : stats.crmFollowUpsDue + outreachMetrics.followUpsDue}
           subtext={outreachMetrics.followUpsDue > 0 ? `${outreachMetrics.followUpsDue} outreach` : undefined}
         />
         {isApiAvailable() && (
