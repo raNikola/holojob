@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from providers.base_provider import JobProvider, build_canonical_job, filter_jobs
+from providers.base_provider import JobProvider, build_canonical_job, filter_jobs, parts_outcome
 
 logger = logging.getLogger(__name__)
 
@@ -23,28 +23,25 @@ class WWRProvider(JobProvider):
     provider_name = "wwr"
 
     def _parse_feed(self, url: str) -> list[dict]:
-        try:
-            resp = requests.get(url, timeout=30)
-            resp.raise_for_status()
-            root = ET.fromstring(resp.content)
-            items = []
-            for item in root.findall(".//item"):
-                title_raw = (item.findtext("title") or "").strip()
-                link = (item.findtext("link") or "").strip()
-                description = (item.findtext("description") or "").strip()
-                pub_date = (item.findtext("pubDate") or "").strip()
-                company, title = self._split_title(title_raw)
-                items.append({
-                    "title": title,
-                    "company": company,
-                    "link": link,
-                    "description": description,
-                    "pubDate": pub_date,
-                })
-            return items
-        except Exception as exc:
-            logger.warning("WWR feed %s failed: %s", url, exc)
-            return []
+        """The feed's postings; raises when it cannot be read."""
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        root = ET.fromstring(resp.content)
+        items = []
+        for item in root.findall(".//item"):
+            title_raw = (item.findtext("title") or "").strip()
+            link = (item.findtext("link") or "").strip()
+            description = (item.findtext("description") or "").strip()
+            pub_date = (item.findtext("pubDate") or "").strip()
+            company, title = self._split_title(title_raw)
+            items.append({
+                "title": title,
+                "company": company,
+                "link": link,
+                "description": description,
+                "pubDate": pub_date,
+            })
+        return items
 
     @staticmethod
     def _split_title(title_raw: str) -> tuple[str, str]:
@@ -65,9 +62,16 @@ class WWRProvider(JobProvider):
         primary_loc = locations[0] if locations else ""
         all_jobs: list[dict] = []
         seen_urls: set[str] = set()
+        failures: dict[str, str] = {}
 
         for feed_url in RSS_FEEDS:
-            for posting in self._parse_feed(feed_url):
+            try:
+                postings = self._parse_feed(feed_url)
+            except Exception as exc:
+                logger.warning("WWR feed %s failed: %s", feed_url, exc)
+                failures[feed_url] = str(exc)
+                continue
+            for posting in postings:
                 url = posting.get("link") or ""
                 if url in seen_urls:
                     continue
@@ -90,4 +94,6 @@ class WWRProvider(JobProvider):
                 if job["title"]:
                     all_jobs.append(job)
 
-        return filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
+        kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
+        self.last_outcome = parts_outcome(read=len(all_jobs), kept=len(kept), total=len(RSS_FEEDS), failures=failures)
+        return kept

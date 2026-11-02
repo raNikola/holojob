@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-from providers.base_provider import JobProvider, build_canonical_job, filter_jobs
+from providers.base_provider import JobProvider, build_canonical_job, filter_jobs, parts_outcome
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,8 @@ class GreenhouseProvider(JobProvider):
         all_jobs: list[dict] = []
         primary_term = search_terms[0] if search_terms else ""
         primary_loc = locations[0] if locations else ""
-        self.failed_boards = []
+        failures: dict[str, str] = {}
+        empty: list[str] = []
 
         for entry in boards:
             company = entry.get("company") or entry.get("board") or ""
@@ -97,11 +98,17 @@ class GreenhouseProvider(JobProvider):
                 postings = self._fetch_board(board)
             except Exception as exc:
                 logger.warning("Greenhouse board %s failed: %s", board, exc)
-                self.failed_boards.append(board)
+                failures[board] = str(exc)
                 continue
+            if not postings:
+                empty.append(board)
             for posting in postings:
                 job = self._normalize_posting(posting, company, board, primary_term, primary_loc)
                 if job["title"]:
                     all_jobs.append(job)
 
-        return filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
+        kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
+        self.last_outcome = parts_outcome(
+            read=len(all_jobs), kept=len(kept), total=len(boards), failures=failures, empty=empty
+        )
+        return kept

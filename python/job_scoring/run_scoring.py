@@ -252,6 +252,9 @@ def main() -> int:
         "meta": {
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "sourceRunId": uuid.uuid4().hex[:12],
+            # The run-log record of the discovery run these jobs came from. A Re-score has its own sourceRunId and the
+            # same discoveryRunId, so several scorings can point at one record. None: hand-entered jobs only, or an older file.
+            "discoveryRunId": (discovered.get("meta") or {}).get("sourceRunId") if isinstance(discovered, dict) else None,
             "scoringVersion": "1.0",
             "intelligenceGeneratedAt": (intelligence.get("meta") or {}).get("generatedAt"),
             "discoveryGeneratedAt": (discovered.get("meta") or {}).get("generatedAt") if isinstance(discovered, dict) else None,

@@ -6,7 +6,7 @@ import logging
 
 import requests
 
-from providers.base_provider import JobProvider, build_canonical_job, filter_jobs
+from providers.base_provider import JobProvider, ProviderOutcome, build_canonical_job, filter_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -17,18 +17,14 @@ class YCProvider(JobProvider):
     provider_name = "yc"
 
     def _fetch_all(self) -> list[dict]:
-        try:
-            resp = requests.get(API_URL, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-            if isinstance(data, dict):
-                return data.get("jobs") or data.get("data") or []
-            if isinstance(data, list):
-                return data
-            return []
-        except Exception as exc:
-            logger.warning("YC jobs fetch failed: %s", exc)
-            return []
+        """The postings; raises when they cannot be read."""
+        resp = requests.get(API_URL, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        rows = data.get("jobs", data.get("data")) if isinstance(data, dict) else data
+        if not isinstance(rows, list):
+            raise ValueError("the answer has no list of postings")
+        return rows
 
     def fetch_jobs(
         self,
@@ -41,7 +37,14 @@ class YCProvider(JobProvider):
         primary_loc = locations[0] if locations else ""
         all_jobs: list[dict] = []
 
-        for posting in self._fetch_all():
+        try:
+            postings = self._fetch_all()
+        except Exception as exc:
+            logger.warning("YC jobs fetch failed: %s", exc)
+            self.last_outcome = ProviderOutcome(status="failed", error=str(exc))
+            return []
+
+        for posting in postings:
             title = posting.get("title") or posting.get("role") or ""
             company_info = posting.get("company") or {}
             if isinstance(company_info, dict):
@@ -68,4 +71,6 @@ class YCProvider(JobProvider):
             if job["title"]:
                 all_jobs.append(job)
 
-        return filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
+        kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
+        self.last_outcome = ProviderOutcome(read=len(all_jobs), kept=len(kept))
+        return kept

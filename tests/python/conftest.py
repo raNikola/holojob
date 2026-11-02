@@ -59,6 +59,12 @@ def _source_settings_in_tmp(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _run_log_in_tmp(tmp_path, monkeypatch):
+    """No test writes the server's data/analytics/runs/."""
+    monkeypatch.setenv("CAREER_OS_ANALYTICS_DIR", str(tmp_path / "analytics"))
+
+
+@pytest.fixture(autouse=True)
 def _manual_jobs_in_tmp(tmp_path, monkeypatch):
     """No test reads the owner's data/jobs/manual_jobs.json: a scoring run merges that file in, which changes what it scores and sends."""
     import manual_jobs

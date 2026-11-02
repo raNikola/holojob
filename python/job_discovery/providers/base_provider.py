@@ -6,6 +6,7 @@ import importlib.util
 import logging
 import re
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,11 +23,45 @@ _spec.loader.exec_module(_geography)
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class ProviderOutcome:
+    """How a fetch went, beside the jobs it returned. run_discovery passes boards_failed to the ledger, so an unread
+    board's ads are not taken for ads that were removed, and the rest to the run log.
+
+    read: ads parsed before the search, role and location filters. kept: the ones returned.
+    An unsupported country and a source not built yet are status ok with read 0, explained in warnings.
+    """
+
+    status: str = "ok"  # ok, partial (some boards or feeds failed) or failed (nothing could be read)
+    read: int = 0
+    kept: int = 0
+    error: str | None = None
+    boards_failed: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+def parts_outcome(
+    *, read: int, kept: int, total: int, failures: dict[str, str], empty: list[str] | None = None, named: bool = True
+) -> ProviderOutcome:
+    """The outcome of a fetch made of several parts (boards, feeds, searches). `failures` maps a part to its error;
+    `named` says the parts are boards or feeds, which the record lists by name."""
+    status = "ok"
+    if failures:
+        status = "failed" if len(failures) >= total else "partial"
+    return ProviderOutcome(
+        status=status,
+        read=read,
+        kept=kept,
+        error="; ".join(f"{part}: {error}" for part, error in failures.items()) or None,
+        boards_failed=list(failures) if named else [],
+        warnings=[f"board {board} answered with 0 ads" for board in empty or []],
+    )
+
+
 class JobProvider(ABC):
     provider_name = "base"
-    # Boards this fetch could not read. A board provider sets it in fetch_jobs; run_discovery passes it to the
-    # ledger, so an unread board's ads are not taken for ads that were removed.
-    failed_boards: list[str] = []
+    # Set by every fetch_jobs; a provider that forgets fails its run-log row instead of reporting a guess.
+    last_outcome: ProviderOutcome | None = None
 
     @abstractmethod
     def fetch_jobs(

@@ -162,16 +162,22 @@ def fetch_jobs(
     location: str = "Serbia",
     extra_terms: tuple[str, ...] = (),
     delay: float = 1.0,
+    counts: dict | None = None,
 ) -> list[dict]:
+    """The relevant ads. `counts`, when given, receives "read": how many different ads came back before the role filter."""
     by_url: dict[str, dict] = {}
+    read: set[str] = set()
     for term in search_terms:
         for row in search(term, location):
             job = normalize(row)
+            read.add(job["jobUrl"])
             if not job["jobUrl"] or job["jobUrl"] in by_url:
                 continue
             if is_relevant_role(job["title"], "", extra_terms or search_terms):
                 by_url[job["jobUrl"]] = job
         time.sleep(delay)
+    if counts is not None:
+        counts["read"] = len(read)
     return list(by_url.values())
 
 

@@ -477,7 +477,7 @@ def test_a_board_that_raises_is_named_and_the_others_still_return_their_jobs(mon
 
     provider = provider_with(monkeypatch, name, answers)
     assert [j["source"] for j in fetch(provider)] == ["good"]
-    assert provider.failed_boards == ["bad"]
+    assert provider.last_outcome.boards_failed == ["bad"]
 
 
 @pytest.mark.parametrize("name", ["greenhouse", "lever", "ashby"])
@@ -486,7 +486,7 @@ def test_a_board_that_raises_is_named_and_the_others_still_return_their_jobs(mon
 def test_a_board_with_an_error_status_or_an_unreadable_answer_is_failed_not_empty(monkeypatch, name, bad):
     provider = provider_with(monkeypatch, name, lambda board, url: bad if board == "bad" else FakeResponse(body=GOOD_BODY[name]))
     fetch(provider)
-    assert provider.failed_boards == ["bad"]
+    assert provider.last_outcome.boards_failed == ["bad"]
 
 
 def test_lever_counts_a_404_on_both_hosts_as_failed_and_still_tries_the_eu_host(monkeypatch):
@@ -497,14 +497,14 @@ def test_lever_counts_a_404_on_both_hosts_as_failed_and_still_tries_the_eu_host(
 
     provider = provider_with(monkeypatch, "lever", answers)
     assert [j["source"] for j in fetch(provider)] == ["good"]
-    assert provider.failed_boards == ["bad"]
+    assert provider.last_outcome.boards_failed == ["bad"]
 
 
 @pytest.mark.parametrize("name", ["greenhouse", "ashby", "lever"])
 def test_a_board_that_really_is_empty_is_not_failed(monkeypatch, name):
     empty = [] if name == "lever" else {"jobs": []}
     provider = provider_with(monkeypatch, name, lambda board, url: FakeResponse(body=empty))
-    assert fetch(provider) == [] and provider.failed_boards == []
+    assert fetch(provider) == [] and provider.last_outcome.boards_failed == []
 
 
 def test_from_a_failing_board_to_the_ledger_nothing_of_that_board_closes(monkeypatch):
@@ -517,5 +517,5 @@ def test_from_a_failing_board_to_the_ledger_nothing_of_that_board_closes(monkeyp
     run(ledger, [board_job("b1", "bad")], day=0)
     provider = provider_with(monkeypatch, "greenhouse", answers)
     jobs = fetch(provider)
-    _, stats = run_failed(ledger, jobs, {"greenhouse": set(provider.failed_boards)}, returned={"greenhouse": len(jobs)})
+    _, stats = run_failed(ledger, jobs, {"greenhouse": set(provider.last_outcome.boards_failed)}, returned={"greenhouse": len(jobs)})
     assert stats["closed"] == 0 and ledger["jobs"]["b1"]["closedAt"] is None

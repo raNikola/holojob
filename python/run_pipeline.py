@@ -218,7 +218,7 @@ def execute(args: argparse.Namespace, steps: list[dict]) -> dict:
     enrich_line = share = reduced = None
 
     if not args.skip_discovery:
-        cmd = [str(PY / "job_discovery" / "run_discovery.py"), "--providers", args.providers]
+        cmd = [str(PY / "job_discovery" / "run_discovery.py"), "--providers", args.providers, "--trigger", "pipeline"]
         if args.country:
             cmd += ["--country", args.country]
         run_step("discovery", cmd, steps)

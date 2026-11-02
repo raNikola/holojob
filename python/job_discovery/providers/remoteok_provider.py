@@ -6,7 +6,7 @@ import logging
 
 import requests
 
-from providers.base_provider import JobProvider, build_canonical_job, filter_jobs
+from providers.base_provider import JobProvider, ProviderOutcome, build_canonical_job, filter_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -17,20 +17,17 @@ class RemoteOKProvider(JobProvider):
     provider_name = "remoteok"
 
     def _fetch_all(self) -> list[dict]:
-        try:
-            resp = requests.get(
-                API_URL,
-                headers={"User-Agent": "CareerOS/1.0"},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            if not isinstance(data, list):
-                return []
-            return [item for item in data if isinstance(item, dict) and item.get("position")]
-        except Exception as exc:
-            logger.warning("RemoteOK fetch failed: %s", exc)
-            return []
+        """The postings; raises when they cannot be read."""
+        resp = requests.get(
+            API_URL,
+            headers={"User-Agent": "CareerOS/1.0"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, list):
+            raise ValueError("the answer is not a list of postings")
+        return [item for item in data if isinstance(item, dict) and item.get("position")]
 
     def fetch_jobs(
         self,
@@ -43,7 +40,14 @@ class RemoteOKProvider(JobProvider):
         primary_loc = locations[0] if locations else ""
         all_jobs: list[dict] = []
 
-        for posting in self._fetch_all():
+        try:
+            postings = self._fetch_all()
+        except Exception as exc:
+            logger.warning("RemoteOK fetch failed: %s", exc)
+            self.last_outcome = ProviderOutcome(status="failed", error=str(exc))
+            return []
+
+        for posting in postings:
             title = posting.get("position") or posting.get("title") or ""
             company = posting.get("company") or "Unknown"
             location = posting.get("location") or "Remote"
@@ -71,4 +75,6 @@ class RemoteOKProvider(JobProvider):
             if job["title"]:
                 all_jobs.append(job)
 
-        return filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
+        kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
+        self.last_outcome = ProviderOutcome(read=len(all_jobs), kept=len(kept))
+        return kept

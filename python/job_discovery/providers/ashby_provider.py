@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-from providers.base_provider import JobProvider, build_canonical_job, filter_jobs
+from providers.base_provider import JobProvider, build_canonical_job, filter_jobs, parts_outcome
 
 logger = logging.getLogger(__name__)
 
@@ -93,18 +93,25 @@ class AshbyProvider(JobProvider):
         all_jobs: list[dict] = []
         primary_term = search_terms[0] if search_terms else ""
         primary_loc = locations[0] if locations else ""
-        self.failed_boards = []
+        failures: dict[str, str] = {}
+        empty: list[str] = []
 
         for slug in companies:
             try:
                 postings = self._fetch_company(slug)
             except Exception as exc:
                 logger.warning("Ashby company %s failed: %s", slug, exc)
-                self.failed_boards.append(slug)
+                failures[slug] = str(exc)
                 continue
+            if not postings:
+                empty.append(slug)
             for posting in postings:
                 job = self._normalize_posting(posting, slug, primary_term, primary_loc)
                 if job and job.get("title"):
                     all_jobs.append(job)
 
-        return filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
+        kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
+        self.last_outcome = parts_outcome(
+            read=len(all_jobs), kept=len(kept), total=len(companies), failures=failures, empty=empty
+        )
+        return kept

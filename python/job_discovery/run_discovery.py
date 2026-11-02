@@ -9,6 +9,7 @@ import json
 import logging
 import sys
 import uuid
+from collections import Counter
 from pathlib import Path
 
 import pandas as pd
@@ -29,8 +30,10 @@ from export_jobs import (  # noqa: E402
     export_normalized_json,
     export_raw_csv,
 )
+from providers.base_provider import ProviderOutcome  # noqa: E402
 from providers.jobspy_provider import JobSpyProvider  # noqa: E402
 from providers.provider_registry import PROVIDER_GROUPS, get_provider, resolve_providers  # noqa: E402
+import run_log  # noqa: E402
 import source_settings  # noqa: E402
 
 # The ledger lives beside the scorer's shared modules; it is loaded by path so
@@ -70,6 +73,12 @@ def parse_args() -> argparse.Namespace:
         default=INTELLIGENCE_PATH,
         help="Path to candidate-intelligence.json",
     )
+    parser.add_argument(
+        "--trigger",
+        choices=run_log.TRIGGERS,
+        default="manual",
+        help="What started this run, for the run log. run_pipeline.py passes pipeline.",
+    )
     return parser.parse_args()
 
 
@@ -92,7 +101,40 @@ def effective_provider_names(spec: str | None) -> list[str]:
 
 def main() -> int:
     args = parse_args()
-    source_run_id = uuid.uuid4().hex[:12]
+    record = run_log.new_record(uuid.uuid4().hex[:12], args.trigger)
+    code = 1
+    try:
+        code = discover(args, record)
+        return code
+    except Exception as exc:
+        run_log.add_issue(record, "error", f"Discovery stopped: {exc}")
+        raise
+    finally:
+        # Here, not in a caller: a manual Re-scrape and a pipeline run both come through this one line.
+        run_log.save(run_log.finish(record, exit_ok=code == 0))
+
+
+def stop(record: dict, message: str) -> int:
+    """A run that cannot start: reported like any other failed run."""
+    logger.error("%s", message)
+    run_log.add_issue(record, "error", message)
+    return 1
+
+
+def fetch_source(provider, name: str, search_terms, locations, remote_filters, country) -> tuple[list[dict], ProviderOutcome]:
+    """One provider's jobs and outcome. A provider that raises is one failed source, not a stopped run."""
+    try:
+        jobs = provider.fetch_jobs(search_terms, locations, remote_filters, country)
+        if provider.last_outcome is None:
+            raise RuntimeError("the provider reported no outcome")
+        return jobs, provider.last_outcome
+    except Exception as exc:
+        logger.exception("Provider %s failed", name)
+        return [], ProviderOutcome(status="failed", error=str(exc))
+
+
+def discover(args: argparse.Namespace, record: dict) -> int:
+    source_run_id = record["runId"]
 
     intelligence = load_intelligence(args.intelligence)
     try:
@@ -102,21 +144,18 @@ def main() -> int:
             locations=args.locations,
         )
     except ValueError as exc:
-        logger.error("%s", exc)
-        return 1
+        return stop(record, str(exc))
     search_terms = config["search_terms"]
     locations = config["locations"]
     remote_filters = config["remote_filters"]
     country = config["country"]
 
     if not search_terms:
-        logger.error("No jobSpySearchTerms found in intelligence file.")
-        return 1
+        return stop(record, "No jobSpySearchTerms found in intelligence file.")
 
     provider_names = effective_provider_names(args.providers)
     if not provider_names:
-        logger.error("No valid providers resolved from: %s", args.providers)
-        return 1
+        return stop(record, f"No valid providers resolved from: {args.providers}")
 
     all_jobs: list[dict] = []
     provider_counts: dict[str, int] = {}
@@ -126,13 +165,16 @@ def main() -> int:
     for name in provider_names:
         logger.info("Running provider: %s", name)
         provider = get_provider(name)
-        jobs = provider.fetch_jobs(search_terms, locations, remote_filters, country)
+        jobs, outcome = fetch_source(provider, name, search_terms, locations, remote_filters, country)
+        run_log.add_source(record, name, outcome)
         provider_counts[name] = len(jobs)
         all_jobs.extend(jobs)
         logger.info("Provider %s returned %d jobs", name, len(jobs))
-        if provider.failed_boards:
-            failed_boards[name] = set(provider.failed_boards)
-            logger.warning("Provider %s could not read: %s", name, ", ".join(provider.failed_boards))
+        if outcome.boards_failed:
+            failed_boards[name] = set(outcome.boards_failed)
+            logger.warning("Provider %s could not read: %s", name, ", ".join(outcome.boards_failed))
+        elif outcome.status == "failed":
+            failed_boards[name] = None  # it stopped before naming any board
 
         if name == "jobspy" and isinstance(provider, JobSpyProvider):
             raw_df = provider.last_raw_df
@@ -161,6 +203,9 @@ def main() -> int:
 
     ledger_file = job_history.ledger_path(jobs_file)
     ledger = job_history.load(ledger_file)
+    run_log.set_new_counts(record, Counter(
+        job.get("provider") for job in deduped if job["jobId"] not in ledger["jobs"]
+    ))
     to_write, history_stats = job_history.apply_run(
         ledger,
         deduped,
