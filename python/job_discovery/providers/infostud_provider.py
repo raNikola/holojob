@@ -17,6 +17,7 @@ import logging
 from providers import infostud_client
 from providers.base_provider import (
     JobProvider,
+    ProviderOutcome,
     build_canonical_job,
     matches_country,
     matches_location_filters,
@@ -41,14 +42,18 @@ class InfostudProvider(JobProvider):
             logger.info(
                 "Infostud covers Serbia only -- skipping for country=%r", country
             )
+            self.last_outcome = ProviderOutcome(warnings=[f"Infostud covers Serbia only: not searched for {country!r}"])
             return []
 
+        counts: dict = {}
         try:
             raw_jobs = infostud_client.fetch_jobs(
-                extra_terms=tuple(search_terms or ())
+                extra_terms=tuple(search_terms or ()),
+                counts=counts,
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("Infostud fetch failed; continuing without it")
+            self.last_outcome = ProviderOutcome(status="failed", error=str(exc))
             return []
 
         logger.info("Infostud: %d relevant ads before geo filtering", len(raw_jobs))
@@ -61,6 +66,7 @@ class InfostudProvider(JobProvider):
             and matches_country(job, country)
         ]
         logger.info("Infostud: %d jobs after geo filtering", len(kept))
+        self.last_outcome = ProviderOutcome(read=counts.get("read", len(raw_jobs)), kept=len(kept))
         return kept
 
     @staticmethod

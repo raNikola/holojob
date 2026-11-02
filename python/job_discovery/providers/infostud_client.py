@@ -238,9 +238,13 @@ def fetch_jobs(
     categories=DEFAULT_CATEGORIES,
     enrich_matches: bool = True,
     extra_terms: tuple[str, ...] = (),
+    counts: dict | None = None,
 ) -> list[dict]:
+    """The relevant ads. `counts`, when given, receives "read": how many ads were fetched before the role filter."""
     raw, _total = fetch_raw(categories)
     jobs = [normalize(row) for row in raw]
+    if counts is not None:
+        counts["read"] = len(jobs)
     matches = [
         job for job in jobs
         if is_relevant_role(

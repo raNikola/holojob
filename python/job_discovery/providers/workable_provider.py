@@ -15,6 +15,7 @@ import logging
 from providers import workable_client
 from providers.base_provider import (
     JobProvider,
+    ProviderOutcome,
     build_canonical_job,
     matches_country,
     matches_location_filters,
@@ -34,10 +35,12 @@ class WorkableProvider(JobProvider):
         country: str,
     ) -> list[dict]:
         terms = tuple(search_terms or ("Product Manager",))
+        counts: dict = {}
         try:
-            raw_jobs = workable_client.fetch_jobs(terms, location=country)
-        except Exception:
+            raw_jobs = workable_client.fetch_jobs(terms, location=country, counts=counts)
+        except Exception as exc:
             logger.exception("Workable fetch failed; continuing without it")
+            self.last_outcome = ProviderOutcome(status="failed", error=str(exc))
             return []
 
         logger.info("Workable: %d relevant ads before geo filtering", len(raw_jobs))
@@ -50,6 +53,7 @@ class WorkableProvider(JobProvider):
             and matches_country(job, country)
         ]
         logger.info("Workable: %d jobs after geo filtering", len(kept))
+        self.last_outcome = ProviderOutcome(read=counts.get("read", len(raw_jobs)), kept=len(kept))
         return kept
 
     @staticmethod

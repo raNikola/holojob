@@ -23,6 +23,7 @@ from pathlib import Path
 from providers import joberty_client
 from providers.base_provider import (
     JobProvider,
+    ProviderOutcome,
     _geography,
     build_canonical_job,
     matches_country,
@@ -147,20 +148,26 @@ class JobertyProvider(JobProvider):
     ) -> list[dict]:
         try:
             return self._fetch(search_terms, locations, remote_filters, country)
-        except Exception:
+        except Exception as exc:
             logger.exception("Joberty fetch failed; continuing without it")
+            self.last_outcome = ProviderOutcome(status="failed", error=str(exc))
             return []
 
     def _fetch(self, search_terms, locations, remote_filters, country) -> list[dict]:
         if not country_supported(country, joberty_client.fetch_cities()):
             logger.info("Joberty has no ads for country=%r (or its facets were unreadable) -- skipping", country)
+            self.last_outcome = ProviderOutcome(
+                warnings=[f"Joberty has no ads for {country!r}, or its facets were unreadable: not searched"]
+            )
             return []
 
         terms = tuple(search_terms or ())
         wanted: dict[int, dict] = {}
+        read: set[int] = set()
         for item in joberty_client.fetch_listing():
             if not isinstance(item.get("id"), int) or item["id"] in wanted:
                 continue
+            read.add(item["id"])
             job = to_canonical(item, country=country)
             if (
                 is_relevant_role(job["title"], "", terms)
@@ -190,4 +197,9 @@ class JobertyProvider(JobProvider):
         if deferred:
             logger.info("Joberty: %d ads left for the next run (cap of %d details)", deferred, joberty_client.MAX_DETAILS)
         logger.info("Joberty: %d jobs (%d details read)", len(jobs), fetched)
+        self.last_outcome = ProviderOutcome(
+            read=len(read),
+            kept=len(jobs),
+            warnings=[f"{deferred} ads left for the next run (cap of {joberty_client.MAX_DETAILS} details)"] if deferred else [],
+        )
         return jobs

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from providers.base_provider import JobProvider
+from providers.base_provider import JobProvider, ProviderOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -22,4 +22,5 @@ class WellfoundProvider(JobProvider):
         logger.info("Wellfound provider is skeleton mode.")
         _ = (search_terms, locations, remote_filters, country)
         # Future: use playwright_provider_base.run_with_browser for scraping
+        self.last_outcome = ProviderOutcome(warnings=["Wellfound is not built yet: nothing was searched"])
         return []

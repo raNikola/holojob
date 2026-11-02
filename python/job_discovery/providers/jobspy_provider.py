@@ -8,7 +8,7 @@ import pandas as pd
 
 from jobspy_adapter import fetch_jobs
 from normalize_jobs import normalize_jobs
-from providers.base_provider import JobProvider
+from providers.base_provider import JobProvider, parts_outcome
 from providers.role_filter import is_relevant_role
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ class JobSpyProvider(JobProvider):
     ) -> list[dict]:
         all_normalized: list[dict] = []
         frames: list[pd.DataFrame] = []
+        failures: dict[str, str] = {}
 
         for term in search_terms:
             for location in locations:
@@ -49,6 +50,7 @@ class JobSpyProvider(JobProvider):
                     df = fetch_jobs(term, location, remote=remote, country=country)
                 except Exception as exc:
                     logger.warning("JobSpy fetch failed for %r @ %r: %s", term, location, exc)
+                    failures[f"{term} @ {location}"] = str(exc)
                     continue
 
                 if df is not None and not df.empty:
@@ -67,6 +69,13 @@ class JobSpyProvider(JobProvider):
         logger.info(
             "JobSpy: %d ads fetched, %d kept after title filtering",
             len(all_normalized), len(relevant),
+        )
+        self.last_outcome = parts_outcome(
+            read=len(all_normalized),
+            kept=len(relevant),
+            total=len(search_terms) * len(locations),
+            failures=failures,
+            named=False,  # searches, not boards
         )
         return relevant
 
