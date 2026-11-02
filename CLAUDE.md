@@ -37,7 +37,7 @@ Area rules load only when matching files are touched: `.claude/rules/scoring.md`
   `data/` except the tracked examples, `.env`, CVs and keys stay in `.gitignore`.
 - File modes: Node writers create new files 600 and new directories 700 in `data/profile`, `data/applications`, `data/ai/findings`, `data/backups`, `data/profile.bak-*` and,
   on restore, `data/config` (`PRIVATE_*_MODE`, `replaceFileAtomic(file, data, { mode })` in `scripts/atomic-file.js`); an existing file keeps its mode and nothing is chmodded at startup.
-  Existing files: `scripts/tighten-data-permissions.sh` (dry run; `--apply` changes, owner runs it). Python writers and other `data/` folders are not covered yet.
+  Existing files: `scripts/tighten-data-permissions.sh` (dry run; `--apply` changes, owner runs it). Python: `write_text_atomic(path, text, new_file_mode)` and `make_private_dirs` (`python/job_scoring/atomic_write.py`), used by `ai_gate._atomic_write`, `confirmed_facts.py` and `competency_backup.py`. Other `data/` folders are not covered yet.
 
 ## Container gotchas
 

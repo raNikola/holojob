@@ -19,6 +19,8 @@ import json
 from pathlib import Path
 from typing import TypedDict
 
+from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic
+
 ROOT = Path(__file__).resolve().parents[2]
 CONFIRMED_FACTS_PATH = ROOT / "data" / "profile" / "confirmed-facts.json"
 STORE_VERSION = 1
@@ -56,7 +58,5 @@ def load(path: Path = CONFIRMED_FACTS_PATH) -> list[ConfirmedFact]:
 
 def save(facts: list[ConfirmedFact], path: Path = CONFIRMED_FACTS_PATH) -> None:
     clean = [f for f in (_valid(item) for item in facts) if f]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps({"version": STORE_VERSION, "facts": clean}, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    make_private_dirs(path.parent)
+    write_text_atomic(path, json.dumps({"version": STORE_VERSION, "facts": clean}, indent=2), new_file_mode=PRIVATE_FILE_MODE)

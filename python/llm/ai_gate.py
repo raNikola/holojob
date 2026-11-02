@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import contextvars
 import fcntl
+import importlib.util
 import ipaddress
 import json
 import math
@@ -58,6 +59,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import secret_store  # exact-value mask for a resolved API key; read-only, never reads the store here
 
 ROOT = Path(__file__).resolve().parents[2]
+
+_atomic_spec = importlib.util.spec_from_file_location("_ai_gate_atomic_write", ROOT / "python" / "job_scoring" / "atomic_write.py")
+_atomic_module = importlib.util.module_from_spec(_atomic_spec)
+_atomic_spec.loader.exec_module(_atomic_module)
 
 LEDGER_VERSION = 1
 CLASSES = ("free", "local", "paid", "unknown")
@@ -755,16 +760,10 @@ def _loosening(old: dict, new: dict) -> list[str]:
 
 
 def _atomic_write(path: Path, data: dict) -> None:
-    """Temp file next to the target, fsync, rename: a reader sees the old file or the new one, never half."""
-    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        with open(tmp, "w", encoding="utf-8") as handle:
-            handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp, path)
-    finally:
-        tmp.unlink(missing_ok=True)
+    """A reader sees the old file or the new one, never half. An existing file keeps its mode; a new one is 600."""
+    _atomic_module.write_text_atomic(
+        path, json.dumps(data, indent=2, ensure_ascii=False) + "\n", new_file_mode=_atomic_module.PRIVATE_FILE_MODE
+    )
 
 
 def save_settings(patch, confirm: bool = False) -> dict:

@@ -8,10 +8,11 @@ The backup goes to data/backups/competency-2c3-<timestamp>/ (gitignored; the
 tool refuses to write where git does not ignore it): the jobs file and its
 ledger, the requirement frames, the remap table and learned aliases (if they
 exist), the fit and engine verdict caches, the confirmed facts, the profile and
-the intelligence. manifest.json holds each file's SHA-256; old-ids.json holds,
+the intelligence. Everything in the backup is private (folders 700, files 600).
+manifest.json holds each file's SHA-256 and original mode; old-ids.json holds,
 per job, the id of every requirement now (ids and counts, no other content).
 Restore verifies the backup against its manifest, then copies every file back
-to where it came from. --root points both commands at another tree, which is
+to where it came from, with its original mode. --root points both commands at another tree, which is
 how the tests exercise a restore without touching live files.
 """
 
@@ -22,6 +23,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import uuid
@@ -33,6 +35,7 @@ if str(ROOT / "python") not in sys.path:
     sys.path.insert(0, str(ROOT / "python"))
 
 from match_engine import competency_report  # noqa: E402 (puts job_scoring on the path)
+from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic  # noqa: E402
 from requirement_frames import frame_key  # noqa: E402
 from requirement_ids import PROVISIONAL_PREFIX  # noqa: E402
 
@@ -86,24 +89,26 @@ def backup(root: Path = ROOT, stamp: str | None = None) -> Path:
         raise SystemExit(f"backup already exists: {target}")
     if (root / ".git").exists() and not ignored_by_git(target / "manifest.json", root):
         raise SystemExit(f"git does not ignore {target}; add {BACKUPS_DIR}/ to .gitignore first")
+    make_private_dirs(target)
     files = {}
     for rel in BACKUP_FILES:
         src = root / rel
         if not src.exists():
             continue
         dest = target / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        make_private_dirs(dest.parent)
         shutil.copy2(src, dest)
-        files[rel] = {"sha256": sha256(src), "bytes": src.stat().st_size}
+        os.chmod(dest, PRIVATE_FILE_MODE)
+        files[rel] = {"sha256": sha256(src), "bytes": src.stat().st_size, "mode": stat.S_IMODE(src.stat().st_mode)}
         if sha256(dest) != files[rel]["sha256"]:
             raise SystemExit(f"copy of {rel} does not match its source")
     jobs_path = root / JOBS_FILE
     payload = json.loads(jobs_path.read_text(encoding="utf-8")) if jobs_path.exists() else []
     ids = old_ids(payload.get("jobs") if isinstance(payload, dict) else payload)
-    (target / "old-ids.json").write_text(json.dumps(ids, indent=1, ensure_ascii=False), encoding="utf-8")
+    write_text_atomic(target / "old-ids.json", json.dumps(ids, indent=1, ensure_ascii=False), new_file_mode=PRIVATE_FILE_MODE)
     manifest = {"created": stamp, "files": files, "absent": [r for r in BACKUP_FILES if r not in files],
                 "oldIds": ids["counts"]}
-    (target / "manifest.json").write_text(json.dumps(manifest, indent=1), encoding="utf-8")
+    write_text_atomic(target / "manifest.json", json.dumps(manifest, indent=1), new_file_mode=PRIVATE_FILE_MODE)
     return target
 
 
@@ -115,12 +120,15 @@ def verify(source: Path) -> dict:
     return manifest
 
 
-def _copy_atomic(src: Path, dest: Path) -> None:
+def _copy_atomic(src: Path, dest: Path, mode: int | None = None) -> None:
     """copy2 to a temp file next to `dest`, then rename: `dest` is the old file or the whole copy, with the copy's exact
-    bytes, mode and time. Not write_text_atomic: these files are restored as bytes, and it would keep the live file's mode."""
+    bytes and time, and `mode` (a backup older than the recorded mode: the copy's). Not write_text_atomic: these files are
+    restored as bytes, and it would keep the live file's mode."""
     tmp = dest.with_name(f".{dest.name}.{uuid.uuid4().hex}.tmp")
     try:
         shutil.copy2(src, tmp)
+        if mode is not None:
+            os.chmod(tmp, mode)
         with tmp.open("rb") as handle:
             os.fsync(handle.fileno())
         os.replace(tmp, dest)
@@ -131,10 +139,10 @@ def _copy_atomic(src: Path, dest: Path) -> None:
 def restore(source: Path, root: Path = ROOT) -> list[str]:
     """Copy every backed-up file back under `root`; a file the backup lacked (it did not exist) is removed."""
     manifest = verify(source)
-    for rel in manifest["files"]:
+    for rel, meta in manifest["files"].items():
         dest = root / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
-        _copy_atomic(source / rel, dest)
+        _copy_atomic(source / rel, dest, meta.get("mode"))
     for rel in manifest["absent"]:
         (root / rel).unlink(missing_ok=True)
     return sorted(manifest["files"])
