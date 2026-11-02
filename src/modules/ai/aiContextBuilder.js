@@ -6,7 +6,7 @@ import { isActionable } from '../jobs/jobHistory.js'
 import { loadAiMemory } from './aiMemory.js'
 import { buildRedactionHints } from './redactionHints.js'
 import { getApplicationsState } from '../applications/applicationsClient.js'
-import { overlayTracking } from '../applications/trackingView.js'
+import { applicationOnlyJobs, overlayTracking, trackerStats } from '../applications/trackingView.js'
 import { onListJobs } from '../jobs/jobFilters.js'
 
 function truncate(str, max = 4000) {
@@ -85,7 +85,10 @@ export function buildSkillGapContext() {
 
 export function buildApplicationContext() {
   const cache = getApplicationsState()
-  const jobs = overlayTracking(loadJobs().jobs, cache.status === 'ready' ? cache.store : null, cache.settings)
+  const store = cache.status === 'ready' ? cache.store : null
+  const rows = loadJobs().jobs
+  // An application is the owner's own record, so it is here even when its ad has no row; its job goes through summarizeJob like any other.
+  const jobs = [...overlayTracking(rows, store, cache.settings), ...applicationOnlyJobs(rows, store, cache.settings)]
     .filter((j) => j.applicationTracking?.applied || j.applicationTracking?.interviewStage)
   return {
     applied: jobs.filter((j) => j.applicationTracking?.applied).map(summarizeJob),
@@ -102,7 +105,8 @@ export function buildAiContext({ featureId, job, message, extra } = {}) {
   const profile = loadProfile()
   const intelligence = loadIntelligence()
   const jobState = loadJobs()
-  const stats = computeJobStats(jobState.jobs)
+  const cache = getApplicationsState()
+  const stats = { ...computeJobStats(jobState.jobs), ...trackerStats(cache.status === 'ready' ? cache.store : null, cache.settings) }
   const memory = loadAiMemory()
 
   // `extra` is the caller's own object (it can carry a whole job.outreach with its contacts): never spread it as is.

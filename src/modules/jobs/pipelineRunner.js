@@ -130,6 +130,18 @@ export async function loadLatestScoredJobs() {
   return res.json()
 }
 
+/** One job's ledger snapshot (`GET /api/jobs/history/<jobId>`), or null when it has none or the server cannot say. */
+export async function loadJobHistory(jobId) {
+  try {
+    const res = await fetch(`/api/jobs/history/${encodeURIComponent(jobId)}`)
+    if (!res.ok) return null
+    const body = await res.json()
+    return body?.found ? body : null
+  } catch {
+    return null
+  }
+}
+
 export async function runTailor({ jobId, jobIds, priority, limit, applyOnly, profile }, { onLog } = {}) {
   const body = { jobId, jobIds, priority, limit, applyOnly, profile }
   if (onLog && isApiAvailable()) {

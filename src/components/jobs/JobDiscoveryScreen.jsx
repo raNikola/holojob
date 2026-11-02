@@ -26,7 +26,7 @@ import { downloadJobsCsv, downloadJobsJson } from '../../modules/jobs/jobExport'
 import { usePipelineAutoRefresh } from '../../modules/jobs/usePipelineAutoRefresh'
 import { autoLoadJobs } from '../../modules/jobs/autoLoadJobs'
 import { derivePipelineStateFromHealth, loadPipelineState, syncPipelineCounts, updatePipelineState } from '../../modules/jobs/pipelineState'
-import { overlayTracking } from '../../modules/applications/trackingView'
+import { overlayTracking, trackerStats } from '../../modules/applications/trackingView'
 import { useApplications } from '../../hooks/useApplications'
 import { useJobsSync } from '../../hooks/useJobs'
 import { loadJobsTab, persistJobsTab } from '../../modules/appNavigation'
@@ -113,7 +113,11 @@ export default function JobDiscoveryScreen() {
     () => overlayTracking(state.jobs, applications.status === 'ready' ? applications.store : null, applications.settings),
     [state.jobs, applications.status, applications.store, applications.settings],
   )
-  const stats = useMemo(() => computeJobStats(viewJobs), [viewJobs])
+  const stats = useMemo(
+    // The tracker cards count applications from the store, whether or not their ad still has a row.
+    () => ({ ...computeJobStats(viewJobs), ...trackerStats(applications.status === 'ready' ? applications.store : null, applications.settings) }),
+    [viewJobs, applications.status, applications.store, applications.settings],
+  )
   const applicationStore = applications.status === 'ready' ? applications.store : null
   const appliedIds = useMemo(() => appliedJobIds(applicationStore), [applicationStore])
   const listed = useMemo(() => listedJobs(state.jobs, state.filters), [state.jobs, state.filters])

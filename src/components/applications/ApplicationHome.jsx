@@ -14,8 +14,9 @@ import {
   saveJobs,
 } from '../../modules/jobs/jobStorage'
 import { normalizeApplicationTracking } from '../../modules/jobs/applicationTracking'
-import { overlayTracking } from '../../modules/applications/trackingView'
+import { applicationOnlyJobs, overlayTracking, trackerStats } from '../../modules/applications/trackingView'
 import { columnByJobId, stageFilterOptions } from '../../modules/applications/applicationStatistics'
+import { applicationOpenTarget, openJobPage } from '../../modules/jobs/jobRoute'
 import { useApplications } from '../../hooks/useApplications'
 import { probePipelineApi } from '../../modules/jobs/pipelineRunner'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
@@ -81,7 +82,11 @@ export default function ApplicationHome() {
     [state.jobs, applications.status, applications.store, applications.settings],
   )
 
-  const stats = useMemo(() => computeJobStats(viewJobs), [viewJobs])
+  const stats = useMemo(
+    // The tracker cards count applications from the store, whether or not their ad still has a row.
+    () => ({ ...computeJobStats(viewJobs), ...trackerStats(applications.status === 'ready' ? applications.store : null, applications.settings) }),
+    [viewJobs, applications.status, applications.store, applications.settings],
+  )
   const outreachMetrics = useMemo(() => computeOutreachMetrics(viewJobs), [viewJobs])
 
   const [trackerSort, onTrackerSort] = useTableSort(TRACKER_DEFAULT_SORT, TRACKER_COLUMNS)
@@ -97,15 +102,18 @@ export default function ApplicationHome() {
   // a filter whose stage no longer holds an application is ignored, not left hiding every row
   const activeStageFilter = stageOptions.some((o) => o.value === stageFilter) ? stageFilter : ''
   const trackedJobs = useMemo(() => {
-    const rows = viewJobs.filter(hasTrackingData).filter((job) => !activeStageFilter || columns.get(job.jobId) === activeStageFilter)
+    // An application whose ad has no row is still a row here; it is derived on every render and never saved.
+    const applicationRows = storeReady ? applicationOnlyJobs(state.jobs, applications.store, applications.settings) : []
+    const rows = [...viewJobs.filter(hasTrackingData), ...applicationRows].filter((job) => !activeStageFilter || columns.get(job.jobId) === activeStageFilter)
     return sortRows(rows, trackerSort, TRACKER_COLUMNS)
-  }, [viewJobs, trackerSort, activeStageFilter, columns])
+  }, [viewJobs, state.jobs, storeReady, applications.store, applications.settings, trackerSort, activeStageFilter, columns])
 
-  // true when the job is in the Jobs list and its details opened
+  // The quick view on the browser row, else Job Details by id. False only for an application saved with no job id.
   const openJob = useCallback((jobId) => {
-    const job = state.jobs.find((j) => j.jobId === jobId)
-    if (job) setSelectedJob(job)
-    return Boolean(job)
+    const target = applicationOpenTarget(state.jobs, jobId)
+    if (target.kind === 'drawer') setSelectedJob(target.job)
+    if (target.kind === 'page') openJobPage(target.jobId)
+    return target.kind !== 'none'
   }, [state.jobs])
 
   return (
@@ -167,9 +175,9 @@ export default function ApplicationHome() {
                       const outreachFollowUpDue = isOutreachFollowUpDue(job)
                       return (
                         <tr
-                          key={job.jobId}
+                          key={job.jobId ?? job.applicationId}
                           className="cursor-pointer border-b border-stone-100 hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900/50"
-                          onClick={() => setSelectedJob(state.jobs.find((j) => j.jobId === job.jobId) ?? job)}
+                          onClick={() => openJob(job.jobId)}
                         >
                           <td className="py-3 pr-4 font-medium text-stone-900 dark:text-stone-100">
                             {job.company || '—'}

@@ -96,7 +96,7 @@ export default function ApplicationBoard({ onOpenJob }) {
 
   const handleOpen = (card) => {
     const opened = card.jobId ? onOpenJob(card.jobId) : false
-    setNotice(opened ? null : `"${card.company || card.title}" is no longer in the Jobs list, so its details cannot be opened yet.`)
+    setNotice(opened ? null : `"${card.company || card.title}" was saved without a job id, so it has no details page to open.`)
   }
 
   const footnote = boardFootnote(board)
