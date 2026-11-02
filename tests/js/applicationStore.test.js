@@ -1642,7 +1642,7 @@ describe('backup of the stage settings', () => {
 // --- static checks -----------------------------------------------------------------------------
 
 describe('isolation', () => {
-  it('only the store module names data/applications in src/ and scripts/', () => {
+  it('only the store module, and the chmod-only permissions script, name data/applications in src/ and scripts/', () => {
     const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
     const hits = []
     const walk = (dir) => {
@@ -1656,6 +1656,6 @@ describe('isolation', () => {
     }
     walk(path.join(repo, 'src'))
     walk(path.join(repo, 'scripts'))
-    expect(hits).toEqual(['scripts/application-store.js'])
+    expect(hits.sort()).toEqual(['scripts/application-store.js', 'scripts/tighten-data-permissions.sh'])
   })
 })

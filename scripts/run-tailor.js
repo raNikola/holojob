@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeProfileFile } from './save-profile.js'
 import { initSseResponse, sseWrite, streamChildProcess } from './stream-spawn.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -17,15 +18,6 @@ const SCORED_PATH = path.join(ROOT, 'data/jobs/scored_jobs.json')
 const RESUMES_ROOT = path.join(ROOT, 'data/resumes')
 const VENV_PYTHON = process.platform === 'win32' ? path.join(ROOT, '.venv/Scripts/python.exe') : path.join(ROOT, '.venv/bin/python')
 const RUN_TAILOR = path.join(ROOT, 'python/resume_generator/run_tailor.py')
-
-function ensureDir(filePath) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
-}
-
-function writeJson(filePath, data) {
-  ensureDir(filePath)
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
-}
 
 function venvReady() {
   return fs.existsSync(VENV_PYTHON)
@@ -62,7 +54,7 @@ function prepareTailor(opts = {}) {
     return { error: 'Python venv not found. Run: npm run setup:jobs' }
   }
   if (opts.profile) {
-    writeJson(PROFILE_PATH, opts.profile)
+    writeProfileFile(opts.profile)
   } else if (!fs.existsSync(PROFILE_PATH)) {
     return { error: `Missing ${PROFILE_PATH}. Export profile from Module 1 first.` }
   }

@@ -8,6 +8,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE } from './atomic-file.js'
 import { isSecretPath } from './secret-paths.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -56,6 +57,19 @@ function sizeOf(abs) {
   return fs.readdirSync(abs).reduce((sum, name) => sum + sizeOf(path.join(abs, name)), 0)
 }
 
+/** cpSync carries each source's mode over; the copy inside the private backup folder gets 600 / 700. Links are skipped. */
+function makePrivate(dir, fsImpl) {
+  for (const entry of fsImpl.readdirSync(dir, { withFileTypes: true })) {
+    const abs = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      fsImpl.chmodSync(abs, PRIVATE_DIR_MODE)
+      makePrivate(abs, fsImpl)
+    } else if (entry.isFile()) {
+      fsImpl.chmodSync(abs, PRIVATE_FILE_MODE)
+    }
+  }
+}
+
 /**
  * @param {{ dataDir?: string, now?: Date, fsImpl?: object }} [options] dataDir and fsImpl exist for tests.
  * @returns {{ ok: true, backup: string|null, moved: number } | { ok: false, code: string }}
@@ -73,10 +87,10 @@ export function resetProfileOnDisk({ dataDir = path.join(ROOT, 'data'), now = ne
   const folder = uniqueDir(dataDir, backupFolderName(now))
   const backupDir = path.join(dataDir, folder)
   try {
-    fsImpl.mkdirSync(backupDir, { recursive: false, mode: 0o700 })
+    fsImpl.mkdirSync(backupDir, { recursive: false, mode: PRIVATE_DIR_MODE })
     for (const target of targets) {
       const dest = path.join(backupDir, target.rel)
-      fsImpl.mkdirSync(path.dirname(dest), { recursive: true, mode: 0o700 })
+      fsImpl.mkdirSync(path.dirname(dest), { recursive: true, mode: PRIVATE_DIR_MODE })
       // Credentials are never copied, whatever they are named (secret-paths.js is the one list).
       fsImpl.cpSync(target.abs, dest, {
         recursive: true,
@@ -84,6 +98,7 @@ export function resetProfileOnDisk({ dataDir = path.join(ROOT, 'data'), now = ne
       })
       if (sizeOf(dest) !== sizeOf(target.abs)) throw new Error('size mismatch')
     }
+    makePrivate(backupDir, fsImpl)
   } catch {
     try { fsImpl.rmSync(backupDir, { recursive: true, force: true }) } catch { /* the originals are untouched either way */ }
     return { ok: false, code: 'backup_failed' }

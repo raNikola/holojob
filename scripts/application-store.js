@@ -48,6 +48,7 @@ import {
   legacyTrackingOf,
   unmappedLegacyKeys,
 } from '../src/modules/applications/legacyTracking.js'
+import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE, copyToNewFile, replaceFileAtomic } from './atomic-file.js'
 import { isCvId } from './cv-store.js'
 
 const STORE_REL = 'data/applications'
@@ -204,31 +205,10 @@ export function loadStore(root) {
   return store
 }
 
-/** Write a temp file, fsync it, rename it over the target. A failure leaves the target as it was. */
+/** Replace a file whole (atomic-file.js). A failure leaves the target as it was. New files and folders are private. */
 export function writeFileAtomic(file, data) {
-  const tmp = `${file}.tmp`
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  let fd
-  try {
-    fd = fs.openSync(tmp, 'w')
-    fs.writeFileSync(fd, data)
-    fs.fsyncSync(fd)
-    fs.closeSync(fd)
-    fd = undefined
-    fs.renameSync(tmp, file)
-  } catch (e) {
-    if (fd !== undefined) {
-      try { fs.closeSync(fd) } catch { /* already failing */ }
-    }
-    fs.rmSync(tmp, { force: true })
-    throw e
-  }
-  try {
-    const dirFd = fs.openSync(path.dirname(file), 'r')
-    try { fs.fsyncSync(dirFd) } finally { fs.closeSync(dirFd) }
-  } catch {
-    // directory fsync is best effort (not supported everywhere)
-  }
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: PRIVATE_DIR_MODE })
+  replaceFileAtomic(file, data, { mode: PRIVATE_FILE_MODE })
 }
 
 function saveStore(root, prev, next) {
@@ -410,9 +390,9 @@ function tailoredSource(paths, jobId, fileName, what) {
 
 /** Copy (never link) a file into the application's folder; returns its sha256. */
 function freezeFile(dir, src) {
-  fs.mkdirSync(dir, { recursive: true })
+  fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE })
   const dest = path.join(dir, src.fileName)
-  fs.copyFileSync(src.file, dest, fs.constants.COPYFILE_EXCL)
+  copyToNewFile(src.file, dest, PRIVATE_FILE_MODE)
   return sha256(fs.readFileSync(dest))
 }
 
@@ -696,14 +676,14 @@ function eventDay(body, today) {
 
 /** Copy a file into the application's folder under a name nobody has used, never over one. */
 function freezeUnique(dir, src) {
-  fs.mkdirSync(dir, { recursive: true })
+  fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE })
   const ext = path.extname(src.fileName)
   const stem = src.fileName.slice(0, src.fileName.length - ext.length)
   for (let n = 1; ; n += 1) {
     const fileName = n === 1 ? src.fileName : `${stem}-${n}${ext}`
     const dest = path.join(dir, fileName)
     try {
-      fs.copyFileSync(src.file, dest, fs.constants.COPYFILE_EXCL)
+      copyToNewFile(src.file, dest, PRIVATE_FILE_MODE)
     } catch (e) {
       if (e.code === 'EEXIST') continue
       throw e
@@ -1028,8 +1008,8 @@ export function mergeFromBackup(root, entries, { now = () => new Date() } = {}) 
     const existing = [paths.store, paths.settings].filter((file) => fs.existsSync(file))
     if (existing.length) {
       const dir = uniqueDir(path.join(paths.backups, `applications-${backupStamp(now())}`))
-      fs.mkdirSync(dir, { recursive: true })
-      for (const file of existing) fs.copyFileSync(file, path.join(dir, path.basename(file)), fs.constants.COPYFILE_EXCL)
+      fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE })
+      for (const file of existing) copyToNewFile(file, path.join(dir, path.basename(file)), PRIVATE_FILE_MODE)
       report.backupPath = path.relative(root, dir)
     }
 
@@ -1368,9 +1348,8 @@ export function migrateApplications(root, body, { now = () => new Date() } = {})
     const paths = storePaths(root)
     const dir = uniqueDir(path.join(paths.backups, `applications-${backupStamp(at)}`))
     try {
-      fs.mkdirSync(dir, { recursive: true })
-      fs.writeFileSync(path.join(dir, 'legacy-jobs.json'), `${JSON.stringify(input.jobs, null, 2)}\n`)
-      if (fs.existsSync(paths.store)) fs.copyFileSync(paths.store, path.join(dir, 'applications.json'), fs.constants.COPYFILE_EXCL)
+      writeFileAtomic(path.join(dir, 'legacy-jobs.json'), `${JSON.stringify(input.jobs, null, 2)}\n`)
+      if (fs.existsSync(paths.store)) copyToNewFile(paths.store, path.join(dir, 'applications.json'), PRIVATE_FILE_MODE)
     } catch (e) {
       throw new StoreError(500, `Backup failed, nothing was migrated: ${e.message}`)
     }

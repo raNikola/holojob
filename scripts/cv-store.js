@@ -9,6 +9,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE, replaceFileAtomic } from './atomic-file.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const CVS_DIR = path.join(path.resolve(__dirname, '..'), 'data/profile/cvs')
@@ -29,9 +30,9 @@ export function saveCvFile(buffer, dir = CVS_DIR) {
   if (!buffer?.length) throw new Error('Empty file')
   if (buffer.length > MAX_CV_BYTES) throw new Error('File is too large. Maximum size is 10 MB.')
   if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') throw new Error('Please upload a PDF file.')
-  fs.mkdirSync(dir, { recursive: true })
+  fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE })
   const id = crypto.randomBytes(8).toString('hex')
-  fs.writeFileSync(cvFilePath(id, dir), buffer)
+  replaceFileAtomic(cvFilePath(id, dir), buffer, { mode: PRIVATE_FILE_MODE })
   return { id, size: buffer.length }
 }
 
