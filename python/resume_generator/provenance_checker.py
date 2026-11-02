@@ -45,7 +45,7 @@ def build_canonical_facts(profile: dict, intelligence: dict) -> set[str]:
     return facts
 
 
-def _metric_in_fact(metric: str) -> re.Pattern[str]:
+def metric_in_fact(metric: str) -> re.Pattern[str]:
     """A metric as a whole token: 50% is not in 150% or 1.50%, 10m is not in 10ms. A letter before it changes no number."""
     after = "" if metric.endswith("%") else r"(?!\w)"
     return re.compile(r"(?<!\d)(?<!\d[.,])" + re.escape(metric) + after)
@@ -59,7 +59,7 @@ def check_provenance(content: str, facts: set[str]) -> tuple[bool, list[str]]:
     """
     issues: list[str] = []
     for match in METRIC_RE.finditer(content):
-        pattern = _metric_in_fact(match.group(0).lower())
+        pattern = metric_in_fact(match.group(0).lower())
         if not any(pattern.search(f) for f in facts):
             issues.append(f"Unverified metric or number: {match.group(0)}")
 
