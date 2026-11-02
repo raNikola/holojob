@@ -33,7 +33,7 @@ Area rules load only when matching files are touched: `.claude/rules/scoring.md`
 - Personal data must never leave the home server. The repo is pushed only to the
   owner's private GitHub repo (`origin` = `git@github.com:raNikola/holojob.git`;
   `upstream` = Shanupower/career-os, fetch only, push URL `no-push`).
-  `.git/hooks/pre-push` refuses every remote except `origin`. Everything under
+  `scripts/git-hooks/pre-push` refuses every remote except `origin` at that URL. Everything under
   `data/` except the tracked examples, `.env`, CVs and keys stay in `.gitignore`.
 
 ## Container gotchas
@@ -68,6 +68,11 @@ in the container (it links to a Python outside the repo).
 `pytest.ini` limits collection to `tests/python`. Two `network` tests hit live
 Infostud and Workable and skip when unreachable; `-m "not network"` runs offline.
 Do not build `.venv` with Python 3.15 (pinned pandas 2.3.3 has no wheel).
+
+Pre-push hook: `sh scripts/install-git-hooks.sh` (once; sets `core.hooksPath`) enables `scripts/git-hooks/pre-push`, which runs lint, JS tests, pytest
+`-m "not network"` and build, in that order, stopping at the first failure. It checks an export of the pushed commit, not the working tree, using the repo's
+`node_modules` and `.venv`. It skips branch deletions and tag-only pushes. It first refuses every remote except `origin` at its pinned URL, deletions and tags included (`core.hooksPath` turns off `.git/hooks/pre-push`, which is no longer used).
+`git push --no-verify` bypasses all of it, the remote refusal included (only upstream's `no-push` push URL still holds then).
 
 ## Privacy rules and exceptions
 
