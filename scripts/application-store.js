@@ -38,6 +38,7 @@ import {
   withChange,
 } from '../src/modules/applications/stageRegistry.js'
 import { maskErrorField } from './secret-mask.js'
+import { MAX_LARGE_BODY_BYTES, readRawBody } from './read-body.js'
 import {
   LEGACY_CLOSED_STAGES,
   legacyChanges,
@@ -1395,25 +1396,19 @@ export function knownContactIdentity(root) {
 // --- routes (3.1) ----------------------------------------------------------------------------
 
 function sendJson(res, status, data) {
+  if (res.writableEnded) return // read-body.js has already answered 413
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify(maskErrorField(data)))
 }
 
-function readJsonBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = []
-    req.on('data', (c) => chunks.push(c))
-    req.on('end', () => {
-      try {
-        const raw = Buffer.concat(chunks).toString('utf-8')
-        resolve(raw ? JSON.parse(raw) : {})
-      } catch {
-        reject(new StoreError(400, 'Body is not valid JSON'))
-      }
-    })
-    req.on('error', reject)
-  })
+async function readStoreBody(req, res, options) {
+  const raw = (await readRawBody(req, res, options)).toString('utf-8')
+  try {
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    throw new StoreError(400, 'Body is not valid JSON')
+  }
 }
 
 function contentTypeFor(name) {
@@ -1435,7 +1430,7 @@ export const APPLICATION_ROUTES = [
     method: 'POST',
     pattern: /^\/api\/applications$/,
     handle: async (req, res, _m, ctx) => {
-      const { status, ...result } = await createApplication(ctx.root, await readJsonBody(req), ctx)
+      const { status, ...result } = await createApplication(ctx.root, await readStoreBody(req, res), ctx)
       sendJson(res, status, result)
     },
   },
@@ -1443,7 +1438,7 @@ export const APPLICATION_ROUTES = [
     method: 'POST',
     pattern: /^\/api\/applications\/([^/]+)\/events$/,
     handle: async (req, res, [, id], ctx) => {
-      const { status, ...result } = await appendEvent(ctx.root, id, await readJsonBody(req), ctx)
+      const { status, ...result } = await appendEvent(ctx.root, id, await readStoreBody(req, res), ctx)
       sendJson(res, status, result)
     },
   },
@@ -1451,7 +1446,7 @@ export const APPLICATION_ROUTES = [
     method: 'POST',
     pattern: /^\/api\/applications\/([^/]+)\/move$/,
     handle: async (req, res, [, id], ctx) => {
-      const { status, ...result } = await moveApplication(ctx.root, id, await readJsonBody(req), ctx)
+      const { status, ...result } = await moveApplication(ctx.root, id, await readStoreBody(req, res), ctx)
       sendJson(res, status, result)
     },
   },
@@ -1459,7 +1454,7 @@ export const APPLICATION_ROUTES = [
     method: 'POST',
     pattern: /^\/api\/applications\/migrate\/preview$/,
     handle: async (req, res, _m, ctx) => {
-      const { status, ...result } = await previewMigration(ctx.root, await readJsonBody(req), ctx)
+      const { status, ...result } = await previewMigration(ctx.root, await readStoreBody(req, res, { limit: MAX_LARGE_BODY_BYTES }), ctx)
       sendJson(res, status, result)
     },
   },
@@ -1467,7 +1462,7 @@ export const APPLICATION_ROUTES = [
     method: 'POST',
     pattern: /^\/api\/applications\/migrate$/,
     handle: async (req, res, _m, ctx) => {
-      const { status, ...result } = await migrateApplications(ctx.root, await readJsonBody(req), ctx)
+      const { status, ...result } = await migrateApplications(ctx.root, await readStoreBody(req, res, { limit: MAX_LARGE_BODY_BYTES }), ctx)
       sendJson(res, status, result)
     },
   },
@@ -1480,7 +1475,7 @@ export const APPLICATION_ROUTES = [
     method: 'POST',
     pattern: /^\/api\/applications\/settings$/,
     handle: async (req, res, _m, ctx) => {
-      const { status, ...result } = await changeSettings(ctx.root, await readJsonBody(req), ctx)
+      const { status, ...result } = await changeSettings(ctx.root, await readStoreBody(req, res), ctx)
       sendJson(res, status, result)
     },
   },
@@ -1488,7 +1483,7 @@ export const APPLICATION_ROUTES = [
     method: 'POST',
     pattern: /^\/api\/applications\/settings\/stages$/,
     handle: async (req, res, _m, ctx) => {
-      const { status, ...result } = await changeStageRegistry(ctx.root, await readJsonBody(req), ctx)
+      const { status, ...result } = await changeStageRegistry(ctx.root, await readStoreBody(req, res), ctx)
       sendJson(res, status, result)
     },
   },
