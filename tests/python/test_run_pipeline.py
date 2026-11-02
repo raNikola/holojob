@@ -2,12 +2,15 @@
 
 import fcntl
 import json
+import stat
 from datetime import datetime, timezone
 
 import sys
 from pathlib import Path
 
 import pytest
+
+from conftest import fail_replacing
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 import run_pipeline as rp  # noqa: E402
@@ -66,6 +69,29 @@ def fake_steps(monkeypatch, *, enriched=10, total=10, fail=None, deduped=10, cal
 
     monkeypatch.setattr(rp, "run_step", run_step)
     return calls
+
+
+def test_a_failed_last_run_write_keeps_the_previous_record_and_leaves_no_temp_file(env, monkeypatch):
+    fake_steps(monkeypatch)
+    rp.LAST_RUN.write_text('{"previous": true}', encoding="utf-8")
+    temps = fail_replacing(monkeypatch, rp.LAST_RUN)
+
+    with pytest.raises(OSError, match="disk full"):
+        rp.main(["--json"])
+
+    assert temps and temps[0].endswith(".tmp")
+    assert rp.LAST_RUN.read_text(encoding="utf-8") == '{"previous": true}'
+    assert not [p.name for p in rp.LAST_RUN.parent.iterdir() if p.name.endswith(".tmp")]
+
+
+def test_the_last_run_record_keeps_its_bytes_and_mode(env, monkeypatch):
+    fake_steps(monkeypatch)
+    rp.LAST_RUN.write_text("{}", encoding="utf-8")
+    rp.LAST_RUN.chmod(0o640)
+    assert rp.main(["--json"]) == 0
+    text = rp.LAST_RUN.read_bytes().decode("utf-8")
+    assert text == json.dumps(json.loads(text), indent=2)
+    assert stat.S_IMODE(rp.LAST_RUN.stat().st_mode) == 0o640
 
 
 def test_a_clean_run_runs_every_step_and_summarises(env, monkeypatch, capsys):

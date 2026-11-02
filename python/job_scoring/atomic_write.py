@@ -1,4 +1,4 @@
-"""One way to replace a data file whole, shared by the writers of scored_jobs.json and manual_jobs.json."""
+"""One way to replace a data file whole, shared by every writer of data/jobs/*.json."""
 
 from __future__ import annotations
 

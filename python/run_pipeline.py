@@ -36,6 +36,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PY = ROOT / "python"
 sys.path.insert(0, str(PY / "job_scoring"))
+from atomic_write import write_text_atomic  # noqa: E402
 from work_authorization import outside_allowed_before_enrichment  # noqa: E402
 DATA = ROOT / "data"
 INTELLIGENCE = DATA / "intelligence" / "candidate-intelligence.json"
@@ -298,7 +299,7 @@ def main(argv=None) -> int:
         code = exc.code
     finally:
         record["finishedAt"] = datetime.now(timezone.utc).isoformat()
-        LAST_RUN.write_text(json.dumps(record, indent=2), encoding="utf-8")
+        write_text_atomic(LAST_RUN, json.dumps(record, indent=2))
         lock.close()
     return code
 
