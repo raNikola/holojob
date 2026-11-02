@@ -89,6 +89,23 @@ def load_project_intelligence() -> dict:
     return {}
 
 
+def _is_text_or_none(value) -> bool:
+    return value is None or isinstance(value, str)
+
+
+def _entries(data: dict, key: str, issues: list[str]) -> list[dict]:
+    """The objects under `key`; anything else there is recorded as an issue. Absent or null is an empty section."""
+    value = data.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        issues.append(f"{key} must be a list")
+        return []
+    if not all(isinstance(entry, dict) for entry in value):
+        issues.append(f"{key} entries must be objects")
+    return [entry for entry in value if isinstance(entry, dict)]
+
+
 def _validate(data: dict, parsed: dict) -> list[str]:
     """Structural checks before the caller's provenance/lint gates."""
     issues = []
@@ -100,11 +117,24 @@ def _validate(data: dict, parsed: dict) -> list[str]:
     if not isinstance(paras, list) or len(paras) != 4 or not all(isinstance(p, str) and p.strip() for p in paras):
         issues.append("cover letter must be exactly 4 non-empty paragraphs")
     known_companies = {(e.get("company") or "").strip().lower() for e in parsed.get("experience") or []}
-    for entry in data.get("experience") or []:
-        if (entry.get("company") or "").strip().lower() not in known_companies:
-            issues.append(f"unknown company in experience: {entry.get('company')}")
-        if not entry.get("bullets"):
-            issues.append(f"empty bullets for {entry.get('company')}")
+    for entry in _entries(data, "experience", issues):
+        company = entry.get("company")
+        if not _is_text_or_none(company) or (company or "").strip().lower() not in known_companies:
+            issues.append(f"unknown company in experience: {company}")
+        bullets = entry.get("bullets")
+        if not bullets:
+            issues.append(f"empty bullets for {company}")
+        elif isinstance(bullets, list) and not all(isinstance(b, str) for b in bullets):
+            issues.append(f"bullets for {company} must be text")
+    for entry in _entries(data, "skills", issues):
+        items = entry.get("skills")
+        if not _is_text_or_none(entry.get("label")):
+            issues.append("skills label must be text")
+        if items is not None and not (isinstance(items, list) and all(isinstance(s, str) for s in items)):
+            issues.append("skills items must be a list of text")
+    for entry in _entries(data, "projects", issues):
+        if not _is_text_or_none(entry.get("name")) or not _is_text_or_none(entry.get("line")):
+            issues.append("project name and line must be text")
     return issues
 
 

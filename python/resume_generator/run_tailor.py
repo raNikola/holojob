@@ -160,22 +160,29 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
         if llm is None:
             llm_issues.append(f"llm skipped: {reason}")
         else:
-            candidate_ctx = _apply_llm_content(ctx, llm, intelligence)
-            paragraphs = [p.strip() for p in llm["cover_letter_paragraphs"]]
-            trial_md = render_resume_md(candidate_ctx)
-            prov_ok, prov_issues = check_provenance(trial_md + "\n" + "\n".join(paragraphs), facts)
-            lint = lint_cover_letter(paragraphs)
-            cliches = [p for p in BANNED_PHRASES if p in (trial_md + " ".join(paragraphs)).lower()]
-            if prov_ok and not lint and not cliches:
-                ctx = candidate_ctx
-                llm_paragraphs = paragraphs
-                content_engine = "claude-code"
-                print("  · Claude Code content accepted", flush=True)
-            else:
+            try:
+                candidate_ctx = _apply_llm_content(ctx, llm, intelligence)
+                paragraphs = [p.strip() for p in llm["cover_letter_paragraphs"]]
+                trial_md = render_resume_md(candidate_ctx)
+                prov_ok, prov_issues = check_provenance(trial_md + "\n" + "\n".join(paragraphs), facts)
+                lint = lint_cover_letter(paragraphs)
+                cliches = [p for p in BANNED_PHRASES if p in (trial_md + " ".join(paragraphs)).lower()]
+            except (AttributeError, KeyError, TypeError, ValueError) as exc:
+                # A shape _validate did not foresee must cost this draft only, not the whole run.
                 llm_issues.append(
-                    "llm output rejected, fell back to rule-based: "
-                    + "; ".join(prov_issues + lint + [f"cliché '{c}'" for c in cliches])
+                    f"llm output rejected, fell back to rule-based: malformed draft ({type(exc).__name__}: {exc})"
                 )
+            else:
+                if prov_ok and not lint and not cliches:
+                    ctx = candidate_ctx
+                    llm_paragraphs = paragraphs
+                    content_engine = "claude-code"
+                    print("  · Claude Code content accepted", flush=True)
+                else:
+                    llm_issues.append(
+                        "llm output rejected, fell back to rule-based: "
+                        + "; ".join(prov_issues + lint + [f"cliché '{c}'" for c in cliches])
+                    )
 
     if not use_llm or content_engine == "rule-based":
         print("  · Using rule-based content", flush=True)
