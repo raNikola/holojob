@@ -93,12 +93,15 @@ Each item gets a fixture-based regression test; the Phase 1 stability test must 
 A new screen named Activity, in the nav group System, built in this repo. Decisions and known gaps:
 [DECISIONS.md](DECISIONS.md#activity-screen-approved-2026-11-02).
 
-| Slice | Content |
-|---|---|
-| 1 | Per-source outcome and run log, including a fix so a failed board cannot close its existing ads |
-| 2 | `GET /api/runs` read API, with 90-day pruning at write time |
-| 3 | The Activity screen: one row per run, Details with per-site stats plus errors and warnings with their level. Top-of-page statistics belong to Analytics (later) |
-| 4 | Ad lifecycle changes, last ([rules](DECISIONS.md#ad-lifecycle-rules-narrowed-2026-11-02)) |
+| Slice | Content | Status on 2026-11-02 |
+|---|---|---|
+| 1 | Per-source outcome and run log, including a fix so a failed board cannot close its existing ads | **Built.** `python/job_discovery/run_log.py`, records in `data/analytics/runs/`. [Shape and deviations](DECISIONS.md#activity-slice-1-as-built-2026-11-02) |
+| 2 | `GET /api/runs` read API. The 90-day pruning at write time is already in slice 1 | Not built |
+| 3 | The Activity screen: one row per run, Details with per-site stats plus errors and warnings with their level. Top-of-page statistics belong to Analytics (later) | Not built |
+| 4 | Ad lifecycle changes, last ([rules](DECISIONS.md#ad-lifecycle-rules-narrowed-2026-11-02)) | Not built |
+
+Left for a later slice from slice 1: scored, closed, missing and expired counts on the record; failures `jobspy_adapter.py` and
+`joberty_client.py` still swallow (listed in the decision).
 
 ## Import redesign - in progress
 

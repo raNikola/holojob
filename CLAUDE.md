@@ -25,6 +25,7 @@ Area rules load only when matching files are touched: `.claude/rules/scoring.md`
 
 - Work only inside /srv/holojob. Do not read other projects under /srv (e.g. applypack, jobapply). Never print secret values (passwords, keys, tokens) from any file; refer to them by name only.
 - All code and comments in English.
+- After finishing a feature, update docs/ROADMAP.md and docs/DECISIONS.md: mark what is built and record new decisions.
 - The repo lives at `/srv/holojob`. The container is `holojob`.
 - `./data` is bind-mounted to `/app/data`, so data edits need no copying.
   Code does: either `podman cp` for a quick test, or `podman-compose build`
