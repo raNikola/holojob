@@ -2,7 +2,13 @@
 
 **Draft, for the roadmap phase "3b" in [../ROADMAP.md](../ROADMAP.md).** Implements
 [DECISIONS.md](DECISIONS.md) principle 16 (job sources are user configuration, not code) with principle 15
-(server-side master for new stores). No code exists yet.
+(server-side master for new stores).
+
+**Status:** first slice built (2026-10-30): `python/job_discovery/source_settings.py`, `scripts/sources-handler.js` and
+Settings > Sources > Job boards, with the opt-in switch for Joberty only. As built, `data/config/sources.json` holds
+`version`, `updatedAt`, `boards.<provider>` (`active`, `consentAcceptedAt`, `disabledAt`, `history`) and `migrations`.
+Not built: a switch for the other boards (they still follow the provider groups, with `serbia` as the default), watched
+companies, probes, `lastRun`, `keys` and the migration below. The rest of this spec is the design for those parts.
 
 ## Goal
 

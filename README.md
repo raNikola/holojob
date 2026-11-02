@@ -132,11 +132,16 @@ Browser AI features (copilot, interview coach) keep their own provider settings 
 
 ## Tests
 
+On DS9 `node` and `npm` are not on the host's PATH, so lint, vitest and build run in a throwaway container (always `--security-opt label=disable`, never `:Z`, which would relabel the repo), and pytest runs against the host `.venv` (Python 3.12). The commands work in fish or bash:
+
 ```bash
-npm test                 # vitest, then pytest
-npm run test:python      # pytest only (host .venv, Python 3.12)
-npm run lint
+podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run lint
+podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run test:js
+podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run build
+.venv/bin/python -m pytest tests/python -q
 ```
+
+`npm test` and `npm run test:python` need Node and the `.venv` on one machine, so they work on neither side on DS9. Details: [CLAUDE.md](CLAUDE.md) (Tests).
 
 ## Troubleshooting
 
@@ -150,7 +155,7 @@ npm run lint
 | Port in use | Outside the container set `PORT` in `.env` and restart. In the container the app listens on 5173; change the host port in `docker-compose.yml` (`3073:5173`) |
 | `.env` change has no effect in the container | `podman-compose up -d --force-recreate`; a restart does not re-read it |
 | `import pandas` fails with `podman exec career-os python` | The image predates the `ENV PATH` line in the Dockerfile; rebuild it (`podman-compose build`) |
-| `pytest` not found in the container | The image carries no tests; run `npm run test:python` on the host |
+| `pytest` not found in the container | The image carries no tests; run `.venv/bin/python -m pytest tests/python -q` on the host |
 | Jobs not showing in the UI | Run discovery and scoring (`npm run pipeline`); check the Pipeline health card on the Jobs screen |
 
 ## Documentation

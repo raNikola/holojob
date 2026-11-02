@@ -207,6 +207,8 @@ an `Origin` header must be an allowed origin; wrong type 415, wrong origin or ho
   `X-Forwarded-Host`) must be on it, which also stops DNS rebinding; reaching the app by another name (a LAN IP) then
   gets 403 until that name is added. With no list, an Origin must equal the request Host (same origin) and Host is not checked.
   A `.env` change needs `podman-compose up -d --force-recreate`.
+- **Body limits:** `scripts/read-body.js` is the one reader of `/api` bodies: `MAX_JSON_BODY_BYTES` (1 MB) by default, `MAX_LARGE_BODY_BYTES` (25 MB) for the backup routes and the routes that post the whole job list (`/api/jobs/manual/sync`, `/api/applications/migrate` and its preview); some routes pass a limit of their own (secrets, settings, sources, CV upload, profile import). Past the limit it answers 413 itself.
+  If a real backup restore fails with "Request body too large", raise `MAX_LARGE_BODY_BYTES`.
 - Credentials are masked in error bodies, SSE errors, ledger reasons and console output by `scripts/secret-mask.js`
   (`sk-`/`AIza` keys, `key=` / `token=` query values, Authorization, `li_at`, long tokens). Backup export and restore use
   one exclusion list, `scripts/secret-paths.js`; a restore with `..` or an absolute path in the archive is refused whole.

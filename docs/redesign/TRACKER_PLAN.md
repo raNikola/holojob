@@ -691,7 +691,8 @@ It pulls the first parts of S4 (board) and S5 (Settings) forward; the legacy rem
 - **Applications screen, two tabs:** Board (default) and Statistics.
   - **Board** (`boardModel.js`, `ApplicationBoard.jsx`): columns Applied, the active registry stages, Rejected, Ghosted;
     cards (company, title, days in stage from `daysInCurrentStage`, "stale" after 14 days) read the store, not the Jobs
-    list. A "Move to" select calls `/move`; no drag. The cache changes only on success; a refusal (for example the
+    list. Dragging a card to a column (`dropDecision`) and a "Move to" select, the touch and keyboard fallback, both call
+    `/move`. The move is not optimistic: the cache changes only on success; a refusal (for example the
     competing-attempt 409) shows on the card. Closed (other outcomes) and unfiled are one line of counts. A card whose
     job left the Jobs list says so instead of opening Job Details (the snapshot view is not built).
   - **Statistics** (`applicationStatistics.js`): the earlier stat cards and tracker table unchanged, a stage filter on the
@@ -699,12 +700,12 @@ It pulls the first parts of S4 (board) and S5 (Settings) forward; the legacy rem
     per stage (every spell, running ones to today), outcomes. Voided applications count nowhere; an unrecorded applied
     date, channel, CV or stage date is counted as missing and shown, never guessed.
 - **Settings > Applications** (`ApplicationSettingsPanel.jsx`): the tracking switch and the board columns: rename,
-  up / down, add, remove (= retire, refused with the count while open applications sit there), restore. Applied, Rejected
+  reorder by dragging (`reorderDecision` in `stageRegistry.js`) or up / down, add, remove (= retire, refused with the count while open applications sit there), restore. Applied, Rejected
   and Ghosted are shown locked. The `interview` flag, the reminders switch, "avoid duplicate applications" and CSV
   import are not built here. Counts come from the cached store; the server still decides a retire.
-- **Not built:** drag, optimistic moves, Closed panel, Unfiled column, "Show voided", snapshot view, several contacts,
+- **Not built:** optimistic moves, Closed panel, Unfiled column, "Show voided", snapshot view, several contacts,
   nudges, CSV, component tests (the tests cover the pure modules and the routes through the client).
-- **Tests:** `appliedFilter.test.js`, `applicationBoard.test.js`, `applicationSettings.test.js`.
+- **Tests:** `appliedFilter.test.js`, `applicationBoard.test.js`, `applicationSettings.test.js`, `stageRegistry.test.js` (`reorderDecision`).
 
 ### 2.5 As built in S3, first slice (2026-10-29)
 

@@ -31,7 +31,7 @@ run, and they implement the "Stable results", "Private by default" and "Every sc
 | 1 | **Stability.** For each fixture, 3 runs with the same profile: requirement-id overlap >= 90%, status flips <= 5%, Fit spread <= 5 points | A test or script reports all three numbers per fixture and overall; overlap is the share of requirement ids present in all 3 runs, flips the share of shared requirements whose status differs between runs, spread the max minus min Fit | Stable results |
 | 2 | **Shadow mode changes nothing.** With Fit computed and stored, ranking, label and priority of every job are identical to a run without it | A test scores a fixture set both ways and asserts equal `matchScore`, `matchLabel`, `priority` and sort order | Rank by evidence of fit |
 | 3 | **No personal identifiers leave.** No name, phone, e-mail or personal link in any payload sent to a provider | A test builds every payload the engine sends from a profile that contains such strings and asserts none is present | Private by default |
-| 4 | **Checks pass.** `npm run lint`, `npm test` (vitest and pytest) and `npm run build` pass | Run on the host, no failures | - |
+| 4 | **Checks pass.** Lint, vitest, pytest and the build pass | `npm run lint`, `npm run test:js` and `npm run build` in the throwaway `node:20-bookworm` container (`--security-opt label=disable`, never `:Z`), pytest against the host `.venv`, no failures; commands in [CLAUDE.md](../CLAUDE.md) (Tests) | - |
 
 Related GOALS.md measures that these criteria cover only in part, and the later phase that finishes them: "Every
 score is explainable" is shown in the job drawer in Phase 1 but its per-requirement quotes are verified by the
