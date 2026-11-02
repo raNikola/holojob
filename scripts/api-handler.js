@@ -40,6 +40,7 @@ import { maskErrorField } from './secret-mask.js'
 import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
 import { handleApplicationsRequest } from './application-store.js'
+import { handleJobHistoryRequest } from './job-history-read.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -529,6 +530,10 @@ export async function handleApiRequest(req, res) {
 
   // Application tracker: the store module owns every route under /api/applications.
   if (await handleApplicationsRequest(req, res, url, { root: ROOT })) {
+    return true
+  }
+
+  if (await handleJobHistoryRequest(req, res, url, { root: ROOT })) {
     return true
   }
 
