@@ -103,8 +103,12 @@ A new screen named Activity, in the nav group System, built in this repo. Decisi
 Owner corrections to slice 1, all done: an empty board holds its ads; a source that does not apply is `skipped`; a run where every
 source was skipped is `skipped`; a source that skipped or failed keeps its ads in `discovered_jobs.json`.
 
+**Built 2026-11-03, browser only, ahead of slice 4:** an ad that leaves the file no longer takes the owner's data with it. The import keeps a row
+holding a status other than `new`, AI insights, tailored assets, outreach or legacy tracking, marked `offList` and hidden from default views. This is a
+temporary protection until the Step 5 overlay. [Rule, terms and limits](DECISIONS.md#offlist-rows-keep-the-owners-data-2026-11-03).
+
 **For slice 4, unchanged so far:** a search-based ad that a successful run did not return leaves the file, the scored list and the
-browser list with no badge, while the ledger keeps it open, and the status and notes on that browser row are lost. A skipped source's
+browser's default list with no badge, while the ledger keeps it open. A row with none of the owner's data is dropped from the browser. A skipped source's
 ads, on the other hand, stay active with no time limit. [Details](DECISIONS.md#activity-slice-1-as-built-2026-11-02).
 
 Left for a later slice from slice 1: scored, closed, missing and expired counts on the record.
@@ -135,6 +139,7 @@ Known and left open on purpose. Checked against the code on 2026-11-02.
 **Step 5 (server master), [STEP5_SERVER_MASTER_PLAN.md](redesign/STEP5_SERVER_MASTER_PLAN.md):**
 
 - `applied_manually` vs the tracker: "Mark as applied" still sets the old job status beside the application store's record.
+- `offList` rows migrate as orphans, not active `record` entries ([decision](DECISIONS.md#offlist-rows-keep-the-owners-data-2026-11-03)).
 - Whole-list save: the Jobs, Applications and Outreach screens still save their whole list from memory (`saveJobs`).
 - Hard-coded `serbia` provider group: `scripts/run-discovery.js`, `run-pipeline.js`, `api-handler.js`, `PipelineOrchestrator.jsx`, `JobDiscoveryScreen.jsx` and `npm run discover:jobs`.
 
