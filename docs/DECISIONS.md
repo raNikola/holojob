@@ -107,8 +107,8 @@ of a shared file could lose a record.
 - **Unchanged on purpose:** a source that ran successfully and did not return an ad. A search-based ad then leaves
   `discovered_jobs.json`, `scored_jobs.json` and the browser list with no badge, while the ledger keeps it open; a Greenhouse, Lever or
   Ashby ad closes and shows the badge for 14 days. A source that was not asked to run at all (not in `--providers`, or an opt-in source
-  switched off) has no status, so its ads leave the file too. A browser list import keeps only rows in the file, so the status, AI
-  insights, tailored assets and outreach stored on a row that left are gone from the browser copy. **For slice 4.**
+  switched off) has no status, so its ads leave the file too. **For slice 4.** A row that left no longer loses the owner's data in
+  the browser: see [offList](#offlist-rows-keep-the-owners-data-2026-11-03).
 - **Scoring:** `scored_jobs.json` meta gains `discoveryRunId`; `sourceRunId` stays scoring's own. No scored counts are attached: a
   Re-score runs on its own, several times per discovery run, so it would overwrite an older record's counts.
 - **Backups:** `data/analytics/` is not in `DATA_DIRS` in `scripts/backup-handler.js`, so run history is not backed up (nor is
@@ -121,6 +121,46 @@ of a shared file could lose a record.
   raises. The source then shows `ok` with the 0-ads warning, so run statistics for `jobspy` are unreliable. It never closes ads
   automatically.
 - `joberty_client.fetch_listing` keeps the pages it read and drops the rest, so a listing cut short still shows `ok`.
+
+## offList rows keep the owner's data (2026-11-03)
+
+**Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,
+tailored assets, outreach or legacy `applicationTracking`.
+
+- **What is kept:** `importJobsFromFile` keeps a stored row the imported file lacks if it holds any of those: a status other than
+  `new` (`rejected` included, so a rediscovered ad does not come back as new), or a non-empty `aiInsights`, `tailoredAssets`, `outreach`
+  or `applicationTracking`. It is marked `offList: true`. A row with none of them is dropped as before, so old ads do not pile up.
+  Timestamps alone, `applied: false` and an outreach with status `none` and empty lists do not count as data.
+- **When it returns:** matched on `jobId`, then lowercased URL, as before. It loses the mark and keeps all its data.
+- **Where it is hidden:** the Jobs list (`filterJobs`), its totals, filter options and exports, `computeJobStats`, `computeOutreachMetrics`,
+  the Dashboard's tailored count, the pipeline counts, and the AI features that read the whole list (`topJobs`, skill gap). The "Show
+  jobs absent from current results" filter lists them.
+- **Where it stays visible, on purpose:** Job Details and the drawer by id, Resume Library, the tracker table, and the Outreach contact
+  list and exports, because each of those is the owner's own record. The backup, the tracker migration and the AI redaction hints still read
+  these rows.
+- **Scoring and discovery never see it:** the browser sends only hand-entered jobs to the server, and `run_scoring.py` reads only the
+  discovered and manual files (`tests/python/test_scoring_input.py`). The file contents did not change.
+
+**Terms, two different states:**
+
+- **offList** = absent from current results. A browser mark on a row. It says nothing about whether the ad closed.
+- **orphan** (Step 5) = a user record with no matching active discovery record.
+
+**Temporary:** `offList` is a protection until the Step 5 job-state overlay (`data/jobs/job-state.json`). The Step 5 migration must treat
+`offList` rows as orphans, not as active records. Its plan turns a browser-only job into a `record` entry, which is an active job, so this
+is an exception to that rule ([plan, section 2.3](redesign/STEP5_SERVER_MASTER_PLAN.md)).
+
+**Limits of this step:**
+
+- Data lost before this change is not restored; only rows still in the browser are protected.
+- A row kept under another browser or profile is not shared: the data still lives in one browser's `localStorage`.
+- When the list does not fit `localStorage`, `saveJobs` stores it without `description`, `llmFacts` and `engineShadow` (`slimJob`). A
+  scored row gets them back from the file; an `offList` row does not, so its Job Details can show no ad text. The ledger still has it.
+- Carry-over still matches on `jobId` or URL only. A status on one copy of a role is not moved to another copy with a different URL; the
+  old copy is kept `offList` instead.
+- Job Details does not yet say a job is absent from current results, and an ad whose row was dropped still cannot be opened.
+- Stat cards count only rows in current results, so an application whose ad is `offList` is not in the "Applied" card; Application
+  Statistics reads the application store and still counts it.
 
 ## Ad lifecycle rules (narrowed 2026-11-02)
 

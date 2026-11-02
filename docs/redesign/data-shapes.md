@@ -601,7 +601,7 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
 ## Scored jobs
 
 - **Path:** `data/jobs/scored_jobs.json`
-- **Purpose:** Everything in discovered jobs plus scores, label, priority, reasons, work-authorization status, salary parse. What the UI job list loads (copy in browser key `job-dashboard-discovered-jobs`).
+- **Purpose:** Everything in discovered jobs plus scores, label, priority, reasons, work-authorization status, salary parse. What the UI job list loads (copy in browser key `job-dashboard-discovered-jobs`). The browser copy can also hold rows the file lacks, marked `offList: true`, kept only for the owner's data ([decision](../DECISIONS.md#offlist-rows-keep-the-owners-data-2026-11-03)); that mark is never in this file.
 - **Written by:** `run_scoring.py` (`--judge` adds `llmFit`; with `CAREER_OS_ENGINE_SHADOW` on, every job with an
   engine output gets `engineShadow` and `meta.engineShadow` counts them, see "Engine shadow output").
 
