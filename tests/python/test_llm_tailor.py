@@ -379,18 +379,18 @@ def test_an_invented_claim_of_any_shape_is_rejected(allowed, tmp_path, claim):
     assert assets["contentEngine"] == "rule-based"
 
 
-BYPASS = "BUG (DECISIONS.md principle 8): check_provenance matches `snippet in f or f in snippet`. The second half lets " \
-         "any short fact inside the invented metric vouch for it, so the invented metric is accepted"
+# --- the fact gate: a metric is matched as a whole token -------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=BYPASS)
 @pytest.mark.parametrize(("change", "metric"), [
     (lambda p, i: p["basicProfile"].update(experienceYears="5"), "500%"),
     (lambda p, i: p["basicProfile"].update(experienceYears="12"), "12000 users"),
+    (lambda p, i: p["basicProfile"].update(experienceYears="12"), "12%"),
+    (lambda p, i: p["basicProfile"].update(experienceYears="12"), "12 users"),
     (lambda p, i: p["resume"]["parsedData"]["skills"].append("R"), "870 users"),
     (lambda p, i: p["resume"]["parsedData"]["skills"].append("C"), "870 customers"),
     (lambda p, i: i["experienceMap"]["projectHighlights"].append(""), "99%"),
-], ids=["years-5", "years-12", "skill-R", "skill-C", "empty-highlight"])
+], ids=["years-5", "years-12", "years-same-number-percent", "years-same-number-users", "skill-R", "skill-C", "empty-highlight"])
 def test_a_short_fact_does_not_vouch_for_an_invented_metric(change, metric):
     prof, intel = profile(), intelligence()
     change(prof, intel)
@@ -398,12 +398,57 @@ def test_a_short_fact_does_not_vouch_for_an_invented_metric(change, metric):
     assert passed is False, issues
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG (DECISIONS.md principle 8): a metric is matched as a substring of a fact, with "
-                                       "no number boundary, so an invented '50%' is accepted because the CV says '150%'")
 def test_a_metric_is_not_accepted_because_a_longer_number_contains_it():
     facts = build_canonical_facts({"resume": {"rawText": "Grew revenue by 150% in two years", "parsedData": {}}}, {})
     passed, _ = check_provenance("Grew revenue by 50%.", facts)
     assert passed is False
+
+
+def _facts_from_cv(line):
+    return build_canonical_facts({"resume": {"rawText": line, "parsedData": {}}}, {})
+
+
+@pytest.mark.parametrize(("source", "claim"), [
+    ("Cut churn by 1.5% in a year", "1.50%"),
+    ("Cut churn by 1.5% in a year", "5%"),
+    ("Served 1,500 users", "500 users"),
+    ("Served 1,000 users", "2,000 users"),
+    ("Served 112 users", "12 users"),
+    ("Answered in 10ms flat", "10m"),
+    ("Saved 12k a year", "2k"),
+], ids=["longer-decimal", "tail-of-decimal", "tail-of-thousands", "other-thousands", "tail-of-integer", "ms-is-not-m", "tail-of-k"])
+def test_an_invented_metric_inside_a_real_number_is_rejected(source, claim):
+    passed, issues = check_provenance(f"Reached {claim} overall.", _facts_from_cv(source))
+    assert passed is False, issues
+    assert claim in issues[0]
+
+
+@pytest.mark.parametrize(("source", "claim"), [
+    ("Led a migration: 40% faster releases.", "Reached 40% faster."),
+    ("Cut churn by 1.5% in a year", "Cut churn by 1.5%."),
+    ("Cut churn by 5,5% in a year", "Cut churn by 5,5%."),
+    ("Served 1,000 users daily", "Served 1,000 users."),
+    ("Served 10k daily users", "Served 10k people."),
+    ("Budget of $2.5m per year", "Ran $2.5m."),
+    ("Revenue of EUR40k a month", "Brought 40k."),
+    ("Grew 30-50% each year", "Grew 50%."),
+    ("(40%) and more", "Reached 40%."),
+    ("Grew by 40%of the base", "Grew 40%."),
+    ("Bought 5 Xbox consoles", "Bought 5 Xbox."),
+    ("Served 120 USERS", "Served 120 users."),
+], ids=["percent", "decimal", "decimal-comma", "thousands", "k", "money-m", "currency-glued", "range-end", "in-brackets",
+        "percent-glued-word", "unit-whole-word", "case"])
+def test_a_metric_the_source_states_still_passes(source, claim):
+    passed, issues = check_provenance(claim, _facts_from_cv(source))
+    assert passed is True, issues
+
+
+def test_blank_facts_are_not_kept():
+    facts = build_canonical_facts(
+        {"resume": {"parsedData": {}}},
+        {"experienceMap": {"projectHighlights": ["", "  "]}, "skillsMap": {"technicalSkills": [" ", 0, "SQL"]}},
+    )
+    assert facts == {"sql"}
 
 
 # --- empty and invalid provider output -----------------------------------------------------------
