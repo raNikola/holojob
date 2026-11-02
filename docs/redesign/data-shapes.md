@@ -501,7 +501,8 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
       "closed": "<number>",
       "keptFullerDescription": "<number>",
       "keptFailedBoard": "<number>",
-      "keptEmptyBoard": "<number>"
+      "keptEmptyBoard": "<number>",
+      "keptSourceNotRun": "<number>"
     }
   },
   "jobs": [
@@ -953,7 +954,7 @@ Fields added later, in the browser job store and not in this file until saved:
   "trigger": "manual | pipeline | scheduled",
   "startedAt": "<string>",
   "finishedAt": "<string>",
-  "status": "ok | partial | failed",
+  "status": "ok | partial | failed | skipped",
   "sources": [
     {
       "name": "<string>",
@@ -1016,7 +1017,8 @@ Fields added later, in the browser job store and not in this file until saved:
       "closed": "<number>",
       "keptFullerDescription": "<number>",
       "keptFailedBoard": "<number>",
-      "keptEmptyBoard": "<number>"
+      "keptEmptyBoard": "<number>",
+      "keptSourceNotRun": "<number>"
     }
   },
   "enrichment": {
