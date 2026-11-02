@@ -500,7 +500,8 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
       "carriedFacts": "<number>",
       "closed": "<number>",
       "keptFullerDescription": "<number>",
-      "keptFailedBoard": "<number>"
+      "keptFailedBoard": "<number>",
+      "keptEmptyBoard": "<number>"
     }
   },
   "jobs": [
@@ -943,7 +944,39 @@ Fields added later, in the browser job store and not in this file until saved:
 
 - **Path:** `data/analytics/runs/<startedAt>-<runId>.json`, one file per run, kept 90 days.
 - **Purpose:** What each discovery run did per source, for the Activity screen.
-- **Written by:** `run_discovery.py` through `run_log.py`. Shape: [DECISIONS.md](../DECISIONS.md#activity-slice-1-as-built-2026-11-02).
+- **Written by:** `run_discovery.py` through `run_log.py`. Field meanings: [DECISIONS.md](../DECISIONS.md#activity-slice-1-as-built-2026-11-02).
+
+```json
+{
+  "version": 1,
+  "runId": "<string>",
+  "trigger": "manual | pipeline | scheduled",
+  "startedAt": "<string>",
+  "finishedAt": "<string>",
+  "status": "ok | partial | failed",
+  "sources": [
+    {
+      "name": "<string>",
+      "status": "ok | partial | failed | skipped",
+      "read": "<number>",
+      "kept": "<number>",
+      "new": "<number>",
+      "error": "<string or null>",
+      "boardsFailed": [
+        "<string>"
+      ],
+      "skipReason": "<string or null>"
+    }
+  ],
+  "issues": [
+    {
+      "level": "error | warning",
+      "source": "<string or null>",
+      "message": "<string>"
+    }
+  ]
+}
+```
 
 ## Last pipeline run
 
@@ -982,7 +1015,8 @@ Fields added later, in the browser job store and not in this file until saved:
       "carriedFacts": "<number>",
       "closed": "<number>",
       "keptFullerDescription": "<number>",
-      "keptFailedBoard": "<number>"
+      "keptFailedBoard": "<number>",
+      "keptEmptyBoard": "<number>"
     }
   },
   "enrichment": {
