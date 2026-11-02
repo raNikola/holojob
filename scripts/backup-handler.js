@@ -7,6 +7,7 @@ import path from 'node:path'
 import { PassThrough } from 'node:stream'
 import { createRequire } from 'node:module'
 import { isStoreBackupEntry, mergeFromBackup } from './application-store.js'
+import { replaceFileAtomic } from './atomic-file.js'
 import { isSecretPath, safeRelativePath } from './secret-paths.js'
 
 const require = createRequire(import.meta.url)
@@ -93,7 +94,7 @@ export async function importBackupZip(root, zipBuffer, options = {}) {
       throw new Error(`Backup refused: path leaves data/ (${name.slice(0, 80)})`)
     }
     fs.mkdirSync(path.dirname(dest), { recursive: true })
-    fs.writeFileSync(dest, entry.getData())
+    replaceFileAtomic(dest, entry.getData())
     restored.push(name)
   }
 
