@@ -39,6 +39,7 @@ if str(ROOT / "python") not in sys.path:
 
 from geography import WORLDWIDE, is_known  # noqa: E402
 from work_authorization import outside_allowed_before_enrichment  # noqa: E402
+from atomic_write import write_text_atomic  # noqa: E402
 import job_history  # noqa: E402
 from job_fingerprint import (  # noqa: E402,F401
     MAX_DESCRIPTION_CHARS,
@@ -615,7 +616,7 @@ def main() -> int:
             )
             done += 1
 
-    args.jobs.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    write_text_atomic(args.jobs, json.dumps(payload, indent=2))
     if mapper:
         mapper.save()
         remapped += requirement_frames.apply_remap(frames, mapper.remap)

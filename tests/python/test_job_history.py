@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import enrich_jobs
-from conftest import select_provider
+from conftest import fail_replacing, select_provider
 import job_history as jh
 from dedupe_jobs import _crosspost_key
 from job_fingerprint import job_fingerprint
@@ -149,6 +149,41 @@ def test_save_then_load_round_trips(tmp_path):
     path = tmp_path / "job_history.json"
     jh.save(path, ledger)
     assert jh.load(path)["jobs"]["g1"]["firstSeen"] == iso()
+
+
+def test_a_failed_save_keeps_the_previous_ledger_and_leaves_no_temp_file(tmp_path, monkeypatch):
+    (tmp_path / "jobs").mkdir()
+    path = tmp_path / "jobs" / "job_history.json"
+    path.write_text('{"previous": true}', encoding="utf-8")
+    temps = fail_replacing(monkeypatch, path)
+
+    with pytest.raises(OSError, match="disk full"):
+        jh.save(path, jh.empty_ledger())
+
+    assert temps and temps[0].endswith(".tmp")
+    assert path.read_text(encoding="utf-8") == '{"previous": true}'
+    assert [p.name for p in path.parent.iterdir()] == ["job_history.json"]
+
+
+def test_a_failed_enrichment_write_keeps_the_previous_jobs_file_and_leaves_no_temp_file(tmp_path, monkeypatch):
+    j = job()
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    jobs_file = jobs_dir / "discovered_jobs.json"
+    write_jobs(jobs_file, [j])
+    before = jobs_file.read_bytes()
+    monkeypatch.setattr(enrich_jobs, "extract", lambda j, model, provider, previous=None: facts_for(j))
+    monkeypatch.setattr("sys.argv", ["enrich_jobs.py", "--jobs", str(jobs_file), "--workers", "1",
+                                       "--intelligence", str(tmp_path / "none.json")])
+    select_provider(tmp_path, monkeypatch, "claude-code")
+    temps = fail_replacing(monkeypatch, jobs_file)
+
+    with pytest.raises(OSError, match="disk full"):
+        enrich_jobs.main()
+
+    assert temps and temps[0].endswith(".tmp")
+    assert jobs_file.read_bytes() == before
+    assert [p.name for p in jobs_dir.iterdir()] == ["discovered_jobs.json"]
 
 
 # --- enrichment checks the ledger first ----------------------------------------------------------

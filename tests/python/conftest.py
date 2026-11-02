@@ -78,6 +78,25 @@ def _secret_store_in_tmp(tmp_path, monkeypatch):
     monkeypatch.setattr(secret_store, "_masked", set())
 
 
+def fail_replacing(monkeypatch, target):
+    """Make the rename onto `target` fail, and only that one, so no other write can be what the test sees fail.
+    Returns the names of the temp files it was asked to rename, which proves the write went through a temp file."""
+    import os
+    from pathlib import Path
+
+    real_replace, temps = os.replace, []
+
+    def replace(src, dst, **kwargs):
+        if Path(dst) == Path(target):
+            assert Path(src).exists()
+            temps.append(Path(src).name)
+            raise OSError("disk full")
+        return real_replace(src, dst, **kwargs)
+
+    monkeypatch.setattr(os, "replace", replace)
+    return temps
+
+
 def write_secret_store(tmp_path, entries, mode=0o600):
     """Write data/secrets/ai.json the way the Node store would (directory 700, file 600 unless told otherwise)."""
     import json

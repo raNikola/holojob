@@ -20,9 +20,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -113,13 +115,26 @@ def verify(source: Path) -> dict:
     return manifest
 
 
+def _copy_atomic(src: Path, dest: Path) -> None:
+    """copy2 to a temp file next to `dest`, then rename: `dest` is the old file or the whole copy, with the copy's exact
+    bytes, mode and time. Not write_text_atomic: these files are restored as bytes, and it would keep the live file's mode."""
+    tmp = dest.with_name(f".{dest.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        shutil.copy2(src, tmp)
+        with tmp.open("rb") as handle:
+            os.fsync(handle.fileno())
+        os.replace(tmp, dest)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def restore(source: Path, root: Path = ROOT) -> list[str]:
     """Copy every backed-up file back under `root`; a file the backup lacked (it did not exist) is removed."""
     manifest = verify(source)
     for rel in manifest["files"]:
         dest = root / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source / rel, dest)
+        _copy_atomic(source / rel, dest)
     for rel in manifest["absent"]:
         (root / rel).unlink(missing_ok=True)
     return sorted(manifest["files"])

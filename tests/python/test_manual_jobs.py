@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 import manual_jobs
+from conftest import fail_replacing
 from scorer import score_jobs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -441,3 +442,21 @@ def test_a_failed_merge_keeps_the_previous_scored_file_and_leaves_no_temp_file(t
     assert any(name.endswith(".tmp") for name in on_disk_at_failure)  # it failed with the temp file there
     assert path.read_text(encoding="utf-8") == before
     assert [p.name for p in tmp_path.iterdir()] == ["scored_jobs.json"]
+
+
+def test_a_failed_url_import_keeps_the_previous_discovered_file_and_leaves_no_temp_file(tmp_path, monkeypatch):
+    jobs = tmp_path / "jobs"
+    jobs.mkdir()
+    discovered = jobs / "discovered_jobs.json"
+    discovered.write_text('{"meta": {}, "jobs": []}', encoding="utf-8")
+    monkeypatch.setattr(importer.claude_code, "is_available", lambda: False)
+    monkeypatch.setattr(importer, "extract_job", lambda url, use_llm: (_discovered("url-1", url), ""))
+    temps = fail_replacing(monkeypatch, discovered)
+
+    with pytest.raises(OSError, match="disk full"):
+        importer.main(["--url", "https://acme.example/a", "--discovered", str(discovered), "--scored", str(jobs / "scored_jobs.json"),
+                       "--manual", str(jobs / "manual_jobs.json"), "--intelligence", str(tmp_path / "none.json")])
+
+    assert temps and temps[0].endswith(".tmp")
+    assert discovered.read_text(encoding="utf-8") == '{"meta": {}, "jobs": []}'
+    assert [p.name for p in jobs.iterdir()] == ["discovered_jobs.json"]

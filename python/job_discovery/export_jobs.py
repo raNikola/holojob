@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+
+# Loaded by path, as run_discovery loads the ledger: job_scoring on sys.path would let its modules shadow this package's.
+_atomic_spec = importlib.util.spec_from_file_location(
+    "_export_atomic_write", Path(__file__).resolve().parents[1] / "job_scoring" / "atomic_write.py"
+)
+_atomic_module = importlib.util.module_from_spec(_atomic_spec)
+_atomic_spec.loader.exec_module(_atomic_module)
+write_text_atomic = _atomic_module.write_text_atomic
 
 
 def _jobs_dir(root: Path) -> Path:
@@ -26,7 +35,7 @@ def export_raw_csv(df: pd.DataFrame, root: Path) -> Path:
 
 def export_normalized_json(jobs: list[dict], root: Path) -> Path:
     out = _jobs_dir(root) / "normalized_jobs.json"
-    out.write_text(json.dumps(jobs, indent=2), encoding="utf-8")
+    write_text_atomic(out, json.dumps(jobs, indent=2))
     return out
 
 
@@ -66,5 +75,5 @@ def export_discovered_json(
         "jobs": jobs,
     }
     out = _jobs_dir(root) / "discovered_jobs.json"
-    out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    write_text_atomic(out, json.dumps(payload, indent=2))
     return out

@@ -378,7 +378,7 @@ def main(argv=None) -> int:
         discovered["jobs"] = list(by_id.values())
         discovered.setdefault("meta", {})["lastUrlImportAt"] = datetime.now(timezone.utc).isoformat()
         args.discovered.parent.mkdir(parents=True, exist_ok=True)
-        args.discovered.write_text(json.dumps(discovered, indent=2), encoding="utf-8")
+        write_text_atomic(args.discovered, json.dumps(discovered, indent=2))
 
         # Score only the new jobs and merge into scored_jobs.json (preserves tailoredAssets)
         if args.intelligence.exists():

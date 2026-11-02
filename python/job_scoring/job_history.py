@@ -27,6 +27,13 @@ _fingerprint_module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_fingerprint_module)
 job_fingerprint = _fingerprint_module.job_fingerprint
 
+_atomic_spec = importlib.util.spec_from_file_location(
+    "_ledger_atomic_write", Path(__file__).with_name("atomic_write.py")
+)
+_atomic_module = importlib.util.module_from_spec(_atomic_spec)
+_atomic_spec.loader.exec_module(_atomic_module)
+write_text_atomic = _atomic_module.write_text_atomic
+
 LEDGER_FILE = "job_history.json"
 
 # Providers whose API returns every open posting of a board, so a job that is
@@ -91,9 +98,7 @@ def load(path: Path) -> dict:
 def save(path: Path, ledger: dict) -> None:
     ledger["updatedAt"] = now_iso()
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(ledger, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    write_text_atomic(path, json.dumps(ledger, indent=2))
 
 
 def _snapshot(job: dict) -> dict:

@@ -1,10 +1,13 @@
 """Backup, restore and the old-ids snapshot, on a fictional tree in tmp (never the live files)."""
 
 import json
+import os
+import stat
 import subprocess
 
 import pytest
 
+from conftest import fail_replacing
 from match_engine import competency_backup as cb
 from requirement_frames import frame_key
 from requirement_ids import provisional_id
@@ -82,6 +85,40 @@ def test_restore_puts_every_file_back_and_removes_what_the_run_created(tree):
     restored = cb.restore(target, tree)
     assert "data/jobs/discovered_jobs.json" in restored
     assert snapshot(tree) == before
+
+
+def test_a_failed_restore_keeps_the_live_file_and_the_backup_and_leaves_no_temp_file(tree, monkeypatch):
+    target = cb.backup(tree, "t1")
+    live = tree / "data/jobs/discovered_jobs.json"
+    live.write_text("changed")
+    backup_before = {p: p.read_bytes() for p in target.rglob("*") if p.is_file()}
+    temps = fail_replacing(monkeypatch, live)
+
+    with pytest.raises(OSError, match="disk full"):
+        cb.restore(target, tree)
+
+    assert temps and temps[0].endswith(".tmp")
+    assert live.read_text() == "changed"
+    assert [p.name for p in live.parent.iterdir() if p.name.endswith(".tmp")] == []
+    assert {p: p.read_bytes() for p in target.rglob("*") if p.is_file()} == backup_before
+    assert cb.verify(target)
+
+
+def test_restore_gives_back_the_exact_bytes_mode_and_time_of_the_backup(tree):
+    live = tree / "data/profile/confirmed-facts.json"  # not the jobs file: backup() parses that one
+    raw = b'{"jobs": []}\r\n\xff not utf-8'
+    live.write_bytes(raw)
+    live.chmod(0o640)
+    os.utime(live, (1_000_000_000, 1_000_000_000))
+    target = cb.backup(tree, "t1")
+    live.write_text("changed")
+    live.chmod(0o600)
+
+    cb.restore(target, tree)
+
+    assert live.read_bytes() == raw
+    assert stat.S_IMODE(live.stat().st_mode) == 0o640
+    assert live.stat().st_mtime == 1_000_000_000
 
 
 def test_restore_refuses_a_damaged_backup_and_changes_nothing(tree):

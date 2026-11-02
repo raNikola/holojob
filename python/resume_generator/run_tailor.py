@@ -14,7 +14,11 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+# Appended: job_scoring has a text_utils of its own, which must not shadow this folder's.
+if str(ROOT / "python" / "job_scoring") not in sys.path:
+    sys.path.append(str(ROOT / "python" / "job_scoring"))
 
+from atomic_write import write_text_atomic  # noqa: E402
 from cover_letter_generator import BANNED_PHRASES, build_cover_letter_context, lint_cover_letter  # noqa: E402
 from llm_tailor import generate_llm_content, load_project_intelligence  # noqa: E402
 from pdf_renderer import render_single_page_pdf  # noqa: E402
@@ -282,7 +286,7 @@ def main() -> int:
         print(f"Tailored [{engine}]: {updated.get('title')} @ {updated.get('company')} -> data/resumes/{updated['jobId']}/")
 
     scored_doc["jobs"] = list(by_id.values())
-    args.scored.write_text(json.dumps(scored_doc, indent=2), encoding="utf-8")
+    write_text_atomic(args.scored, json.dumps(scored_doc, indent=2))
     return 0
 
 
