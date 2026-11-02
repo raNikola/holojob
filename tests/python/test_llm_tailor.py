@@ -549,12 +549,19 @@ def test_a_malformed_draft_does_not_stop_a_bulk_run_or_lose_other_jobs(allowed, 
     assert any("skills must be a list" in issue for issue in saved["job-2"]["llmIssues"])
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG: `bullets` as a string passes _validate and the template loops over it, so the "
-                                       "CV is written with one letter per bullet and marked as accepted")
 def test_bullets_given_as_a_string_are_not_written_one_letter_per_line(allowed, tmp_path):
     allowed.reply = json.dumps(good_output(experience=[{"company": COMPANY, "bullets": "One long line"}]))
-    _, written = tailor(tmp_path)
+    assets, written = tailor(tmp_path)
     assert "- O\n" not in written["tailored_resume.md"]
+    assert assets["contentEngine"] == "rule-based"
+    assert any("must be a list" in issue for issue in assets["llmIssues"])
+
+
+@pytest.mark.parametrize("bullets", [5, {"a": "b"}, True], ids=["number", "object", "boolean"])
+def test_bullets_of_any_other_non_list_shape_are_rejected_with_the_reason(allowed, bullets):
+    allowed.reply = json.dumps(good_output(experience=[{"company": COMPANY, "bullets": bullets}]))
+    data, err = generate()
+    assert data is None and "must be a list" in err
 
 
 # --- the budget gate -----------------------------------------------------------------------------

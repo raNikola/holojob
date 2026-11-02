@@ -124,7 +124,9 @@ def _validate(data: dict, parsed: dict) -> list[str]:
         bullets = entry.get("bullets")
         if not bullets:
             issues.append(f"empty bullets for {company}")
-        elif isinstance(bullets, list) and not all(isinstance(b, str) for b in bullets):
+        elif not isinstance(bullets, list):
+            issues.append(f"bullets for {company} must be a list")
+        elif not all(isinstance(b, str) for b in bullets):
             issues.append(f"bullets for {company} must be text")
     for entry in _entries(data, "skills", issues):
         items = entry.get("skills")
