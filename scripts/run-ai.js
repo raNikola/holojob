@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE } from './atomic-file.js'
 import { buildMessages, parseAiResponse } from '../src/modules/ai/aiPromptLibrary.js'
 import { getProvider, PROVIDER_NAMES, KEYLESS_PROVIDERS, checkProviderHealth, listProviderModels } from '../src/modules/ai/aiProviderRegistry.js'
 import { initSseResponse, sseWrite } from './stream-spawn.js'
@@ -24,7 +25,7 @@ function outputDir(folder) {
 }
 
 function ensureDir(dir) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE })
 }
 
 function sanitizeKey(key) {
@@ -35,7 +36,7 @@ export function writeInterviewPrep(jobId, data) {
   const dir = path.join(outputDir('interviews'), path.basename(jobId))
   ensureDir(dir)
   const filePath = path.join(dir, 'interview_prep.json')
-  fs.writeFileSync(filePath, JSON.stringify({ ...data, generatedAt: new Date().toISOString() }, null, 2))
+  fs.writeFileSync(filePath, JSON.stringify({ ...data, generatedAt: new Date().toISOString() }, null, 2), { mode: PRIVATE_FILE_MODE })
   return filePath
 }
 
@@ -55,7 +56,7 @@ export function writeCoverLetter(jobId, variants) {
     variants.aggressive || '',
   ].join('\n')
   const filePath = path.join(dir, 'ai_cover_letter.md')
-  fs.writeFileSync(filePath, content)
+  fs.writeFileSync(filePath, content, { mode: PRIVATE_FILE_MODE })
   return filePath
 }
 
@@ -63,7 +64,7 @@ export function writeSkillGap(data) {
   const dir = outputDir('analytics')
   ensureDir(dir)
   const filePath = path.join(dir, 'skill_gap.json')
-  fs.writeFileSync(filePath, JSON.stringify({ ...data, generatedAt: new Date().toISOString() }, null, 2))
+  fs.writeFileSync(filePath, JSON.stringify({ ...data, generatedAt: new Date().toISOString() }, null, 2), { mode: PRIVATE_FILE_MODE })
   return filePath
 }
 

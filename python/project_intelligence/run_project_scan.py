@@ -24,8 +24,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python" / "llm"))
+sys.path.append(str(ROOT / "python" / "job_scoring"))
 
 import claude_code  # noqa: E402
+from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic  # noqa: E402
 
 PROFILE_PATH = ROOT / "data/profile/candidate-profile.json"
 INTELLIGENCE_PATH = ROOT / "data/intelligence/candidate-intelligence.json"
@@ -181,7 +183,7 @@ def merge_into_intelligence(agg: dict) -> bool:
     intel["resumeKeywords"] = extend_unique(intel.get("resumeKeywords") or [], skill_names)
 
     intel.setdefault("meta", {})["projectScanAt"] = datetime.now(timezone.utc).isoformat()
-    INTELLIGENCE_PATH.write_text(json.dumps(intel, indent=2), encoding="utf-8")
+    write_text_atomic(INTELLIGENCE_PATH, json.dumps(intel, indent=2), new_file_mode=PRIVATE_FILE_MODE)
     return True
 
 
@@ -237,8 +239,8 @@ def main() -> int:
         "projects": projects,
         "aggregate": agg,
     }
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+    make_private_dirs(OUTPUT_PATH.parent)
+    write_text_atomic(OUTPUT_PATH, json.dumps(doc, indent=2), new_file_mode=PRIVATE_FILE_MODE)
     merged = merge_into_intelligence(agg)
     print(f"Scanned {len(projects)} project(s) -> {OUTPUT_PATH.relative_to(ROOT)}"
           f"{' (intelligence merged)' if merged else ''}")

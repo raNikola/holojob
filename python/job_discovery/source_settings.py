@@ -24,6 +24,7 @@ at the bottom (scripts/sources-handler.js), discovery reads it (run_discovery.py
 from __future__ import annotations
 
 import fcntl
+import importlib.util
 import json
 import os
 import sys
@@ -38,6 +39,12 @@ if str(Path(__file__).resolve().parent) not in sys.path:  # run as a script by t
 from source_definitions import PROVIDER_GROUPS, SOURCE_DEFINITIONS, STANDARD_GROUP, opt_in_names  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# Loaded by path, as export_jobs does: job_scoring on sys.path would let its modules shadow this package's.
+_atomic_spec = importlib.util.spec_from_file_location("_sources_atomic_write", ROOT / "python" / "job_scoring" / "atomic_write.py")
+_atomic_module = importlib.util.module_from_spec(_atomic_spec)
+_atomic_spec.loader.exec_module(_atomic_module)
+
 VERSION = 1
 HISTORY_LIMIT = 50
 LEGACY_BROWSER_KEY = "job-dashboard-discovery-options"
@@ -104,8 +111,9 @@ def effective_providers(spec: str | None, resolved: list[str], data: dict | None
 @contextmanager
 def _locked():
     path = sources_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path.with_name(f".{path.name}.lock"), "a") as handle:
+    _atomic_module.make_private_dirs(path.parent)
+    private = lambda name, flags: os.open(name, flags, _atomic_module.PRIVATE_FILE_MODE)
+    with open(path.with_name(f".{path.name}.lock"), "a", opener=private) as handle:
         fcntl.flock(handle, fcntl.LOCK_EX)
         try:
             yield

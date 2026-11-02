@@ -11,6 +11,9 @@ import { importBackupZip } from '../../scripts/backup-handler.js'
 import { saveCvFile } from '../../scripts/cv-store.js'
 import { resetProfileOnDisk } from '../../scripts/profile-reset.js'
 import { PROFILE_PATH, saveProfileToDisk } from '../../scripts/save-profile.js'
+import { writeCoverLetter, writeInterviewPrep, writeSkillGap } from '../../scripts/run-ai.js'
+import { writeContactsFile } from '../../scripts/run-outreach.js'
+import { INTELLIGENCE_PATH, saveIntelligenceToDisk, writeIntelligenceFile } from '../../scripts/save-intelligence.js'
 
 const require = createRequire(import.meta.url)
 const AdmZip = require('adm-zip')
@@ -148,6 +151,76 @@ describe('profile mirror', () => {
   })
 })
 
+describe('saved AI answers', () => {
+  const writers = [
+    ['interview prep', () => writeInterviewPrep('job-1', { answer: 'x' }), 'interviews/job-1/interview_prep.json'],
+    ['cover letter', () => writeCoverLetter('job-1', { short: 'x' }), 'resumes/job-1/ai_cover_letter.md'],
+    ['skill gap', () => writeSkillGap({ answer: 'x' }), 'analytics/skill_gap.json'],
+  ]
+
+  beforeEach(() => vi.stubEnv('HOLOJOB_AI_OUTPUT_DIR', root))
+  afterEach(() => vi.unstubAllEnvs())
+
+  it.each(writers)('a new %s is 600 in new 700 folders', (_label, write, rel) => {
+    expect(write()).toBe(abs(rel))
+    expect(modeOf(rel)).toBe(0o600)
+    expect(modeOf(path.dirname(rel))).toBe(0o700)
+  })
+
+  it.each(writers)('rewriting a %s keeps the file and folder modes', (_label, write, rel) => {
+    put(rel, 'old', 0o640)
+    fs.chmodSync(abs(path.dirname(rel)), 0o755)
+    write()
+    expect(modeOf(rel)).toBe(0o640)
+    expect(modeOf(path.dirname(rel))).toBe(0o755)
+    expect(fs.readFileSync(abs(rel), 'utf-8')).not.toBe('old')
+  })
+})
+
+describe('outreach contacts', () => {
+  it('are 600 in new 700 folders', () => {
+    const file = writeContactsFile('job-1', { contacts: [] }, abs('outreach'))
+    expect(file).toBe(abs('outreach/job-1/contacts.json'))
+    expect(modeOf('outreach/job-1/contacts.json')).toBe(0o600)
+    expect(modeOf('outreach/job-1')).toBe(0o700)
+    expect(modeOf('outreach')).toBe(0o700)
+  })
+
+  it('keep the modes of an existing file and folder', () => {
+    put('outreach/job-1/contacts.json', 'old', 0o644)
+    fs.chmodSync(abs('outreach/job-1'), 0o755)
+    writeContactsFile('job-1', { contacts: ['x'] }, abs('outreach'))
+    expect(modeOf('outreach/job-1/contacts.json')).toBe(0o644)
+    expect(modeOf('outreach/job-1')).toBe(0o755)
+    expect(JSON.parse(fs.readFileSync(abs('outreach/job-1/contacts.json'), 'utf-8'))).toEqual({ contacts: ['x'] })
+  })
+})
+
+describe('candidate intelligence', () => {
+  it('is 600 in a new 700 folder', () => {
+    writeIntelligenceFile({ meta: {} }, abs('intelligence/candidate-intelligence.json'))
+    expect(modeOf('intelligence/candidate-intelligence.json')).toBe(0o600)
+    expect(modeOf('intelligence')).toBe(0o700)
+  })
+
+  it('keeps the modes of an existing file and folder', () => {
+    put('intelligence/candidate-intelligence.json', 'old', 0o640)
+    fs.chmodSync(abs('intelligence'), 0o755)
+    writeIntelligenceFile({ meta: {} }, abs('intelligence/candidate-intelligence.json'))
+    expect(modeOf('intelligence/candidate-intelligence.json')).toBe(0o640)
+    expect(modeOf('intelligence')).toBe(0o755)
+  })
+
+  it('the route saves through the same modes', () => {
+    // The path is fixed under the repo, so the writes are intercepted and never reach the real file.
+    const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {})
+    const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+    saveIntelligenceToDisk({ meta: {} })
+    expect(mkdir).toHaveBeenCalledWith(path.dirname(INTELLIGENCE_PATH), { recursive: true, mode: 0o700 })
+    expect(write).toHaveBeenCalledWith(INTELLIGENCE_PATH, expect.any(String), { encoding: 'utf-8', mode: 0o600 })
+  })
+})
+
 describe('backup restore', () => {
   const zipOf = (entries) => {
     const zip = new AdmZip()
@@ -155,7 +228,11 @@ describe('backup restore', () => {
     return zip.toBuffer()
   }
 
-  it.each(['data/profile/cvs/a.pdf', 'data/config/sources.json', 'data/ai/findings/job/a.json', 'data/backups/x/a.json', 'data/profile.bak-1/a.json'])(
+  it.each([
+    'data/profile/cvs/a.pdf', 'data/config/sources.json', 'data/ai/findings/job/a.json', 'data/ai/usage-ledger.jsonl', 'data/backups/x/a.json',
+    'data/profile.bak-1/a.json', 'data/intelligence/a.json', 'data/outreach/job-1/contacts.json', 'data/interviews/job-1/a.json',
+    'data/analytics/a.json', 'data/resumes/job-1/a.pdf',
+  ])(
     'restores a new %s as 600 in new 700 folders', async (name) => {
       await importBackupZip(root, zipOf({ [name]: 'x' }))
       expect(modeOf(name)).toBe(0o600)

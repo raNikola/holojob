@@ -307,13 +307,18 @@ def _now(now: datetime | None) -> datetime:
     return (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
 
 
+def _private_opener(path, flags):
+    """For open(): a file this creates is 600; an existing file keeps its mode."""
+    return os.open(path, flags, _atomic_module.PRIVATE_FILE_MODE)
+
+
 @contextmanager
 def _locked():
     """One writer at a time across threads and processes (Python and the Node server's CLI calls)."""
     directory = ai_dir()
-    directory.mkdir(parents=True, exist_ok=True)
+    _atomic_module.make_private_dirs(directory)
     with _thread_lock:
-        with open(directory / ".ledger.lock", "a") as handle:
+        with open(directory / ".ledger.lock", "a", opener=_private_opener) as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             try:
                 yield
@@ -324,7 +329,7 @@ def _locked():
 def _append(row: dict) -> None:
     """Append one line; the ledger is never rewritten or truncated. A resolved API key is masked first (secret_store)."""
     row = {k: secret_store.mask(v) if isinstance(v, str) else v for k, v in row.items()}
-    with open(ledger_path(), "a", encoding="utf-8") as handle:
+    with open(ledger_path(), "a", encoding="utf-8", opener=_private_opener) as handle:
         handle.write(json.dumps(row, ensure_ascii=False) + "\n")
         handle.flush()
         os.fsync(handle.fileno())

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+
+from atomic_write import PRIVATE_FILE_MODE, make_private_dirs
 
 
 def render_resume_docx(ctx: dict, output_path: Path) -> bool:
@@ -69,6 +72,9 @@ def render_resume_docx(ctx: dict, output_path: Path) -> bool:
         doc.add_heading("Languages", level=1)
         doc.add_paragraph(ctx["languages_text"])
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    make_private_dirs(output_path.parent)
+    existed = output_path.exists()
     doc.save(str(output_path))
+    if not existed:
+        os.chmod(output_path, PRIVATE_FILE_MODE)  # python-docx writes the file itself; rewriting one keeps its mode
     return True

@@ -18,7 +18,7 @@ if str(SCRIPT_DIR) not in sys.path:
 if str(ROOT / "python" / "job_scoring") not in sys.path:
     sys.path.append(str(ROOT / "python" / "job_scoring"))
 
-from atomic_write import write_text_atomic  # noqa: E402
+from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic  # noqa: E402
 from cover_letter_generator import BANNED_PHRASES, build_cover_letter_context, lint_cover_letter  # noqa: E402
 from llm_tailor import generate_llm_content, load_project_intelligence  # noqa: E402
 from pdf_renderer import render_single_page_pdf  # noqa: E402
@@ -137,7 +137,7 @@ def _apply_llm_content(ctx: dict, llm: dict, intelligence: dict) -> dict:
 def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = True) -> dict:
     job_id = job.get("jobId") or "unknown"
     out_dir = RESUMES_ROOT / job_id
-    out_dir.mkdir(parents=True, exist_ok=True)
+    make_private_dirs(out_dir)
 
     ctx = build_resume_context(profile, intelligence, job)
     # Gaps in the profile that the CV cannot cover without inventing something.
@@ -204,13 +204,14 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     docx_path = out_dir / f"{name_slug}_{company_slug}_{role_slug}_Resume.docx"
     json_resume_path = out_dir / f"{name_slug}_{company_slug}_{role_slug}_Resume.json"
 
-    md_path.write_text(md, encoding="utf-8")
-    html_path.write_text(html, encoding="utf-8")
-    cover_path.write_text(cover_md, encoding="utf-8")
+    write_text_atomic(md_path, md, new_file_mode=PRIVATE_FILE_MODE)
+    write_text_atomic(html_path, html, new_file_mode=PRIVATE_FILE_MODE)
+    write_text_atomic(cover_path, cover_md, new_file_mode=PRIVATE_FILE_MODE)
     docx_ok = render_resume_docx(ctx, docx_path)
-    json_resume_path.write_text(
+    write_text_atomic(
+        json_resume_path,
         json.dumps(build_json_resume(profile, intelligence, ctx), indent=2),
-        encoding="utf-8",
+        new_file_mode=PRIVATE_FILE_MODE,
     )
     # Purge stale PDFs (legacy name or spec names from outdated company/title slugs)
     (out_dir / "tailored_resume.pdf").unlink(missing_ok=True)

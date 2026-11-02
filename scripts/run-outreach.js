@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE } from './atomic-file.js'
 import { discoverContactsForJob } from '../src/modules/outreach/recruiterDiscovery.js'
 import { scrapeLinkedInContacts, resolveLiAt } from './linkedin-scraper-bridge.js'
 import { maskSecrets } from './secret-mask.js'
@@ -17,8 +18,13 @@ const ROOT = path.resolve(__dirname, '..')
 const OUTREACH_ROOT = path.join(ROOT, 'data/outreach')
 const JOBS_PATH = path.join(ROOT, 'data/jobs/scored_jobs.json')
 
-function ensureDir(dir) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+/** Save a job's contacts (names, recruiter links). The modes apply only when the file or folder is created. */
+export function writeContactsFile(jobId, data, root = OUTREACH_ROOT) {
+  const dir = path.join(root, path.basename(jobId || 'unknown'))
+  fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE })
+  const contactsPath = path.join(dir, 'contacts.json')
+  fs.writeFileSync(contactsPath, JSON.stringify(data, null, 2), { mode: PRIVATE_FILE_MODE })
+  return contactsPath
 }
 
 async function fetchPublicPage(url) {
@@ -89,14 +95,11 @@ export async function runOutreachDiscover({ job, fetchPages = true, deep = false
     discovery.metadata.linkedinScrape = { error: maskSecrets(e.message) }
   }
 
-  const dir = path.join(OUTREACH_ROOT, path.basename(job.jobId || 'unknown'))
-  ensureDir(dir)
-  const contactsPath = path.join(dir, 'contacts.json')
-  fs.writeFileSync(contactsPath, JSON.stringify({
+  const contactsPath = writeContactsFile(job.jobId, {
     jobId: job.jobId,
     discoveredAt: new Date().toISOString(),
     ...discovery,
-  }, null, 2))
+  })
 
   return { ok: true, ...discovery, diskPath: contactsPath }
 }
