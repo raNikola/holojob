@@ -41,5 +41,5 @@ rest have no provider in this repo.
 ## Validate after editing
 
 ```bash
-npm run validate:companies
+podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run validate:companies
 ```

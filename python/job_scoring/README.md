@@ -5,11 +5,10 @@ Deterministic job scoring against `candidate-intelligence.json`.
 ## Run
 
 ```bash
-source .venv/bin/activate
-python python/job_scoring/run_scoring.py
+podman exec career-os python python/job_scoring/run_scoring.py
 ```
 
-or `npm run score:jobs`. The opt-in fit judgement (`--judge`) sends data to the configured provider; see [CLAUDE.md](../../CLAUDE.md) for its privacy rules.
+or `podman exec career-os npm run score:jobs`. The opt-in fit judgement (`--judge`) sends data to the configured provider; see [CLAUDE.md](../../CLAUDE.md) for its privacy rules.
 
 ## Input / output
 

@@ -39,10 +39,10 @@ Written to `data/audits/`:
 
 ```bash
 # Full audit (all scored jobs)
-npm run audit:quality
+podman exec career-os npm run audit:quality
 
 # Sample mode — top 5 P1/Apply jobs for current candidate
-python python/quality_audit/run_audit.py --sample-me
+podman exec career-os python python/quality_audit/run_audit.py --sample-me
 ```
 
 ## Safety rules

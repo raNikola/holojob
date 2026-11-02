@@ -1,8 +1,15 @@
 # Holojob - Application tracker plan (Phase 3, A2)
 
-Status: PLAN, REVISED 2026-10-29 for ApplyPack v1 alignment and APPROVED by the owner the same day: decision 13
-and O1-O4 decided, O5-O6 deferred (section 9). Decision 5 (fixed stage enum) is superseded there. No code, no `data/`
-change.
+Status: APPROVED and PARTLY BUILT. The plan was revised 2026-10-29 for ApplyPack v1 alignment and approved by the owner
+the same day: decision 13 and O1-O4 decided, O5-O6 deferred (section 9). Decision 5 (fixed stage enum) is superseded there.
+
+- **Built:** S1 store and stages, S2 migration (2.4), the first slice of S3 (2.5), and the board and Settings columns,
+  which are the first parts of S4 and S5 (2.6).
+- **Not built:** posting snapshot view, Closed panel, "Show voided", removal of the legacy `applicationTracking` field
+  (S4), follow-up nudges and the reminders switch's UI (S5), CSV import (S6).
+
+Everything else below is the plan as approved; where it differs from an "As built" note, the note describes the code. The
+current status is kept in [../ROADMAP.md](../ROADMAP.md) Phase 3.
 
 Inputs: [DECISIONS.md](DECISIONS.md) principles 13 and 15, [PHASE0_AUDIT.md](PHASE0_AUDIT.md) module F and question 5,
 [data-shapes.md](data-shapes.md), [../ROADMAP.md](../ROADMAP.md) Phase 3, the current code listed in section 0, the
@@ -678,7 +685,21 @@ Deviations and limits of this part:
 The legacy field is deleted from the job records in S4, after `migration.json` shows `unmappable: 0` and the dry run
 shows `toCreate: 0` and `legacyChanged: 0`.
 
-## 3. API and UI surface
+### 2.5 As built in S3, first slice (2026-10-29)
+
+Job Details gained the CV and the history; the rest of S3 is still open.
+- **CV picker** (`CvPicker`, `cvOptions`, `defaultCvOption` in `trackerController.js`): tailored for this job (bare name of
+  `job.tailoredAssets.resumePdf`), each library CV that has a stored file (16-hex id and `filePath`), "a CV outside the
+  app" (kind `external`, typed name) and "Not recorded yet" (`unknown`). Preselect: tailored, else the default library CV,
+  else not recorded. A library CV with no stored file is not offered, because the store freezes a copy and refuses what
+  it cannot read.
+- **CV used on a tracked application:** a link to the frozen copy (`GET /api/applications/:id/files/:name`, which already
+  served only names recorded on the application; no server change), "Record the CV" when none, "Correct the CV" with a
+  reason otherwise (`cv_recorded`), earlier copies listed. The correction picker has no "tailored" option yet.
+- **History:** a read-only list of every event, newest first (`ApplicationTimeline`).
+- **Not in this slice:** snapshot view, several contacts, a full attempt switcher, cover letter attach, the 409 dialog
+  beyond the existing button, component tests (tests cover the controller and the routes). Not run in a browser.
+- **AI context:** unchanged; `safeTracking` already passes stage and dates only. `tests/js/trackerCv.test.js` asserts it.
 
 ### 2.6 As built: Jobs filter, Board and Statistics, Settings columns (2026-10-29)
 
@@ -707,21 +728,7 @@ It pulls the first parts of S4 (board) and S5 (Settings) forward; the legacy rem
   nudges, CSV, component tests (the tests cover the pure modules and the routes through the client).
 - **Tests:** `appliedFilter.test.js`, `applicationBoard.test.js`, `applicationSettings.test.js`, `stageRegistry.test.js` (`reorderDecision`).
 
-### 2.5 As built in S3, first slice (2026-10-29)
-
-Job Details gained the CV and the history; the rest of S3 is still open.
-- **CV picker** (`CvPicker`, `cvOptions`, `defaultCvOption` in `trackerController.js`): tailored for this job (bare name of
-  `job.tailoredAssets.resumePdf`), each library CV that has a stored file (16-hex id and `filePath`), "a CV outside the
-  app" (kind `external`, typed name) and "Not recorded yet" (`unknown`). Preselect: tailored, else the default library CV,
-  else not recorded. A library CV with no stored file is not offered, because the store freezes a copy and refuses what
-  it cannot read.
-- **CV used on a tracked application:** a link to the frozen copy (`GET /api/applications/:id/files/:name`, which already
-  served only names recorded on the application; no server change), "Record the CV" when none, "Correct the CV" with a
-  reason otherwise (`cv_recorded`), earlier copies listed. The correction picker has no "tailored" option yet.
-- **History:** a read-only list of every event, newest first (`ApplicationTimeline`).
-- **Not in this slice:** snapshot view, several contacts, a full attempt switcher, cover letter attach, the 409 dialog
-  beyond the existing button, component tests (tests cover the controller and the routes). Not run in a browser.
-- **AI context:** unchanged; `safeTracking` already passes stage and dates only. `tests/js/trackerCv.test.js` asserts it.
+## 3. API and UI surface
 
 ### 3.1 Server (`scripts/api-handler.js` → `scripts/application-store.js`)
 
@@ -1036,7 +1043,7 @@ The company *mute* of ApplyPack ADR 0056 is a separate feature and is not part o
 
 ## 6. Invariants and verification
 
-Every test is named, deterministic, offline and runs in the normal suite (`npm test`). The store tests use a temp
+Every test is named, deterministic, offline and runs in the normal suite (`podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run test:js` and `.venv/bin/python -m pytest tests/python -q`; `npm test` works on neither side on DS9). The store tests use a temp
 directory (`fs.mkdtempSync`), as `cvStore.test.js` does.
 
 ### 6a. An application exists independently of any posting in Discovery
@@ -1256,7 +1263,12 @@ Each scenario is a named test in the normal suite; "kind" says where it runs.
 
 ## 7. Tests and implementation sequence
 
-Each step ships alone, leaves the app working and passes `npm run lint`, `npm test` and `npm run build`.
+Each step ships alone, leaves the app working and passes these checks:
+
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run lint
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run test:js
+    podman run --rm --security-opt label=disable -v /srv/career-os:/work -w /work docker.io/library/node:20-bookworm npm run build
+    .venv/bin/python -m pytest tests/python -q
 
 Revised 2026-10-29. The owner's proposed boundaries (requirements section 12) are adopted. The old steps map
 onto them as below, and nothing of the old content is dropped:

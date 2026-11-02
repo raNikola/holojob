@@ -28,20 +28,16 @@ The Jobs screen reads `discovered_jobs.json` after scoring.
 
 ## Multi-provider discovery
 
-Setup (venv, requirements, Playwright):
-
-```bash
-npm run setup:jobs
-source .venv/bin/activate
-```
+Setup (venv, requirements, Playwright) is part of the image: `podman-compose build`. Bare `python` in the container is
+its venv.
 
 Run multi-provider discovery:
 
 ```bash
-python python/job_discovery/run_discovery.py --providers serbia
-python python/job_discovery/run_discovery.py --providers ats
-python python/job_discovery/run_discovery.py --providers all --country <country>
-python python/job_discovery/run_discovery.py --providers jobspy,greenhouse,lever
+podman exec career-os python python/job_discovery/run_discovery.py --providers serbia
+podman exec career-os python python/job_discovery/run_discovery.py --providers ats
+podman exec career-os python python/job_discovery/run_discovery.py --providers all --country <country>
+podman exec career-os python python/job_discovery/run_discovery.py --providers jobspy,greenhouse,lever
 ```
 
 The country comes from `--country`, else from `searchStrategy.country` or
@@ -63,9 +59,9 @@ Discovery is the gate, not the request: `run_discovery.py` drops an opt-in sourc
 A run that lists names only (`--providers jobspy`) gets just those names.
 
 ```bash
-python python/job_discovery/run_discovery.py --providers serbia    # plus Joberty when it is on
-python python/job_discovery/run_discovery.py --providers joberty   # Joberty alone, only when it is on
-python python/job_discovery/source_settings.py get                 # the switches, read-only
+podman exec career-os python python/job_discovery/run_discovery.py --providers serbia    # plus Joberty when it is on
+podman exec career-os python python/job_discovery/run_discovery.py --providers joberty   # Joberty alone, only when it is on
+podman exec career-os python python/job_discovery/source_settings.py get                 # the switches, read-only
 ```
 
 - **The API is undocumented** and can change without notice. The client fails soft: any error is logged and the source
