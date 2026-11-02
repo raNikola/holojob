@@ -25,7 +25,7 @@ import { searchCountry } from '../../utils/searchCountry'
 import { downloadJobsCsv, downloadJobsJson } from '../../modules/jobs/jobExport'
 import { usePipelineAutoRefresh } from '../../modules/jobs/usePipelineAutoRefresh'
 import { autoLoadJobs } from '../../modules/jobs/autoLoadJobs'
-import { derivePipelineStateFromHealth, loadPipelineState, updatePipelineState } from '../../modules/jobs/pipelineState'
+import { derivePipelineStateFromHealth, loadPipelineState, syncPipelineCounts, updatePipelineState } from '../../modules/jobs/pipelineState'
 import { overlayTracking } from '../../modules/applications/trackingView'
 import { useApplications } from '../../hooks/useApplications'
 import { useJobsSync } from '../../hooks/useJobs'
@@ -88,11 +88,18 @@ export default function JobDiscoveryScreen() {
       setPipelineApiAvailable(probe.available)
       if (probe.health) {
         setHealth(probe.health)
-        setPipelineState(updatePipelineState(derivePipelineStateFromHealth(probe.health, state.jobs)))
+        setPipelineState(updatePipelineState(derivePipelineStateFromHealth(probe.health, loadJobs().jobs)))
       }
     })
     return () => { cancelled = true }
   }, [])
+
+  // Auto-load and later imports replace the jobs after the probe has answered; counts taken from the jobs follow them.
+  useEffect(() => {
+    if (!health) return
+    const next = syncPipelineCounts(health, state.jobs)
+    if (next) setPipelineState(next)
+  }, [health, state.jobs])
 
   usePipelineAutoRefresh({
     enabled: pipelineApiAvailable,
