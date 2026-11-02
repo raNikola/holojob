@@ -7,12 +7,16 @@ import path from 'node:path'
 import { PassThrough } from 'node:stream'
 import { createRequire } from 'node:module'
 import { isStoreBackupEntry, mergeFromBackup } from './application-store.js'
-import { replaceFileAtomic } from './atomic-file.js'
+import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE, replaceFileAtomic } from './atomic-file.js'
 import { isSecretPath, safeRelativePath } from './secret-paths.js'
 
 const require = createRequire(import.meta.url)
 const { ZipArchive } = require('archiver')
 const AdmZip = require('adm-zip')
+
+// Restored files new to these folders are private; an existing file keeps its mode. Application entries go through
+// the store's own private writes. Same list: scripts/tighten-data-permissions.sh.
+const PRIVATE_RESTORE = /^data\/(profile|profile\.bak-[^/]+|ai\/findings|config|backups)\//
 
 const DATA_DIRS = ['profile', 'intelligence', 'jobs', 'resumes', 'outreach', 'audits', 'cache', 'applications']
 
@@ -93,8 +97,13 @@ export async function importBackupZip(root, zipBuffer, options = {}) {
     if (!dest.startsWith(dataRoot)) {
       throw new Error(`Backup refused: path leaves data/ (${name.slice(0, 80)})`)
     }
-    fs.mkdirSync(path.dirname(dest), { recursive: true })
-    replaceFileAtomic(dest, entry.getData())
+    if (PRIVATE_RESTORE.test(name)) {
+      fs.mkdirSync(path.dirname(dest), { recursive: true, mode: PRIVATE_DIR_MODE })
+      replaceFileAtomic(dest, entry.getData(), { mode: PRIVATE_FILE_MODE })
+    } else {
+      fs.mkdirSync(path.dirname(dest), { recursive: true })
+      replaceFileAtomic(dest, entry.getData())
+    }
     restored.push(name)
   }
 

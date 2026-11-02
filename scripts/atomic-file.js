@@ -7,17 +7,21 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
+/** Modes of new files and directories in the private data folders (no login, so nothing there is world-readable). */
+export const PRIVATE_FILE_MODE = 0o600
+export const PRIVATE_DIR_MODE = 0o700
+
 /**
  * Temp file next to the target, fsync, rename. On failure the target is untouched and the temp file is gone.
  *
  * An existing target keeps its permission bits, and the temp file has them before any byte is written, so a
- * 600 file's content is never readable by others. A new file gets the process default (umask). A symlink is
- * written through, not replaced. The parent directory must exist. The temp name does not include the file's
+ * 600 file's content is never readable by others. A new file gets options.mode, else the process default
+ * (umask); options.mode never changes an existing target. A symlink is written through, not replaced. The parent directory must exist. The temp name does not include the file's
  * name, so a name near the file system's length limit still works.
  */
-export function replaceFileAtomic(file, data) {
+export function replaceFileAtomic(file, data, { mode: newFileMode } = {}) {
   let target = file
-  let mode
+  let mode = newFileMode
   try {
     target = fs.realpathSync(file)
     mode = fs.statSync(target).mode & 0o777
@@ -47,5 +51,26 @@ export function replaceFileAtomic(file, data) {
     try { fs.fsyncSync(dirFd) } finally { fs.closeSync(dirFd) }
   } catch {
     // directory fsync is best effort (not supported everywhere)
+  }
+}
+
+/**
+ * Copy src to a new file with exactly `mode`, whatever src's mode is (fs.copyFileSync would carry src's over).
+ * An existing dest throws EEXIST and is left alone; a failed write leaves no dest.
+ */
+export function copyToNewFile(src, dest, mode) {
+  const data = fs.readFileSync(src)
+  let fd = fs.openSync(dest, 'wx', mode)
+  try {
+    fs.fchmodSync(fd, mode) // the open above is narrowed by the umask
+    fs.writeFileSync(fd, data)
+    fs.closeSync(fd)
+    fd = undefined
+  } catch (e) {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd) } catch { /* already failing */ }
+    }
+    fs.rmSync(dest, { force: true })
+    throw e
   }
 }

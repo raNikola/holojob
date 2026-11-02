@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeProfileFile } from './save-profile.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -83,7 +84,7 @@ export function runDiscovery(opts = {}) {
   }
 
   if (opts.profile) {
-    writeJson(PROFILE_PATH, opts.profile)
+    writeProfileFile(opts.profile)
   }
 
   const args = [RUN_DISCOVERY, '--providers', providers]
