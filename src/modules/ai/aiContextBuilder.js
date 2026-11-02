@@ -7,6 +7,7 @@ import { loadAiMemory } from './aiMemory.js'
 import { buildRedactionHints } from './redactionHints.js'
 import { getApplicationsState } from '../applications/applicationsClient.js'
 import { overlayTracking } from '../applications/trackingView.js'
+import { onListJobs } from '../jobs/jobFilters.js'
 
 function truncate(str, max = 4000) {
   if (!str) return ''
@@ -62,7 +63,7 @@ function summarizeJob(job) {
 }
 
 export function buildSkillGapContext() {
-  const jobs = loadJobs().jobs
+  const jobs = onListJobs(loadJobs().jobs)
     .filter((j) => typeof j.matchScore === 'number')
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, 100)
@@ -128,7 +129,7 @@ export function buildAiContext({ featureId, job, message, extra } = {}) {
   if (featureId === 'skillGap') base.skillGap = buildSkillGapContext()
   if (featureId === 'applicationStrategy') base.applications = buildApplicationContext()
   if (featureId === 'careerStrategy') {
-    base.topJobs = jobState.jobs
+    base.topJobs = onListJobs(jobState.jobs)
       .filter((j) => typeof j.matchScore === 'number' && isActionable(j))
       .sort((a, b) => b.matchScore - a.matchScore)
       .slice(0, 10)

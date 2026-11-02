@@ -63,6 +63,21 @@ export function isNoLongerListed(job) {
   return job?.isClosed === true
 }
 
+/**
+ * A stored row absent from current results: the last imported file lacks it, and it was kept only because it holds the
+ * owner's data (`importJobsFromFile`). Temporary protection until the Step 5 job-state overlay (docs/DECISIONS.md). Not an
+ * orphan, which is Step 5's record with no matching active discovery record, and says nothing about the ad being closed.
+ */
+export function isOffList(job) {
+  return job?.offList === true
+}
+
+/** The jobs current results hold: what counts, totals and lists use by default. */
+export const onListJobs = (jobs) => (jobs || []).filter((job) => !isOffList(job))
+
+/** The jobs the Jobs screen lists under `filters`, before the other filters apply. */
+export const listedJobs = (jobs, filters = {}) => (filters?.showOffList ? (jobs || []) : onListJobs(jobs))
+
 const lowerSet = (values) => new Set(values.map((v) => String(v).toLowerCase()))
 
 /**
@@ -79,6 +94,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     remoteOnly = false,
     hideNeedsVisa = false,
     hideNoLongerListed = false,
+    showOffList = false,
     status = '',
     matchLabel = '',
     priority = [],
@@ -94,6 +110,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
   const q = searchText.trim().toLowerCase()
 
   return (jobs || []).filter((job) => {
+    if (!showOffList && isOffList(job)) return false
     if (status === 'applied') {
       if (!appliedJobIds?.has(job.jobId)) return false
     } else if (status && job.status !== status) return false
@@ -183,6 +200,7 @@ export function activeFilterChips(filters = {}) {
     add('salary', `Salary: ${describeRange(from, to)}${hidesUnknown}`, SALARY_CLEARED)
   }
   if (filters.hideNoLongerListed) add('hideNoLongerListed', 'Hiding jobs no longer listed', { hideNoLongerListed: false })
+  if (filters.showOffList) add('showOffList', 'Showing jobs absent from current results', { showOffList: false })
   if (filters.hideNeedsVisa) add('hideNeedsVisa', 'Hiding jobs that need a visa', { hideNeedsVisa: false })
   return chips
 }
@@ -212,6 +230,7 @@ export const CLEAR_ALL_FILTERS = {
   remoteOnly: false,
   hideNeedsVisa: false,
   hideNoLongerListed: false,
+  showOffList: false,
   status: '',
   matchLabel: '',
   priority: [],
@@ -221,7 +240,7 @@ export const CLEAR_ALL_FILTERS = {
 }
 
 /** Filters inside "More filters" that are active, so the toggle can show a count. */
-export const MORE_FILTER_KEYS = ['provider', 'company', 'matchLabel', 'salary', 'hideNeedsVisa', 'hideNoLongerListed']
+export const MORE_FILTER_KEYS = ['provider', 'company', 'matchLabel', 'salary', 'hideNeedsVisa', 'hideNoLongerListed', 'showOffList']
 export function moreFiltersCount(chips) {
   return chips.filter((c) => MORE_FILTER_KEYS.includes(c.key)).length
 }

@@ -1,4 +1,5 @@
 import { getOutreachFollowUpDue } from './followUpEngine.js'
+import { onListJobs } from '../jobs/jobFilters.js'
 
 export function computeOutreachMetrics(jobs = []) {
   const metrics = {
@@ -13,7 +14,7 @@ export function computeOutreachMetrics(jobs = []) {
     replyRate: 0,
   }
 
-  for (const job of jobs) {
+  for (const job of onListJobs(jobs)) {
     const outreach = job.outreach
     if (!outreach || (outreach.contacts?.length === 0 && outreach.messages?.length === 0)) continue
 

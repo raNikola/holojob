@@ -290,7 +290,9 @@ describe('importJobsFromFile with manual jobs', () => {
 
   it('keeps a manual job the file lacks, and its notes and links', () => {
     const next = importJobsFromFile({ jobs: [{ jobId: 'd-2', title: 'New', jobUrl: 'https://jobs.example/2' }] }, loadJobs())
-    expect(next.jobs.map((j) => j.jobId)).toEqual(['d-2', ID])
+    // the fixture's discovered row has a saved status, so it stays too, out of current results
+    expect(next.jobs.filter((j) => !j.offList).map((j) => j.jobId)).toEqual(['d-2', ID])
+    expect(next.jobs.filter((j) => j.offList).map((j) => j.jobId)).toEqual(['d-1'])
     expect(next.jobs[1]).toMatchObject({ notes: NOTE, extraLinks: [{ url: LINK, label: LABEL }] })
   })
 
@@ -302,7 +304,7 @@ describe('importJobsFromFile with manual jobs', () => {
 
   it('shows one row when a discovery run finds the same posting under its own id', () => {
     const next = importJobsFromFile({ jobs: [{ jobId: 'd-9', title: 'Product Manager', jobUrl: 'https://ACME.example/jobs/9/' }] }, loadJobs())
-    expect(next.jobs.map((j) => j.jobId)).toEqual([ID])
+    expect(next.jobs.filter((j) => !j.offList).map((j) => j.jobId)).toEqual([ID])
     expect(next.jobs[0].notes).toBe(NOTE)
   })
 

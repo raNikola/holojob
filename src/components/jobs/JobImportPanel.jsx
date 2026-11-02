@@ -3,6 +3,7 @@ import { Upload } from 'lucide-react'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { importJobsFromFile } from '../../modules/jobs/jobStorage'
+import { onListJobs } from '../../modules/jobs/jobFilters'
 
 export default function JobImportPanel({ state, onImport }) {
   const inputRef = useRef(null)
@@ -54,7 +55,7 @@ export default function JobImportPanel({ state, onImport }) {
         </Button>
         {state.importedAt && (
           <p className="text-xs text-stone-500">
-            Last imported: {new Date(state.importedAt).toLocaleString()} ({state.jobs.length} jobs)
+            Last imported: {new Date(state.importedAt).toLocaleString()} ({onListJobs(state.jobs).length} jobs)
           </p>
         )}
       </div>

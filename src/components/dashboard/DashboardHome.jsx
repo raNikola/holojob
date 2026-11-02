@@ -6,7 +6,7 @@ import { useProfile } from '../../context/ProfileContext'
 import { validateProfileForIntelligence } from '../../modules/intelligence/intelligenceValidators'
 import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { loadJobs } from '../../modules/jobs/jobStorage'
-import { computeJobStats } from '../../modules/jobs/jobStats'
+import { computeJobStats, countTailoredResumes } from '../../modules/jobs/jobStats'
 import { computeOutreachMetrics } from '../../modules/outreach/outreachMetrics'
 import { probePipelineApi } from '../../modules/jobs/pipelineRunner'
 import { isApiAvailable } from '../../utils/apiAvailability'
@@ -23,7 +23,7 @@ export default function DashboardHome({ onNavigate }) {
   const outreachMetrics = useMemo(() => computeOutreachMetrics(jobState.jobs), [jobState.jobs])
 
   const resumeCount = useMemo(
-    () => jobState.jobs.filter((j) => j.tailoredAssets?.resumeMd || j.tailoredAssets?.resumePdf).length,
+    () => countTailoredResumes(jobState.jobs),
     [jobState.jobs],
   )
 
