@@ -88,32 +88,17 @@ skills or domain. GitHub Issues are disabled on this repo, so the work is tracke
 Each item gets a fixture-based regression test; the Phase 1 stability test must keep passing. Related: "Recalibrate
 `TARGET_COVERAGE` and fix the flat scoring dimensions" under Later.
 
-## Runs screen extension - planned
+## Activity screen - planned
 
-Extend the existing Runs screen (Search funnel, By source, Run history) instead of adding a new Jobs tab.
+A new screen named Activity, in the nav group System, built in this repo. Decisions and known gaps:
+[DECISIONS.md](DECISIONS.md#activity-screen-approved-2026-11-02).
 
-- Every manual Re-scrape and every scheduled fetch is one row with its start time. Paused fetches are not logged.
-- Each row has a Details dropdown: per-site stats (read, past filter, new, scored, closed / missing / expired) plus the errors
-  and warnings of that run, with their level. There is no separate issues list.
-- Retention 90 days, written per source, atomic, private modes (0600 files, 0700 folders), no AI.
-- Top-of-page statistics belong to Analytics (later).
-- The legacy "Search history" screen (openai gpt-4o-mini) looks dead: verify and note.
-
-**Code check 2026-11-02, the owner needs to clarify this first:**
-
-- No screen named Runs, Search funnel, By source or Run history is in `src`, `scripts` or `python`, on `main` or any other local
-  or remote branch. The closest in this repo is the Pipeline tab on the Jobs screen (`PipelineHealthPanel`,
-  `PipelineOrchestrator`, one file `data/jobs/pipeline_last_run.json`), which keeps the last run only.
-- "Search history" is not found either, so it could not be verified. `gpt-4o-mini` appears only in the price estimate
-  (`aiCostEstimator.js`) and as a fallback model name (`openrouterProvider.js`).
-- Re-scrape exists ("Re-scrape jobs"). Scheduled fetches do not ("Scheduled discovery" under Later), and neither does a paused state.
-- Closed, missing and expired depend on the [ad lifecycle rules](DECISIONS.md#ad-lifecycle-rules---decided-not-built), which
-  are not built.
-
-## Ad lifecycle rules - planned
-
-Build the rules in [DECISIONS.md](DECISIONS.md#ad-lifecycle-rules---decided-not-built); that entry lists what differs in the code
-today.
+| Slice | Content |
+|---|---|
+| 1 | Per-source outcome and run log, including a fix so a failed board cannot close its existing ads |
+| 2 | `GET /api/runs` read API, with 90-day pruning at write time |
+| 3 | The Activity screen: one row per run, Details with per-site stats plus errors and warnings with their level. Top-of-page statistics belong to Analytics (later) |
+| 4 | Ad lifecycle changes, last ([rules](DECISIONS.md#ad-lifecycle-rules-narrowed-2026-11-02)) |
 
 ## Import redesign - in progress
 
@@ -164,7 +149,6 @@ Known and left open on purpose. Checked against the code on 2026-11-02.
 
 - `chmod 600` the top-level files of `data/` (`competency-*`, `competencies-review.md`, `discovery-test.log`, `engine-snapshot.json`, `requirement-remap.json`). `scripts/tighten-data-permissions.sh` covers folders only, not these. Command: `find data -maxdepth 1 -type f -perm /077 -exec chmod 600 {} +`.
 - `chmod 700` the `audits`, `chat` and `data` folders. Already 700 on DS9 on 2026-11-02, with nothing inside `audits` or `chat` open to group or other; nothing is left to run.
-- Clean up the hourly "Fetching is paused" log noise. The text is not in this repo, nor in the last 24 hours of any running container's log or the user journal, so its source still has to be found.
 
 ## Later
 

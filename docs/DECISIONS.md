@@ -6,24 +6,47 @@ principles and the older owner decisions stay in [redesign/DECISIONS.md](redesig
 The date is the day the entry was recorded (2026-11-02), unless the entry names the day of the decision. "Code check" says
 what the code did on 2026-11-02. Where it differs from the decision, the entry says so and nothing has been changed yet.
 
-## Ad lifecycle rules - decided, not built
+## Activity screen (approved 2026-11-02)
+
+- **New screen:** named Activity, in the nav group System, built in career-os. No Runs screen exists here.
+- **Design reference only:** "Runs", "Search funnel", "By source", "Run history" and "Fetching is paused" come from ApplyPack, a
+  separate third-party app on the same server. No code is copied. "Fetching is paused" is ApplyPack's text, not career-os's, so
+  it is not a career-os task.
+- **Not ours:** the legacy "Search history" screen (openai gpt-4o-mini) belongs to the separate jobapply app.
+- **Slices, in order:** (1) per-source outcome and run log, including a fix so a failed board cannot close its existing ads;
+  (2) `GET /api/runs` read API with 90-day pruning at write time; (3) the Activity screen, one row per run, Details with per-site
+  stats plus errors and warnings with their level; (4) ad lifecycle changes, last.
+- **Run log:** one record per run, written by `python/job_discovery/run_discovery.py`, so a manual Re-scrape and a pipeline run
+  each log once.
+- **Storage:** `data/analytics/`, private (0600 files, 0700 folders), atomic through `write_text_atomic`.
+- **Trigger field:** allows `manual` and `scheduled`. No scheduler exists yet, so there are no paused rows.
+- **No AI.**
+
+**Known gaps, none of this exists yet:**
+
+- A miss counter, a last successful fetch per source, and per-source id snapshots.
+- The "read" count: it is lost today, because providers return only the jobs they keep.
+
+**Code check, the bug slice 1 fixes:** the Greenhouse, Lever and Ashby providers catch each board's exception, log it and go on.
+`run_discovery.py` counts jobs per provider, not per board, so one failed board among working ones can close that board's ads.
+
+## Ad lifecycle rules (narrowed 2026-11-02)
 
 - **Closed:** the source explicitly says the ad is closed.
 - **Missing:** absent in a successful fetch of the same source.
-- **Expired:** missing in two consecutive successful fetches of that source, or explicitly closed.
-- A failed fetch changes nothing. The comparison is always with the previous successful fetch of that source.
-- A source returning 0 ads is a warning, and never closes everything.
+- **Expired:** only Greenhouse, Lever and Ashby can reach it, after two consecutive successful and complete fetches of the same
+  board.
+- **Search-based sources** (LinkedIn / JobSpy, Infostud, Workable, Joberty) show Missing and never become Expired automatically.
+- **What is not a miss:** a failed or partial fetch, and a changed search.
+- **0 ads** is a warning and never closes everything.
+- **`expiresAt`** (Infostud, Joberty) is a deadline: displayed only, never used as Closed or Expired.
 
-**Code check, differs:** `python/job_scoring/job_history.py` has one state, `closedAt` / `isClosed`, and no Missing or
-Expired.
+**Code check, differs, built last (slice 4):** `python/job_scoring/job_history.py` has one state, `closedAt` / `isClosed`, and no
+Missing or Expired.
 
 - One absence closes a job, not two.
-- Only `greenhouse`, `lever` and `ashby` can close by absence (`CLOSURE_PROVIDERS`). The module's reason is that LinkedIn
-  searches return a rolling window of recent ads, so absence there says nothing. The new rule does not name an exception,
-  so this needs a decision when it is built.
 - No provider reads an explicit "closed" from the source.
 - A provider that returned 0 jobs closes nothing, which matches the rule, but `run_discovery.py` logs no warning for it.
-- There is no record of per-source fetches to compare with.
 - The UI's "Closed" badge means "No longer listed since ...", which under these rules would be Missing or Expired.
 
 ## AI in scraping - pending, needs separate approval with cost
@@ -31,7 +54,7 @@ Expired.
 - AI only as a second stage after the deterministic parser and filter, only on ads that passed the filter, and only for
   missing or uncertain fields and translation.
 - First measure how many ads have empty or uncertain fields.
-- The Runs screen itself has no AI.
+- The Activity screen itself has no AI.
 
 **Code check:** enrichment (`enrich_jobs.py`, `llmFacts`) already sends ads to a model after discovery, and skips ads the board
 already places outside `allowedLocations`. This decision does not say how it relates to that step.
