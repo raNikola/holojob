@@ -17,6 +17,7 @@ export default function QuestionField({ question, answer, onChange, profile, all
     case 'single':
       return (
         <SelectField
+          id={`question-${question.id}`}
           label={label}
           value={answer || ''}
           onChange={onChange}

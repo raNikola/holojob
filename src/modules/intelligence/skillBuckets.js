@@ -1,3 +1,5 @@
+import { containsTerm } from '../../utils/termMatch.js'
+
 export const SKILL_BUCKETS = {
   frontend: [
     'react', 'vue', 'angular', 'next.js', 'html', 'css', 'tailwind', 'sass', 'javascript',
@@ -37,7 +39,7 @@ export function matchSkillToBucket(skill) {
   const lower = (skill || '').toLowerCase()
   const matches = []
   for (const [bucket, keywords] of Object.entries(SKILL_BUCKETS)) {
-    if (keywords.some((kw) => lower.includes(kw) || kw.includes(lower))) {
+    if (keywords.some((kw) => containsTerm(lower, kw) || containsTerm(kw, lower))) {
       matches.push(bucket)
     }
   }

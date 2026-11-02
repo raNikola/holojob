@@ -25,6 +25,7 @@ data/cache/
 data/resumes/
 data/profile/*.json
 data/profile/cvs/
+data/profile.bak-*/
 data/jobs/*.json
 data/jobs/*.csv
 data/jobs/.pipeline.lock

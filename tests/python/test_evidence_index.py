@@ -81,6 +81,13 @@ def test_experience_detail_gives_one_item_per_bullet():
     assert {e["source"] for e in evidence} == {"role"}
 
 
+def test_an_entry_description_is_evidence_for_its_role():
+    detail = [{"title": "PM", "company": "Acme", "start": "2021", "end": "2022", "description": "Owned the billing roadmap.", "bullets": ["Cut churn by 10%."]}]
+    evidence = build_evidence(_profile(experienceDetail=detail), {})
+    assert [e["text"] for e in evidence] == ["Owned the billing roadmap.", "Cut churn by 10%."]
+    assert {e["role"] for e in evidence} == {"PM — Acme"}
+
+
 def test_work_experience_lines_are_read_when_there_is_no_detail():
     line = "Scrum Master — Acme | Jun 2021–Jul 2023 | Led delivery across 2 teams. Backlog prioritization."
     evidence = build_evidence(_profile(workExperience=[line]), {})

@@ -1,0 +1,17 @@
+Jordan Example
+jordan.example@example.com
+
+SUMMARY
+Product leader with 12 years in B2B software.
+
+WORK EXPERIENCE
+Northwind Software – Head of Product (April 2024 – Present)
+- Own the product strategy for the payments suite
+  and the pricing model.
+- Built a product organisation of nine people.
+
+Globex Corp – Senior Product Manager (June 2021 – March 2024)
+- Ran the checkout squad and cut failures by 22%.
+
+EDUCATION
+BSc Software Engineering, Springfield University, 2016

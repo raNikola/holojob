@@ -25,8 +25,8 @@ export default function IntelligenceSummaryCard({ intelligence }) {
         </div>
         <dl className="divide-y divide-stone-100 dark:divide-stone-800">
           <Field label="One-line pitch" value={s.oneLinePitch} />
-          <Field label="Career narrative" value={s.careerNarrative} />
-          <Field label="Positioning statement" value={s.positioningStatement} />
+          <Field label="Career narrative" value={s.careerNarrative || 'Not answered yet (questionnaire 17)'} />
+          <Field label="Positioning statement" value={s.positioningStatement || 'Not answered yet (questionnaire 13 and 14)'} />
           <Field label="Languages" value={(intelligence.languages || []).join(', ')} />
         </dl>
       </Card>

@@ -6,7 +6,7 @@ items and quote them, never add to them or raise their strength.
 
 Where each item comes from, in this order:
 
-  * role       - each bullet of `resume.parsedData.experienceDetail`. A profile
+  * role       - the description and each bullet of `resume.parsedData.experienceDetail`. A profile
                  whose CV analysis was never applied has no experienceDetail;
                  its `workExperience` lines ("Title — Company | dates | text")
                  are read instead, one item per sentence of the text.
@@ -172,7 +172,7 @@ def _raw_items(profile: dict, intelligence: dict):
         for d in detail:
             role = _role_name(d.get("title"), d.get("company"))
             start, end = to_month(d.get("start")), to_month(d.get("end"))
-            for bullet in _strings(d.get("bullets")):
+            for bullet in _strings(([d["description"]] if isinstance(d.get("description"), str) else []) + (d.get("bullets") or [])):
                 yield "role", role, start, end, bullet
     else:
         for line in _strings(parsed.get("workExperience")):

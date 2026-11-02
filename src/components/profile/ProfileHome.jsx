@@ -11,6 +11,8 @@ import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
 import { VIEWS } from '../../modules/appNavigation'
 import { QUESTIONS } from '../../data/questions'
 import { describeAnswer } from '../../modules/profile/answerDisplay'
+import CompleteProfileCard from './CompleteProfileCard'
+import { answeredQuestionIds } from '../../modules/profile/questionnaireStatus'
 
 // Wizard steps, as numbered in OnboardingWizard.
 const RESUME_STEP = 1
@@ -31,14 +33,14 @@ function Field({ label, value }) {
 }
 
 export default function ProfileHome({ onNavigate }) {
-  const { profile, startProfileEdit } = useProfile()
+  const { profile, startProfileEdit, dismissCompleteProfile } = useProfile()
   const { basicProfile: bp, resume, repositories, questionnaire } = profile
   const pd = resume.parsedData
   const [regenerating, setRegenerating] = useState(false)
   const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
 
-  const answeredCount = questionnaire.answers?.length || 0
+  const answeredCount = answeredQuestionIds(profile).length
   const validation = validateProfileForIntelligence(profile)
 
   const editStep = (step) => {
@@ -90,6 +92,8 @@ export default function ProfileHome({ onNavigate }) {
         </Button>
       </div>
 
+      <CompleteProfileCard profile={profile} onAnswer={() => editStep(QUESTIONNAIRE_STEP)} onDismiss={dismissCompleteProfile} />
+
       {status && <p className="text-xs text-teal-700 dark:text-teal-300">{status}</p>}
       {error && <Alert variant="error" title="Error">{error}</Alert>}
 
@@ -126,7 +130,10 @@ export default function ProfileHome({ onNavigate }) {
         <div className="space-y-5">
           {(questionnaire.answers || []).map((a) => describeAnswer(a, profile)).filter(Boolean).map((d) => (
             <div key={d.id} className="border-b border-stone-100 pb-4 last:border-0 last:pb-0 dark:border-stone-800">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{d.label}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                {d.label}
+                {d.derived && <span className="ml-2 font-normal normal-case text-amber-700 dark:text-amber-300">pre-filled, not confirmed</span>}
+              </p>
               {d.kind === 'chips' && (
                 <ul className="mt-2 flex flex-wrap gap-1.5">
                   {d.items.map((item) => (

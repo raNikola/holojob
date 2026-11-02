@@ -1,0 +1,30 @@
+Jordan Example
+Product Leader
+jordan.example@example.com | +1 202 555 0143 | Springfield, Ohio
+
+PROFILE
+Product leader with 12 years in B2B software. Builds teams and ships platforms
+that customers pay for.
+
+EXPERIENCE
+Head of Product, NORTHWIND SOFTWARE | Remote
+April 2024 – Present | (US-based growth-stage startup)
+Own the product strategy for the payments suite and report to the CEO.
+
+Key Outcomes & Leadership Impact
+• Grew recurring revenue by 40% in 18 months by repricing and a
+  self-service upgrade path.
+• Built a product organisation of nine people across three time zones
+  and kept attrition at zero.
+
+Senior Product Manager, GLOBEX CORP | Belgrade, Serbia
+June 2021 – March 2024
+• Ran the checkout squad and cut failures by 22%.
+• Mentored three junior product managers.
+
+EDUCATION
+B. Sc. Software Engineering | 2016
+M.Sc. Computer Science, Springfield University, 2018
+
+SKILLS
+Product Strategy, Roadmapping, SQL
