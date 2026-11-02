@@ -12,13 +12,16 @@ Record, version 1. A later slice adds fields; a reader ignores what it does not 
       "trigger": "manual" | "pipeline" | "scheduled",
       "startedAt": "<ISO>", "finishedAt": "<ISO>",
       "status": "ok" | "partial" | "failed",
-      "sources": [{"name", "status", "read", "kept", "new", "error", "boardsFailed"}],
+      "sources": [{"name", "status": "ok" | "partial" | "failed" | "skipped", "read", "kept", "new", "error",
+                   "boardsFailed", "skipReason"}],
       "issues": [{"level": "error" | "warning", "source": "<name>" | null, "message"}]
     }
 
 read: ads parsed before the search, role and location filters. kept: past them, before dedupe. new: ads no earlier run
 recorded, counted after dedupe under the provider of the copy that won, so `new` is not a share of `kept`, and summed it
-equals meta.history.new. Left out because discovery does not know them yet: scored, closed, missing, expired.
+equals meta.history.new. skipped: the source did not search because it does not apply (skipReason says why); it is no
+warning and does not lower the run's status. Left out because discovery does not know them yet: scored, closed, missing,
+expired.
 """
 
 from __future__ import annotations
@@ -45,6 +48,7 @@ logger = logging.getLogger(__name__)
 VERSION = 1
 RETENTION_DAYS = 90
 TRIGGERS = ("manual", "pipeline", "scheduled")
+SOURCE_STATUSES = ("ok", "partial", "failed", "skipped")
 MAX_MESSAGE_CHARS = 500
 
 _STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
@@ -88,6 +92,8 @@ def add_issue(record: dict, level: str, message: str, source: str | None = None)
 
 def add_source(record: dict, name: str, outcome) -> None:
     """One source's row and its issues. 0 ads is a warning: it says something may be wrong, and it never closes an ad."""
+    if outcome.status not in SOURCE_STATUSES:
+        raise ValueError(f"Unknown source status: {outcome.status}")
     error = _clean(outcome.error) if outcome.error else None
     record["sources"].append({
         "name": name,
@@ -97,12 +103,13 @@ def add_source(record: dict, name: str, outcome) -> None:
         "new": 0,
         "error": error,
         "boardsFailed": list(outcome.boards_failed),
+        "skipReason": outcome.skip_reason,
     })
     if error:
         add_issue(record, "error", error, name)
     for warning in outcome.warnings:
         add_issue(record, "warning", warning, name)
-    if outcome.kept == 0 and outcome.status != "failed":
+    if outcome.kept == 0 and outcome.status not in ("failed", "skipped"):
         detail = f"read {outcome.read}, all filtered out" if outcome.read else "read 0"
         add_issue(record, "warning", f"0 ads kept ({detail}); nothing was closed for this source", name)
 
@@ -113,13 +120,16 @@ def set_new_counts(record: dict, counts: dict[str, int]) -> None:
 
 
 def finish(record: dict, *, exit_ok: bool) -> dict:
-    statuses = [source["status"] for source in record["sources"]]
-    if not exit_ok or not statuses or all(status == "failed" for status in statuses):
+    all_statuses = [source["status"] for source in record["sources"]]
+    statuses = [status for status in all_statuses if status != "skipped"]  # a skipped source says nothing about the run
+    if not exit_ok or not all_statuses or (statuses and all(status == "failed" for status in statuses)):
         record["status"] = "failed"
     elif any(status != "ok" for status in statuses):
         record["status"] = "partial"
     else:
         record["status"] = "ok"
+    if all_statuses and not statuses:
+        add_issue(record, "warning", "Every source was skipped: no source searched in this run")
     record["finishedAt"] = _now().isoformat()
     return record
 

@@ -38,7 +38,7 @@ from providers.base_provider import JobProvider, ProviderOutcome
 TERMS = ["product manager"]
 REMOTE = ["Remote"]
 RECORD_KEYS = {"version", "runId", "trigger", "startedAt", "finishedAt", "status", "sources", "issues"}
-SOURCE_KEYS = {"name", "status", "read", "kept", "new", "error", "boardsFailed"}
+SOURCE_KEYS = {"name", "status", "read", "kept", "new", "error", "boardsFailed", "skipReason"}
 # Decided on purpose: discovery does not know these yet, and a later slice fills them.
 NOT_KNOWN_YET = {"scored", "closed", "missing", "expired"}
 
@@ -127,7 +127,7 @@ def test_a_run_writes_exactly_one_record_with_the_documented_fields(discovery, t
     assert record["runId"] == discovered(tmp_path)["meta"]["sourceRunId"]
     assert datetime.fromisoformat(record["startedAt"]) <= datetime.fromisoformat(record["finishedAt"])
     assert record["sources"] == [{"name": "greenhouse", "status": "ok", "read": 1, "kept": 1, "new": 1, "error": None,
-                                  "boardsFailed": []}]
+                                  "boardsFailed": [], "skipReason": None}]
     assert set(record["sources"][0]) == SOURCE_KEYS and not NOT_KNOWN_YET & set(record["sources"][0])
 
 
@@ -192,12 +192,54 @@ def test_a_run_that_crashes_still_writes_a_failed_record_and_the_crash_is_not_hi
     (["failed", "partial"], "partial"),
     (["failed", "failed"], "failed"),
     ([], "failed"),
+    (["ok", "skipped"], "ok"),
+    (["partial", "skipped"], "partial"),
+    (["ok", "failed", "skipped"], "partial"),
+    (["failed", "skipped"], "failed"),
+    (["skipped", "skipped"], "ok"),
 ])
 def test_the_run_status_follows_its_sources(statuses, expected):
     record = run_log.new_record("x", "manual")
     for number, status in enumerate(statuses):
         run_log.add_source(record, str(number), ProviderOutcome(status=status, read=1, kept=1))
     assert run_log.finish(record, exit_ok=True)["status"] == expected
+
+
+def skipped(reason="not applicable"):
+    return ProviderOutcome(status="skipped", skip_reason=reason)
+
+
+def test_a_skipped_source_has_its_reason_no_warning_and_does_not_make_the_run_partial(discovery):
+    providers = {"greenhouse": greenhouse({"acme": [posting(1)]}), "wellfound": Fake(outcome=skipped("not built yet"))}
+    assert discovery(providers) == 0
+    record = only_record()
+    source = source_of(record, "wellfound")
+    assert record["status"] == "ok" and record["issues"] == []
+    assert (source["status"], source["skipReason"], source["read"], source["kept"]) == ("skipped", "not built yet", 0, 0)
+    assert source["error"] is None
+
+
+def test_a_run_where_every_source_skipped_says_nothing_was_searched():
+    record = run_log.new_record("x", "manual")
+    run_log.add_source(record, "wellfound", skipped())
+    assert run_log.finish(record, exit_ok=True)["status"] == "ok"
+    assert [(i["level"], i["source"]) for i in record["issues"]] == [("warning", None)]
+    assert "no source searched" in record["issues"][0]["message"]
+
+
+def test_a_skipped_source_closes_nothing_and_its_ads_are_left_as_a_missing_search_leaves_them(discovery, tmp_path):
+    discovery({"infostud": Fake([{"jobId": "i1", "provider": "infostud", "source": "infostud", "title": "Product Lead",
+                                  "company": "A", "location": "Remote", "description": "Own it.", "jobUrl": "https://i/1"}],
+                                ProviderOutcome(read=1, kept=1))})
+    discovery({"infostud": Fake(outcome=skipped())})
+    payload = discovered(tmp_path)
+    assert payload["meta"]["history"]["closed"] == 0 and payload["jobs"] == []
+
+
+def test_only_the_allowed_source_statuses_reach_a_record():
+    assert run_log.SOURCE_STATUSES == ("ok", "partial", "failed", "skipped")
+    with pytest.raises(ValueError):
+        run_log.add_source(run_log.new_record("x", "manual"), "s", ProviderOutcome(status="fine"))
 
 
 def test_warnings_alone_leave_the_run_ok(discovery):
@@ -402,7 +444,8 @@ def test_wwr_reports_each_feed_and_is_partial_when_one_fails(monkeypatch):
 def test_wellfound_says_it_is_not_built():
     provider = wellfound_provider.WellfoundProvider()
     assert fetch(provider) == []
-    assert provider.last_outcome.status == "ok" and "not built" in provider.last_outcome.warnings[0]
+    outcome = provider.last_outcome
+    assert (outcome.status, outcome.warnings) == ("skipped", []) and "not built" in outcome.skip_reason
 
 
 def test_jobspy_reports_read_before_its_title_filter_and_failed_searches(monkeypatch):
@@ -444,7 +487,8 @@ def test_infostud_reports_ads_read_before_the_clients_role_filter(monkeypatch):
     assert (outcome.status, outcome.read, outcome.kept) == ("ok", 2, 1)
 
     assert fetch(provider, "Germany") == []
-    assert provider.last_outcome.status == "ok" and "not searched" in provider.last_outcome.warnings[0]
+    outcome = provider.last_outcome
+    assert (outcome.status, outcome.warnings) == ("skipped", []) and "Serbia only" in outcome.skip_reason
 
     monkeypatch.setattr(infostud_client, "fetch_raw", boom)
     assert fetch(provider) == []
@@ -478,9 +522,16 @@ def test_joberty_reports_the_listing_as_read_and_failure(monkeypatch, tmp_path):
     outcome = provider.last_outcome
     assert (outcome.status, outcome.read, outcome.kept) == ("ok", 2, 1)
 
+    # The board answered with its places and this country is not among them: expected, so no warning.
+    assert fetch(provider, "Germany") == []
+    outcome = provider.last_outcome
+    assert (outcome.status, outcome.warnings) == ("skipped", []) and "Germany" in outcome.skip_reason
+
+    # No places at all is not a country it lacks: fetch_cities could not read them.
     monkeypatch.setattr(joberty_client, "fetch_cities", lambda: [])
     assert fetch(provider) == []
-    assert provider.last_outcome.status == "ok" and "not searched" in provider.last_outcome.warnings[0]
+    outcome = provider.last_outcome
+    assert (outcome.status, outcome.skip_reason) == ("failed", None) and "could not be read" in outcome.error
 
     monkeypatch.setattr(joberty_client, "fetch_cities", boom)
     assert fetch(provider) == []

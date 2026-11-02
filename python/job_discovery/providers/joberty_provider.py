@@ -154,11 +154,14 @@ class JobertyProvider(JobProvider):
             return []
 
     def _fetch(self, search_terms, locations, remote_filters, country) -> list[dict]:
-        if not country_supported(country, joberty_client.fetch_cities()):
-            logger.info("Joberty has no ads for country=%r (or its facets were unreadable) -- skipping", country)
-            self.last_outcome = ProviderOutcome(
-                warnings=[f"Joberty has no ads for {country!r}, or its facets were unreadable: not searched"]
-            )
+        cities = joberty_client.fetch_cities()
+        if not cities:  # the board always lists places, so none means they could not be read, not "not this country"
+            logger.warning("Joberty's place list could not be read; not searched")
+            self.last_outcome = ProviderOutcome(status="failed", error="Joberty's place list could not be read")
+            return []
+        if not country_supported(country, cities):
+            logger.info("Joberty has no ads for country=%r -- skipping", country)
+            self.last_outcome = ProviderOutcome(status="skipped", skip_reason=f"Joberty lists no ads for {country!r}")
             return []
 
         terms = tuple(search_terms or ())

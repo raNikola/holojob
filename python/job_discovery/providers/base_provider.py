@@ -29,16 +29,18 @@ class ProviderOutcome:
     so ads of an unread or empty board are not taken for ads that were removed, and the rest to the run log.
 
     read: ads parsed before the search, role and location filters. kept: the ones returned.
-    An unsupported country and a source not built yet are status ok with read 0, explained in warnings.
+    A source that did not search because it does not apply here (an unsupported country, not built yet) is skipped,
+    with skip_reason saying why. That is expected, so it is no warning. A search that could not run is failed.
     """
 
-    status: str = "ok"  # ok, partial (some boards or feeds failed) or failed (nothing could be read)
+    status: str = "ok"  # ok, partial (some boards or feeds failed), failed (nothing could be read) or skipped
     read: int = 0
     kept: int = 0
     error: str | None = None
     boards_failed: list[str] = field(default_factory=list)
     boards_empty: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    skip_reason: str | None = None
 
 
 def parts_outcome(

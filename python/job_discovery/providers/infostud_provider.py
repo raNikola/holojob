@@ -42,7 +42,7 @@ class InfostudProvider(JobProvider):
             logger.info(
                 "Infostud covers Serbia only -- skipping for country=%r", country
             )
-            self.last_outcome = ProviderOutcome(warnings=[f"Infostud covers Serbia only: not searched for {country!r}"])
+            self.last_outcome = ProviderOutcome(status="skipped", skip_reason=f"Infostud covers Serbia only, not {country!r}")
             return []
 
         counts: dict = {}
