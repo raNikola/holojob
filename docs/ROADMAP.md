@@ -96,6 +96,11 @@ Each item gets a fixture-based regression test; the Phase 1 stability test must 
 - Recalibrate `TARGET_COVERAGE` and fix the flat scoring dimensions (open problems in [ARCHITECTURE.md](ARCHITECTURE.md)).
 - Judge a real run and compare the adjustments with the owner's own sense of the jobs.
 - Redaction and a confirm step for LLM tailoring (privacy gap in [CLAUDE.md](../CLAUDE.md)), with the Phase 4 fact gate.
+- Sources consent UI: replace the inline "I have read the terms" checkbox in Settings > Sources > Job boards with a
+  modal. The user opens it from the Job boards section, selects which opt-in sources to enable, reads the terms for
+  each, and confirms with one explicit action. Server behaviour stays as is: opt-in default off, the server stores its
+  own `consentAcceptedAt`, switching off keeps history, switching on again asks for consent again. UI-only change.
+  Reason: the inline checkbox under the chips looks bad and does not scale to more opt-in sources.
 
 ## Inherited from Career OS
 
