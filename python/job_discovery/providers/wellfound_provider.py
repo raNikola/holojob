@@ -22,5 +22,5 @@ class WellfoundProvider(JobProvider):
         logger.info("Wellfound provider is skeleton mode.")
         _ = (search_terms, locations, remote_filters, country)
         # Future: use playwright_provider_base.run_with_browser for scraping
-        self.last_outcome = ProviderOutcome(warnings=["Wellfound is not built yet: nothing was searched"])
+        self.last_outcome = ProviderOutcome(status="skipped", skip_reason="Wellfound is not built yet")
         return []
