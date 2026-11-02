@@ -14,21 +14,95 @@ what the code did on 2026-11-02. Where it differs from the decision, the entry s
   it is not a career-os task.
 - **Not ours:** the legacy "Search history" screen (openai gpt-4o-mini) belongs to the separate jobapply app.
 - **Slices, in order:** (1) per-source outcome and run log, including a fix so a failed board cannot close its existing ads;
-  (2) `GET /api/runs` read API with 90-day pruning at write time; (3) the Activity screen, one row per run, Details with per-site
+  (2) `GET /api/runs` read API (the 90-day pruning at write time was built in slice 1); (3) the Activity screen, one row per run, Details with per-site
   stats plus errors and warnings with their level; (4) ad lifecycle changes, last.
 - **Run log:** one record per run, written by `python/job_discovery/run_discovery.py`, so a manual Re-scrape and a pipeline run
   each log once.
 - **Storage:** `data/analytics/`, private (0600 files, 0700 folders), atomic through `write_text_atomic`.
-- **Trigger field:** allows `manual` and `scheduled`. No scheduler exists yet, so there are no paused rows.
+- **Trigger field:** allows `manual`, `pipeline` and `scheduled` (`pipeline` added in slice 1). No scheduler exists yet, so there are
+  no paused rows, and nothing writes `scheduled`.
 - **No AI.**
 
 **Known gaps, none of this exists yet:**
 
 - A miss counter, a last successful fetch per source, and per-source id snapshots.
-- The "read" count: it is lost today, because providers return only the jobs they keep.
 
-**Code check, the bug slice 1 fixes:** the Greenhouse, Lever and Ashby providers catch each board's exception, log it and go on.
-`run_discovery.py` counts jobs per provider, not per board, so one failed board among working ones can close that board's ads.
+**The bug slice 1 fixed:** the Greenhouse, Lever and Ashby providers caught each board's exception, logged it and went on, and
+`run_discovery.py` counted jobs per provider, not per board, so one failed board among working ones could close that board's ads.
+
+## Activity slice 1, as built (2026-11-02)
+
+**Where:** `python/job_discovery/run_log.py`, called once from `run_discovery.py` `main()`. One file per run:
+`data/analytics/runs/<startedAt, UTC, YYYYMMDDTHHMMSSZ>-<runId>.json`, 0600 in 0700 folders, atomic through `write_text_atomic`.
+`CAREER_OS_ANALYTICS_DIR` moves the folder (tests set it). Records that started more than 90 days ago are removed when a record is
+written. One file per run, not one shared file, because a Re-scrape takes no pipeline lock, so two runs can overlap and a rewrite
+of a shared file could lose a record.
+
+**Record, version 1:**
+
+```json
+{
+  "version": 1,
+  "runId": "<discovered_jobs.json meta.sourceRunId>",
+  "trigger": "manual | pipeline | scheduled",
+  "startedAt": "<ISO>",
+  "finishedAt": "<ISO>",
+  "status": "ok | partial | failed",
+  "sources": [
+    {
+      "name": "greenhouse",
+      "status": "ok | partial | failed",
+      "read": 120,
+      "kept": 8,
+      "new": 1,
+      "error": "<string or null>",
+      "boardsFailed": ["<board or feed>"]
+    }
+  ],
+  "issues": [
+    { "level": "error | warning", "source": "<name or null>", "message": "<string>" }
+  ]
+}
+```
+
+- **read:** ads parsed before the search, role and location filters. **kept:** past them, before dedupe. **new:** ads no earlier run
+  recorded, counted after dedupe under the provider of the copy that won, so `new` is not a share of `kept`. Summed, it equals
+  `meta.history.new`.
+- **Extensible:** scored, closed, missing and expired are left out, because discovery does not know them yet. A later slice adds
+  fields; a reader ignores what it does not know and treats a missing field as unknown. A breaking change raises `version`.
+- **Run status:** `failed` when the exit code is not 0, no source ran, or every source failed. `partial` when some source is not `ok`.
+  Warnings alone leave it `ok`.
+- **Providers:** `fetch_jobs` still returns a list. The outcome is `provider.last_outcome` (`ProviderOutcome`, `base_provider.py`).
+
+**Decisions made while building, beyond the brief:**
+
+- **A failed board's open ads stay in `discovered_jobs.json`,** unchanged and open (`meta.history.keptFailedBoard` counts them), under
+  the same conditions closing has: same search, role not listed under another copy. Not closing them alone would have dropped them
+  out of the scored list. A board that fails every run therefore keeps its ads open until it is fixed or removed from
+  `companies/*.json`; its error shows on every record.
+- **What counts as a failed board:** an exception, an error status, an answer with no jobs list, and Lever's 404 on both hosts (that
+  last one used to count as empty).
+- **A provider that raises** is one failed source; the others still run and its board ads are held. Before, it stopped the whole run
+  with nothing written.
+- **A run that cannot start or that crashes** also writes a record, `failed`, with the reason as an error issue. `run_pipeline.py
+  --skip-discovery` and a pipeline refused by its lock or setup write none: discovery did not run.
+- **`--trigger` is passed by the caller:** `run_pipeline.py` passes `pipeline`, everything else defaults to `manual`. Cron goes through
+  `run_pipeline.py`, so cron runs log as `pipeline` until a scheduler passes `scheduled`.
+- **No fourth status:** an unsupported country (Infostud, Joberty) and a source not built yet (Wellfound) are `ok`, read 0, with a
+  warning that says why, on top of the 0-ads warning.
+- **A board that answers successfully with no jobs** still closes its absent ads when other boards return jobs, as before (the brief
+  says not to change closing otherwise), and now gets a warning naming it. The lifecycle rule "0 ads never closes everything" is read
+  per provider, as the code check below reads it. **Open for slice 4:** whether it should also hold per board.
+- **Scoring:** `scored_jobs.json` meta gains `discoveryRunId`; `sourceRunId` stays scoring's own. No scored counts are attached: a
+  Re-score runs on its own, several times per discovery run, so it would overwrite an older record's counts.
+- **Backups:** `data/analytics/` is not in `DATA_DIRS` in `scripts/backup-handler.js`, so run history is not backed up (nor is
+  `skill_gap.json`, already there), though `PRIVATE_RESTORE` accepts the folder. Left as it is: a 90-day report is not clearly worth
+  backing up.
+
+**Known gaps, failures that still look like "0 ads" (`ok` plus the 0-ads warning, closing nothing; none of them closes ads):**
+
+- `jobspy_adapter.fetch_jobs` never raises, so a blocked LinkedIn search looks empty. Only an exception reaching the provider counts.
+- `joberty_client.fetch_listing` keeps the pages it read and drops the rest, and a failed `fetch_cities` looks like an unsupported country.
 
 ## Ad lifecycle rules (narrowed 2026-11-02)
 
@@ -46,7 +120,7 @@ Missing or Expired.
 
 - One absence closes a job, not two.
 - No provider reads an explicit "closed" from the source.
-- A provider that returned 0 jobs closes nothing, which matches the rule, but `run_discovery.py` logs no warning for it.
+- A provider that returned 0 jobs closes nothing, which matches the rule. The run log gives it a warning (slice 1).
 - The UI's "Closed" badge means "No longer listed since ...", which under these rules would be Missing or Expired.
 
 ## AI in scraping - pending, needs separate approval with cost

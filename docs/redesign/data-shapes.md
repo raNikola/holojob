@@ -499,7 +499,8 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
       "changed": "<number>",
       "carriedFacts": "<number>",
       "closed": "<number>",
-      "keptFullerDescription": "<number>"
+      "keptFullerDescription": "<number>",
+      "keptFailedBoard": "<number>"
     }
   },
   "jobs": [
@@ -607,6 +608,7 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
   "meta": {
     "generatedAt": "<string>",
     "sourceRunId": "<string>",
+    "discoveryRunId": "<string or null: the run-log record of the discovery run these jobs came from>",
     "scoringVersion": "<string>",
     "intelligenceGeneratedAt": "<string>",
     "discoveryGeneratedAt": "<string>",
@@ -937,6 +939,12 @@ Fields added later, in the browser job store and not in this file until saved:
 
 
 
+## Discovery run log
+
+- **Path:** `data/analytics/runs/<startedAt>-<runId>.json`, one file per run, kept 90 days.
+- **Purpose:** What each discovery run did per source, for the Activity screen.
+- **Written by:** `run_discovery.py` through `run_log.py`. Shape: [DECISIONS.md](../DECISIONS.md#activity-slice-1-as-built-2026-11-02).
+
 ## Last pipeline run
 
 - **Path:** `data/jobs/pipeline_last_run.json`
@@ -973,7 +981,8 @@ Fields added later, in the browser job store and not in this file until saved:
       "changed": "<number>",
       "carriedFacts": "<number>",
       "closed": "<number>",
-      "keptFullerDescription": "<number>"
+      "keptFullerDescription": "<number>",
+      "keptFailedBoard": "<number>"
     }
   },
   "enrichment": {
