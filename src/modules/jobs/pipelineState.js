@@ -48,3 +48,25 @@ export function derivePipelineStateFromHealth(health, jobs = []) {
     lastTailoringRun: null,
   }
 }
+
+// Where the server reports each count. A reported count (0 included) is never taken from the job list.
+const SERVER_COUNTS = {
+  jobsDiscovered: (health) => health?.discovery?.jobCount,
+  jobsScored: (health) => health?.scoring?.jobCount,
+  resumesGenerated: (health) => health?.tailoring?.tailoredCount,
+}
+
+/**
+ * Bring the counts the server does not report in line with the current jobs. Writes, and returns the new state, only
+ * when one differs; otherwise returns null, so a job edit that changes no count writes nothing and causes no render.
+ * A count the server reports is left alone: the caller's `health` may be older than what auto-refresh stored. So are
+ * the run times and runningStep, which belong to whoever set them.
+ */
+export function syncPipelineCounts(health, jobs) {
+  const derived = derivePipelineStateFromHealth(health, jobs)
+  const stored = loadPipelineState()
+  const changed = Object.keys(SERVER_COUNTS)
+    .filter((field) => SERVER_COUNTS[field](health) == null && stored[field] !== derived[field])
+  if (!changed.length) return null
+  return updatePipelineState(Object.fromEntries(changed.map((field) => [field, derived[field]])))
+}
