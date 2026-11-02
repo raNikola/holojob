@@ -11,7 +11,7 @@ Record, version 1. A later slice adds fields; a reader ignores what it does not 
       "runId": "<discovered_jobs.json meta.sourceRunId>",
       "trigger": "manual" | "pipeline" | "scheduled",
       "startedAt": "<ISO>", "finishedAt": "<ISO>",
-      "status": "ok" | "partial" | "failed",
+      "status": "ok" | "partial" | "failed" | "skipped",
       "sources": [{"name", "status": "ok" | "partial" | "failed" | "skipped", "read", "kept", "new", "error",
                    "boardsFailed", "skipReason"}],
       "issues": [{"level": "error" | "warning", "source": "<name>" | null, "message"}]
@@ -20,7 +20,7 @@ Record, version 1. A later slice adds fields; a reader ignores what it does not 
 read: ads parsed before the search, role and location filters. kept: past them, before dedupe. new: ads no earlier run
 recorded, counted after dedupe under the provider of the copy that won, so `new` is not a share of `kept`, and summed it
 equals meta.history.new. skipped: the source did not search because it does not apply (skipReason says why); it is no
-warning and does not lower the run's status. Left out because discovery does not know them yet: scored, closed, missing,
+warning and does not lower the run's status; a run is skipped only when every source was. Left out because discovery does not know them yet: scored, closed, missing,
 expired.
 """
 
@@ -49,6 +49,7 @@ VERSION = 1
 RETENTION_DAYS = 90
 TRIGGERS = ("manual", "pipeline", "scheduled")
 SOURCE_STATUSES = ("ok", "partial", "failed", "skipped")
+RUN_STATUSES = ("ok", "partial", "failed", "skipped")
 MAX_MESSAGE_CHARS = 500
 
 _STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
@@ -124,12 +125,13 @@ def finish(record: dict, *, exit_ok: bool) -> dict:
     statuses = [status for status in all_statuses if status != "skipped"]  # a skipped source says nothing about the run
     if not exit_ok or not all_statuses or (statuses and all(status == "failed" for status in statuses)):
         record["status"] = "failed"
+    elif not statuses:
+        record["status"] = "skipped"
+        add_issue(record, "warning", "Every source was skipped: no source searched in this run")
     elif any(status != "ok" for status in statuses):
         record["status"] = "partial"
     else:
         record["status"] = "ok"
-    if all_statuses and not statuses:
-        add_issue(record, "warning", "Every source was skipped: no source searched in this run")
     record["finishedAt"] = _now().isoformat()
     return record
 
