@@ -120,6 +120,7 @@ def main() -> int:
 
     all_jobs: list[dict] = []
     provider_counts: dict[str, int] = {}
+    failed_boards: dict[str, set[str] | None] = {}
     raw_df = pd.DataFrame()
 
     for name in provider_names:
@@ -129,6 +130,9 @@ def main() -> int:
         provider_counts[name] = len(jobs)
         all_jobs.extend(jobs)
         logger.info("Provider %s returned %d jobs", name, len(jobs))
+        if provider.failed_boards:
+            failed_boards[name] = set(provider.failed_boards)
+            logger.warning("Provider %s could not read: %s", name, ", ".join(provider.failed_boards))
 
         if name == "jobspy" and isinstance(provider, JobSpyProvider):
             raw_df = provider.last_raw_df
@@ -166,6 +170,7 @@ def main() -> int:
         role_key=_crosspost_key,
         previous_facts=previous_facts,
         seen_before=seen_before,
+        failed_boards=failed_boards,
     )
     job_history.save(ledger_file, ledger)
 
@@ -210,7 +215,9 @@ def main() -> int:
     print(f"  facts carried over {history_stats['carriedFacts']}, "
           f"ads changed since last run {history_stats['changed']}, "
           f"fuller description kept over a throttled one {history_stats['keptFullerDescription']}")
-    print(f"  jobs written: {len(to_write)} ({len(to_write) - found_count} closed, kept {job_history.CLOSED_KEEP_DAYS} days)")
+    print(f"  ads of unread boards kept open: {history_stats['keptFailedBoard']}")
+    closed_written = len(to_write) - found_count - history_stats["keptFailedBoard"]
+    print(f"  jobs written: {len(to_write)} ({closed_written} closed, kept {job_history.CLOSED_KEEP_DAYS} days)")
     print("")
     print(f"Output: {discovered_path.relative_to(ROOT)}")
     print("===================================")
