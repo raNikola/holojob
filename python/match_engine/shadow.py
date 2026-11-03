@@ -146,7 +146,7 @@ class ShadowEngine:
         self._excluded_keys = set()
         for job in jobs:
             posting = self._posting(job)
-            if job.get("isClosed") or row_state.inactive(job) or not posting["facts"].get("requirements"):
+            if job.get("isClosed") or row_state.not_found(job) or not posting["facts"].get("requirements"):
                 continue
             if self._cache_key(posting) in self._cache:
                 continue
@@ -183,7 +183,7 @@ class ShadowEngine:
             if not self.judge:
                 self._count("uncached")
                 return None
-            if row_state.inactive(job):
+            if row_state.not_found(job):
                 self._count("notActive")
                 return None
             if _key(job) in self._excluded_keys:
@@ -244,7 +244,7 @@ class ShadowEngine:
     def preview(self, jobs: list[dict]) -> dict:
         """What a judged run would send for the engine, counted without calling anything."""
         send = self.plan(jobs)
-        sendable = [j for j in jobs if not j.get("isClosed") and not row_state.inactive(j) and self._posting(j)["facts"].get("requirements")]
+        sendable = [j for j in jobs if not j.get("isClosed") and not row_state.not_found(j) and self._posting(j)["facts"].get("requirements")]
         cached = sum(1 for j in sendable if self._cache_key(self._posting(j)) in self._cache)
         return {
             "enabled": True,

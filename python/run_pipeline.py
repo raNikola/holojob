@@ -130,11 +130,10 @@ def check_discovery(started_at: datetime) -> dict:
     return payload
 
 
-def enriched_share(jobs: list[dict], prefs: dict | None = None, meta: dict | None = None) -> float:
+def enriched_share(jobs: list[dict], prefs: dict | None = None) -> float:
     """Share of the jobs that should have facts. Ads enrichment deliberately did
     not read (outside the candidate's places, or not found by this run) are not expected to have them."""
-    stamp = row_state.found_stamp(meta)
-    open_jobs = [j for j in jobs if not j.get("isClosed") and not row_state.not_found(j, stamp)] or jobs
+    open_jobs = [j for j in jobs if not j.get("isClosed") and not row_state.not_found(j)] or jobs
     if prefs:
         open_jobs = [
             j for j in open_jobs
@@ -145,10 +144,9 @@ def enriched_share(jobs: list[dict], prefs: dict | None = None, meta: dict | Non
 
 def check_enrichment(minimum: float, refusal: str | None = None) -> float:
     """The enriched share. Too low stops the run, unless the AI budget gate is why: then scoring goes on, reduced."""
-    view = read_view()
-    jobs = view.get("jobs") or []
+    jobs = read_view().get("jobs") or []
     prefs = (read_json(INTELLIGENCE).get("jobFitPreferences") or {}) if INTELLIGENCE.exists() else {}
-    share = enriched_share(jobs, prefs, view.get("meta"))
+    share = enriched_share(jobs, prefs)
     if share < minimum and refusal:
         print(f"Enrichment reduced: only {share:.0%} of jobs have facts because the AI gate refused calls "
               f"({refusal}). Scoring continues; results are labelled reduced quality.", flush=True)
@@ -173,7 +171,7 @@ def summarize(args, steps: list[dict], enrich_line: str | None, share: float | N
             "providerCounts": meta.get("providerCounts") or {},
             "raw": meta.get("rawCount"), "deduped": meta.get("dedupedCount"),
             "history": meta.get("history") or {},
-            "rows": row_state.counts(read_view().get("jobs") or [], meta) if meta else None,
+            "rows": row_state.counts(read_view().get("jobs") or []) if meta else None,
         }
     if enrich_line is not None:
         m = re.search(r"extracted (\d+), cached (\d+) \((\d+) from the ledger\), failed (\d+)"

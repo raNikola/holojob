@@ -55,7 +55,9 @@ CLOSED_KEEP_DAYS = 14  # how long a closed job stays in discovered_jobs.json
 PRUNE_AFTER_DAYS = 90  # how long a closed job stays in the ledger
 
 # Fields the ledger adds to a job; they are not part of the stored snapshot.
-HISTORY_FIELDS = ("firstSeen", "lastSeen", "closedAt", "isNew", "isClosed", "llmFacts", "isAbsent", "absentSince", "closedAfterChecks")
+# On a row a run kept open without finding it: see row_state.py. Comes from the entry's `heldRunId`, so it survives any rebuild of the view.
+NOT_FOUND_MARK = "notFoundThisRun"
+HISTORY_FIELDS = ("firstSeen", "lastSeen", "closedAt", "isNew", "isClosed", "llmFacts", "isAbsent", "absentSince", "closedAfterChecks", NOT_FOUND_MARK)
 
 
 def now_iso() -> str:
@@ -227,6 +229,8 @@ def apply_run(
         if run_id is not None:
             entry["heldRunId"] = run_id
         record = _annotate(entry["job"], entry, now=moment, closed=False)
+        if run_id is not None:
+            record[NOT_FOUND_MARK] = True
         if entry.get("llmFacts"):
             record["llmFacts"] = entry["llmFacts"]
         out.append(record)
@@ -334,6 +338,7 @@ def apply_run(
             record = _annotate(entry["job"], entry, now=moment, closed=False)
             if run_id is not None:
                 entry["heldRunId"] = run_id
+                record[NOT_FOUND_MARK] = True
             if entry.get("llmFacts"):
                 record["llmFacts"] = entry["llmFacts"]
             out.append(record)

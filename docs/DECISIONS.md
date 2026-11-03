@@ -409,14 +409,26 @@ Tests: `tests/python/test_snapshot_closing.py` (rules, evidence, real providers,
 
 ## S5d as built: readers ready for rows a run did not find (2026-11-03)
 
-**No visible change.** A row a run did not find (absent, held, or Stale when S5f comes) now costs nothing and moves nothing. `python/job_scoring/row_state.py` is the one definition. A held row has no mark of its own and `apply_run` was not touched, so it is told by date: the importer stamps every found row with `lastSeen` equal to the view's `meta.generatedAt`. A view with no `meta.ledgerGeneration` says nothing, so nothing counts as held there. A closed row and a hand-entered row never count.
+**No visible change.** A row a run did not find (absent, held, or Stale when S5f comes) now costs nothing and moves nothing. `python/job_scoring/row_state.py` is the one definition; how a row is told was replaced in S5d2 (below).
 
-- **Corpus:** `scorer.score_jobs` builds term rarity without these rows, so an active ad scores byte-identically with or without them. They are still scored, with that corpus. `run_scoring.py` and the manual path (`import_job_url.py`) mark them first; the mark `notFoundThisRun` stays on those rows in `scored_jobs.json`, unread by the UI. Closed rows stay in the corpus as before.
+- **Corpus:** `scorer.score_jobs` builds term rarity without these rows, so an active ad scores byte-identically with or without them. They are still scored, with that corpus. The mark `notFoundThisRun` stays on those rows in `scored_jobs.json`, unread by the UI. Closed rows stay in the corpus as before.
 - **Enrichment:** no model call for them, also under `--force`. Facts they already have are kept. They do not lower the enriched share in `run_pipeline.py`.
 - **Fit judge and shadow engine:** no new call, and no place under the limit. A judgement already paid for still applies, so a row's score does not jump the run it stops being found.
 - **Summaries:** `run_pipeline.py` prints found, kept open and closed on one line and absent on its own; `run_discovery.py` adds an absent line.
 
-**Reuse of stored scores: not built, not clearly safe.** A stored score is valid only for the same ad, profile, weights, scoring code and term rarity. Rarity moves every run: on real data, the same 428 rows scored against the corpus of an earlier run moved on 188 to 262 rows, by at most 2 points (mean 0.4 to 0.6). So reuse would freeze a row at an older corpus, and a profile or code change would need a key over all of those to invalidate it. Time is `score_job` at 0.034 s a row; building rarity is 0.7 s. For S5e: reuse for absent rows only, with a key of ad fingerprint, intelligence hash, weights and a scoring version, saves about 0.034 s per absent row (about 45 s of 61 s with today's rows), accepts up to about 2 points of difference from what a rescore would give, and needs a file or field for the key. Decision left to S5e.
+**Reuse of stored scores: not built, not clearly safe.** A stored score is valid only for the same ad, profile, weights, scoring code and term rarity. Rarity moves every run: on real data, the same 428 rows scored against the corpus of an earlier run moved on 188 to 262 rows, by at most 2 points (mean 0.4 to 0.6). So reuse would freeze a row at an older corpus, and a profile or code change would need a key over all of those to invalidate it. Time is `score_job` at 0.034 s a row; building rarity is 0.7 s. For S5e: reuse for absent rows only, with a key of ad fingerprint, intelligence hash, weights and a scoring version, saves about 0.034 s per absent row (about 45 s of 61 s with today's rows), accepts up to about 2 points of difference from what a rescore would give, and needs a file or field for the key. **No scoring cache for now: decided after the S5e measurements** (owner, S5d2).
+
+Tests: `tests/python/test_readers_not_found.py`.
+
+## S5d2 as built: a durable "not found this run" mark (2026-11-03)
+
+**Replaces the date test of S5d** (`lastSeen == meta.generatedAt`), which a later regeneration or enrichment could break. Readers behave as before; only how a row is told has changed.
+
+**Field chosen: the entry's existing `heldRunId`.** The importer already stamps it on every row a run keeps without finding, and `derive_view` already uses `heldRunId == lastImport.runId` to decide which rows those are. So the mark is that fact and no new state: `notFoundThisRun: true` on the row, written by `apply_run` (for its output) and by `derive_view` (from the ledger), on those rows only. `lastRunId` could not do it alone: a row with neither stamp for this run is not in the view at all. `meta.generatedAt` plays no part any more. Enrichment writes through the same derive or keeps the row as it stands, so the mark survives both. It is in `HISTORY_FIELDS`, so it never reaches a stored ad.
+
+**`lastImport.marksNotFound: true`** says the import knew about the mark. `derive_view` adds marks only then, so a ledger from before gives the very bytes it always gave, and nothing in it counts as held until proven. `isAbsent` is a mark of its own. Such a row is treated as it was before S5d until the next import, which sets the flag. `importer.compare_views` ignores the mark, as it does the other import stamps, so a dry-run against an older commit does not count it.
+
+**Closed rows in the corpus, measured, not changed** (read-only, copy of real data, local score): with today's one closed row, leaving it out moves 3 of 428 active scores by 1 point. What-if runs, treating other ledger rows as closed: 50 rows move 12 of 428, 200 rows move 18 of 428, never more than 1 point. The owner decides.
 
 Tests: `tests/python/test_readers_not_found.py`.
 
