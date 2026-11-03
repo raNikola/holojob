@@ -71,6 +71,7 @@ class WWRProvider(JobProvider):
                 logger.warning("WWR feed %s failed: %s", feed_url, exc)
                 failures[feed_url] = str(exc)
                 continue
+            feed_jobs = []
             for posting in postings:
                 url = posting.get("link") or ""
                 if url in seen_urls:
@@ -92,7 +93,13 @@ class WWRProvider(JobProvider):
                     site="weworkremotely",
                 )
                 if job["title"]:
-                    all_jobs.append(job)
+                    feed_jobs.append(job)
+            all_jobs.extend(feed_jobs)
+            # The feed is staged as soon as it is read (filtered the way the whole list is below), so a stop keeps it.
+            self.stage(
+                filter_jobs(feed_jobs, search_terms, locations, remote_filters, country, log=False),
+                part=feed_url, read=len(feed_jobs),
+            )
 
         kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
         self.last_outcome = parts_outcome(read=len(all_jobs), kept=len(kept), total=len(RSS_FEEDS), failures=failures)

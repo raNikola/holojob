@@ -102,10 +102,17 @@ class GreenhouseProvider(JobProvider):
                 continue
             if not postings:
                 empty.append(board)
+            board_jobs = []
             for posting in postings:
                 job = self._normalize_posting(posting, company, board, primary_term, primary_loc)
                 if job["title"]:
-                    all_jobs.append(job)
+                    board_jobs.append(job)
+            all_jobs.extend(board_jobs)
+            # The board is staged as soon as it is read (filtered the way the whole list is below), so a stop keeps it.
+            self.stage(
+                filter_jobs(board_jobs, search_terms, locations, remote_filters, country, log=False),
+                part=board, read=len(board_jobs),
+            )
 
         kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
         self.last_outcome = parts_outcome(

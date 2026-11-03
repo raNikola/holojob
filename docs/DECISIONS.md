@@ -215,6 +215,21 @@ S5 lifecycle by source class -> S6 Cancel -> S7 Activity screen and `GET /api/ru
 - **Joberty:** `job_history.load(path, read_only=True)` returns an empty ledger for an unreadable file and renames nothing; `known_ids` uses it. A scrape must never rename a ledger.
 - **Infostud's reported total** (`totalPrimaryItems`) is in its footer as `total`. Nothing compares it with the rows read yet.
 
+**1b: when each provider stages.** A provider calls `self.stage(ads, part=..., read=...)` as soon as a part is complete, and returns the same ads in the same order to the old commit
+path. `run_discovery.fetch_source` writes the footer when the fetch ends and stages the whole list of a provider that staged nothing; `mismatch` in the footer is `true` if what a
+provider staged is not what it returned (tested for every provider below). `tests/python/test_staging_streaming.py`.
+
+| Source | Stages | Granule | Not staged / limits |
+|---|---|---|---|
+| JobSpy (LinkedIn) | during collection | one search (term x place), after the title filter; an empty search is a part with 0 ads | a failed search is no part. The raw DataFrame (`raw_jobs.csv`) is not staged |
+| Greenhouse, Lever, Ashby | during collection | one board, filtered as the whole list is | a failed board is no part; an empty board is a part with 0 ads |
+| We Work Remotely | during collection | one feed (a repeat across feeds once) | a failed feed is no part |
+| Infostud | during collection | one ad, after its full description is read (one slow request per ad) | the listing phase (up to 40 pages, about a minute) stages nothing: an ad is final only after its description is read. An ad outside the place filter is neither staged nor returned |
+| Workable | during collection | one search term: the ads that term added | none twice |
+| Joberty | during collection | one ad, as its detail arrives (or at once for an ad the ledger holds) | the listing pages (at most 3) stage nothing; an ad the ledger holds is staged with the empty description it is returned with, the commit restores the stored one; ads past the 25-detail cap are not returned, so not staged |
+| Remote OK, Y Combinator | when the fetch returns, as `part: "all"` | the whole list | a single HTTP response: nothing to stream |
+| Wellfound | nothing | - | skipped, not built |
+
 **Open points:** pruning to 3 runs can remove a run's staging that was never imported, once import exists (S3/S4a must stop pruning an unimported run); a source's staged ads are kept in the order the provider returned them and are not de-duplicated (the existing dedupe still runs on the returned lists).
 
 ## offList rows keep the owner's data (2026-11-03)

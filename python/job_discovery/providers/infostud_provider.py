@@ -46,10 +46,21 @@ class InfostudProvider(JobProvider):
             return []
 
         counts: dict = {}
+        canonical: list[dict] = []
+
+        def keep_as_it_comes(raw: dict) -> None:
+            # An ad is final once its full description is read, and that is one slow request per ad, so it is staged
+            # here, not at the end. The same object is returned below, so what is staged is what the run gets.
+            job = self._to_canonical(raw)
+            canonical.append(job)
+            if matches_location_filters(job, locations, remote_filters) and matches_country(job, country):
+                self.stage([job], part=job["jobId"])
+
         try:
             raw_jobs = infostud_client.fetch_jobs(
                 extra_terms=tuple(search_terms or ()),
                 counts=counts,
+                on_job=keep_as_it_comes,
             )
         except Exception as exc:
             logger.exception("Infostud fetch failed; continuing without it")
@@ -58,7 +69,7 @@ class InfostudProvider(JobProvider):
 
         logger.info("Infostud: %d relevant ads before geo filtering", len(raw_jobs))
 
-        jobs = [self._to_canonical(job) for job in raw_jobs]
+        jobs = canonical if len(canonical) == len(raw_jobs) else [self._to_canonical(job) for job in raw_jobs]
         kept = [
             job
             for job in jobs

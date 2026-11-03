@@ -187,7 +187,9 @@ class JobertyProvider(JobProvider):
         for item in wanted.values():
             if to_canonical(item)["jobId"] in known:
                 # No description: the ledger restores the one it holds (job_history.apply_run).
-                jobs.append(to_canonical(item, country=country))
+                job = to_canonical(item, country=country)
+                jobs.append(job)
+                self.stage([job], part=f"ad {item['id']}")
                 continue
 
             if fetched >= joberty_client.MAX_DETAILS:
@@ -196,7 +198,10 @@ class JobertyProvider(JobProvider):
             fetched += 1
             detail = joberty_client.fetch_detail(item["id"])
             if detail.get("text"):
-                jobs.append(to_canonical(item, detail, country=country))
+                job = to_canonical(item, detail, country=country)
+                jobs.append(job)
+                # One request, then one ad staged: the details are the slow part (a pause between requests).
+                self.stage([job], part=f"ad {item['id']}")
         if deferred:
             logger.info("Joberty: %d ads left for the next run (cap of %d details)", deferred, joberty_client.MAX_DETAILS)
         logger.info("Joberty: %d jobs (%d details read)", len(jobs), fetched)
