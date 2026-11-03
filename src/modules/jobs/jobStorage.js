@@ -100,7 +100,7 @@ export function saveJobs(state, storage = globalThis.localStorage) {
   return payload
 }
 
-function jobMatchKey(job) {
+export function jobMatchKey(job) {
   const url = (job.jobUrl || '').trim().toLowerCase()
   if (url) return `url:${url}`
   return `tcl:${(job.title || '').toLowerCase()}|${(job.company || '').toLowerCase()}|${(job.location || '').toLowerCase()}`

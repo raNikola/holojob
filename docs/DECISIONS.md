@@ -545,6 +545,44 @@ In the real container every request of `scripts/check-view-recovery.js` answered
 
 **Not fixed by this: an id taken out of the list by hand.** With its run on disk, that run is counted again, so that test stays a strict xfail. A guard on `lastRunId` would pass the one-run case only and still double count after a later run, so it is not used. A true fix needs a list of runs on each ad, about 1,500 ads times the runs that saw them, which is not worth it for a hand edit.
 
+## S5e3a as built: the merge and the two lists, wired to nothing (2026-11-03)
+
+**Final owner decisions (2026-11-03). These replace the S5e3 plan where they differ:**
+
+- **Active** is class found or held, hand-entered, and absent seen within 14 days, plus any row the owner already works on (`hasUserData` or any application on that `jobId`), whatever its class. A closed row with no work is only in All.
+- **The 14 days** run from the row's `lastSeen` to the current date, not from the last import. They affect what is shown, never the lifecycle. No `lastImportAt` field; that plan item is dropped.
+- **Cross-post copies:** one representative per `copyGroup`, and every copy with work stays visible. With no worked copy: by class (found, held, absent), then newest `lastSeen`, then smallest `jobId`, never by API order. While the application store is loading, or if it failed, copies are not collapsed, and a failure is flagged. When its data arrives, the list is worked out again from the same inputs and nothing stored changes.
+- **Merge per field**, as in the table below. A stored score on an absent row stays shown.
+- **Server-only rows** never reach `saveJobs` or `importJobsFromFile`.
+
+**Built:**
+
+- `copyGroup` on the rows of `all_ads.py` (the entry's `roleKey`; null on a filtered ad). Additive.
+- `src/modules/jobs/allAds.js`: `mergeRow`, `composeJobList({ stored, server, applications, reference })`, the copy choice, `classLabel`.
+- `src/modules/jobs/useAllAds.js`: `fetchAllAds`, `createAllAdsLoader` (`loading`, `ready`, `error`; in memory only; the last good rows survive a later failure; the newest request wins), `useAllAds`.
+- `jobMatchKey` exported from `jobStorage.js`.
+- Nothing imports the two modules yet except tests, so nothing visible changes.
+
+| Fields | Source when a route row and a stored row share a `jobId` |
+|---|---|
+| `status`, `aiInsights`, `tailoredAssets`, `outreach`, `notes`, `extraLinks`, `sourceUrl`, `sourceChoice`, `createdAt` | Stored always |
+| Tracking | Not part of the merge; the application store, derived |
+| `class`, `reason`, `reasonCode`, `from`, `copyGroup`, `firstSeen`, `lastSeen`, `closedAt`, `absentSince` | Route always, null included. Display only, never stored |
+| `title`, `company`, `location`, `jobUrl`, `provider`, `site`, `isRemote`, `datePosted` | Route when not null, else stored |
+| `description`, `llmFacts`, `engineShadow`, `matchScore`, `matchLabel`, `priority`, salary and authorization fields | Stored only, so the route's `matchScore: null` cannot remove a score |
+| A hand-entered row | Entirely stored |
+
+**Choices made while building:**
+
+- **A dead copy does not hide a live ad.** If the only worked copy of an ad is outside Active's own classes (closed, older key, or past the 14 days), it stays and the best unworked copy shows too. The decision above says a pick is made with no worked copy, and this keeps the rule from the plan for that one case, because otherwise a live ad would leave Active. It shows one extra row at most. Removing it is a one-line change in `copiesToShow`.
+- **A stored row the route does not hold** stays in Active unless it is `offList` with no work, whether the route failed, answered empty or simply lacks it. It has no class, and `classLabel` calls it "Saved in this browser".
+- **An application whose store failed does not count as work,** even if a last copy of the store is held: only what is known counts, and the copies are not collapsed anyway.
+- **A row with no usable `lastSeen`** is out of the 14 days. A date ahead of the clock is in.
+- **Rows match as the import does:** by id, then by `jobMatchKey`. The stored `jobId` stays, since later writes go to it. A route row at a hand-entered job's `identityJobUrl` is dropped.
+- **No usable `reference`** throws, rather than guessing a date.
+
+**Measured on a copy of the real data (compose takes about 50 ms):** Active 1,238 (found 455, absent 781, hand-entered 2), 774 of them with no score. All 3,491. 75 copies hidden. All 4 applications are visible, including the one on a copy the deterministic choice would not have picked. With the store loading, Active is 1,313 with nothing collapsed. With the route failed, the 465 stored rows stay. Moved 14 days ahead with no import, Active is 459.
+
 ## offList rows keep the owner's data (2026-11-03)
 
 **Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,

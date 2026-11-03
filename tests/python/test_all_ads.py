@@ -417,6 +417,12 @@ def test_every_row_has_the_same_fields_and_no_score():
     assert len(shapes) == 1 and all(row["matchScore"] is None for row in answer["rows"])
 
 
+def test_copies_of_one_role_share_a_copy_group_and_a_filtered_ad_has_none():
+    answer = all_ads.build(ledger_of(FOUND, entry(8, lastRunId="r1", roleKey=FOUND["roleKey"]), entry(9, roleKey=None), entry(10, roleKey="")), store_of(a=record(1)))
+    groups = {row["jobId"]: row["copyGroup"] for row in answer["rows"]}
+    assert groups == {"j1": FOUND["roleKey"], "j8": FOUND["roleKey"], "j9": None, "j10": None, "a": None}
+
+
 def test_an_entry_with_no_ad_is_left_out_and_counted():
     ledger = ledger_of(FOUND)
     ledger["jobs"]["bad"] = {"firstSeen": NOW}
