@@ -265,6 +265,23 @@ provider staged is not what it returned (tested for every provider below). `test
 Limits: Infostud's role drops are known after the listing and are written then (`part: "listing"`), before any description is read; a source killed before its footer has discards for what it had finished, and no `discardMismatch`.
 `staging.problems` still only requires `jobId`, `provider` and `title`: the import needs full validation (ROADMAP, review requirements for S3 / S4a).
 
+## Owner decisions: baseline score, role filter, Infostud, testing (2026-11-03)
+
+Recorded from the owner's addendum. Docs only; no code changed. Backlog entries: [ROADMAP.md](ROADMAP.md#activity-screen---planned).
+
+1. **Scoring baseline.** A made-up manual job with a junk description scored 44 (Weak, P3, Maybe; Role 45, Skill 20, Industry 55, Experience 65, Location 50, Culture 58).
+   The owner expects at most about 5 and an "insufficient data" label. **Deferred** to the end of the current Activity work and solved with the scoring fix
+   ([ROADMAP.md](ROADMAP.md#fix-scoring-skill-extraction-scope-requirement-weighting-domain-transferability---todo)). Any fix stays in `scorer.py`, not in a prompt (architectural rule).
+2. **Role filter too strict.** `python/job_discovery/providers/role_filter.py` checks `TITLE_EXCLUDE` ("project manager", ...) first, and an ad with no include term is dropped
+   silently with the reason `title_not_matched` (Infostud: 392 of 409 dropped, for example ad 765172 "Medior Dev Project Manager Niš", position "IT Project Manager").
+   Idea: three tiers (clear no / clear yes / borderline kept with a "for review" flag; AI only on a borderline title plus a short description, which needs its own approval with cost, see
+   "AI in scraping"). Depends on the scoring fix and on the discard-reason data from S2. **Deferred.**
+   **Code check on whether the exclude was deliberate:** `.claude/rules/scoring.md` and this file say nothing about it. The only mentions are the module docstring (one shared term list so clients do not drift)
+   and `docs/ARCHITECTURE.md` open problem 8, which says `role_filter.py` "would tighten" providers that match the whole ad. So the exclude of "project manager" was a deliberate noise cut at the time (commit `c346ad3`),
+   not an owner decision recorded anywhere; the owner now finds it too strict.
+3. **Infostud stays unclassified** (not snapshot-based) until its fetch coverage is confirmed; the six checks are postponed to the end. Consistent with the entry under "Scrape, import, scoring".
+4. **Process rule.** Every decision is recorded in the md files, not only in chat. The owner tests everything at the end; no merge and no production before the real-container integration check.
+
 ## offList rows keep the owner's data (2026-11-03)
 
 **Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,
