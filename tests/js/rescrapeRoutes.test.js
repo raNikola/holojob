@@ -1,12 +1,14 @@
 // The routes around a run: the new ones answer as they should, the old ones say 409 while a run is active.
-import { Readable } from 'node:stream'
+import fs from 'node:fs'
+import path from 'node:path'
+import { Readable, Writable } from 'node:stream'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const run = vi.hoisted(() => ({
   discovery: vi.fn(), pipeline: vi.fn(), scoring: vi.fn(), judged: vi.fn(), manual: vi.fn(), importUrl: vi.fn(),
-  start: vi.fn(), status: vi.fn(), busy: vi.fn(), lock: vi.fn(), restore: vi.fn(),
+  start: vi.fn(), status: vi.fn(), busy: vi.fn(), lock: vi.fn(), restore: vi.fn(), exportZip: vi.fn(),
 }))
 
 vi.mock('../../scripts/run-discovery.js', () => ({ buildDiscoveryCommand: () => '', getDiscoveryStatus: () => ({}), runDiscovery: run.discovery }))
@@ -18,7 +20,7 @@ vi.mock('../../scripts/run-rescrape.js', async (original) => ({
   startRescrape: run.start, rescrapeStatus: run.status, isRunBusy: run.busy, withRunLock: run.lock,
 }))
 vi.mock('../../src/utils/apiAvailability.js', async (original) => ({ ...(await original()), ensureApiAvailable: async () => true }))
-vi.mock('../../scripts/backup-handler.js', () => ({ importBackupZip: run.restore, createBackupStream: vi.fn() }))
+vi.mock('../../scripts/backup-handler.js', () => ({ importBackupZip: run.restore, createBackupStream: run.exportZip }))
 
 const { handleApiRoutes } = await import('../../scripts/api-handler.js')
 const { default: RescrapeProgress } = await import('../../src/components/jobs/RescrapeProgress.jsx')
@@ -256,5 +258,88 @@ describe('the progress line', () => {
   it('says when the scores do not come from the latest discovery', () => {
     const out = html(view({ active: false, run: { runId: 'r2', status: 'failed' }, scoringBehind: true }))
     expect(out).toMatch(/not scored|Re-score/)
+  })
+})
+
+describe('backup export', () => {
+  const marker = () => path.join(process.env.CAREER_OS_ANALYTICS_DIR, 'runs', '.commit-in-progress.json')
+  const clearMarker = () => fs.rmSync(marker(), { force: true })
+  beforeEach(clearMarker)
+  afterEach(clearMarker)
+  const payload = { profile: { a: 1 } }
+
+  /** A response real enough to be piped into, for the route that streams. */
+  async function exportCall() {
+    const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(payload))]), { method: 'POST', url: '/api/backup/export', headers: { 'content-type': 'application/json', host: 'localhost' } })
+    const chunks = []
+    const res = new Writable({ write(chunk, _enc, done) { chunks.push(chunk); done() } })
+    res.statusCode = 200
+    res.headers = {}
+    res.setHeader = (k, v) => { res.headers[k] = v }
+    const end = res.end.bind(res)
+    let json = null
+    res.end = (text, ...rest) => { if (typeof text === 'string') json = JSON.parse(text); return end(...(typeof text === 'string' ? [] : [text, ...rest])) }
+    await handleApiRoutes(req, res)
+    return { status: res.statusCode, json, headers: res.headers, bytes: Buffer.concat(chunks).toString() }
+  }
+
+  it('answers 409 and builds nothing while a run holds the lock', async () => {
+    run.lock.mockResolvedValue({ busy: true })
+    const { status, json, headers } = await exportCall()
+    expect(status).toBe(409)
+    expect(json.error).toBe('run_active')
+    expect(json.message).toMatch(/in progress/)
+    expect(headers['Content-Type']).toBe('application/json')
+    expect(run.exportZip).not.toHaveBeenCalled()
+  })
+
+  it('answers 409 with its own message when a commit never finished, and names the fix', async () => {
+    run.lock.mockImplementation(async (fn) => ({ busy: false, value: await fn() }))
+    fs.mkdirSync(path.dirname(marker()), { recursive: true })
+    fs.writeFileSync(marker(), JSON.stringify({ runId: 'killed', files: ['job_history', 'discovered_jobs'], written: ['job_history'] }))
+    const { status, json } = await exportCall()
+    expect(status).toBe(409)
+    expect(json.error).toBe('commit_incomplete')
+    expect(json.message).toMatch(/job_history/)
+    expect(json.message).toMatch(/discovered_jobs/)
+    expect(json.message).toMatch(/Re-scrape/)
+    expect(run.exportZip).not.toHaveBeenCalled()
+  })
+
+  it('holds the lock until the whole archive has been sent', async () => {
+    const order = []
+    run.lock.mockImplementation(async (fn) => {
+      order.push('locked')
+      const value = await fn()
+      order.push('released')
+      return { busy: false, value }
+    })
+    run.exportZip.mockImplementation(() => Readable.from((async function* () {
+      order.push('first bytes')
+      yield Buffer.from('zip-')
+      await new Promise((r) => setTimeout(r, 20))
+      order.push('last bytes')
+      yield Buffer.from('bytes')
+    })()))
+    const { status, bytes, headers } = await exportCall()
+    expect(status).toBe(200)
+    expect(bytes).toBe('zip-bytes')
+    expect(headers['Content-Type']).toBe('application/zip')
+    expect(run.exportZip.mock.calls[0][1].profile).toEqual({ a: 1 })
+    expect(order).toEqual(['locked', 'first bytes', 'last bytes', 'released'])
+  })
+
+  it('refuses when the lock cannot be checked', async () => {
+    run.lock.mockRejectedValue(Object.assign(new Error('no python'), { lockUnknown: true }))
+    expect((await exportCall()).status).toBe(503)
+    expect(run.exportZip).not.toHaveBeenCalled()
+  })
+
+  it('the backup screen shows the sentence, not the code', async () => {
+    const { downloadBackupZip } = await import('../../src/modules/backup/backupClient.js')
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} })
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 409, json: async () => RUN_ACTIVE }))
+    await expect(downloadBackupZip({})).rejects.toThrow(/in progress/)
+    vi.unstubAllGlobals()
   })
 })

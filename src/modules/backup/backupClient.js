@@ -27,7 +27,7 @@ export async function downloadBackupZip(profile) {
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Backup export failed')
+    throw new Error(err.message || err.error || 'Backup export failed')
   }
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
