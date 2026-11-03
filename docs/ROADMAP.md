@@ -93,19 +93,30 @@ Each item gets a fixture-based regression test; the Phase 1 stability test must 
 A new screen named Activity, in the nav group System, built in this repo. Decisions and known gaps:
 [DECISIONS.md](DECISIONS.md#activity-screen-approved-2026-11-02).
 
+Two numberings meet here. **A1 and A2a** are the slices built earlier (run log; background Re-scrape). **S1 to S7** are the SCRAPE -> IMPORT -> SCORING
+slices approved 2026-11-03: a scrape writes staging only, an import (idempotent, its own step) commits, scoring follows and never undoes the import.
+Plan, approved decisions and rollback per slice: [DECISIONS.md](DECISIONS.md#scrape-import-scoring-approved-2026-11-03). Each S slice is small and shippable alone.
+
 | Slice | Content | Status on 2026-11-03 |
 |---|---|---|
-| 1 | Per-source outcome and run log, including a fix so a failed board cannot close its existing ads | **Built.** `python/job_discovery/run_log.py`, records in `data/analytics/runs/`. [Shape and deviations](DECISIONS.md#activity-slice-1-as-built-2026-11-02) |
-| 2a | Background Re-scrape: one job with a lock over discovery and scoring, an event log, the interrupted state, a commit marker | **Built, not deployed.** `python/run_rescrape.py`, `python/job_scoring/pipeline_lock.py`, `scripts/run-rescrape.js`. Tailoring merges at write time and backup export refuses during a run or after an unfinished commit. [Mechanism and limits](DECISIONS.md#activity-slice-2a-background-re-scrape-2026-11-03) |
-| 2b | Cancel a running Re-scrape | Not built |
-| 2c | Source order and per-source timeout policy | Not built |
-| 3 | `GET /api/runs` read API and the Activity screen: one row per run, Details with per-site stats plus errors and warnings with their level. The 90-day pruning at write time is already in slice 1. Top-of-page statistics belong to Analytics (later) | Not built |
-| 4 | Ad lifecycle changes, last ([rules](DECISIONS.md#ad-lifecycle-rules-narrowed-2026-11-02)) | Not built |
+| A1 | Per-source outcome and run log, including a fix so a failed board cannot close its existing ads | **Built.** `python/job_discovery/run_log.py`, records in `data/analytics/runs/`. [Shape and deviations](DECISIONS.md#activity-slice-1-as-built-2026-11-02) |
+| A2a | Background Re-scrape: one job with a lock over discovery and scoring, an event log, the interrupted state, a commit marker | **Built, not deployed.** `python/run_rescrape.py`, `python/job_scoring/pipeline_lock.py`, `scripts/run-rescrape.js`. Tailoring merges at write time and backup export refuses during a run or after an unfinished commit. [Mechanism and limits](DECISIONS.md#activity-slice-2a-background-re-scrape-2026-11-03) |
+| S1 | Staging store and ad records, then streaming. **1a:** `data/jobs/staging/<runId>/<source>.jsonl` (header, batches, footer), reader and validator, a hard link of the ledger as the run found it, last 3 runs kept, excluded from backup and restore, Joberty reads the ledger read-only. **1b:** providers append while they collect. No behaviour change: the old commit path is untouched and nothing reads staging yet | **1a built, not deployed.** `python/job_discovery/staging.py`. [What is staged and what is not](DECISIONS.md#scrape-import-scoring-approved-2026-11-03) |
+| S2 | Per-ad discard reasons plus `externalId`: source-stage reasons in the staging data | Not built |
+| S3 | `import --dry-run` (writes nothing) and the import report with import-stage discard reasons; compared with the current commit on real runs before the switch | Not built |
+| S4a | The switch: scrape -> import -> scoring, ledger as single source of truth with a derived `discovered_jobs.json`, generation check before any reader, automatic recovery, commit marker removed, closures stop, 90-day ledger prune off. Manual backup first | Not built |
+| S4b | Demote then remove the debug mirrors `raw_jobs.csv` and `normalized_jobs.json` (no reader exists; confirmed 2026-11-03) | Not built |
+| S5 | Lifecycle by source class (snapshot or search-based), Stale as a flag only; after a dry-run comparison on real data | Not built |
+| S6 | Cancel a running Re-scrape (was 2b): stop the scrape, import what is written, skip scoring; its own outcome, not a failed run | Not built |
+| S7 | `GET /api/runs` read API and the Activity screen (was 3) | Not built |
+| later | Source order and per-source timeout policy (was 2c) | Not built |
 
-Owner corrections to slice 1, all done: an empty board holds its ads; a source that does not apply is `skipped`; a run where every
+Backlog: Infostud completeness measurement (end of this work). Infostud is **not** classified snapshot-based until it is done.
+
+Owner corrections to slice A1, all done: an empty board holds its ads; a source that does not apply is `skipped`; a run where every
 source was skipped is `skipped`; a source that skipped or failed keeps its ads in `discovered_jobs.json`.
 
-**Built 2026-11-03, browser only, ahead of slice 4:** an ad that leaves the file no longer takes the owner's data with it. The import keeps a row
+**Built 2026-11-03, browser only, ahead of the lifecycle slice (S5):** an ad that leaves the file no longer takes the owner's data with it. The import keeps a row
 holding a status other than `new`, AI insights, tailored assets, outreach or legacy tracking, marked `offList` and hidden from default views. This is a
 temporary protection until the Step 5 overlay. [Rule, terms and limits](DECISIONS.md#offlist-rows-keep-the-owners-data-2026-11-03).
 

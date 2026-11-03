@@ -22,6 +22,11 @@ const PRIVATE_RESTORE = /^data\/(profile|profile\.bak-[^/]+|ai|config|backups|in
 // next process. A commit marker from an archive would report an incomplete save that did not happen here.
 const RUN_STATE_FILES = new Set(['data/jobs/.pipeline.lock', 'data/analytics/runs/.commit-in-progress.json'])
 
+// What a scrape has collected so far, and the ledger as the run found it (hard link): working state of one run, private,
+// pruned to the last three runs. Neither exported nor restored: a restored folder would look like an unimported run.
+const STAGING_DIR = 'data/jobs/staging'
+const isStagingPath = (name) => name === STAGING_DIR || name.startsWith(`${STAGING_DIR}/`)
+
 const DATA_DIRS = ['profile', 'intelligence', 'jobs', 'resumes', 'outreach', 'audits', 'cache', 'applications']
 
 export function createBackupStream(root, clientPayload = {}) {
@@ -33,7 +38,10 @@ export function createBackupStream(root, clientPayload = {}) {
     const abs = path.join(root, 'data', dir)
     if (fs.existsSync(abs)) {
       // Credentials are left out here, in the one place that lists them (secret-paths.js).
-      archive.directory(abs, `data/${dir}`, (entry) => (isSecretPath(`data/${dir}/${entry.name}`) ? false : entry))
+      archive.directory(abs, `data/${dir}`, (entry) => {
+        const name = `data/${dir}/${entry.name}`
+        return isSecretPath(name) || isStagingPath(name) ? false : entry
+      })
     }
   }
 
@@ -93,7 +101,7 @@ export async function importBackupZip(root, zipBuffer, options = {}) {
       refused.push(name)
       continue
     }
-    if (RUN_STATE_FILES.has(name)) continue
+    if (RUN_STATE_FILES.has(name) || isStagingPath(name)) continue
     if (isStoreBackupEntry(name)) {
       storeEntries.push({ name, data: entry.getData() })
       continue

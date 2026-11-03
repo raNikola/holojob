@@ -41,6 +41,7 @@ class ProviderOutcome:
     boards_empty: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     skip_reason: str | None = None
+    total_reported: int | None = None  # the total the source itself reports for its search (Infostud), for the staging footer
 
 
 def parts_outcome(
@@ -66,6 +67,17 @@ class JobProvider(ABC):
     provider_name = "base"
     # Set by every fetch_jobs; a provider that forgets fails its run-log row instead of reporting a guess.
     last_outcome: ProviderOutcome | None = None
+    # Set by run_discovery before each fetch: the staging file of this source (staging.SourceWriter), or None.
+    stage_writer = None
+
+    def stage(self, jobs: list[dict], *, part: str | None = None, read: int | None = None) -> None:
+        """Append ads to this source's staging file as they are collected. Does nothing when there is none.
+
+        What a provider stages must be what it returns, in the same order: the runner checks the count. A provider that
+        does not call this gets its whole list staged when its fetch returns.
+        """
+        if self.stage_writer is not None:
+            self.stage_writer.append(jobs, part=part, read=read)
 
     @abstractmethod
     def fetch_jobs(

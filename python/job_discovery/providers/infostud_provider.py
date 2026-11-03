@@ -66,7 +66,9 @@ class InfostudProvider(JobProvider):
             and matches_country(job, country)
         ]
         logger.info("Infostud: %d jobs after geo filtering", len(kept))
-        self.last_outcome = ProviderOutcome(read=counts.get("read", len(raw_jobs)), kept=len(kept))
+        self.last_outcome = ProviderOutcome(
+            read=counts.get("read", len(raw_jobs)), kept=len(kept), total_reported=counts.get("reported")
+        )
         return kept
 
     @staticmethod
