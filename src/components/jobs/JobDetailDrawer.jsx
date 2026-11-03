@@ -6,8 +6,9 @@ import { dirtyDraftLabels, leaveDecision } from '../../modules/jobs/draftGuard'
 import ApplicationTrackingSummary from './ApplicationTrackingSummary'
 import { canOpenJobPage, MISSING_JOB_HINT, openJobPage } from '../../modules/jobs/jobRoute'
 import { hasFallback } from '../../modules/jobs/jobResolve'
-import { SERVER_ONLY_NOTE } from '../../modules/jobs/jobListView'
-import { applicationsForJob } from '../../modules/applications/trackingView'
+import { KEEP_FIRST_NOTE } from '../../modules/jobs/jobListView'
+import { stripDisplayFields } from '../../modules/jobs/allAds'
+import KeepAdButton from './KeepAdButton'
 import { mergeLive } from '../../modules/jobs/jobsStore'
 import { loadJobHistory } from '../../modules/jobs/pipelineRunner'
 import { useApplications } from '../../hooks/useApplications'
@@ -35,6 +36,7 @@ export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
   }, [jobId, needsLedger])
 
   // A row only the server holds is shown, never stored: its ad text comes from the ledger, and what would write to it waits for "Keep this ad".
+  // Mark Applied does not: an application lives in the application store, with no stored row, here as on Job Details.
   const readOnly = Boolean(row?.serverOnly) && !stored
   const job = readOnly && !merged.description && ledger?.jobId === jobId ? { ...merged, description: ledger.job?.description } : merged
   if (!job) return null
@@ -70,12 +72,15 @@ export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
 
         <div className="p-4">
           <JobDetailBody job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} onStatusChange={onStatusChange} includeAiTools={false} includeContacts={false} includeTracker={false} />
-          {readOnly && <p className="mt-5 text-sm text-stone-600 dark:text-stone-400">This ad is not saved in this browser, so it is read-only here. {SERVER_ONLY_NOTE}.</p>}
-          {(!readOnly || applicationsForJob(store, jobId).length > 0) && (
-            <div className="mt-5">
-              <ApplicationTrackingSummary job={job} onStatusChange={onStatusChange} onOpenFull={openFullDetails} canOpenFull={canOpen} />
+          {readOnly && (
+            <div className="mt-5 space-y-2">
+              <p className="text-sm text-stone-600 dark:text-stone-400">{KEEP_FIRST_NOTE}</p>
+              <KeepAdButton row={row} />
             </div>
           )}
+          <div className="mt-5">
+            <ApplicationTrackingSummary job={stripDisplayFields(job)} onStatusChange={onStatusChange} onOpenFull={openFullDetails} canOpenFull={canOpen} />
+          </div>
         </div>
       </aside>
     </div>

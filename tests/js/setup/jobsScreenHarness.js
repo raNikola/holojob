@@ -19,7 +19,17 @@ export function routeRow(jobId, cls = 'found', extra = {}) {
 
 export const storedJob = (jobId, extra = {}) => ({ jobId, title: `Stored ${jobId}`, company: 'Acme', location: 'Remote', jobUrl: `https://x.example/${jobId}`, provider: 'jobspy', status: 'new', matchScore: 60, matchLabel: 'Good', ...extra })
 
+/** An application as the store holds one. */
+export const makeApplication = (id, jobId) => ({
+  id, schemaVersion: 1, createdAt: '2026-11-03T10:00:00.000Z',
+  posting: { jobId, title: `T ${jobId}`, company: 'Acme', capturedAt: '2026-11-03T10:00:00.000Z' },
+  attempt: { channel: 'company_site', channelDetail: '', applicationUrl: '', appliedDate: '2026-11-03', cv: null },
+  events: [],
+})
+
 export const routeAnswer = (rows, filteredFile = 'ok') => ({ status: 200, body: { ok: true, rows, meta: { filteredFile, counts: {} } } })
+
+const SETTINGS = { stages: { work: [{ key: 'applied', label: 'Applied' }, { key: 'interview', label: 'Interview' }] } }
 
 const reply = (status, body) => ({ ok: status < 400, status, json: async () => body, text: async () => JSON.stringify(body), headers: { get: () => null } })
 
@@ -43,12 +53,12 @@ export function stubServer({ route = () => routeAnswer([]), health = true, score
     if (path === '/api/applications' && options.method === 'POST') {
       const body = JSON.parse(options.body)
       server.posts.push(body)
-      const app = { id: `app${server.posts.length}`, createdAt: 'x', channel: 'company_site', events: [{ type: 'applied', date: '2026-11-03', at: 'x' }], posting: { jobId: body.jobId, title: body.browserPosting?.title ?? body.jobId, company: 'Acme' } }
+      const app = makeApplication(`app${server.posts.length}`, body.jobId)
       server.applications = { ...server.applications, [app.id]: app }
-      return reply(200, { application: app, store: { applications: server.applications } })
+      return reply(200, { application: app })
     }
     if (path === '/api/applications') return reply(200, { applications: server.applications })
-    if (path === '/api/applications/settings') return reply(200, { settings: {} })
+    if (path === '/api/applications/settings') return reply(200, { settings: SETTINGS })
     return reply(404, {})
   })
   return server

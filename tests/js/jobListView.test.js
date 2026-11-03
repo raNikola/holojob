@@ -114,10 +114,13 @@ describe('badges and reasons per class', () => {
     expect(classBadges(route('a', cls))[0].label).toBe(label)
   })
 
-  it('found has no badge, and its reason shows', () => {
-    viewport(true)
+  it('found has no badge and no reason line; other classes keep theirs', () => {
     expect(classBadges(route('a', 'found'))).toEqual([])
-    expect(table([route('a', 'found', { reason: 'Found by the latest run' })])).toContain('Found by the latest run')
+    for (const wide of [true, false]) {
+      viewport(wide)
+      expect(table([route('a', 'found', { reason: 'Found by the latest run' })])).not.toContain('Found by the latest run')
+      expect(table([route('b', 'held', { reason: 'Could not say' })])).toContain('Could not say')
+    }
   })
 
   it('cards show them too', () => {
@@ -203,11 +206,12 @@ describe('a filtered row is read-only', () => {
   })
 })
 
-describe('a server-only row until Keep this ad', () => {
+describe('a server-only row before Keep this ad', () => {
   it('its actions are disabled, and say why', () => {
     viewport(true)
     const html = table([serverOnly('a', 'absent')])
-    expect(SERVER_ONLY_NOTE).toBe('Keep this ad is coming in the next update')
+    expect(SERVER_ONLY_NOTE).toBe('Press Keep this ad first')
+    expect(html).toContain('Keep this ad')
     expect(html.match(/<button[^>]*aria-label="Save[^>]*>/)[0]).toContain(`title="${SERVER_ONLY_NOTE}"`)
     expect(html.match(/<button[^>]*aria-label="Save[^>]*>/)[0]).toContain('disabled=""')
     expect(html.match(/<input[^>]*type="checkbox"[^>]*>/g).at(-1)).toContain('disabled=""')
@@ -249,9 +253,8 @@ describe('a server-only row until Keep this ad', () => {
     const source = fs.readFileSync('src/components/jobs/JobDetailDrawer.jsx', 'utf-8')
     expect(source).not.toMatch(/addJobIfAbsent|saveJobs|createJob/)
     expect(source).toContain('const readOnly = Boolean(row?.serverOnly) && !stored')
-    expect(source).toContain('{readOnly && <p')
-    expect(source).toContain('{SERVER_ONLY_NOTE}')
-    expect(source).toContain('(!readOnly || applicationsForJob(store, jobId).length > 0)')
+    expect(source).toContain('{KEEP_FIRST_NOTE}')
+    expect(source).toContain('<KeepAdButton row={row} />')
   })
 })
 
@@ -303,7 +306,8 @@ describe('notices', () => {
   })
 
   it('server-only rows say why they are read-only', () => {
-    expect(texts({ hasServerOnly: true })[0]).toContain(SERVER_ONLY_NOTE)
+    expect(texts({ hasServerOnly: true })[0]).toContain('until you press Keep this ad')
+    expect(texts({ hasServerOnly: true })[0]).toContain('bulk actions cover saved rows only')
   })
 })
 

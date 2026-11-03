@@ -674,6 +674,39 @@ In the real container every request of `scripts/check-view-recovery.js` answered
 - **Production is not affected:** the build output is byte-identical with and without it (sha256 of every file in `dist`). The image's final stage runs `npm ci --omit=dev`, so it does not ship.
 - **Tests:** `tests/js/jobsScreen.dom.test.js` runs real clicks on the real Jobs screen, with the server stubbed by `tests/js/setup/jobsScreenHarness.js`. This covers the checks that until now ran only once, outside the repo. No production code changed for them.
 
+## S5e3d, commit 2: "Keep this ad" and promotion (2026-11-03)
+
+**Owner decisions (2026-11-03):**
+
+- An explicit "Keep this ad" button on server-only rows (table, cards, drawer, Job Details) is the only way such a row becomes a stored row. Opening details never stores it. Filtered rows stay read-only with Add job.
+- AI, outreach, tailoring and status changes need Keep first, and say so. Status stays disabled until then, rather than promoting on the same click.
+- Keep is a lasting intent. The row is marked `keptByUser`, so it survives re-import and stays in Active even when off-list, with no status, note or AI on it.
+- Mark Applied works on both the drawer and Job Details, the same way, and does not promote the ad. The application store holds it, so it stays after refresh and re-import.
+- The reason line "Found by the latest run" is hidden on found rows. Other classes keep theirs.
+- Bulk selection covers stored rows only, stated clearly. The per-field merge stays as decided.
+
+**Built:** `keepAd.js` reads the ad from the ledger through `resolveJob`, the path Job Details already uses, and calls `promoteRow` in `jobsStore.js`. That is built on `addJobIfAbsent`, and is the one explicit exception to "only rows from the file are added". `KeepAdButton.jsx` is the only caller.
+
+**A stored kept row:** the ledger's ad plus `status: 'new'`, `keptByUser: true`, `keptAt`. It never holds `class`, `reason`, `reasonCode`, `from`, `copyGroup` or `serverOnly`, and it does not take the route's empty `matchScore`, `closedAt` or `absentSince`.
+
+| When Keep runs | What happens |
+|---|---|
+| Ledger answers with the ad | Stored whole |
+| Ledger cannot answer | Nothing stored; "The ad could not be read from the job history, so nothing was kept. Try again." |
+| Ledger answers with no ad text | Stored with `descriptionIncomplete: true`; the details say the copy is incomplete. The mark goes away when a later scored file brings the text |
+| Another tab already stored it | Its data stays and it gets the mark |
+
+**Changes this needed outside the button:**
+
+- `hasUserData` counts `keptByUser`, which is what keeps the row through an import.
+- `mergeStatusOnImport` carries `keptByUser` and `keptAt` over when the ad returns to the file. Otherwise a kept ad that came back would lose the mark, and be dropped at its next absence.
+- `listedJobs` and `filterJobs` keep a kept off-list row on today's list, so it stays visible when the route has not answered. `onListJobs` is unchanged, so AI context and the numbers still leave it out while it is off the list.
+- `JobDetailBody` offers AI tools on a kept row with no score, or Keep would promise something it did not give.
+- **A leak fixed:** `handleJobUpdated` in the screen merged a whole row into the stored one, and in a composed list that row carried display fields, so the tailoring tools in cards would have stored `class` and `reason`. It now strips them. The drawer strips them from what Mark Applied posts too.
+- A server-only row with an application shows "applied manually", for display only, as Job Details does.
+
+**Known limit:** a kept ad with no score stays "Not scored" unless a later run finds it. Re-score reads the view, which does not hold it, and the tailoring tools still need a score.
+
 ## offList rows keep the owner's data (2026-11-03)
 
 **Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,
