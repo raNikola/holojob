@@ -869,7 +869,7 @@ Fields added later, in the browser job store and not in this file until saved:
 }
 ```
 
-- **`appliedRuns`:** every run already counted, so a run counts once in any order. The newest 500 ids, never dropping one still in staging.
+- **`appliedRuns`:** every run already counted, so a run counts once in any order. Ids only; the list only grows.
 - **`firstSeen`, `lastSeen`:** the run's own time (`importer.import_time`), not the clock.
 - **`inLedger`:** the ledger also holds this ad, so it is shown once, from the ledger. Refreshed at every write. Records are never removed.
 

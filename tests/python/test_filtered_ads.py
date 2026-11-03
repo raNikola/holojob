@@ -172,16 +172,15 @@ def test_a_run_with_no_usable_time_is_refused_and_not_marked_applied():
     assert store == filtered_ads.empty()
 
 
-def test_the_list_of_applied_runs_is_bounded_and_never_forgets_a_run_still_on_disk(monkeypatch):
-    monkeypatch.setattr(filtered_ads, "MAX_APPLIED_RUNS", 3)
+def test_the_list_of_applied_runs_only_grows_and_holds_ids_only(tmp_path, monkeypatch):
+    jobs = staging.jobs_dir(tmp_path)
+    jobs.mkdir(parents=True)
     store = filtered_ads.empty()
-    for n in range(6):
-        filtered_ads.apply_run(store, f"r{n}", T[0], "k", [])
-    filtered_ads._trim(store, {"r0"})
-    assert store["appliedRuns"] == ["r0", "r4", "r5"]
-    store = {**filtered_ads.empty(), "appliedRuns": ["r0", "r1"]}
-    filtered_ads._trim(store, set())
-    assert store["appliedRuns"] == ["r0", "r1"], "under the bound nothing goes"
+    ids = [f"r{n}" for n in range(1200)]
+    for run_id in ids:
+        filtered_ads.apply_run(store, run_id, T[0], "k", [])
+    filtered_ads.save(tmp_path, store)
+    assert filtered_ads.load(tmp_path)["appliedRuns"] == ids, "no bound, and none of them is a run on this disk"
 
 
 # --- the real import -------------------------------------------------------------------------------------------------------
@@ -737,12 +736,10 @@ def test_a_scrape_logs_it_when_its_dropped_ads_were_not_recorded(tmp_path, monke
     assert "were not recorded" in caplog.text
 
 
-# --- the bound on appliedRuns and a run still in staging (asked for with S5e2) ----------------------------------------------------
+# --- appliedRuns only grows, so a run on disk counts once (asked for with S5e2, fixed in S5e2b) -------------------------------------
 
 
-def test_the_bound_never_drops_a_run_still_in_staging_so_repeats_count_once(tmp_path, monkeypatch):
-    """Through the real code: more runs than the bound, all on disk. The ids stay past the bound, and neither a backfill nor an import counts twice."""
-    monkeypatch.setattr(filtered_ads, "MAX_APPLIED_RUNS", 2)
+def test_a_run_still_in_staging_counts_once_however_many_runs_there_are(tmp_path, monkeypatch):
     job = ad(1)
     for n, run_id in enumerate(("a", "b", "c", "d")):
         stage_run(tmp_path, monkeypatch, run_id, T[n], kept=[canon(9)], dropped=[job])
@@ -754,26 +751,45 @@ def test_the_bound_never_drops_a_run_still_in_staging_so_repeats_count_once(tmp_
     assert record_of(tmp_path, job)["timesSeen"] == 4
 
 
-def test_an_id_goes_from_the_list_only_once_its_run_has_left_staging(tmp_path, monkeypatch):
-    monkeypatch.setattr(filtered_ads, "MAX_APPLIED_RUNS", 1)
+def test_a_run_folder_restored_after_it_was_removed_is_not_counted_twice(tmp_path, monkeypatch):
+    """The one way the code alone could lose an id while the trim step existed: gone from staging, trimmed, then restored from a copy."""
+    job = ad(1)
+    stage_run(tmp_path, monkeypatch, "a", T[0], kept=[canon(9)], dropped=[job])
+    assert backfill(tmp_path) == 0
+    folder, kept = tmp_path / "data/jobs/staging/a", tmp_path / "a.copy"
+    shutil.copytree(folder, kept)
+    shutil.rmtree(folder)
+    assert backfill(tmp_path) == 0
+    assert filtered_ads.load(tmp_path)["appliedRuns"] == ["a"], "its id stays after the run has left staging"
+    shutil.copytree(kept, folder)
+    assert backfill(tmp_path) == 0
+    assert record_of(tmp_path, job)["timesSeen"] == 1
+
+
+def test_nothing_in_the_code_can_remove_an_id():
+    source = Path(filtered_ads.__file__).read_text(encoding="utf-8")
+    assert '"appliedRuns"] =' not in source and '"appliedRuns"].remove' not in source and '"appliedRuns"].pop' not in source
+    assert "MAX_APPLIED_RUNS" not in source and "_trim" not in source
+
+
+@pytest.mark.xfail(strict=True, reason="Reported in S5e2b: an id taken out of appliedRuns by hand, with its run on disk, is counted again. Removing the trim step means "
+                                       "the code can no longer cause this; only an edited file can. Passing it needs a per-ad list of runs, not a one-line fix.")
+def test_an_id_edited_out_of_the_list_while_its_run_is_on_disk_is_not_counted_twice(tmp_path, monkeypatch):
     job = ad(1)
     stage_run(tmp_path, monkeypatch, "a", T[0], kept=[canon(9)], dropped=[job])
     stage_run(tmp_path, monkeypatch, "b", T[1], kept=[canon(9)], dropped=[job])
-    assert backfill(tmp_path) == 0
-    assert filtered_ads.load(tmp_path)["appliedRuns"] == ["a", "b"]
-    shutil.rmtree(tmp_path / "data/jobs/staging/a")
-    assert backfill(tmp_path) == 0
-    assert filtered_ads.load(tmp_path)["appliedRuns"] == ["b"] and record_of(tmp_path, job)["timesSeen"] == 2, "nothing is left that could be counted again"
-
-
-@pytest.mark.xfail(strict=True, reason="Known and reported in S5e2: an id missing from appliedRuns with its run on disk is counted again. The code cannot "
-                                       "reach this state by itself (see the two tests above); only a run folder restored from a copy or an edited file can.")
-def test_an_id_that_left_the_list_while_its_run_is_on_disk_is_not_counted_twice(tmp_path, monkeypatch):
-    job = ad(1)
-    stage_run(tmp_path, monkeypatch, "a", T[0], kept=[canon(9)], dropped=[job])
     assert backfill(tmp_path) == 0
     store = filtered_ads.load(tmp_path)
     store["appliedRuns"].remove("a")
     filtered_ads.save(tmp_path, store)
     assert backfill(tmp_path) == 0
-    assert record_of(tmp_path, job)["timesSeen"] == 1
+    assert record_of(tmp_path, job)["timesSeen"] == 2
+
+
+def test_the_protection_of_staged_runs_stays(tmp_path, monkeypatch):
+    stage_run(tmp_path, monkeypatch, "a", T[0], kept=[canon(9)], dropped=[ad(1)])
+    assert filtered_ads.unrecorded(tmp_path) == {"a"}
+    assert backfill(tmp_path) == 0
+    assert filtered_ads.unrecorded(tmp_path) == set()
+    stage_run(tmp_path, monkeypatch, "b", T[1], kept=[canon(9)], dropped=[ad(2)])
+    assert filtered_ads.unrecorded(tmp_path) == {"b"}
