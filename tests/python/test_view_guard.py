@@ -747,7 +747,31 @@ def test_the_order_guard_refuses_an_older_run_with_a_message_and_the_override_is
     err = capsys.readouterr().err
     assert "REFUSED" in err and "older_run" in err and "allow_older" in err
 
-    assert import_run.main(["--run", older, "--import", "--allow-older"], root=root) == 0
+    # the override needs an explicit confirmation: without it, nothing happens
+    assert import_run.main(["--run", older, "--import", "--allow-older"], root=root) == 2
+    err = capsys.readouterr().err
+    assert "may overwrite newer ledger data with older data" in err and "Refused: no confirmation" in err
+    assert (root / "data/jobs/job_history.json").read_bytes() == ledger_before and not staging.is_imported(root, older)
+    assert import_run.main(["--run", older, "--import", "--confirm-overwrite-newer"], root=root) == 2, "the flag alone is not the override"
+    capsys.readouterr()
+
+    class Terminal:
+        def __init__(self, answer): self.answer = answer
+        def isatty(self): return True
+        def readline(self): return self.answer + "\n"
+
+    monkeypatch.setattr(import_run.sys, "stdin", Terminal("yes"))
+    assert import_run.main(["--run", older, "--import", "--allow-older"], root=root) == 2, "only the word OVERWRITE counts"
+    assert not staging.is_imported(root, older)
+    capsys.readouterr()
+    monkeypatch.setattr(import_run.sys, "stdin", Terminal("OVERWRITE"))
+    assert import_run.main(["--run", older, "--import", "--allow-older"], root=root) == 0, "typed confirmation at a terminal"
+    assert staging.is_imported(root, older)
+    # again with the flag, from the state before
+    (root / "data/jobs/staging" / older / "imported.json").unlink()
+    (root / "data/jobs/job_history.json").write_bytes(ledger_before)
+    (root / "data/jobs/discovered_jobs.json").write_bytes(view_before)
+    assert import_run.main(["--run", older, "--import", "--allow-older", "--confirm-overwrite-newer"], root=root) == 0
     assert "Imported run" in capsys.readouterr().out and staging.is_imported(root, older)
     assert load(root, "job_history.json")["lastImport"]["runId"] == older
     assert view_guard.state(*paths(root))["consistent"]
@@ -790,3 +814,21 @@ def test_a_run_reads_a_stale_view_as_rebuilt_before_it_keeps_its_discovered_file
     run_id = latest(root)
     kept = json.loads(staging.read_run(root, run_id).discovered_before.read_text())
     assert kept["meta"]["ledgerGeneration"] == 2, "the run kept the rebuilt view, not the stale one"
+
+
+def test_the_older_run_override_is_never_reachable_from_an_automatic_path():
+    """allow_older is passed by import_run.py (a human at a command line) and nowhere else: not the live run, not recovery, not Node."""
+    repo = Path(__file__).resolve().parents[2]
+    users = []
+    for base in ("python", "scripts"):
+        for file in (repo / base).rglob("*"):
+            if file.suffix in (".py", ".js") and "__pycache__" not in file.parts:
+                text = file.read_text(encoding="utf-8", errors="replace")
+                if "allow_older" in text or "allow-older" in text:
+                    users.append(file.relative_to(repo).as_posix())
+    assert sorted(users) == ["python/job_discovery/import_run.py", "python/job_discovery/importer.py"]
+    importer_text = (repo / "python/job_discovery/importer.py").read_text(encoding="utf-8")
+    assert importer_text.count("allow_older: bool = False") == 2, "off by default, both signatures"
+    assert [l for l in importer_text.splitlines() if "allow_older=True" in l and "`" not in l] == [], "no code passes it"
+    discovery = (repo / "python/job_discovery/run_discovery.py").read_text(encoding="utf-8")
+    assert "import_staged_run(ROOT, source_run_id)" in discovery, "the live run calls the importer with no override"
