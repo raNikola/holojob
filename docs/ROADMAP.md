@@ -93,11 +93,13 @@ Each item gets a fixture-based regression test; the Phase 1 stability test must 
 A new screen named Activity, in the nav group System, built in this repo. Decisions and known gaps:
 [DECISIONS.md](DECISIONS.md#activity-screen-approved-2026-11-02).
 
-| Slice | Content | Status on 2026-11-02 |
+| Slice | Content | Status on 2026-11-03 |
 |---|---|---|
 | 1 | Per-source outcome and run log, including a fix so a failed board cannot close its existing ads | **Built.** `python/job_discovery/run_log.py`, records in `data/analytics/runs/`. [Shape and deviations](DECISIONS.md#activity-slice-1-as-built-2026-11-02) |
-| 2 | `GET /api/runs` read API. The 90-day pruning at write time is already in slice 1 | Not built |
-| 3 | The Activity screen: one row per run, Details with per-site stats plus errors and warnings with their level. Top-of-page statistics belong to Analytics (later) | Not built |
+| 2a | Background Re-scrape: one job with a lock over discovery and scoring, an event log, the interrupted state, a commit marker | **Built, not deployed.** `python/run_rescrape.py`, `python/job_scoring/pipeline_lock.py`, `scripts/run-rescrape.js`. [Mechanism and limits](DECISIONS.md#activity-slice-2a-background-re-scrape-2026-11-03) |
+| 2b | Cancel a running Re-scrape | Not built |
+| 2c | Source order and per-source timeout policy | Not built |
+| 3 | `GET /api/runs` read API and the Activity screen: one row per run, Details with per-site stats plus errors and warnings with their level. The 90-day pruning at write time is already in slice 1. Top-of-page statistics belong to Analytics (later) | Not built |
 | 4 | Ad lifecycle changes, last ([rules](DECISIONS.md#ad-lifecycle-rules-narrowed-2026-11-02)) | Not built |
 
 Owner corrections to slice 1, all done: an empty board holds its ads; a source that does not apply is `skipped`; a run where every
