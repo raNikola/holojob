@@ -17,6 +17,7 @@ vi.mock('../../scripts/run-rescrape.js', async (original) => ({
   ...(await original()),
   startRescrape: run.start, rescrapeStatus: run.status, isRunBusy: run.busy, withRunLock: run.lock,
 }))
+vi.mock('../../src/utils/apiAvailability.js', async (original) => ({ ...(await original()), ensureApiAvailable: async () => true }))
 vi.mock('../../scripts/backup-handler.js', () => ({ importBackupZip: run.restore, createBackupStream: vi.fn() }))
 
 const { handleApiRoutes } = await import('../../scripts/api-handler.js')
@@ -92,6 +93,7 @@ describe('the old routes while a run is active', () => {
     const { status, data } = await call('POST', url, { intelligence: { a: 1 } })
     expect(status).toBe(409)
     expect(data.error).toBe('run_active')
+    expect(data.stderr).toMatch(/in progress/) // what runDiscovery and runFullPipeline show the owner
     expect(run[fn]).not.toHaveBeenCalled()
   })
 
@@ -116,6 +118,13 @@ describe('the old routes while a run is active', () => {
     expect(status).toBe(409)
     expect(data.error).toBe('run_active')
     expect(run.restore).not.toHaveBeenCalled()
+  })
+
+  it('the restore screen shows the sentence, not the code', async () => {
+    const { importBackupZip } = await import('../../src/modules/backup/backupClient.js')
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 409, json: async () => RUN_ACTIVE }))
+    await expect(importBackupZip({ arrayBuffer: async () => new ArrayBuffer(1) })).rejects.toThrow(/in progress/)
+    vi.unstubAllGlobals()
   })
 
   it('backup restore runs inside the lock when there is no run', async () => {

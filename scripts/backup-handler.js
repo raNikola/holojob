@@ -18,8 +18,9 @@ const AdmZip = require('adm-zip')
 // the store's own private writes. Same list: scripts/tighten-data-permissions.sh.
 const PRIVATE_RESTORE = /^data\/(profile|profile\.bak-[^/]+|ai|config|backups|intelligence|outreach|interviews|analytics|resumes)\//
 
-// The lock must stay the same file: flock holds an inode, and renaming a copy over it would free it for the next process.
-const RUN_LOCK = 'data/jobs/.pipeline.lock'
+// Never restored. The lock must stay the same file: flock holds an inode, and renaming a copy over it would free it for the
+// next process. A commit marker from an archive would report an incomplete save that did not happen here.
+const RUN_STATE_FILES = new Set(['data/jobs/.pipeline.lock', 'data/analytics/runs/.commit-in-progress.json'])
 
 const DATA_DIRS = ['profile', 'intelligence', 'jobs', 'resumes', 'outreach', 'audits', 'cache', 'applications']
 
@@ -92,7 +93,7 @@ export async function importBackupZip(root, zipBuffer, options = {}) {
       refused.push(name)
       continue
     }
-    if (name === RUN_LOCK) continue
+    if (RUN_STATE_FILES.has(name)) continue
     if (isStoreBackupEntry(name)) {
       storeEntries.push({ name, data: entry.getData() })
       continue
