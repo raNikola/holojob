@@ -1,6 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Bookmark, CircleDot, ExternalLink, SquareCheckBig, X } from 'lucide-react'
 import Badge from '../ui/Badge'
+import Button from '../ui/Button'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { JOB_PAGE_SIZE, everySelected, pageLimit, selectedNotShown, showMore } from '../../modules/jobs/jobTableModel'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
@@ -28,6 +31,8 @@ const COLUMNS = {
   status: { type: 'text', value: (j) => j.status || 'new' },
 }
 const DEFAULT_SORT = { key: 'score', dir: 'desc' }
+const NO_SELECTION = new Set()
+const DESKTOP = '(min-width: 768px)' // Tailwind's md, the width the two layouts always switched at
 
 const STATUS_VARIANT = {
   new: 'default',
@@ -168,16 +173,26 @@ export default function JobTable({
   onStatusChange,
   apiAvailable,
   onJobUpdated,
-  selectedJobIds = [],
+  selectedJobIds = NO_SELECTION,
   onToggleSelect,
   onToggleSelectAll,
   onJobSelect,
+  filterKey = '',
 }) {
   const [sort, onSort] = useTableSort(DEFAULT_SORT, COLUMNS)
+  const [paging, setPaging] = useState(null)
+  const pagerRef = useRef(null)
+  const isDesktop = useMediaQuery(DESKTOP, true)
+  // The whole list is sorted first; only then is a batch taken from it. The list's other uses read the whole list too.
   const jobs = useMemo(() => sortRows(unsortedJobs, sort, COLUMNS), [unsortedJobs, sort])
+  const pageKey = `${filterKey}|${sort.key}|${sort.dir}`
+  const limit = pageLimit(paging, pageKey)
+  const visibleJobs = useMemo(() => jobs.slice(0, limit), [jobs, limit])
   const showScores = hasMatchScores(jobs)
   const showProvider = jobs.some((j) => getJobProvider(j))
-  const allSelected = jobs.length > 0 && jobs.every((j) => selectedJobIds.includes(j.jobId))
+  const allSelected = useMemo(() => everySelected(selectedJobIds, jobs.map((j) => j.jobId)), [selectedJobIds, jobs])
+  const notShown = useMemo(() => selectedNotShown(selectedJobIds, jobs, limit), [selectedJobIds, jobs, limit])
+  const selectAllLabel = `Select all ${jobs.length} filtered jobs, not only the ${visibleJobs.length} shown`
 
   if (!jobs.length) {
     return (
@@ -187,14 +202,27 @@ export default function JobTable({
     )
   }
 
+  const remaining = jobs.length - visibleJobs.length
+  const handleShowMore = () => {
+    setPaging(showMore(paging, pageKey))
+    if (remaining <= JOB_PAGE_SIZE) pagerRef.current?.focus() // the button is about to go: keep the keyboard's place
+  }
+
   return (
     <>
-      <div className="hidden overflow-x-auto rounded-xl border border-stone-200 dark:border-stone-800 md:block">
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
+        <button type="button" className="underline hover:text-stone-800 dark:hover:text-stone-100" onClick={onToggleSelectAll}>
+          {allSelected ? `Clear selection of all ${jobs.length} filtered jobs` : `Select all ${jobs.length} filtered jobs`}
+        </button>
+        {notShown > 0 && <span>{notShown} selected {notShown === 1 ? 'job is' : 'jobs are'} not shown yet</span>}
+      </div>
+      {isDesktop ? (
+      <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-stone-800">
         <table className="w-full min-w-[960px] text-left text-sm">
           <thead className="border-b border-stone-200 bg-stone-50 text-xs uppercase tracking-wide text-stone-500 dark:border-stone-800 dark:bg-stone-900">
             <tr>
               <th className="px-3 py-2">
-                <input type="checkbox" checked={allSelected} onChange={onToggleSelectAll} className="rounded border-stone-300 text-teal-600" />
+                <input type="checkbox" checked={allSelected} onChange={onToggleSelectAll} aria-label={selectAllLabel} title={selectAllLabel} className="rounded border-stone-300 text-teal-600" />
               </th>
               {showScores && <SortableTh label="Score" sortKey="score" sort={sort} onSort={onSort} className="px-3 py-2" />}
               <SortableTh label="Title" sortKey="title" sort={sort} onSort={onSort} className="px-3 py-2" />
@@ -207,7 +235,7 @@ export default function JobTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
-            {jobs.map((job) => (
+            {visibleJobs.map((job) => (
               <tr
                 key={job.jobId}
                 className="cursor-pointer bg-white hover:bg-stone-50 dark:bg-stone-950 dark:hover:bg-stone-900"
@@ -216,7 +244,7 @@ export default function JobTable({
                 <td className="px-3 py-2 align-top" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
-                    checked={selectedJobIds.includes(job.jobId)}
+                    checked={selectedJobIds.has(job.jobId)}
                     onChange={() => onToggleSelect?.(job.jobId)}
                     className="rounded border-stone-300 text-teal-600"
                   />
@@ -247,9 +275,9 @@ export default function JobTable({
           </tbody>
         </table>
       </div>
-
-      <div className="space-y-3 md:hidden">
-        {jobs.map((job) => (
+      ) : (
+      <div className="space-y-3">
+        {visibleJobs.map((job) => (
           <JobCard
             key={job.jobId}
             job={job}
@@ -257,11 +285,22 @@ export default function JobTable({
             apiAvailable={apiAvailable}
             onJobUpdated={onJobUpdated}
             showScores={showScores}
-            selected={selectedJobIds.includes(job.jobId)}
+            selected={selectedJobIds.has(job.jobId)}
             onToggleSelect={onToggleSelect}
             onJobSelect={onJobSelect}
           />
         ))}
+      </div>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <span ref={pagerRef} tabIndex={-1} role="status" className="text-sm text-stone-600 focus:outline-none dark:text-stone-400">
+          Showing {visibleJobs.length} of {jobs.length}
+        </span>
+        {remaining > 0 && (
+          <Button variant="secondary" onClick={handleShowMore}>
+            Show {Math.min(remaining, JOB_PAGE_SIZE)} more
+          </Button>
+        )}
       </div>
     </>
   )

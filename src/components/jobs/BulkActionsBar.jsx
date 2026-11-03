@@ -16,7 +16,7 @@ export default function BulkActionsBar({
   if (!selectedCount) return null
 
   const handleExport = () => {
-    const selected = jobs.filter((j) => selectedJobIds.includes(j.jobId))
+    const selected = jobs.filter((j) => selectedJobIds.has(j.jobId))
     downloadJobsJson({ jobs: selected, exportedAt: new Date().toISOString() }, 'selected_jobs.json')
     onExportSelected?.()
   }

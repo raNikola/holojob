@@ -20,6 +20,7 @@ import JobEmptyState from './JobEmptyState'
 import { appliedJobIds } from '../../modules/applications/appliedFilter'
 import { filterJobs, getUniqueProviders, getUniqueSites, listedJobs, onListJobs } from '../../modules/jobs/jobFilters'
 import { computeJobStats } from '../../modules/jobs/jobStats'
+import { selectionFor, toggleAllSelected, toggleSelected } from '../../modules/jobs/jobTableModel'
 import { probePipelineApi, runTailor } from '../../modules/jobs/pipelineRunner'
 import { searchCountry } from '../../utils/searchCountry'
 import { downloadJobsCsv, downloadJobsJson } from '../../modules/jobs/jobExport'
@@ -60,7 +61,7 @@ export default function JobDiscoveryScreen() {
   const [pipelineApiAvailable, setPipelineApiAvailable] = useState(false)
   const [health, setHealth] = useState(null)
   const [pipelineState, setPipelineState] = useState(() => loadPipelineState())
-  const [selectedJobIds, setSelectedJobIds] = useState([])
+  const [selection, setSelection] = useState(null)
   const [selectedJob, setSelectedJob] = useState(null)
   const [bulkRunning, setBulkRunning] = useState(false)
   const [rerunning, setRerunning] = useState(false)
@@ -129,6 +130,9 @@ export default function JobDiscoveryScreen() {
   const filteredJobs = useMemo(() => {
     return filterJobs(viewJobs, effectiveFilters, { appliedJobIds: appliedIds })
   }, [viewJobs, effectiveFilters, appliedIds])
+  // Changing a filter starts the selection and the paging again; a sort, Show more or a row's new status do not.
+  const filterKey = useMemo(() => JSON.stringify(effectiveFilters), [effectiveFilters])
+  const selectedJobIds = selectionFor(selection, filterKey)
 
   const handleRescrapeFinished = useCallback(async (run) => {
     if (!run || run.status === 'failed' || run.status === 'interrupted') {
@@ -237,15 +241,12 @@ export default function JobDiscoveryScreen() {
   }, [])
 
   const handleToggleSelect = useCallback((jobId) => {
-    setSelectedJobIds((prev) => (
-      prev.includes(jobId) ? prev.filter((id) => id !== jobId) : [...prev, jobId]
-    ))
-  }, [])
+    setSelection((prev) => toggleSelected(prev, filterKey, jobId))
+  }, [filterKey])
 
   const handleToggleSelectAll = useCallback(() => {
-    const ids = filteredJobs.map((j) => j.jobId)
-    setSelectedJobIds((prev) => (prev.length === ids.length ? [] : ids))
-  }, [filteredJobs])
+    setSelection((prev) => toggleAllSelected(prev, filterKey, filteredJobs.map((j) => j.jobId)))
+  }, [filteredJobs, filterKey])
 
   const handleBulkTailor = useCallback(async (opts) => {
     setBulkRunning(true)
@@ -266,7 +267,7 @@ export default function JobDiscoveryScreen() {
     setState((prev) => ({
       ...prev,
       jobs: prev.jobs.map((j) => (
-        selectedJobIds.includes(j.jobId) ? { ...j, status } : j
+        selectedJobIds.has(j.jobId) ? { ...j, status } : j
       )),
     }))
   }, [selectedJobIds])
@@ -364,7 +365,7 @@ export default function JobDiscoveryScreen() {
 
               <JobFilters filters={effectiveFilters} sites={sites} providers={providers} jobs={listed} applicationStore={applicationStore} basicProfile={profile?.basicProfile} onChange={handleFilterChange} />
               <BulkActionsBar
-                selectedCount={selectedJobIds.length}
+                selectedCount={selectedJobIds.size}
                 running={bulkRunning}
                 jobs={state.jobs}
                 selectedJobIds={selectedJobIds}
@@ -379,6 +380,7 @@ export default function JobDiscoveryScreen() {
                 apiAvailable={pipelineApiAvailable}
                 onJobUpdated={handleJobUpdated}
                 selectedJobIds={selectedJobIds}
+                filterKey={filterKey}
                 onToggleSelect={handleToggleSelect}
                 onToggleSelectAll={handleToggleSelectAll}
                 onJobSelect={setSelectedJob}
