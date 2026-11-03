@@ -29,6 +29,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(rp, "SCORED", jobs / "scored_jobs.json")
     monkeypatch.setattr(rp, "LAST_RUN", jobs / "pipeline_last_run.json")
     monkeypatch.setattr(rp, "LOCK", jobs / ".pipeline.lock")
+    monkeypatch.setenv("CAREER_OS_PIPELINE_LOCK", str(jobs / ".pipeline.lock"))
     rp.INTELLIGENCE.write_text("{}")
     return tmp_path
 

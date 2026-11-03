@@ -126,7 +126,7 @@ describe('the Jobs screen', () => {
 
   it('has no Joberty checkbox and asks for the standard run only; the server decides about opt-in sources', () => {
     expect(screen).not.toMatch(/Joberty|DiscoverySourceOptions|discoveryProviders/)
-    expect(screen).toContain("await runDiscovery({ providers: 'serbia', country: searchCountry(profile, intelligence), intelligence, profile })")
+    expect(screen).toContain("await rescrape.start({ providers: 'serbia', country: searchCountry(profile, intelligence), intelligence, profile })")
   })
 
   it('moves the old checkbox value once on load', () => {

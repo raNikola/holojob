@@ -41,6 +41,7 @@ import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
 import { handleApplicationsRequest } from './application-store.js'
 import { handleJobHistoryRequest } from './job-history-read.js'
+import { RUN_ACTIVE, isRunBusy, rescrapeStatus, runHttpStatus, startRescrape, withRunLock } from './run-rescrape.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -237,9 +238,37 @@ export async function handleApiRequest(req, res) {
     return true
   }
 
+  // Re-scrape as one background run (python/run_rescrape.py): the browser starts it and reads its status.
+  if (url === '/api/rescrape' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req, res)
+      const { status, body: answer } = await startRescrape(body)
+      sendJson(res, status, answer)
+    } catch (e) {
+      sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (url === '/api/rescrape/status' && req.method === 'GET') {
+    try {
+      const after = new URL(req.url, 'http://localhost').searchParams.get('after')
+      const { status, body: answer } = await rescrapeStatus(after)
+      sendJson(res, status, answer)
+    } catch (e) {
+      sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
   if (url === '/api/discovery/run' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req, res)
+      // Before the mirrors: a refused request must not change an active run's input.
+      if (await isRunBusy()) {
+        sendJson(res, 409, RUN_ACTIVE)
+        return true
+      }
       const result = await runDiscovery({
         providers: body.providers || 'serbia',
         country: body.country,
@@ -247,7 +276,7 @@ export async function handleApiRequest(req, res) {
         intelligence: body.intelligence,
         profile: body.profile,
       })
-      sendJson(res, result.ok ? 200 : 500, result)
+      sendJson(res, runHttpStatus(result), result)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }
@@ -259,13 +288,17 @@ export async function handleApiRequest(req, res) {
   if (url === '/api/pipeline/run' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req, res)
+      if (await isRunBusy()) {
+        sendJson(res, 409, RUN_ACTIVE)
+        return true
+      }
       const result = await runPipeline({
         providers: body.providers || 'serbia',
         country: body.country,
         intelligence: body.intelligence,
         profile: body.profile,
       })
-      sendJson(res, result.ok ? 200 : 500, result)
+      sendJson(res, runHttpStatus(result), result)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }
@@ -308,7 +341,7 @@ export async function handleApiRequest(req, res) {
     try {
       const body = await readJsonBody(req, res)
       const result = await runScoring({ minScore: body.minScore })
-      sendJson(res, result.ok ? 200 : 500, result)
+      sendJson(res, runHttpStatus(result), result)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }
@@ -331,7 +364,7 @@ export async function handleApiRequest(req, res) {
         return true
       }
       const result = await runJudgedScoring()
-      sendJson(res, result.ok ? 200 : 500, result)
+      sendJson(res, runHttpStatus(result), result)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }
@@ -427,6 +460,10 @@ export async function handleApiRequest(req, res) {
   if (url === '/api/jobs/import-url' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req, res)
+      if (await isRunBusy()) {
+        sendJson(res, 409, { ...RUN_ACTIVE, stderr: RUN_ACTIVE.message })
+        return true
+      }
       const result = await runJobImport({
         urls: body.urls || (body.url ? [body.url] : []),
         tailor: Boolean(body.tailor),
@@ -677,8 +714,22 @@ export async function handleApiRequest(req, res) {
         sendJson(res, 400, { error: 'Empty backup file' })
         return true
       }
-      const result = await importBackupZip(ROOT, zipBuffer)
-      sendJson(res, 200, result)
+      // A restore overwrites the job files, so it holds the run lock: no run under it, and none starts during it.
+      let held
+      try {
+        held = await withRunLock(() => importBackupZip(ROOT, zipBuffer))
+      } catch (e) {
+        if (e.lockUnknown) {
+          sendJson(res, 503, { ok: false, error: 'lock_unknown', message: 'Could not check for a running job run, so nothing was restored.' })
+          return true
+        }
+        throw e
+      }
+      if (held.busy) {
+        sendJson(res, 409, RUN_ACTIVE)
+        return true
+      }
+      sendJson(res, 200, held.value)
     } catch (e) {
       sendJson(res, 400, { error: e.message })
     }

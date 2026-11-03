@@ -43,6 +43,11 @@ _history_spec = importlib.util.spec_from_file_location(
 )
 job_history = importlib.util.module_from_spec(_history_spec)
 _history_spec.loader.exec_module(job_history)
+_lock_spec = importlib.util.spec_from_file_location(
+    "pipeline_lock", SCRIPT_DIR.parent / "job_scoring" / "pipeline_lock.py"
+)
+pipeline_lock = importlib.util.module_from_spec(_lock_spec)
+_lock_spec.loader.exec_module(pipeline_lock)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -79,6 +84,10 @@ def parse_args() -> argparse.Namespace:
         default="manual",
         help="What started this run, for the run log. run_pipeline.py passes pipeline.",
     )
+    parser.add_argument(
+        "--run-id",
+        help="run_rescrape.py: fill this run's record and leave finishing it to the orchestrator.",
+    )
     return parser.parse_args()
 
 
@@ -101,23 +110,51 @@ def effective_provider_names(spec: str | None) -> list[str]:
 
 def main() -> int:
     args = parse_args()
-    record = run_log.new_record(uuid.uuid4().hex[:12], args.trigger)
+    lock = pipeline_lock.acquire()
+    if lock is None:
+        print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
+        return pipeline_lock.EXIT_LOCKED
+    try:
+        return run_locked(args)
+    finally:
+        lock.release()
+
+
+def run_locked(args: argparse.Namespace) -> int:
+    managed = bool(args.run_id)
+    if managed:
+        record = run_log.find_record(args.run_id)
+        if record is None:
+            logger.error("No run record for %s", args.run_id)
+            return 1
+    else:
+        run_log.sweep_interrupted()
+        record = run_log.new_record(uuid.uuid4().hex[:12], args.trigger)
+        run_log.save(record)
+        run_log.event(record, "run_start", trigger=args.trigger)
+    run_log.report_incomplete_commit(record)
     code = 1
     try:
         code = discover(args, record)
         return code
     except Exception as exc:
         run_log.add_issue(record, "error", f"Discovery stopped: {exc}")
+        run_log.event(record, "error", message=f"Discovery stopped: {exc}")
         raise
     finally:
         # Here, not in a caller: a manual Re-scrape and a pipeline run both come through this one line.
-        run_log.save(run_log.finish(record, exit_ok=code == 0))
+        if managed:
+            run_log.save(record)  # still running: scoring comes next, and the orchestrator finishes the record
+        else:
+            run_log.save(run_log.finish(record, exit_ok=code == 0))
+            run_log.event(record, "run_end", status=record["status"])
 
 
 def stop(record: dict, message: str) -> int:
     """A run that cannot start: reported like any other failed run."""
     logger.error("%s", message)
     run_log.add_issue(record, "error", message)
+    run_log.event(record, "error", message=message)
     return 1
 
 
@@ -167,8 +204,12 @@ def discover(args: argparse.Namespace, record: dict) -> int:
     for name in provider_names:
         logger.info("Running provider: %s", name)
         provider = get_provider(name)
+        run_log.event(record, "source_start", source=name)
         jobs, outcome = fetch_source(provider, name, search_terms, locations, remote_filters, country)
         run_log.add_source(record, name, outcome)
+        run_log.save(record)
+        run_log.event(record, "source_end", source=name, status=outcome.status, read=outcome.read, kept=outcome.kept,
+                      error=outcome.error, skipReason=outcome.skip_reason)
         provider_counts[name] = len(jobs)
         all_jobs.extend(jobs)
         logger.info("Provider %s returned %d jobs", name, len(jobs))
@@ -225,10 +266,15 @@ def discover(args: argparse.Namespace, record: dict) -> int:
         empty_boards=empty_boards,
         sources_not_run=sources_not_run,
     )
+    # Each file is replaced whole, the set is not: a stop between them leaves this marker for the next look to report.
+    commit = run_log.begin_commit(record, ["job_history", "raw_jobs", "normalized_jobs", "discovered_jobs"])
     job_history.save(ledger_file, ledger)
+    run_log.commit_wrote(commit, "job_history")
 
     export_raw_csv(raw_df, ROOT)
+    run_log.commit_wrote(commit, "raw_jobs")
     export_normalized_json(all_jobs, ROOT)
+    run_log.commit_wrote(commit, "normalized_jobs")
     discovered_path = export_discovered_json(
         to_write,
         ROOT,
@@ -243,6 +289,8 @@ def discover(args: argparse.Namespace, record: dict) -> int:
         deduped_count=found_count,
         history=history_stats,
     )
+    run_log.commit_wrote(commit, "discovered_jobs")
+    run_log.end_commit(record, commit)
 
     print("")
     print("===================================")

@@ -65,6 +65,13 @@ def _run_log_in_tmp(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _pipeline_lock_in_tmp(tmp_path, monkeypatch):
+    """No test takes the server's data/jobs/.pipeline.lock, and none inherits a lock handed down by a run."""
+    monkeypatch.setenv("CAREER_OS_PIPELINE_LOCK", str(tmp_path / "pipeline.lock"))
+    monkeypatch.delenv("CAREER_OS_PIPELINE_LOCK_FD", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _manual_jobs_in_tmp(tmp_path, monkeypatch):
     """No test reads the owner's data/jobs/manual_jobs.json: a scoring run merges that file in, which changes what it scores and sends."""
     import manual_jobs

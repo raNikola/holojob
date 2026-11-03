@@ -14,6 +14,9 @@ export default defineConfig({
       CAREER_OS_SECRETS_DIR: path.join(os.tmpdir(), `holojob-vitest-secrets-${process.pid}`),
       // No test writes saved AI answers to the real data/interviews, data/resumes or data/analytics.
       CAREER_OS_AI_OUTPUT_DIR: path.join(os.tmpdir(), `holojob-vitest-ai-output-${process.pid}`),
+      // No test takes the real run lock or writes the real run log.
+      CAREER_OS_PIPELINE_LOCK: path.join(os.tmpdir(), `holojob-vitest-pipeline-${process.pid}.lock`),
+      CAREER_OS_ANALYTICS_DIR: path.join(os.tmpdir(), `holojob-vitest-analytics-${process.pid}`),
       OPENAI_API_KEY: '',
       ANTHROPIC_API_KEY: '',
     },
