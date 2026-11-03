@@ -38,6 +38,7 @@ if str(_CV_ANALYSIS) not in sys.path:
     sys.path.append(str(_CV_ANALYSIS))
 
 from redact import redact_cv_text  # noqa: E402
+import row_state  # noqa: E402
 
 
 class ScoreEnhancer(Protocol):
@@ -327,7 +328,7 @@ class LlmFitEnhancer:
             self._cache = json.loads(cache_path.read_text(encoding="utf-8"))
         self.counts = {
             "judged": 0, "cached": 0, "skipped": 0, "failed": 0, "uncached": 0, "beyond_limit": 0,
-            "closed": 0, "refused": 0,
+            "closed": 0, "refused": 0, "not_active": 0,
         }
         # The AI budget gate refused a call: the rest of the run makes none (ai_gate.py).
         self.refusal: str | None = None
@@ -357,7 +358,7 @@ class LlmFitEnhancer:
         eligible = [
             (-r["matchScore"], index, self._key(r))
             for index, r in enumerate(results)
-            if r["matchScore"] >= self.threshold and not r.get("isClosed")
+            if r["matchScore"] >= self.threshold and not r.get("isClosed") and not row_state.inactive(r)
         ]
         eligible.sort()
         self._selected = {key for _, _, key in eligible[: max(0, self.limit)]}
@@ -372,6 +373,10 @@ class LlmFitEnhancer:
             if not self.cache_only:
                 ai_gate.record_cache_hit(self.provider, self.model, feature="fit-judge", job_id=job.get("jobId"))
             return cached, fingerprint, True
+        if row_state.inactive(job):
+            # A judgement already paid for still applies, so the score does not jump. A new one is not worth a call.
+            self._count("not_active")
+            raise NotCached(fingerprint)
         if self._selected is not None and self._key(job) not in self._selected:
             self._count("beyond_limit")
             raise NotCached(fingerprint)

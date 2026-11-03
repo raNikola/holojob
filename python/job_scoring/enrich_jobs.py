@@ -42,6 +42,7 @@ from work_authorization import outside_allowed_before_enrichment  # noqa: E402
 from atomic_write import write_text_atomic  # noqa: E402
 import pipeline_lock  # noqa: E402
 import job_history  # noqa: E402
+import row_state  # noqa: E402
 import view_guard  # noqa: E402
 from job_fingerprint import (  # noqa: E402,F401
     MAX_DESCRIPTION_CHARS,
@@ -540,7 +541,8 @@ def enrich(args: argparse.Namespace) -> int:
         prefs = (json.loads(args.intelligence.read_text(encoding="utf-8")).get("jobFitPreferences")) or {}
 
     pending: list[tuple[int, dict]] = []
-    skipped = from_ledger = outside = 0
+    skipped = from_ledger = outside = not_active = 0
+    stamp = row_state.found_stamp(payload.get("meta") if isinstance(payload, dict) else None)
     for index, job in enumerate(jobs, start=1):
         cached = job.get("llmFacts") or {}
         if not args.force and cached.get("_fingerprint") == _fingerprint(job):
@@ -552,6 +554,10 @@ def enrich(args: argparse.Namespace) -> int:
             job["llmFacts"] = stored
             skipped += 1
             from_ledger += 1
+            continue
+        # This run did not find it: facts it already has are kept above, and it is not worth a new call.
+        if row_state.not_found(job, stamp):
+            not_active += 1
             continue
         if outside_allowed_before_enrichment(job, prefs):
             outside += 1
@@ -565,6 +571,7 @@ def enrich(args: argparse.Namespace) -> int:
     frames = requirement_frames.load()
     remapped = requirement_frames.apply_remap(frames, remap)
     if args.dry_run:
+        print(f"  not found by this run, so not read: {not_active}")
         return _dry_run(args, jobs, pending, skipped, from_ledger, outside, frames, remap, mapper)
     done = failed = refused = 0
     refusal = None
@@ -656,7 +663,8 @@ def enrich(args: argparse.Namespace) -> int:
             job_history.save(ledger_file, ledger)
         write_text_atomic(args.jobs, json.dumps(payload, indent=2))
     print(f"\nextracted {done}, cached {skipped} ({from_ledger} from the ledger), failed {failed}"
-          f", not read {outside} (outside your allowed locations), refused {refused} (AI budget gate)")
+          f", not read {outside} (outside your allowed locations), refused {refused} (AI budget gate)"
+          f", not found by this run {not_active} (no call)")
     if refusal:
         # run_pipeline.py reads this line: refused work degrades the run, it does not stop it.
         print(f"ai gate refused: {refusal}")

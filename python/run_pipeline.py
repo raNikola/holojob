@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PY = ROOT / "python"
 sys.path.insert(0, str(PY / "job_scoring"))
 from atomic_write import write_text_atomic  # noqa: E402
+import row_state  # noqa: E402
 import pipeline_lock  # noqa: E402
 import view_guard  # noqa: E402
 from work_authorization import outside_allowed_before_enrichment  # noqa: E402
@@ -129,10 +130,11 @@ def check_discovery(started_at: datetime) -> dict:
     return payload
 
 
-def enriched_share(jobs: list[dict], prefs: dict | None = None) -> float:
+def enriched_share(jobs: list[dict], prefs: dict | None = None, meta: dict | None = None) -> float:
     """Share of the jobs that should have facts. Ads enrichment deliberately did
-    not read (outside the candidate's places) are not expected to have them."""
-    open_jobs = [j for j in jobs if not j.get("isClosed")] or jobs
+    not read (outside the candidate's places, or not found by this run) are not expected to have them."""
+    stamp = row_state.found_stamp(meta)
+    open_jobs = [j for j in jobs if not j.get("isClosed") and not row_state.not_found(j, stamp)] or jobs
     if prefs:
         open_jobs = [
             j for j in open_jobs
@@ -143,9 +145,10 @@ def enriched_share(jobs: list[dict], prefs: dict | None = None) -> float:
 
 def check_enrichment(minimum: float, refusal: str | None = None) -> float:
     """The enriched share. Too low stops the run, unless the AI budget gate is why: then scoring goes on, reduced."""
-    jobs = read_view().get("jobs") or []
+    view = read_view()
+    jobs = view.get("jobs") or []
     prefs = (read_json(INTELLIGENCE).get("jobFitPreferences") or {}) if INTELLIGENCE.exists() else {}
-    share = enriched_share(jobs, prefs)
+    share = enriched_share(jobs, prefs, view.get("meta"))
     if share < minimum and refusal:
         print(f"Enrichment reduced: only {share:.0%} of jobs have facts because the AI gate refused calls "
               f"({refusal}). Scoring continues; results are labelled reduced quality.", flush=True)
@@ -170,6 +173,7 @@ def summarize(args, steps: list[dict], enrich_line: str | None, share: float | N
             "providerCounts": meta.get("providerCounts") or {},
             "raw": meta.get("rawCount"), "deduped": meta.get("dedupedCount"),
             "history": meta.get("history") or {},
+            "rows": row_state.counts(read_view().get("jobs") or [], meta) if meta else None,
         }
     if enrich_line is not None:
         m = re.search(r"extracted (\d+), cached (\d+) \((\d+) from the ledger\), failed (\d+)"
@@ -215,6 +219,10 @@ def print_summary(s: dict) -> None:
         print(f"Discovery : {d['raw']} found, {d['deduped']} after dedup ({counts})")
         if h:
             print(f"            new {h.get('new', 0)}, known {h.get('known', 0)}, closed {h.get('closed', 0)}")
+        rows = d.get("rows")
+        if rows:
+            print(f"Job list  : {rows['found']} found by this run, {rows['held']} kept open, {rows['closed']} closed and still shown")
+            print(f"Absent    : {rows['absent']} not listed in the latest fetch; shown, with no AI calls")
     e = s.get("enrichment")
     if e:
         print(f"Enrichment: {e.get('enrichedShare', 0):.0%} of jobs have facts"

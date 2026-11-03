@@ -32,6 +32,7 @@ from pathlib import Path
 
 from job_fingerprint import job_fingerprint
 from competency_mapping import load_remap
+import row_state
 from llm_client import GuardrailRefused, complete_json
 import ai_gate  # noqa: E402 (on the path through llm_client)
 
@@ -115,7 +116,7 @@ class ShadowEngine:
         self._cache: dict[str, dict] = (
             json.loads(self.cache_path.read_text(encoding="utf-8")) if self.cache_path.exists() else {})
         self.counts = {"matched": 0, "cached": 0, "uncached": 0, "beyondLimit": 0, "noRequirements": 0,
-                       "closed": 0, "failed": 0, "excluded": 0, "refused": 0}
+                       "closed": 0, "failed": 0, "excluded": 0, "refused": 0, "notActive": 0}
         # The AI budget gate refused a call: the rest of the run makes none (ai_gate.py).
         self.refusal: str | None = None
         # Ads the cheap gates ruled out of the send, by gate (an ad failing two counts in both).
@@ -145,7 +146,7 @@ class ShadowEngine:
         self._excluded_keys = set()
         for job in jobs:
             posting = self._posting(job)
-            if job.get("isClosed") or not posting["facts"].get("requirements"):
+            if job.get("isClosed") or row_state.inactive(job) or not posting["facts"].get("requirements"):
                 continue
             if self._cache_key(posting) in self._cache:
                 continue
@@ -181,6 +182,9 @@ class ShadowEngine:
         if output is None:
             if not self.judge:
                 self._count("uncached")
+                return None
+            if row_state.inactive(job):
+                self._count("notActive")
                 return None
             if _key(job) in self._excluded_keys:
                 self._count("excluded")
@@ -240,7 +244,7 @@ class ShadowEngine:
     def preview(self, jobs: list[dict]) -> dict:
         """What a judged run would send for the engine, counted without calling anything."""
         send = self.plan(jobs)
-        sendable = [j for j in jobs if not j.get("isClosed") and self._posting(j)["facts"].get("requirements")]
+        sendable = [j for j in jobs if not j.get("isClosed") and not row_state.inactive(j) and self._posting(j)["facts"].get("requirements")]
         cached = sum(1 for j in sendable if self._cache_key(self._posting(j)) in self._cache)
         return {
             "enabled": True,

@@ -407,6 +407,19 @@ Accepted consequence: the ads of that run are lost (they were only in memory); t
 
 Tests: `tests/python/test_snapshot_closing.py` (rules, evidence, real providers, the five-step replay through `run_discovery`), rewritten tests in `test_job_history.py`, `test_import.py`, `test_run_log.py`. The 2026-11-02 "code check" list below is now partly out of date: one absence no longer closes a snapshot ad.
 
+## S5d as built: readers ready for rows a run did not find (2026-11-03)
+
+**No visible change.** A row a run did not find (absent, held, or Stale when S5f comes) now costs nothing and moves nothing. `python/job_scoring/row_state.py` is the one definition. A held row has no mark of its own and `apply_run` was not touched, so it is told by date: the importer stamps every found row with `lastSeen` equal to the view's `meta.generatedAt`. A view with no `meta.ledgerGeneration` says nothing, so nothing counts as held there. A closed row and a hand-entered row never count.
+
+- **Corpus:** `scorer.score_jobs` builds term rarity without these rows, so an active ad scores byte-identically with or without them. They are still scored, with that corpus. `run_scoring.py` and the manual path (`import_job_url.py`) mark them first; the mark `notFoundThisRun` stays on those rows in `scored_jobs.json`, unread by the UI. Closed rows stay in the corpus as before.
+- **Enrichment:** no model call for them, also under `--force`. Facts they already have are kept. They do not lower the enriched share in `run_pipeline.py`.
+- **Fit judge and shadow engine:** no new call, and no place under the limit. A judgement already paid for still applies, so a row's score does not jump the run it stops being found.
+- **Summaries:** `run_pipeline.py` prints found, kept open and closed on one line and absent on its own; `run_discovery.py` adds an absent line.
+
+**Reuse of stored scores: not built, not clearly safe.** A stored score is valid only for the same ad, profile, weights, scoring code and term rarity. Rarity moves every run: on real data, the same 428 rows scored against the corpus of an earlier run moved on 188 to 262 rows, by at most 2 points (mean 0.4 to 0.6). So reuse would freeze a row at an older corpus, and a profile or code change would need a key over all of those to invalidate it. Time is `score_job` at 0.034 s a row; building rarity is 0.7 s. For S5e: reuse for absent rows only, with a key of ad fingerprint, intelligence hash, weights and a scoring version, saves about 0.034 s per absent row (about 45 s of 61 s with today's rows), accepts up to about 2 points of difference from what a rescore would give, and needs a file or field for the key. Decision left to S5e.
+
+Tests: `tests/python/test_readers_not_found.py`.
+
 ### S4a follow-up (2026-11-03): the older-run override is confirmed by a human; Node view recovery has a safe live check
 
 - **`import_run.py --allow-older` needs an explicit confirmation.** It prints a warning first (the import may overwrite newer ledger data with older data: `lastSeen` moves back, ads the newer run closed can reopen) and then needs either `--confirm-overwrite-newer` or, at a terminal, the word `OVERWRITE` typed at the prompt. Without either it refuses, exit 2, and changes nothing. `--confirm-overwrite-newer` alone is not the override. Only this command line passes `allow_older`: the live run, the recovery in `run_discovery` and the Node routes never do. Code check: `tests/python/test_view_guard.py` (`test_the_older_run_override_is_never_reachable_from_an_automatic_path` scans `python/` and `scripts/` for every use; the order-guard test covers the refusals).

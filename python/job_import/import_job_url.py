@@ -35,6 +35,7 @@ from atomic_write import write_text_atomic  # noqa: E402
 import claude_code  # noqa: E402
 import manual_jobs  # noqa: E402
 import pipeline_lock  # noqa: E402
+import row_state  # noqa: E402
 import view_guard  # noqa: E402
 import safe_fetch  # noqa: E402
 from scorer import score_jobs  # noqa: E402
@@ -279,7 +280,8 @@ def run_job_json(args) -> int:
     if args.check_only:
         return _check_only(items, args)
 
-    discovered_jobs = _load_doc(args.discovered)["jobs"]
+    discovered_doc = _load_doc(args.discovered)
+    discovered_jobs = discovered_doc["jobs"]
     scored_jobs = _load_doc(args.scored)["jobs"]
     stored = manual_jobs.load(args.manual)
 
@@ -318,7 +320,7 @@ def run_job_json(args) -> int:
             return _fail(4, error="no_intelligence", saved=sorted(ids))
         intelligence = json.loads(args.intelligence.read_text(encoding="utf-8"))
         # The corpus a full run scores (term rarity is measured over it), so the row equals the one Re-score writes.
-        corpus = manual_jobs.with_manual(discovered_jobs, stored)
+        corpus = manual_jobs.with_manual(row_state.mark(discovered_jobs, discovered_doc.get("meta")), stored)
         scored = [j for j in score_jobs([dict(j) for j in corpus], intelligence) if j.get("jobId") in ids]
         for job in scored:
             manual_jobs.mark_missing_facts(job)
