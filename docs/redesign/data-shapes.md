@@ -1076,8 +1076,8 @@ Fields added later, in the browser job store and not in this file until saved:
 
 ## Other job files
 
-- `data/jobs/normalized_jobs.json` - discovery output before dedupe (same job fields as discovered jobs, list under `jobs`).
-- `data/jobs/raw_jobs.csv` - raw provider rows, one column per job field above plus provider-specific extras.
+- `data/jobs/normalized_jobs.json` - **no longer written (S4b, 2026-11-03); an old copy may remain on disk and nothing reads it.** Was: discovery output before dedupe (same job fields as discovered jobs, list under `jobs`).
+- `data/jobs/raw_jobs.csv` - **no longer written (S4b, 2026-11-03); an old copy may remain, nothing reads it.** Was: raw provider rows, one column per job field above plus provider-specific extras.
 - `data/jobs/.pipeline.lock` - empty file that carries the flock over every run that replaces the job files (`python/job_scoring/pipeline_lock.py`). Its presence means nothing; a restore never replaces it.
 
 ## Fit judgement cache

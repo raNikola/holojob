@@ -12,7 +12,6 @@ import uuid
 from collections import Counter
 from pathlib import Path
 
-import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -24,12 +23,7 @@ from discovery_common import (  # noqa: E402
     load_intelligence,
     resolve_search_config,
 )
-from export_jobs import (  # noqa: E402
-    export_normalized_json,
-    export_raw_csv,
-)
 from providers.base_provider import ProviderOutcome  # noqa: E402
-from providers.jobspy_provider import JobSpyProvider  # noqa: E402
 from providers.provider_registry import PROVIDER_GROUPS, get_provider, resolve_providers  # noqa: E402
 import run_log  # noqa: E402
 import source_settings  # noqa: E402
@@ -236,7 +230,6 @@ def discover(args: argparse.Namespace, record: dict) -> int:
 
     all_jobs: list[dict] = []
     provider_counts: dict[str, int] = {}
-    raw_df = pd.DataFrame()
 
     for name in provider_names:
         logger.info("Running provider: %s", name)
@@ -252,8 +245,6 @@ def discover(args: argparse.Namespace, record: dict) -> int:
         provider_counts[name] = len(jobs)
         all_jobs.extend(jobs)
         logger.info("Provider %s returned %d jobs", name, len(jobs))
-        if name == "jobspy" and isinstance(provider, JobSpyProvider):
-            raw_df = provider.last_raw_df
 
     for warning in stage_run.warnings:
         run_log.add_issue(record, "warning", warning)
@@ -290,13 +281,6 @@ def discover(args: argparse.Namespace, record: dict) -> int:
     if not result.report.get("complete"):
         logger.info("Import: not a complete scrape (%s)", ", ".join(result.report.get("incompleteSources") or ["see the report"]))
 
-    # Debug output only (S4a): after the commit, best effort. A failure here never fails or blocks a run.
-    for label, write in (("raw_jobs.csv", lambda: export_raw_csv(raw_df, ROOT)), ("normalized_jobs.json", lambda: export_normalized_json(all_jobs, ROOT))):
-        try:
-            write()
-        except Exception as exc:  # noqa: BLE001 - nothing may fail the run from here on
-            run_log.add_issue(record, "warning", f"{label} (debug output) was not written: {exc}")
-            logger.warning("%s not written: %s", label, exc)
     found_count = result.view["meta"]["dedupedCount"]
     discovered_path = ROOT / "data" / "jobs" / "discovered_jobs.json"
 
