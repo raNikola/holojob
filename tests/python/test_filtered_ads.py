@@ -3,6 +3,7 @@ under tmp_path. The process-kill tests run the real importer in a child process 
 
 import copy
 import json
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -43,13 +44,13 @@ def ad(n, title="Chef", **extra):
     return canon(n, title=title, **extra)
 
 
-def stage_run(root, monkeypatch, run_id, at, *, kept=(), dropped=(), reason="title_not_matched", finish=True):
+def stage_run(root, monkeypatch, run_id, at, *, kept=(), dropped=(), reason="title_not_matched", finish=True, key=None, source="greenhouse"):
     """A staged run at time `at`: `kept` ads of source greenhouse, and `dropped` ads with the reason."""
     with monkeypatch.context() as patch:
         patch.setattr(staging, "_now", lambda: at)
-        run = staging.StagingRun.begin(root, run_id, search_key=f"key-{run_id}", terms=["pm"], locations=["Remote"], country="Serbia",
-                                       remote_filters=["remote"], providers=["greenhouse"])
-        writer = run.open_source("greenhouse")
+        run = staging.StagingRun.begin(root, run_id, search_key=key or f"key-{run_id}", terms=["pm"], locations=["Remote"], country="Serbia",
+                                       remote_filters=["remote"], providers=[source])
+        writer = run.open_source(source)
         writer.append(list(kept), part="p", read=len(kept) + len(dropped))
         writer.drops([dropped_ad(job, reason, f"ext-{job['jobId']}") for job in dropped])
         writer.finish(status="ok", complete=True, read=len(kept) + len(dropped), kept=len(kept))
@@ -734,3 +735,45 @@ def test_a_scrape_logs_it_when_its_dropped_ads_were_not_recorded(tmp_path, monke
     monkeypatch.setattr(filtered_ads, "save", broken)
     assert discover(tmp_path, monkeypatch, {"greenhouse": Prov([canon(1)])}) == 0, "the run itself succeeds"
     assert "were not recorded" in caplog.text
+
+
+# --- the bound on appliedRuns and a run still in staging (asked for with S5e2) ----------------------------------------------------
+
+
+def test_the_bound_never_drops_a_run_still_in_staging_so_repeats_count_once(tmp_path, monkeypatch):
+    """Through the real code: more runs than the bound, all on disk. The ids stay past the bound, and neither a backfill nor an import counts twice."""
+    monkeypatch.setattr(filtered_ads, "MAX_APPLIED_RUNS", 2)
+    job = ad(1)
+    for n, run_id in enumerate(("a", "b", "c", "d")):
+        stage_run(tmp_path, monkeypatch, run_id, T[n], kept=[canon(9)], dropped=[job])
+    assert backfill(tmp_path) == 0
+    store = filtered_ads.load(tmp_path)
+    assert store["appliedRuns"] == ["a", "b", "c", "d"] and store["ads"][job["jobId"]]["timesSeen"] == 4
+    assert backfill(tmp_path) == 0
+    imported(tmp_path, "a")
+    assert record_of(tmp_path, job)["timesSeen"] == 4
+
+
+def test_an_id_goes_from_the_list_only_once_its_run_has_left_staging(tmp_path, monkeypatch):
+    monkeypatch.setattr(filtered_ads, "MAX_APPLIED_RUNS", 1)
+    job = ad(1)
+    stage_run(tmp_path, monkeypatch, "a", T[0], kept=[canon(9)], dropped=[job])
+    stage_run(tmp_path, monkeypatch, "b", T[1], kept=[canon(9)], dropped=[job])
+    assert backfill(tmp_path) == 0
+    assert filtered_ads.load(tmp_path)["appliedRuns"] == ["a", "b"]
+    shutil.rmtree(tmp_path / "data/jobs/staging/a")
+    assert backfill(tmp_path) == 0
+    assert filtered_ads.load(tmp_path)["appliedRuns"] == ["b"] and record_of(tmp_path, job)["timesSeen"] == 2, "nothing is left that could be counted again"
+
+
+@pytest.mark.xfail(strict=True, reason="Known and reported in S5e2: an id missing from appliedRuns with its run on disk is counted again. The code cannot "
+                                       "reach this state by itself (see the two tests above); only a run folder restored from a copy or an edited file can.")
+def test_an_id_that_left_the_list_while_its_run_is_on_disk_is_not_counted_twice(tmp_path, monkeypatch):
+    job = ad(1)
+    stage_run(tmp_path, monkeypatch, "a", T[0], kept=[canon(9)], dropped=[job])
+    assert backfill(tmp_path) == 0
+    store = filtered_ads.load(tmp_path)
+    store["appliedRuns"].remove("a")
+    filtered_ads.save(tmp_path, store)
+    assert backfill(tmp_path) == 0
+    assert record_of(tmp_path, job)["timesSeen"] == 1

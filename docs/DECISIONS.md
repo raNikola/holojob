@@ -490,6 +490,49 @@ In the real container every request of `scripts/check-view-recovery.js` answered
 
 **DEFERRED: ledger growth.** At about 10 KB per entry and about 150 new ads a day, `job_history.json` grows about 1.5 MB a day, about 550 MB a year, and every import reads and rewrites all of it. D3 removes nothing. The likely fix is moving descriptions out of the main file (they are about 6.3 KB of each entry). Not scheduled; this will hurt long before `filtered_ads.json` does.
 
+## S5e2 as built: `GET /api/jobs/all`, the read-only list of all ads (2026-11-03)
+
+**Owner decisions (2026-11-03):**
+
+- "All" comes from a separate server route, not from more rows in `discovered_jobs.json`.
+- Active (S5e3) will be found, held, manual, and absent seen within 14 days. All is everything known: closed, absent, older search key, stale (S5f), filtered.
+- A filtered ad shows only with a valid title and web address. Others stay in `filtered_ads.json` as diagnostics.
+- `detail_cap` and `no_detail_text` ads with a valid title and address show, marked incomplete.
+- Hidden rows have no score: "Not scored", no model call, no last-score file.
+- "Read-only" means no job data changes. The existing view recovery may still rebuild a view behind the ledger.
+- Found, held, absent and older_key must come from ledger marks, never from `meta.generatedAt` or the time a view was regenerated. A missing mark gets a documented fallback, never a guess.
+
+**The route:** `scripts/job-all-read.js` makes the same `ensureViewCurrent` check as the other job routes, then runs `python/job_discovery/all_ads.py`. The rules are in Python because the marks are written there and the tests can then use the real import, view rebuild and enrichment. The script uses only the standard library and takes about 0.15 s on the real files. A view that cannot be rebuilt, and a ledger that cannot be read, are both 503 `view_unrecoverable` with no list. The second check matters: a cut ledger whose generation can still be peeked passes the view check.
+
+**Classes, first match wins (`all_ads.classify`):**
+
+| Class | Mark | Note |
+|---|---|---|
+| `found` | `lastRunId == lastImport.runId` | |
+| `closed` | `closedAt` | Its own mark |
+| `stale` | `staleSince` | Nothing writes it until S5f |
+| `absent` | `absentSince` | Its own mark: a proven miss |
+| `unclassified` | no `lastImport.runId` | Fallback |
+| `held` | `heldRunId == lastImport.runId` | |
+| `unclassified` | no `seenUnder`, or no current search | Fallback |
+| `older_key` | `seenUnder` differs from the current search | |
+| `absent` | `seenUnder` equals the current search | The search ran and did not return it |
+
+`filtered` and `filtered_incomplete` come from `filtered_ads.json`.
+
+- **`unclassified` is a ninth class, added here.** The "never guess" rule needs somewhere to put a row none of the eight describes. Real data has none.
+- **`lastImport.searchKey` is not added.** The current search is the one `seenUnder` on the rows the last import found, because `apply_run` writes it on each. So the ledger and the importer do not change, and an older ledger works. If that import found no row, or rows under two keys, there is no current search and the fallback applies.
+- **`lastImport.marksNotFound` is not read.** `heldRunId` is older than that flag, so a ledger from before it gives the same classes.
+- **`lastSeen` does not decide a class.** It is only shown in the reason. S5e3 uses it for the 14-day rule.
+
+**One row per ad:** an ad in both files shows once, from the ledger, by the ledger's real ids rather than the `inLedger` mark, which may be behind. A cross-post whose other copy was found is `absent` with the reason "Still listed under another copy" (44 on real data).
+
+**Slim rows:** a whitelist, so no description, facts or salary can be in them. Every row has the same fields and `matchScore: null`. `meta` holds the counts per class, `filteredFile` (`ok`, `missing`, `unreadable`; the ledger's rows do not depend on it) and diagnostics. Hand-entered jobs are not in the route: they are not in the ledger, and S5e3 takes them from the browser's list.
+
+**Measured on a copy of the real data:** 3,489 rows, 2.0 MB (the plan's 1.1 MB estimate was low). Counts: found 455, absent 856, closed 1, older_key 669, filtered 1,508; held, stale, filtered_incomplete and unclassified 0. The view's 463 rows are exactly the 455 found, the 7 proven absent and the 1 closed.
+
+**`appliedRuns` bound, tested as asked.** Through the code a repeat never counts twice: `_trim` never drops an id whose run is in staging, even past the bound. An id missing from the list with its run on disk is counted again; that test is a strict xfail. The code cannot reach that state alone. Only a run folder restored after its id was dropped, or a hand-edited file, can. **Smallest fix, not applied (scope):** remove `_trim`. The list then only grows, by about 15 bytes a run (about 27 KB a year at 5 runs a day), and a restored folder is covered; only a hand-edited file is left.
+
 ## offList rows keep the owner's data (2026-11-03)
 
 **Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,

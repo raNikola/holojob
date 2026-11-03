@@ -852,7 +852,7 @@ Fields added later, in the browser job store and not in this file until saved:
 ## Filtered ads
 
 - **Path:** `data/jobs/filtered_ads.json`
-- **Purpose:** Every ad a source returned and a filter dropped, kept after its staging run is pruned. No reader yet (S5e2).
+- **Purpose:** Every ad a source returned and a filter dropped, kept after its staging run is pruned. Read by `job_discovery/all_ads.py` for `GET /api/jobs/all` (S5e2).
 - **Written by:** `job_discovery/filtered_ads.py`, from the real import and `import_run.py --backfill-filtered`. A dry run never writes it. Not in backups, like the ledger.
 
 ```json

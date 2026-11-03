@@ -42,6 +42,7 @@ import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
 import { handleApplicationsRequest } from './application-store.js'
 import { handleJobHistoryRequest } from './job-history-read.js'
+import { handleJobsAllRequest } from './job-all-read.js'
 import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
 import { RUN_ACTIVE, incompleteCommit, isRunBusy, rescrapeStatus, runHttpStatus, startRescrape, withRunLock } from './run-rescrape.js'
 
@@ -593,6 +594,10 @@ export async function handleApiRequest(req, res) {
   }
 
   if (await handleJobHistoryRequest(req, res, url, { root: ROOT })) {
+    return true
+  }
+
+  if (await handleJobsAllRequest(req, res, url, { root: ROOT })) {
     return true
   }
 
