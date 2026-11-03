@@ -3,12 +3,15 @@
 
     import_run.py --run RUNID --dry-run [--limit N] [--report-file]
     import_run.py --latest  --dry-run
-    import_run.py --run RUNID --import [--allow-older]          recovery: import a staged run that was never imported
+    import_run.py --run RUNID --import [--allow-older --confirm-overwrite-newer]   recovery: import a staged run that was never imported
 
 --dry-run is read-only. It writes no live file; with --report-file it writes staging/RUNID/import-report.json and nothing else.
 --import is the same import a Re-scrape makes (the importer: full validation, ledger then derived view, run marked imported). It
 is for a staged run whose import did not happen (the run stopped after staging). It REFUSES a run that started before the last
-imported run, with the reason; --allow-older overrides that for recovery only, and is off by default.
+imported run, with the reason; --allow-older overrides that for recovery only, and is off by default. It prints a warning first
+(the import may overwrite newer ledger data with older data) and then needs the flag --confirm-overwrite-newer, or, at a terminal,
+the word OVERWRITE typed at the prompt. Without either it refuses and changes nothing. Only this command line passes it: the
+live pipeline, the recovery in run_discovery and the Node routes never do (tests/python/test_import.py scans for that).
 Both take the pipeline lock (exit 2 when a run is active).
 
 Exit codes (dry run): 0 compared and ZERO differences; 1 differences; 2 error, refused import or a run that is active; 3 nothing to
@@ -33,6 +36,27 @@ import staging  # noqa: E402
 _lock_spec = importlib.util.spec_from_file_location("pipeline_lock", SCRIPT_DIR.parent / "job_scoring" / "pipeline_lock.py")
 pipeline_lock = importlib.util.module_from_spec(_lock_spec)
 _lock_spec.loader.exec_module(pipeline_lock)
+
+
+OVERRIDE_WARNING = (
+    "WARNING: --allow-older imports a run that started BEFORE the last imported run. Its sightings are older than what the ledger "
+    "holds now, so this import may overwrite newer ledger data with older data (lastSeen moves back, ads the newer run closed can "
+    "reopen, newer facts can be replaced). Use it only to recover a run that was never imported, and keep a copy of "
+    "data/jobs/job_history.json first."
+)
+
+
+def confirmed_override(args, stdin=None) -> bool:
+    """True only when the owner has said yes explicitly: the flag, or the word OVERWRITE typed at a terminal. Never assumed."""
+    print(OVERRIDE_WARNING, file=sys.stderr)
+    if args.confirm_overwrite_newer:
+        return True
+    stdin = stdin or sys.stdin
+    if not stdin.isatty():
+        print("Refused: no confirmation. Add --confirm-overwrite-newer, or run it at a terminal and type OVERWRITE.", file=sys.stderr)
+        return False
+    print("Type OVERWRITE to go on, anything else stops: ", end="", file=sys.stderr, flush=True)
+    return stdin.readline().strip() == "OVERWRITE"
 
 
 def megabytes(size: int) -> str:
@@ -119,8 +143,13 @@ def main(argv=None, root: Path | None = None) -> int:
     parser.add_argument("--allow-older", action="store_true", help="with --import: import a run older than the last imported one")
     parser.add_argument("--limit", type=int, default=20, help="how many differences to print (default 20)")
     parser.add_argument("--report-file", action="store_true", help="also write staging/RUNID/import-report.json (the only file written)")
+    parser.add_argument("--confirm-overwrite-newer", action="store_true",
+                        help="with --allow-older: yes, this may overwrite newer ledger data with older data")
     args = parser.parse_args(argv)
     root = Path(root or ROOT)
+    if args.confirm_overwrite_newer and not args.allow_older:
+        print("--confirm-overwrite-newer only goes with --allow-older.", file=sys.stderr)
+        return 2
     if args.allow_older and not args.do_import:
         print("--allow-older only goes with --import.", file=sys.stderr)
         return 2
@@ -131,6 +160,9 @@ def main(argv=None, root: Path | None = None) -> int:
             print("No staging runs in data/jobs/staging.", file=sys.stderr)
             return 2
         run_id = runs[0]
+    if args.allow_older and not confirmed_override(args):
+        print("Nothing was changed.", file=sys.stderr)
+        return 2
     lock = pipeline_lock.acquire()
     if lock is None:
         print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
