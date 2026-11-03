@@ -356,6 +356,20 @@ Accepted consequence: the ads of that run are lost (they were only in memory); t
 
 `raw_jobs.csv` and `normalized_jobs.json` are not written by a run any more. `export_raw_csv` and `export_normalized_json` are removed from `export_jobs.py`, and the best-effort block after the commit is removed from `run_discovery.py` (with the now unused `raw_df`, `pandas` and `JobSpyProvider` imports there). Re-confirmed by search before removing: nothing reads them (no Python module, Node script or route, `src/` component, backup or restore list, `.gitignore` entry; the backup copies whole folders, so an absent file cannot fail it). Files left by earlier runs stay on disk, untouched and not deleted; they are stale and nothing uses them, so the owner may delete them by hand. No change to discovery, import, ledger, view, scoring or the run record (the "debug output was not written" warning no longer exists). `JobSpyProvider.last_raw_df` stays (a test and the provider use it). Test: `test_a_run_no_longer_writes_the_debug_mirror_files_and_leaves_existing_ones_alone` (`tests/python/test_view_guard.py`); the failed-export test in `test_atomic_writers.py` now covers `discovered_jobs.json` only. `docs/redesign/data-shapes.md` marks both files as no longer written.
 
+## S5: owner decisions so far, and S5a as built: the lifecycle report (2026-11-03)
+
+**Owner decisions (D3 open, D1 pending the report's numbers):**
+
+- **D1:** the 14-day default list window is temporary, to be confirmed after this report.
+- **D2:** Stale rows may leave `discovered_jobs.json`, but "Include stale" must bring them back from the ledger. A row missing from the file must never mean the owner cannot find it. Application tracking stays independent of the discovery list.
+- **D3, not decided:** no automatic removal of rows under an old search key after 30 days. The report measures it first.
+- **D4:** snapshot closing ignores the search key, and only for a board proven completely read.
+- **D5:** no minimum gap between the two fetches.
+- **D6, naming:** in the rules of 2026-11-02 below, **Missing = Absent and Expired = Closed**. An explicit close by the source stays unbuilt, no provider reads one.
+- **D7:** per board, but only for boards with reliable proof of a complete read. `read == kept + dropped` alone is not enough, a provider may have stopped early. The extra evidence is proposed per provider in `lifecycle_report.BOARD_EVIDENCE`, not decided.
+
+**S5a, no behaviour change.** `python/job_discovery/lifecycle_report.py` and `import_run.py --latest --lifecycle-report [--report-file]`: pure functions (`simulate`, `build_report`) replay the staged runs under the S5 rules. `apply_run`, the importer, the ledger and the view are not touched, and these rules are not live until S5c to S5f. It writes nothing, except `staging/<runId>/lifecycle-report.json` with `--report-file`; it takes the pipeline lock like `--dry-run`. Scoring is timed in a child process with no model call. Closing is shown twice: strict (today: no board has proof, so nothing closes) and if proven. User data is what the backend can see; the browser's status, insights and outreach state cannot be seen. One live GET per provider on 2026-11-03 checked the answer shapes (Greenhouse `meta.total`, Lever `skip`/`limit`, Ashby only `jobs` and `apiVersion`). **The application store stays closed to Python** (`test_no_python_code_names_the_application_store`, TRACKER_PLAN 6a). The report does not read it: application job ids come through `--application-job-ids FILE`, and without it the report prints that applications were not joined. The file citations live in `python/job_discovery/lifecycle_storage_map.json`, a data file. Tests: `tests/python/test_lifecycle_report.py`.
+
 ### S4a follow-up (2026-11-03): the older-run override is confirmed by a human; Node view recovery has a safe live check
 
 - **`import_run.py --allow-older` needs an explicit confirmation.** It prints a warning first (the import may overwrite newer ledger data with older data: `lastSeen` moves back, ads the newer run closed can reopen) and then needs either `--confirm-overwrite-newer` or, at a terminal, the word `OVERWRITE` typed at the prompt. Without either it refuses, exit 2, and changes nothing. `--confirm-overwrite-newer` alone is not the override. Only this command line passes `allow_older`: the live run, the recovery in `run_discovery` and the Node routes never do. Code check: `tests/python/test_view_guard.py` (`test_the_older_run_override_is_never_reachable_from_an_automatic_path` scans `python/` and `scripts/` for every use; the order-guard test covers the refusals).
@@ -437,6 +451,8 @@ whatever discovery returns.
 - Per-job AI tools on a stored `offList` row are unchanged: they run only when the owner opens that job and asks.
 
 ## Ad lifecycle rules (narrowed 2026-11-02)
+
+**Naming (owner, D6, 2026-11-03):** Missing is now called Absent, and Expired is now called Closed.
 
 - **Closed:** the source explicitly says the ad is closed.
 - **Missing:** absent in a successful fetch of the same source.

@@ -3,6 +3,7 @@
 
     import_run.py --run RUNID --dry-run [--limit N] [--report-file]
     import_run.py --latest  --dry-run
+    import_run.py --latest  --lifecycle-report [--report-file] [--application-job-ids FILE]  what the S5 lifecycle rules would do (lifecycle_report.py); read-only
     import_run.py --run RUNID --import [--allow-older --confirm-overwrite-newer]   recovery: import a staged run that was never imported
 
 --dry-run is read-only. It writes no live file; with --report-file it writes staging/RUNID/import-report.json and nothing else.
@@ -23,6 +24,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -31,6 +33,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import importer  # noqa: E402
+import lifecycle_report  # noqa: E402
 import staging  # noqa: E402
 
 _lock_spec = importlib.util.spec_from_file_location("pipeline_lock", SCRIPT_DIR.parent / "job_scoring" / "pipeline_lock.py")
@@ -140,9 +143,11 @@ def main(argv=None, root: Path | None = None) -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="replay and compare; writes nothing")
     mode.add_argument("--import", dest="do_import", action="store_true", help="import the run for real (recovery)")
+    mode.add_argument("--lifecycle-report", action="store_true", help="what the S5 lifecycle rules would do; writes nothing (--report-file: its own file)")
     parser.add_argument("--allow-older", action="store_true", help="with --import: import a run older than the last imported one")
     parser.add_argument("--limit", type=int, default=20, help="how many differences to print (default 20)")
     parser.add_argument("--report-file", action="store_true", help="also write staging/RUNID/import-report.json (the only file written)")
+    parser.add_argument("--application-job-ids", type=Path, help="with --lifecycle-report: a file of job ids with an application, one a line; Python does not read the store")
     parser.add_argument("--confirm-overwrite-newer", action="store_true",
                         help="with --allow-older: yes, this may overwrite newer ledger data with older data")
     args = parser.parse_args(argv)
@@ -167,6 +172,22 @@ def main(argv=None, root: Path | None = None) -> int:
     if lock is None:
         print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
         return 2
+    if args.lifecycle_report:
+        try:
+            application_ids = None
+            if args.application_job_ids:
+                application_ids = {line.strip() for line in args.application_job_ids.read_text(encoding="utf-8").splitlines() if line.strip()}
+            report = lifecycle_report.gather(root, run_id, as_of=datetime.now(timezone.utc).isoformat(), application_ids=application_ids)
+            for line in lifecycle_report.render(report):
+                print(line)
+            if args.report_file:
+                print(f"Report written: {lifecycle_report.write_report_file(root, run_id, report).relative_to(root)}")
+        except (OSError, ValueError) as exc:
+            print(f"Lifecycle report stopped: {exc}", file=sys.stderr)
+            return 2
+        finally:
+            lock.release()
+        return 0
     if args.do_import:
         try:
             outcome = importer.import_staged_run(root, run_id, allow_older=args.allow_older)
