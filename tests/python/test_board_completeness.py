@@ -1,12 +1,8 @@
 """Board completeness evidence (slice S5b): what the staging footer says about each snapshot board. Offline: requests.get is faked."""
 
-import inspect
-
 import pytest
 import requests
 
-import importer
-import job_history
 import run_discovery
 import staging
 from providers import ashby_provider, greenhouse_provider, lever_provider
@@ -219,12 +215,3 @@ def test_an_incomplete_board_always_says_why_and_a_complete_one_never_does():
 
 def test_a_source_that_is_not_a_board_source_has_no_lines():
     assert parts_outcome(read=1, kept=1, total=1, failures={}).boards_read == []
-
-
-# --- nothing reads it yet ----------------------------------------------------------------------------------------------
-
-
-def test_nothing_reads_the_field_yet():
-    for module in (importer, job_history):
-        assert "boardsRead" not in inspect.getsource(module) and "boards_read" not in inspect.getsource(module)
-    assert "boardsRead" not in inspect.getsource(run_discovery) and "boards_read" not in inspect.getsource(run_discovery)

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """What the S5 lifecycle rules WOULD do, from the ledger and the staged runs (slice S5a). Changes no behaviour and writes nothing.
 
-`simulate` and `build_report` are pure: they take the data, mutate none of it, and do no I/O. The rules live only here until S5c
-to S5f build them for real; `job_history.apply_run` is untouched. `import_run.py --lifecycle-report` gathers the inputs and prints.
+`simulate` and `build_report` are pure: they take the data, mutate none of it, and do no I/O. This is an estimate, separate from
+the live rules: S5c built snapshot closing in `job_history.apply_run` (which uses the S5b proof), and this report does not read it. `import_run.py --lifecycle-report` gathers the inputs and prints.
 
 Closing is simulated twice, because a board's read is not yet proven complete (owner, D7: read == kept + dropped alone is not
 enough, a provider may stop early):

@@ -384,6 +384,29 @@ Accepted consequence: the ads of that run are lost (they were only in memory); t
 
 `parts_outcome` is the one place that forces a failed or empty board to `complete: false` and gives it a line, whatever its provider said. Limit: Greenhouse's total comes from the same answer, so it catches a list cut short of its own total, not a server that lies about both. `lifecycle_report` still does not read the field; only its wording changed. Tests: `tests/python/test_board_completeness.py`, through the real staging writer.
 
+## S5c as built: two-fetch closing for snapshot sources (2026-11-03)
+
+**Behaviour change, snapshot sources only.** `job_history.apply_run` closes an ad only on `board_evidence`, which the importer builds (`importer.board_evidence`). With none, nothing closes and no miss is counted, so every run staged before S5b is no evidence. Search-based and unclassified sources are not touched: absence closes nothing, and their rows stay shown or hidden as before until S5e. `SOURCE_CLASS` in `job_history.py` names the classes; a source it does not name is search-based.
+
+| What a run says about an open snapshot ad | Result |
+|---|---|
+| Found | Active. Clears `absentRuns`, `absentSince`, `lastAbsentRunId`; a closed ad reopens, with `firstSeen` and facts kept |
+| Complete board, not listed, first time | `absentRuns` 1, `absentSince`. Stays shown, marked `isAbsent`; `lastSeen` unchanged |
+| Complete board, not listed, second in a row | `closedAt`. Row carries `closedAfterChecks`, shown for 14 days as before |
+| Listed, dropped by a filter | No miss, not found, not shown. On a complete board it clears an earlier miss; a closed ad stays closed |
+| Listed under another copy (`roleKey`) | No miss, as before |
+| Failed, empty, unproven, board not read, source did not run | Neither raises nor clears. Shown if it was of this search or already absent |
+
+- **Complete** means the provider's proof (`boardsRead`, S5b) AND this run's files accounting for the board: `read` is the same in the line and the batches, equals kept plus counted discards, every counted discard has an id, `discards.jsonl` is whole, no `discardMismatch`. Without the second part a lost discard would make a filtered ad look gone. **This goes beyond the owner's wording and only closes less.**
+- **A listed ad clearing an earlier miss on a complete board** is how "stays as it is" and "consecutive" were reconciled: a board that shows the ad means the two misses were not consecutive.
+- **An unproven board keeps an ad shown with no mark**, so an Ashby ad that leaves its board stays in the list as an ordinary row, with an old `lastSeen`, for good. Accepted result of "Ashby never closes"; only a later proof or rule changes it.
+- **`closedAfterChecks`** lets the badge say "Not on the company's board in 2 complete checks since DATE" only for an ad that really had them. An ad closed before S5c keeps "No longer listed since DATE".
+- **`lastAbsentRunId`** makes one run count once, so a run applied twice gives the same ledger. A board removed from the config is unread and closes nothing, which fixes the old bug. D4 and D5 as decided: the key plays no part on a proven board, and there is no gap between the two fetches.
+- **Dry-run comparison:** a run imported before S5c may now differ from what its old commit wrote, by design. Fields are additive, version stays 1, nothing migrates.
+- **Limit until S5d:** first-miss rows are in the scoring corpus, like the held rows already are.
+
+Tests: `tests/python/test_snapshot_closing.py` (rules, evidence, real providers, the five-step replay through `run_discovery`), rewritten tests in `test_job_history.py`, `test_import.py`, `test_run_log.py`. The 2026-11-02 "code check" list below is now partly out of date: one absence no longer closes a snapshot ad.
+
 ### S4a follow-up (2026-11-03): the older-run override is confirmed by a human; Node view recovery has a safe live check
 
 - **`import_run.py --allow-older` needs an explicit confirmation.** It prints a warning first (the import may overwrite newer ledger data with older data: `lastSeen` moves back, ads the newer run closed can reopen) and then needs either `--confirm-overwrite-newer` or, at a terminal, the word `OVERWRITE` typed at the prompt. Without either it refuses, exit 2, and changes nothing. `--confirm-overwrite-newer` alone is not the override. Only this command line passes `allow_older`: the live run, the recovery in `run_discovery` and the Node routes never do. Code check: `tests/python/test_view_guard.py` (`test_the_older_run_override_is_never_reachable_from_an_automatic_path` scans `python/` and `scripts/` for every use; the order-guard test covers the refusals).
@@ -478,7 +501,7 @@ whatever discovery returns.
 - **A source that did not run** (`skipped` or `failed`) keeps its ads as they were (slice 1 correction).
 - **`expiresAt`** (Infostud, Joberty) is a deadline: displayed only, never used as Closed or Expired.
 
-**Code check, differs, built last (slice 4):** `python/job_scoring/job_history.py` has one state, `closedAt` / `isClosed`, and no
+**Code check, partly out of date since S5c (2026-11-03): a snapshot ad now closes after two proven misses; see S5c as built. The rest still holds for search-based sources.** **Code check, differs, built last (slice 4):** `python/job_scoring/job_history.py` has one state, `closedAt` / `isClosed`, and no
 Missing or Expired.
 
 - One absence closes a job, not two.

@@ -304,14 +304,14 @@ def discover(args: argparse.Namespace, record: dict) -> int:
     print("")
     print("Job history:")
     print(f"  new {history_stats['new']}, already known {history_stats['known']}, "
-          f"reopened {history_stats['reopened']}, closed this run {history_stats['closed']}")
+          f"reopened {history_stats['reopened']}, absent from a proven board {history_stats['absent']}, closed this run {history_stats['closed']}")
     print(f"  facts carried over {history_stats['carriedFacts']}, "
           f"ads changed since last run {history_stats['changed']}, "
           f"fuller description kept over a throttled one {history_stats['keptFullerDescription']}")
-    held = history_stats["keptFailedBoard"] + history_stats["keptEmptyBoard"] + history_stats["keptSourceNotRun"]
     print(f"  ads kept open: {history_stats['keptFailedBoard']} of unread boards, {history_stats['keptEmptyBoard']} of empty boards, "
-          f"{history_stats['keptSourceNotRun']} of sources that did not run")
-    closed_written = len(to_write) - found_count - held
+          f"{history_stats['keptSourceNotRun']} of sources that did not run, {history_stats['keptUnproven']} of unproven boards, "
+          f"{history_stats['keptBoardNotRead']} of boards not read")
+    closed_written = sum(1 for job in to_write if job.get("isClosed"))
     print(f"  jobs written: {len(to_write)} ({closed_written} closed, kept {job_history.CLOSED_KEEP_DAYS} days)")
     print("")
     print(f"Output: {discovered_path.relative_to(ROOT)}")

@@ -138,6 +138,49 @@ def _previous(previous) -> tuple[dict, dict]:
     return facts, seen
 
 
+def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bool) -> dict:
+    """{board: {"complete", "listed"}} for one snapshot source: what `job_history.apply_run` may close on (S5c). A run staged before
+    S5b has no `boardsRead`, so it gives none.
+
+    Complete means the provider proved the read (`boardsRead`, S5b) AND this run's files account for every ad of the board. Without
+    the second, an ad a filter dropped could look like one the board no longer lists: a discard lost, a torn line or an ad
+    that failed staging stops the board from counting. `listed` is every id the board showed: kept, or dropped by a filter.
+    """
+    rows = (footer or {}).get("boardsRead")
+    if not isinstance(rows, list) or not stage or not stage.usable:
+        return {}
+    kept: dict[str, list] = {}
+    read: dict[str, int] = {}
+    for batch in stage.batches:
+        kept.setdefault(batch.part, []).extend(batch.jobs)
+        read[batch.part] = read.get(batch.part, 0) + (batch.read or 0)
+    dropped: dict[str, list] = {}
+    for record in (run.discards.by_source(name) if run.discards else []):
+        dropped.setdefault(record.get("part"), []).append(record)
+    damaged = bool(run.discards is None or run.discards.torn or run.discards.unreadable_lines or run.discards.rejected)
+    failed = set(footer.get("boardsFailed") or [])
+    empty = set(footer.get("boardsEmpty") or [])
+    found: dict[str, dict] = {}
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("board"), str):
+            continue
+        board = row["board"]
+        records = dropped.get(board, [])
+        counted = [r for r in records if r.get("counted")]
+        accounted = (
+            read.get(board) == row.get("read") == len(kept.get(board, [])) + len(counted)
+            and all(r.get("jobId") for r in counted)
+        )
+        found[board] = {
+            "complete": (
+                row.get("complete") is True and not row.get("anomalies") and board not in failed and board not in empty
+                and accounted and not in_doubt and not damaged
+            ),
+            "listed": {job.get("jobId") for job in kept.get(board, []) if isinstance(job, dict)} | {r["jobId"] for r in records if r.get("jobId")},
+        }
+    return found
+
+
 def plan_import(
     run: staging.RunStage, ledger: dict, previous=None, *, now: str | None = None, force: bool = False,
     allow_older: bool = False,
@@ -192,6 +235,7 @@ def plan_import(
     failed_boards: dict[str, set[str] | None] = {}
     empty_boards: dict[str, set[str]] = {}
     not_run: set[str] = set()
+    evidence: dict[str, dict] = {}
     rejected_total = 0
 
     for name in providers:
@@ -227,6 +271,9 @@ def plan_import(
         # A source that did not run to its end, or whose staged ads are not all there, is not evidence that any other ad is gone.
         if state in ("unfinished", "failed", "skipped") or anomalies:
             not_run.add(name)
+        if name in job_history.CLOSURE_PROVIDERS:
+            in_doubt = name in not_run or bool(stage and stage.torn) or bool(footer and footer.get("discardMismatch"))
+            evidence[name] = board_evidence(run, name, stage, footer, in_doubt)
         if footer:
             if footer.get("boardsFailed"):
                 failed_boards[name] = set(footer["boardsFailed"])
@@ -257,7 +304,7 @@ def plan_import(
     to_write, stats = job_history.apply_run(
         result.ledger, deduped, now=moment, providers_returned=provider_counts, key=manifest.get("searchKey") or "",
         role_key=_crosspost_key, previous_facts=previous_facts, seen_before=seen_before, failed_boards=failed_boards,
-        empty_boards=empty_boards, sources_not_run=not_run, run_id=run.run_id, prune=False,
+        empty_boards=empty_boards, sources_not_run=not_run, run_id=run.run_id, prune=False, board_evidence=evidence,
     )
     result.stats = stats
     meta = {
@@ -280,8 +327,12 @@ def plan_import(
         heldFailedBoard=stats.get("keptFailedBoard", 0),
         heldEmptyBoard=stats.get("keptEmptyBoard", 0),
         heldSourceNotRun=stats.get("keptSourceNotRun", 0),
+        heldUnproven=stats.get("keptUnproven", 0),
+        heldBoardNotRead=stats.get("keptBoardNotRead", 0),
+        listedButFiltered=stats.get("listedButFiltered", 0),
+        boardsProvenComplete=sorted(f"{name}/{board}" for name, boards in evidence.items() for board, one in boards.items() if one["complete"]),
         incompleteSources=[s["name"] for s in report["sources"] if s["state"] != "complete" or s["anomalies"]],
-        ledgerChanges={k: stats[k] for k in ("new", "known", "reopened", "changed", "closed", "carriedFacts")},
+        ledgerChanges={k: stats[k] for k in ("new", "known", "reopened", "changed", "absent", "closed", "carriedFacts")},
         reasons=dict(sorted(reasons.items())),
         complete=not rejected_total and not any(s["state"] != "complete" or s["anomalies"] for s in report["sources"])
         and report["stagingStatus"] == "ok",
