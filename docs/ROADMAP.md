@@ -96,7 +96,7 @@ A new screen named Activity, in the nav group System, built in this repo. Decisi
 | Slice | Content | Status on 2026-11-03 |
 |---|---|---|
 | 1 | Per-source outcome and run log, including a fix so a failed board cannot close its existing ads | **Built.** `python/job_discovery/run_log.py`, records in `data/analytics/runs/`. [Shape and deviations](DECISIONS.md#activity-slice-1-as-built-2026-11-02) |
-| 2a | Background Re-scrape: one job with a lock over discovery and scoring, an event log, the interrupted state, a commit marker | **Built, not deployed.** `python/run_rescrape.py`, `python/job_scoring/pipeline_lock.py`, `scripts/run-rescrape.js`. [Mechanism and limits](DECISIONS.md#activity-slice-2a-background-re-scrape-2026-11-03) |
+| 2a | Background Re-scrape: one job with a lock over discovery and scoring, an event log, the interrupted state, a commit marker | **Built, not deployed.** `python/run_rescrape.py`, `python/job_scoring/pipeline_lock.py`, `scripts/run-rescrape.js`. Tailoring merges at write time and backup export refuses during a run or after an unfinished commit. [Mechanism and limits](DECISIONS.md#activity-slice-2a-background-re-scrape-2026-11-03) |
 | 2b | Cancel a running Re-scrape | Not built |
 | 2c | Source order and per-source timeout policy | Not built |
 | 3 | `GET /api/runs` read API and the Activity screen: one row per run, Details with per-site stats plus errors and warnings with their level. The 90-day pruning at write time is already in slice 1. Top-of-page statistics belong to Analytics (later) | Not built |

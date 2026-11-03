@@ -155,14 +155,19 @@ A short separate lock would not be enough: `run_scoring.py` reads `manual_jobs.j
 
 **Known gaps, not closed by this slice:**
 
-- **Tailoring is not locked.** `run_tailor.py` reads `scored_jobs.json`, works for minutes, and writes its copy back, so a tailoring that spans a run's scoring reverts the scores until the next Re-score. Not on the slice's list; it needs an owner decision, since locking it would also block tailoring for a whole run.
-- **Backup export is not blocked.** It only reads, but an export during a commit can capture files from two runs.
 - **Profile reset is not locked.** It moves the candidate intelligence away; a run past discovery then fails at scoring with "Missing intelligence". No job file is touched, and the reset's own copy is kept.
 - **`competency_backup.py restore` is not locked.** It is a command the owner runs by hand and it replaces job files: run it only with no run active.
 - **A pipeline run's enrichment and scoring have no events,** and a direct Re-score has no record, so the status endpoint does not show them as active; a start during one still gets 409.
 - **The other screens still use the old blocking routes** (Pipeline screen, Re-score, judge). They are safe under the lock but not background jobs.
 
-**Tests:** `tests/python/test_rescrape.py`, `tests/js/rescrape.test.js`, `tests/js/rescrapeRoutes.test.js`.
+**Tests:** `tests/python/test_rescrape.py`, `tests/python/test_tailor_merge.py`, `tests/js/rescrape.test.js`, `tests/js/rescrapeRoutes.test.js`.
+
+**Closed after the slice (2026-11-03):**
+
+- **Tailoring can no longer revert a run's scores.** `run_tailor.py` used to write back the whole file it read minutes earlier. `save_tailored` now re-reads `scored_jobs.json` at write time and sets `tailoredAssets` on the rows it tailored, nothing else, under the pipeline lock. The lock is not held while it tailors, so tailoring does not block a run.
+  If a run holds the lock at write time, tailoring waits for the run to end (it says so) rather than getting a 409 that would throw the finished work away; a row the run removed does not come back, and its documents stay in `data/resumes/`. Under the pipeline it uses the lock it was handed.
+  Unchanged direction: a later full scoring rebuilds the file from the discovered jobs and leaves `tailoredAssets` out of it, as it always has. The browser keeps its copy and the documents stay on disk.
+- **Backup export refuses instead of mixing runs.** `/api/backup/export` holds the lock until the last byte (a run starting meanwhile gets 409), answers 409 `run_active` during a run, 409 `commit_incomplete` when a commit marker is left over, and 503 when the lock cannot be checked. The marker stays until a commit finishes, so after a killed commit **no backup can be made until a Re-scrape has run to the end**. That is the owner's rule: such files may not match each other. A `.pipeline.lock` in an archive is harmless, because a restore skips it.
 
 ## offList rows keep the owner's data (2026-11-03)
 
