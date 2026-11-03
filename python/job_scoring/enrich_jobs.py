@@ -40,6 +40,7 @@ if str(ROOT / "python") not in sys.path:
 from geography import WORLDWIDE, is_known  # noqa: E402
 from work_authorization import outside_allowed_before_enrichment  # noqa: E402
 from atomic_write import write_text_atomic  # noqa: E402
+import pipeline_lock  # noqa: E402
 import job_history  # noqa: E402
 from job_fingerprint import (  # noqa: E402,F401
     MAX_DESCRIPTION_CHARS,
@@ -499,6 +500,17 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    lock = pipeline_lock.acquire()
+    if lock is None:
+        print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
+        return pipeline_lock.EXIT_LOCKED
+    try:
+        return enrich(args)
+    finally:
+        lock.release()
+
+
+def enrich(args: argparse.Namespace) -> int:
     # Unconfirmed batch work: automatic unless the owner says otherwise (ai_gate.py).
     os.environ[ai_gate.TRIGGER_ENV] = ai_gate.MANUAL if args.manual else ai_gate.AUTOMATION
     try:

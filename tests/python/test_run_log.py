@@ -95,7 +95,7 @@ def discovery(tmp_path, monkeypatch):
 
 def records():
     folder = run_log.runs_dir()
-    found = [json.loads(p.read_text()) for p in folder.iterdir()] if folder.exists() else []
+    found = [json.loads(p.read_text()) for p in folder.iterdir() if run_log.is_record_name(p.name)] if folder.exists() else []
     return sorted(found, key=lambda record: record["startedAt"])
 
 
@@ -236,7 +236,7 @@ def test_a_run_that_crashed_is_failed_even_if_every_source_skipped():
 
 
 def test_the_allowed_run_statuses():
-    assert run_log.RUN_STATUSES == ("ok", "partial", "failed", "skipped")
+    assert run_log.RUN_STATUSES == ("ok", "partial", "failed", "skipped", "running", "interrupted")
 
 
 def infostud_job(job_id="i1", title="Product Lead"):
@@ -689,6 +689,22 @@ def test_records_older_than_ninety_days_are_pruned_at_write_time_and_nothing_els
     fresh = run_log.save(saved_record("fresh"))
     assert not old.exists(), "a record past 90 days goes when the next one is written"
     assert edge.exists() and fresh.exists() and foreign.exists() and bad_date.exists()
+
+
+def test_pruning_takes_a_run_s_events_log_with_its_record():
+    now = datetime.now(timezone.utc)
+    old = planted("old", now - timedelta(days=91))
+    old_events = old.with_name(old.name.replace(".json", ".events.jsonl"))
+    old_events.write_text('{"type": "run_start"}\n')
+    orphan_events = old.with_name(old.name.replace("-old.json", "-orphan.events.jsonl"))
+    orphan_events.write_text("")
+    young = planted("young", now - timedelta(days=89))
+    young_events = young.with_name(young.name.replace(".json", ".events.jsonl"))
+    young_events.write_text('{"type": "run_start"}\n')
+
+    assert run_log.prune(run_log.runs_dir(), now) == 3
+    assert not old.exists() and not old_events.exists() and not orphan_events.exists()
+    assert young.exists() and young_events.exists()
 
 
 def test_pruning_reads_the_start_time_not_the_file_time():

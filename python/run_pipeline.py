@@ -22,7 +22,6 @@ scores without the ad facts and labels the result reduced quality.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import json
 import os
 import re
@@ -37,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PY = ROOT / "python"
 sys.path.insert(0, str(PY / "job_scoring"))
 from atomic_write import write_text_atomic  # noqa: E402
+import pipeline_lock  # noqa: E402
 from work_authorization import outside_allowed_before_enrichment  # noqa: E402
 DATA = ROOT / "data"
 INTELLIGENCE = DATA / "intelligence" / "candidate-intelligence.json"
@@ -45,7 +45,10 @@ SCORED = DATA / "jobs" / "scored_jobs.json"
 LAST_RUN = DATA / "jobs" / "pipeline_last_run.json"
 LOCK = DATA / "jobs" / ".pipeline.lock"
 
-EXIT_FAILED, EXIT_SETUP, EXIT_LOCKED = 1, 2, 75
+EXIT_FAILED, EXIT_SETUP, EXIT_LOCKED = 1, 2, pipeline_lock.EXIT_LOCKED
+
+# The lock of this run, handed to each step: a step takes the pipeline lock itself when run alone.
+_held_lock = None
 
 # Scoring on jobs the model never read would skip the role-track and visa caps,
 # so too few enriched jobs stops the run instead of producing a flattering list.
@@ -83,11 +86,13 @@ def run_step(name: str, cmd: list[str], steps: list[dict]) -> str:
     """Run one script, streaming its output; returns its stdout. Raises StepFailed."""
     print(f"\n=== {name} ===", flush=True)
     started = time.monotonic()
+    handed = {"pass_fds": (_held_lock.fd,)} if _held_lock else {}
     proc = subprocess.Popen(
         [sys.executable, *cmd], cwd=ROOT, text=True, encoding="utf-8",
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         # Every model call in a pipeline step is an automatic AI task (ai_gate.py).
-        env={**os.environ, "HOLOJOB_AI_TRIGGER": "automation"},
+        env={**(_held_lock.child_env() if _held_lock else os.environ), "HOLOJOB_AI_TRIGGER": "automation"},
+        **handed,
     )
     lines = []
     for line in proc.stdout:
@@ -273,11 +278,10 @@ def main(argv=None) -> int:
         # SELinux hosts another container mounting ./data with :Z causes this.
         print(f"Cannot read and write {LOCK.parent}: {exc}. Nothing started.", file=sys.stderr)
         return EXIT_SETUP
-    lock = LOCK.open("w")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        print("Another pipeline run is in progress; nothing started.", file=sys.stderr)
+    global _held_lock
+    _held_lock = pipeline_lock.acquire()
+    if _held_lock is None:
+        print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
         return EXIT_LOCKED
 
     steps: list[dict] = []
@@ -300,7 +304,8 @@ def main(argv=None) -> int:
     finally:
         record["finishedAt"] = datetime.now(timezone.utc).isoformat()
         write_text_atomic(LAST_RUN, json.dumps(record, indent=2))
-        lock.close()
+        _held_lock.release()
+        _held_lock = None
     return code
 
 

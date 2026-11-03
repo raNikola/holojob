@@ -34,6 +34,7 @@ sys.path.insert(0, str(ROOT / "python" / "job_scoring"))
 from atomic_write import write_text_atomic  # noqa: E402
 import claude_code  # noqa: E402
 import manual_jobs  # noqa: E402
+import pipeline_lock  # noqa: E402
 import safe_fetch  # noqa: E402
 from scorer import score_jobs  # noqa: E402
 
@@ -343,6 +344,21 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    if args.job_json and args.check_only:  # writes nothing, so it can answer during a run
+        return run_job_json(args)
+    # These replace scored_jobs.json from a copy read earlier, and a run replaces it whole: one must wait for the other.
+    # A hand-entered job stays saved in the browser, unscored, with its "Score now" retry (DECISIONS.md, Activity slice 2a).
+    lock = pipeline_lock.acquire()
+    if lock is None:
+        print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
+        return pipeline_lock.EXIT_LOCKED
+    try:
+        return import_locked(args)
+    finally:
+        lock.release()
+
+
+def import_locked(args) -> int:
     # Decided before anything that could reach the network or a model is looked at.
     if args.job_json:
         return run_job_json(args)

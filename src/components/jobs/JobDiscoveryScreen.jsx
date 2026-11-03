@@ -38,7 +38,9 @@ import {
   updateJobRecord,
   updateJobStatus,
 } from '../../modules/jobs/jobStorage'
-import { runDiscovery, runScoring, loadLatestScoredJobs } from '../../modules/jobs/pipelineRunner'
+import { runScoring, loadLatestScoredJobs } from '../../modules/jobs/pipelineRunner'
+import { useRescrapeRun } from '../../modules/jobs/useRescrapeRun'
+import RescrapeProgress from './RescrapeProgress'
 import { withProfileSalaryDefaults } from '../../modules/jobs/jobSalary'
 import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { useProfile } from '../../context/ProfileContext'
@@ -128,27 +130,38 @@ export default function JobDiscoveryScreen() {
     return filterJobs(viewJobs, effectiveFilters, { appliedJobIds: appliedIds })
   }, [viewJobs, effectiveFilters, appliedIds])
 
-  const handleRerunDiscovery = useCallback(async () => {
-    setRerunning(true)
-    setRerunMsg('Discovering new jobs…')
+  const handleRescrapeFinished = useCallback(async (run) => {
+    if (!run || run.status === 'failed' || run.status === 'interrupted') {
+      setRerunMsg(run?.status === 'interrupted' ? 'Re-scrape was interrupted.' : 'Re-scrape failed. Details below.')
+      return
+    }
     try {
-      const intelligence = loadIntelligence()
-      if (!intelligence?.searchStrategy?.jobSpySearchTerms?.length) {
-        throw new Error('Run candidate intelligence generation first (Module 2).')
-      }
-      await runDiscovery({ providers: 'serbia', country: searchCountry(profile, intelligence), intelligence, profile })
-      setRerunMsg('Scoring jobs…')
-      await runScoring()
       const jobs = await loadLatestScoredJobs()
       setState((prev) => importJobsFromFile(jobs, prev))
       const p1 = (jobs.jobs || []).filter((j) => j.priority === 'P1').length
       setRerunMsg(`Done — ${jobs.jobs?.length || 0} jobs, ${p1} P1`)
     } catch (e) {
       setRerunMsg(`Error: ${e.message}`)
+    }
+  }, [])
+
+  const rescrape = useRescrapeRun({ enabled: pipelineApiAvailable, onFinished: handleRescrapeFinished })
+
+  const handleRerunDiscovery = useCallback(async () => {
+    setRerunning(true)
+    setRerunMsg('')
+    try {
+      const intelligence = loadIntelligence()
+      if (!intelligence?.searchStrategy?.jobSpySearchTerms?.length) {
+        throw new Error('Run candidate intelligence generation first (Module 2).')
+      }
+      await rescrape.start({ providers: 'serbia', country: searchCountry(profile, intelligence), intelligence, profile })
+    } catch (e) {
+      setRerunMsg(`Error: ${e.message}`)
     } finally {
       setRerunning(false)
     }
-  }, [profile])
+  }, [profile, rescrape])
 
   const handleRescore = useCallback(async () => {
     setRerunning(true)
@@ -305,11 +318,11 @@ export default function JobDiscoveryScreen() {
 
           {pipelineApiAvailable && (
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 dark:border-stone-800 dark:bg-stone-900">
-              <Button onClick={handleRerunDiscovery} disabled={rerunning || !pipelineApiAvailable}>
-                {rerunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <Button onClick={handleRerunDiscovery} disabled={rerunning || rescrape.view.active || !pipelineApiAvailable}>
+                {rerunning || rescrape.view.active ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Re-scrape jobs
               </Button>
-              <Button variant="secondary" onClick={handleRescore} disabled={rerunning}>
+              <Button variant="secondary" onClick={handleRescore} disabled={rerunning || rescrape.view.active}>
                 <RefreshCw className="h-4 w-4" />
                 Re-score
               </Button>
@@ -317,6 +330,7 @@ export default function JobDiscoveryScreen() {
               {rerunMsg && (
                 <p className="ml-1 text-xs text-stone-500 dark:text-stone-400">{rerunMsg}</p>
               )}
+              <RescrapeProgress view={rescrape.view} />
             </div>
           )}
 

@@ -18,6 +18,9 @@ const AdmZip = require('adm-zip')
 // the store's own private writes. Same list: scripts/tighten-data-permissions.sh.
 const PRIVATE_RESTORE = /^data\/(profile|profile\.bak-[^/]+|ai|config|backups|intelligence|outreach|interviews|analytics|resumes)\//
 
+// The lock must stay the same file: flock holds an inode, and renaming a copy over it would free it for the next process.
+const RUN_LOCK = 'data/jobs/.pipeline.lock'
+
 const DATA_DIRS = ['profile', 'intelligence', 'jobs', 'resumes', 'outreach', 'audits', 'cache', 'applications']
 
 export function createBackupStream(root, clientPayload = {}) {
@@ -89,6 +92,7 @@ export async function importBackupZip(root, zipBuffer, options = {}) {
       refused.push(name)
       continue
     }
+    if (name === RUN_LOCK) continue
     if (isStoreBackupEntry(name)) {
       storeEntries.push({ name, data: entry.getData() })
       continue
