@@ -113,10 +113,12 @@ Plan, approved decisions and rollback per slice: [DECISIONS.md](DECISIONS.md#scr
 | S5c | Two-fetch closing for snapshot sources: a board proven complete twice in a row, not listing the ad. Ashby never closes. A removed board closes nothing. Search-based sources unchanged | **Built, not deployed** (2026-11-03). `job_history.apply_run`, `importer.board_evidence`. [Decisions](DECISIONS.md#s5c-as-built-two-fetch-closing-for-snapshot-sources-2026-11-03) |
 | S5d | Readers ready for rows a run did not find: out of the scoring corpus, no enrichment, judge or shadow call, own summary lines. No visible change | **Built, not deployed** (2026-11-03). `python/job_scoring/row_state.py`. [Decisions](DECISIONS.md#s5d-as-built-readers-ready-for-rows-a-run-did-not-find-2026-11-03) |
 | S5d2 | A durable `notFoundThisRun` mark from the ledger's `heldRunId`, replacing the date test; closed rows in the corpus measured only | **Built, not deployed** (2026-11-03). [Decisions](DECISIONS.md#s5d2-as-built-a-durable-not-found-this-run-mark-2026-11-03) |
+| S5e1 | `data/jobs/filtered_ads.json`: every dropped ad, one record per `jobId`, written at import before pruning; a run not yet counted is never pruned; `import_run.py --backfill-filtered`. No UI, no route | **Built, not deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e1-as-built-dropped-ads-kept-in-filtered_adsjson-2026-11-03) |
 | S5 | Lifecycle by source class (snapshot or search-based), Stale as a flag only; after a dry-run comparison on real data | Not built |
 | S6 | Cancel a running Re-scrape (was 2b): stop the scrape, import what is written, skip scoring; its own outcome, not a failed run | Not built |
 | S7 | `GET /api/runs` read API and the Activity screen (was 3) | Not built |
 | later | Source order and per-source timeout policy (was 2c) | Not built |
+| deferred | Ledger growth: `job_history.json` grows about 550 MB a year (about 10 KB per entry, about 150 new ads a day), and every import reads and rewrites it. Likely fix: descriptions out of the main file | **Deferred** (recorded 2026-11-03). [Decisions](DECISIONS.md#s5e1-as-built-dropped-ads-kept-in-filtered_adsjson-2026-11-03) |
 
 **Review requirements for S3 / S4a (recorded 2026-11-03, not built):**
 

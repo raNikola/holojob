@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import filtered_ads
 import staging
 from dedupe_jobs import _collapse, _crosspost_key, _exact_key
 
@@ -586,15 +587,18 @@ class ImportOutcome:
     generation: int | None = None
     pruned: list[str] = field(default_factory=list)
     usage: dict = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
 
 def import_staged_run(root: Path, run_id: str, *, allow_older: bool = False) -> ImportOutcome:
     """Import a staged run for real: the one commit of the live path. The caller holds the pipeline lock.
 
     Read the ledger and the discovered file the run replaced, plan the import (full validation, the order guard, the same rules
-    as ever), write the ledger and then the view derived from it (inside the view lock), mark the run imported, prune old
-    staging. Refusals change nothing. A stop between the two writes leaves a view one generation behind; the next reader
-    rebuilds it. Import is final: scoring does not undo it, and a failed scoring is redone with Re-score alone.
+    as ever), write the ledger and then the view derived from it (inside the view lock), record the run's dropped ads
+    (filtered_ads.py), mark the run imported, prune old staging. Refusals change nothing. A stop between the two writes leaves a view
+    one generation behind; the next reader rebuilds it. A stop after them is finished by importing the run again, which counts its
+    dropped ads once. Dropped ads that cannot be recorded never stop an import: the run stays out of pruning, so they are not lost.
+    Import is final: scoring does not undo it, and a failed scoring is redone with Re-score alone.
     """
     root = Path(root)
     out = ImportOutcome(ok=False, run_id=run_id)
@@ -619,8 +623,16 @@ def import_staged_run(root: Path, run_id: str, *, allow_older: bool = False) -> 
     else:
         view_guard.ensure(jobs_file, ledger_file)
     out.generation = result.ledger.get("generation")
+    try:
+        filtered_ads.record_run(root, run, import_time(run), result.ledger["jobs"])
+    except Exception as exc:  # noqa: BLE001 - the ledger is written and stays written; only the pruning of this run waits
+        out.warnings.append(f"The dropped ads of run {run_id} were not recorded ({type(exc).__name__}).")
     staging.mark_imported(root, run_id, {"generation": out.generation, "committed": out.committed})
-    out.pruned = staging.prune(root)
+    waiting = filtered_ads.unrecorded(root)
+    held = sorted(r for r in waiting if staging.is_imported(root, r))
+    if held:
+        out.warnings.append(f"{len(held)} imported run(s) are not in {filtered_ads.FILE_NAME} and stay in staging; import_run.py --backfill-filtered records them.")
+    out.pruned = staging.prune(root, protect=waiting)
     out.usage = staging.usage(root)
     out.ok = True
     return out
