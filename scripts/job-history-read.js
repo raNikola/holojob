@@ -30,7 +30,7 @@ function buildIndex(text) {
   const index = new Map()
   for (const [jobId, entry] of Object.entries(jobs)) {
     if (!entry?.job || typeof entry.job !== 'object') continue
-    index.set(jobId, { job: entry.job, firstSeen: entry.firstSeen ?? null, lastSeen: entry.lastSeen ?? null, closedAt: entry.closedAt ?? null })
+    index.set(jobId, { job: entry.job, firstSeen: entry.firstSeen ?? null, lastSeen: entry.lastSeen ?? null, closedAt: entry.closedAt ?? null, absentSince: entry.absentSince ?? null, absentRuns: entry.absentRuns ?? 0 })
   }
   return index
 }

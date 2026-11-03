@@ -56,6 +56,7 @@ def greenhouse(boards):
     def fetch(board):
         if isinstance(boards[board], Exception):
             raise boards[board]
+        provider._reported_totals[board] = len(boards[board])  # as the real answer's meta.total: a complete read (S5b)
         return boards[board]
 
     provider._fetch_board = fetch
@@ -308,6 +309,11 @@ def test_a_board_source_that_ran_and_lost_an_ad_still_closes_it(discovery, tmp_p
     discovery({"greenhouse": greenhouse({"a": [posting(1), posting(2, "Senior Product Manager")]})})
     discovery({"greenhouse": greenhouse({"a": [posting(1)]})})
     payload = discovered(tmp_path)
+    assert {j["title"]: j["isClosed"] for j in payload["jobs"]} == {"Product Manager": False, "Senior Product Manager": False}
+    assert payload["meta"]["history"]["closed"] == 0 and payload["meta"]["history"]["absent"] == 1
+    assert next(j for j in payload["jobs"] if j["title"] == "Senior Product Manager")["isAbsent"] is True
+    discovery({"greenhouse": greenhouse({"a": [posting(1)]})})
+    payload = discovered(tmp_path)
     assert {j["title"]: j["isClosed"] for j in payload["jobs"]} == {"Product Manager": False, "Senior Product Manager": True}
     assert payload["meta"]["history"]["closed"] == 1
 
@@ -412,6 +418,7 @@ def test_an_empty_board_is_warned_about_by_name_and_its_ad_stays_open(discovery,
 def test_an_ad_gone_from_a_non_empty_board_still_closes_when_another_board_is_empty(discovery, tmp_path):
     first = {"greenhouse": greenhouse({"good": [posting(1), posting(3, "Lead Product Manager")], "empty": [posting(2, "Senior Product Manager")]})}
     discovery(first)
+    discovery({"greenhouse": greenhouse({"good": [posting(1)], "empty": []})})
     discovery({"greenhouse": greenhouse({"good": [posting(1)], "empty": []})})
     states = {j["title"]: j["isClosed"] for j in discovered(tmp_path)["jobs"]}
     assert states == {"Product Manager": False, "Senior Product Manager": False, "Lead Product Manager": True}

@@ -64,6 +64,8 @@ describe('GET /api/jobs/history/<jobId>', () => {
       firstSeen: '2026-10-01T10:00:00+00:00',
       lastSeen: '2026-10-20T10:00:00+00:00',
       closedAt: null,
+      absentSince: null,
+      absentRuns: 0,
     })
   })
 

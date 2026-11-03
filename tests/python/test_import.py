@@ -22,7 +22,7 @@ import run_discovery
 import run_log
 import staging
 from dedupe_jobs import dedupe_jobs
-from providers.base_provider import JobProvider, ProviderOutcome, build_canonical_job
+from providers.base_provider import JobProvider, ProviderOutcome, board_read, build_canonical_job
 from test_staging import discover, settled
 
 T1, T2 = "2026-11-01T10:00:00+00:00", "2026-11-02T10:00:00+00:00"
@@ -40,11 +40,19 @@ def canon(n, provider="greenhouse", title=None, company="Acme", description=None
 
 
 class Prov(JobProvider):
-    def __init__(self, jobs, status="ok", boards_failed=(), boards_empty=()):
-        self.jobs, self.status, self.failed, self.empty = jobs, status, list(boards_failed), list(boards_empty)
+    """`proven`: its one board, acme, is staged as a board and read whole (S5b evidence), so a missing ad of it counts as a miss."""
+
+    def __init__(self, jobs, status="ok", boards_failed=(), boards_empty=(), proven=False):
+        self.jobs, self.status, self.failed, self.empty, self.proven = jobs, status, list(boards_failed), list(boards_empty), proven
         self.last_outcome = None
 
     def fetch_jobs(self, *args):
+        if self.proven:
+            self.stage(self.jobs, part="acme", read=len(self.jobs))
+            self.last_outcome = ProviderOutcome(
+                status=self.status, read=len(self.jobs), kept=len(self.jobs), boards_failed=self.failed, boards_empty=self.empty,
+                boards_read=[board_read("acme", read=len(self.jobs), postings=len(self.jobs), complete=True, reason=None)])
+            return list(self.jobs)
         self.last_outcome = ProviderOutcome(
             status=self.status, read=len(self.jobs), kept=len(self.jobs), boards_failed=self.failed, boards_empty=self.empty)
         return list(self.jobs)
@@ -172,12 +180,13 @@ def closed(result, ad):
     return result.ledger["jobs"][ad["jobId"]]["closedAt"]
 
 
-def test_a_complete_source_closes_what_it_no_longer_lists(tmp_path):
+def test_a_run_staged_before_s5b_has_no_closing_evidence_and_counts_no_miss(tmp_path):
     ledger = seeded_ledger(tmp_path)
     run = hand_run(tmp_path, "r1", {"greenhouse": ([canon(1)], OK), "lever": ([canon(3, "lever"), canon(4, "lever")], OK),
                                      "ashby": ([canon(5, "ashby")], OK)})
     result = importer.plan_import(run, ledger, None)
-    assert closed(result, canon(2)) is not None and result.stats["closed"] == 1
+    assert closed(result, canon(2)) is None and result.stats["closed"] == 0
+    assert "absentRuns" not in result.ledger["jobs"][canon(2)["jobId"]] and result.stats["keptUnproven"] >= 1
 
 
 def test_an_unfinished_source_imports_what_it_wrote_and_closes_and_changes_nothing_else(tmp_path):
@@ -338,8 +347,8 @@ def test_import_order_changes_the_result_exactly_as_apply_run_does(tmp_path, mon
     back. The importer's order guard (S4a) refuses that by default."""
     root = tmp_path / "root"
     root.mkdir()
-    assert discover(root, monkeypatch, {"greenhouse": Prov([canon(1), canon(2)])}) == 0
-    assert discover(root, monkeypatch, {"greenhouse": Prov([canon(1), canon(3)])}) == 0
+    assert discover(root, monkeypatch, {"greenhouse": Prov([canon(1), canon(2)], proven=True)}) == 0
+    assert discover(root, monkeypatch, {"greenhouse": Prov([canon(1), canon(3)], proven=True)}) == 0
     older, newer = (staging.read_run(root, r) for r in reversed(staging.list_runs(root)))
     empty = job_history.empty_ledger()
     forward = importer.plan_import(newer, importer.plan_import(older, empty, None).ledger, None)
@@ -354,8 +363,8 @@ def test_import_order_changes_the_result_exactly_as_apply_run_does(tmp_path, mon
     # what forward gives is what the old path left behind
     assert importer.compare_ledgers(forward.ledger, load(root, "job_history.json"), "forward", "committed").total >= 0
     ad2 = canon(2)["jobId"]
-    assert forward.ledger["jobs"][ad2]["closedAt"] is not None, "closed by the newer run, which no longer lists it"
-    assert backward.ledger["jobs"][ad2]["closedAt"] is None, "backwards, the older run reopens it"
+    assert forward.ledger["jobs"][ad2]["absentRuns"] == 1, "a miss in the newer run, which no longer lists it"
+    assert "absentRuns" not in backward.ledger["jobs"][ad2], "backwards, the older run clears it"
 
 
 # --- replay equals what the old commit wrote ---------------------------------------------------------------------------------
@@ -378,16 +387,19 @@ def test_the_replay_of_every_run_of_a_history_equals_the_committed_files(tmp_pat
         "meta": {"generatedAt": "2026-10-01T00:00:00+00:00"}, "jobs": [{**seed, "llmFacts": {"_fingerprint": job_history.job_fingerprint(seed), "workMode": "remote"}}],
     }))
     history = [
-        {"greenhouse": Prov([canon(1), canon(2), canon(3)]), "lever": Prov([canon(10, "lever"), canon(11, "lever")])},
-        # 3 closes; 2 changes; a cross-post of ad 10 arrives from ashby; a duplicate of 1 from lever
-        {"greenhouse": Prov([canon(1), canon(2, description="rewritten " * 40), canon(4)]),
+        {"greenhouse": Prov([canon(1), canon(2), canon(3)], proven=True), "lever": Prov([canon(10, "lever"), canon(11, "lever")])},
+        # 3 misses a proven board; 2 changes; a cross-post of ad 10 arrives from ashby; a duplicate of 1 from lever
+        {"greenhouse": Prov([canon(1), canon(2, description="rewritten " * 40), canon(4)], proven=True),
          "lever": Prov([canon(10, "lever"), canon(11, "lever"), canon(1, "lever", url=seed["jobUrl"])]),
          "ashby": Prov([canon(20, "ashby", title="Product Manager 10")])},
+        # 3 misses it again and closes
+        {"greenhouse": Prov([canon(1), canon(2, description="rewritten " * 40), canon(4)], proven=True),
+         "lever": Prov([canon(10, "lever"), canon(11, "lever")]), "ashby": Prov([canon(20, "ashby", title="Product Manager 10")])},
         # a thin description after a full one; lever fails; greenhouse has a failed board and an empty one
         {"greenhouse": Prov([canon(1, description="x"), canon(2)], status="partial", boards_failed=["acme"], boards_empty=["b2"]),
          "lever": Prov([], status="failed"), "ashby": Prov([canon(20, "ashby", title="Product Manager 10")])},
         # ad 3 comes back (reopened); ashby is skipped
-        {"greenhouse": Prov([canon(1), canon(2), canon(3)]), "lever": Prov([canon(10, "lever")]), "ashby": Prov([], status="skipped")},
+        {"greenhouse": Prov([canon(1), canon(2), canon(3)], proven=True), "lever": Prov([canon(10, "lever")]), "ashby": Prov([], status="skipped")},
         {"greenhouse": Prov([], boards_empty=["acme"]), "lever": Prov([canon(10, "lever")]),
          "ashby": Prov([canon(20, "ashby", title="Product Manager 10")])},
     ]

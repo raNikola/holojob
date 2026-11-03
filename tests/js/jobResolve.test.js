@@ -44,6 +44,11 @@ describe('resolveJob order', () => {
 
   it('a ledger entry reads a closed ad as closed', () => {
     expect(resolveJob({ ledger: ledger({ closedAt: '2026-10-21' }) }).job.isClosed).toBe(true)
+    expect(resolveJob({ ledger: ledger({ closedAt: '2026-10-21', absentRuns: 2 }) }).job.closedAfterChecks).toBe(2)
+    expect(resolveJob({ ledger: ledger({ closedAt: '2026-10-21' }) }).job.closedAfterChecks).toBeUndefined()
+    const absent = resolveJob({ ledger: ledger({ absentSince: '2026-10-22', absentRuns: 1 }) }).job
+    expect(absent.isAbsent).toBe(true)
+    expect(absent.absentSince).toBe('2026-10-22')
   })
 
   it('an application only: the job reads as applied, and its status is not invented otherwise', () => {

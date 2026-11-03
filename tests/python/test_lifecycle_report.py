@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import import_run
-import job_history
 import lifecycle_report as lr
 import staging
 from dedupe_jobs import _crosspost_key
@@ -314,11 +313,6 @@ def test_python_never_reads_the_application_store_and_the_report_says_applicatio
     assert import_run.main(["--latest", "--lifecycle-report", "--application-job-ids", str(ids)], root=clock.root) == 0
     out = capsys.readouterr().out
     assert "APPLICATIONS NOT JOINED" not in out and "would be: found 1" in out
-
-
-def test_the_rules_do_not_touch_apply_run():
-    source = (lr.Path(job_history.__file__)).read_text(encoding="utf-8")
-    assert "lifecycle_report" not in source and "absentRuns" not in source
 
 
 # --- the command line --------------------------------------------------------------------------------------------------

@@ -677,7 +677,9 @@ def test_the_ninety_day_ledger_prune_is_off_for_an_import_and_still_there_for_a_
     old = canon(9)
     ledger = job_history.empty_ledger()
     job_history.apply_run(ledger, [old], now="2026-06-01T10:00:00+00:00", providers_returned={"greenhouse": 1}, key="k", role_key=_crosspost_key)
-    job_history.apply_run(ledger, [canon(1)], now="2026-06-02T10:00:00+00:00", providers_returned={"greenhouse": 1}, key="k", role_key=_crosspost_key)
+    evidence = {"greenhouse": {"acme": {"complete": True, "listed": set()}}}
+    job_history.apply_run(ledger, [canon(1)], now="2026-06-02T09:00:00+00:00", providers_returned={"greenhouse": 1}, key="k", role_key=_crosspost_key, board_evidence=evidence)
+    job_history.apply_run(ledger, [canon(1)], now="2026-06-02T10:00:00+00:00", providers_returned={"greenhouse": 1}, key="k", board_evidence=evidence, role_key=_crosspost_key)
     assert ledger["jobs"][old["jobId"]]["closedAt"] is not None, "closed long ago"
     run = hand_run(tmp_path, "r1", {"greenhouse": ([canon(1)], OK)})
     kept = importer.plan_import(run, copy.deepcopy(ledger), None, now="2026-11-03T10:00:00+00:00")

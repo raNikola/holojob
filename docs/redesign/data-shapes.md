@@ -854,6 +854,7 @@ Fields added later, in the browser job store and not in this file until saved:
 - **Path:** `data/jobs/job_history.json`
 - **Purpose:** Survives discovery rewrites: first/last seen, closed, a snapshot of each job, and the enrichment facts (reused while the ad fingerprint is unchanged). Dropped after 90 days closed.
 - **Written by:** `job_scoring/job_history.py`.
+- **Snapshot lifecycle (S5c), optional fields on an entry:** `absentRuns` (consecutive complete fetches of the board that did not list the ad), `absentSince`, `lastAbsentRunId`. Gone when the ad is found again; the version stays 1. A row in `discovered_jobs.json` or `scored_jobs.json` carries, only when it applies, `isAbsent` and `absentSince`, or `closedAfterChecks` on an ad closed by that rule.
 
 ```json
 {

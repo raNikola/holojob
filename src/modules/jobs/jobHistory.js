@@ -1,7 +1,15 @@
+/** Only an ad closed by the two-check rule (S5c) says so; one closed earlier, after a single absence, keeps the old wording. */
+function closedReason(job) {
+  if (!job.closedAt) return ''
+  const date = job.closedAt.slice(0, 10)
+  return job.closedAfterChecks ? `Not on the company's board in 2 complete checks since ${date}` : `No longer listed since ${date}`
+}
+
 /** Badges for a job's place in the discovery history: "Just found" (first seen recently, the `isNew` flag, not the triage status), or no longer listed. */
 export function historyBadges(job) {
   const badges = []
-  if (job?.isClosed) badges.push({ label: 'Closed', variant: 'low', reason: job.closedAt ? `No longer listed since ${job.closedAt.slice(0, 10)}` : '' })
+  if (job?.isClosed) badges.push({ label: 'Closed', variant: 'low', reason: closedReason(job) })
+  else if (job?.isAbsent) badges.push({ label: 'Not in latest search', variant: 'low', reason: job.absentSince ? `Not on the company's board in a complete check on ${job.absentSince.slice(0, 10)}. Last seen ${formatSeen(job.lastSeen)}` : '' })
   else if (job?.isNew) badges.push({ label: 'Just found', variant: 'high', reason: job.firstSeen ? `First seen ${job.firstSeen.slice(0, 10)}` : '' })
   return badges
 }

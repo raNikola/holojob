@@ -89,7 +89,8 @@ def render(dry: importer.DryRun, limit: int) -> list[str]:
             lines.append(f"Import: duplicates removed {rep['duplicatesRemoved']}, cross-posts merged {rep['crosspostsMerged']}, "
                          f"rejected as invalid {rep['rejected']}, thin description replaced by the stored one {rep['thinDescriptionReplaced']}")
             lines.append(f"Held open: failed board {rep['heldFailedBoard']}, empty board {rep['heldEmptyBoard']}, "
-                         f"source not run or unfinished {rep['heldSourceNotRun']}")
+                         f"source not run or unfinished {rep['heldSourceNotRun']}, board unproven {rep['heldUnproven']}, board not read {rep['heldBoardNotRead']}; "
+                         f"listed but filtered {rep['listedButFiltered']}; boards proven complete: {', '.join(rep['boardsProvenComplete']) or 'none'}")
             lines.append("Ledger: " + ", ".join(f"{k} {v}" for k, v in changes.items()))
             lines.append(f"Complete scrape: {'yes' if rep['complete'] else 'NO (' + ', '.join(rep['incompleteSources'] or ['see rejections']) + ')'}")
             if rep["reasons"]:
