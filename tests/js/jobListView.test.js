@@ -13,6 +13,7 @@ import {
 } from '../../src/modules/jobs/jobListView.js'
 import { composeJobList } from '../../src/modules/jobs/allAds.js'
 import { computeJobStats } from '../../src/modules/jobs/jobStats.js'
+import { historyBadges, isActionable } from '../../src/modules/jobs/jobHistory.js'
 import { getDefaultJobsState, saveJobs, updateFilters } from '../../src/modules/jobs/jobStorage.js'
 
 vi.mock('../../src/components/jobs/JobTailorActions.jsx', () => ({ default: () => 'TAILOR-ACTIONS' }))
@@ -413,6 +414,84 @@ describe('the screen', () => {
   it('the route is asked again after any import, and after a Re-scrape however it ended', () => {
     expect(screen).toContain('if (lastImportedAt.current === state.importedAt) return')
     expect(screen).toContain('if (routeEnabled) refetchAllAds() // the ledger may have moved')
+  })
+})
+
+describe('Stale is not actionable, at every place that asks', () => {
+  it('isActionable: closed and stale are not, on a stored row or a composed one', () => {
+    expect(isActionable(stored('s'))).toBe(true)
+    expect(isActionable(route('a', 'found'))).toBe(true)
+    expect(isActionable(route('a', 'absent'))).toBe(true)
+    expect(isActionable(stored('s', { isStale: true }))).toBe(false)
+    expect(isActionable(route('a', 'stale'))).toBe(false)
+    expect(isActionable(stored('s', { isClosed: true }))).toBe(false)
+    expect(isActionable(route('a', 'closed'))).toBe(false)
+  })
+
+  it('the action buckets leave a stale row out, as a closed one; the rest of the numbers keep it', () => {
+    const open = stored('o', { priority: 'P1', applyRecommendation: 'Apply', matchScore: 80 })
+    const stale = stored('t', { priority: 'P1', applyRecommendation: 'Apply', isStale: true, matchScore: 40 })
+    const stats = computeJobStats([open, stale])
+    expect(stats.p1).toBe(1)
+    expect(stats.apply).toBe(1)
+    expect(stats.scored).toBe(2)
+    expect(stats.avgScore).toBe(60)
+  })
+
+  it('the only other caller, the AI context, leaves it out of the top jobs', () => {
+    const source = fs.readFileSync('src/modules/ai/aiContextBuilder.js', 'utf-8')
+    expect(source).toContain("typeof j.matchScore === 'number' && isActionable(j)")
+    const callers = ['src/modules/ai/aiContextBuilder.js', 'src/modules/jobs/jobStats.js'].map((file) => fs.readFileSync(file, 'utf-8').includes('isActionable('))
+    expect(callers).toEqual([true, true])
+  })
+
+  it('a stale row on today\'s list has its badge, Closed before it', () => {
+    expect(historyBadges(stored('s', { isStale: true, lastSeen: '2026-10-01T10:00:00Z' }))[0]).toMatchObject({ label: 'Stale', reason: expect.stringContaining('2026-10-01') })
+    expect(historyBadges(stored('s', { isStale: true, isClosed: true })).map((b) => b.label)).toEqual(['Closed'])
+    expect(historyBadges(stored('s', { isStale: true, isAbsent: true })).map((b) => b.label)).toEqual(['Stale'])
+    expect(historyBadges(stored('s', { isStale: true })).find((b) => b.reason === undefined)).toBeUndefined()
+  })
+})
+
+describe('Stale in Active and All', () => {
+  const STALE = route('t', 'stale', { lastSeen: ago(40), reason: 'No sighting for 40 days and 3 successful runs of this search. Last seen 2026-10-11' })
+  const compose = (input) => composeJobList({ stored: [], server: [STALE], applications: READY, reference: NOW, ...input })
+
+  it('leaves Active and stays in All', () => {
+    const { active, all } = compose({})
+    expect(active).toEqual([])
+    expect(ids(all)).toEqual(['t'])
+  })
+
+  it('leaves Active even when seen within 14 days by another reckoning', () => {
+    expect(compose({ server: [route('t', 'stale', { lastSeen: ago(1) })] }).active).toEqual([])
+  })
+
+  it.each([
+    ['a status', { stored: [stored('t', { status: 'saved' })] }],
+    ['notes through keeping', { stored: [stored('t', { keptByUser: true })] }],
+    ['an application', { applications: { status: 'ready', store: { applications: { a: { posting: { jobId: 't' } } } } } }],
+  ])('with %s it stays in Active', (_, input) => {
+    expect(ids(compose(input).active)).toEqual(['t'])
+  })
+
+  it('a worked stale copy does not hide the live ad', () => {
+    const server = [route('t', 'stale', { copyGroup: 'g' }), route('live', 'found', { copyGroup: 'g' })]
+    expect(ids(compose({ stored: [stored('t', { status: 'saved' })], server }).active).sort()).toEqual(['live', 't'])
+  })
+
+  it('the Stale filter finds it', () => {
+    const rows = compose({}).all
+    expect(classOptions(rows).find((o) => o.value === 'stale')).toMatchObject({ label: 'Stale', count: 1 })
+    expect(ids(applyAllControls(rows, { classes: new Set(['stale']), reference: NOW }))).toEqual(['t'])
+    expect(applyAllControls(rows, { classes: new Set(['absent']), reference: NOW })).toEqual([])
+  })
+
+  it('shows its badge and the reason with the counts', () => {
+    viewport(true)
+    const html = table([{ ...STALE, status: 'new', serverOnly: true }])
+    expect(html).toContain('>Stale<')
+    expect(html).toContain('No sighting for 40 days and 3 successful runs of this search')
   })
 })
 

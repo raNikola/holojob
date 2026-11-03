@@ -707,6 +707,53 @@ In the real container every request of `scripts/check-view-recovery.js` answered
 
 **Known limit:** a kept ad with no score stays "Not scored" unless a later run finds it. Re-score reads the view, which does not hold it, and the tailoring tools still need a score.
 
+## S5f as built: the Stale flag (2026-11-04)
+
+**Owner rule (2026-11-04):** an ad is Stale after no sighting for 30 days and at least 3 successful runs of the same source and search key since its last sighting. It is a flag only: nothing is deleted and no ledger history changes. "Successful" means finished and proven by the same evidence rules as S5b and S5c. Snapshot ads keep their closed and absent rules, and a closed ad is not Stale. An ad with the owner's work can be Stale but never leaves Active for it. Scoring, the IDF corpus and the closed-row treatment are untouched.
+
+**The rule is in one place:** `python/job_scoring/stale_rule.py`, stdlib only and pure, used by the importer, the view and the route.
+
+**The evidence is in the ledger, additive:**
+
+- `ledger.sourceRuns`: `{provider: {bucket: [{runId, at}]}}`, oldest first, the newest 100 kept per bucket. The rule needs only 3; the rest give the count in the reason line, shown as "100 or more" past the bound.
+- A bucket is the search key for a search-based source. For a snapshot source it is `board:<name>`, with no key (D4).
+- `lastListedAt` on an entry: when a run last returned the ad and a filter dropped it. That counts as a sighting, since the source plainly still has the ad. `lastSeen` does not move.
+- A ledger with no `sourceRuns` has no Stale ad and derives the same bytes as before. Runs before this slice are not counted, so the count starts at the first import after deploy.
+
+**What counts as a proven run:**
+
+| Run | Counts? |
+|---|---|
+| Search-based source: status ok, ads read, nothing lost, files add up | Yes, under its key |
+| Failed, partial, skipped or unfinished | No |
+| Status ok but nothing read (a throttled source can do this) | No |
+| A lost ad, staged ads that differ, `discardMismatch`, a failed part, or a damaged discards file | No |
+| A disabled source (not in the run) | No: it has no run |
+| A board proven complete by S5b/S5c | Yes, under the board |
+| Any other board, and every Ashby board | No, so Ashby ads never go Stale, as they never close |
+
+**Choices made while building:**
+
+- **The 30 days are measured from the last sighting to the newest proven run, not to today.** So a pause in scraping proves nothing and flags nothing, and one ledger always gives one class. With regular runs the two readings differ only by the time since the last run. This also keeps the rule that classes do not depend on when they are read. Measuring to today instead is a small change in `stale_rule.evidence`.
+- **A snapshot ad a proven board stops listing closes first** (2 misses), so in practice only a search-based ad goes Stale.
+- **An older-key row is not Stale** while its key does not run again, so it stays `older_key`.
+- **Order:** found, closed, stale, then absent and held. A held ad can be Stale: its source failing now does not undo the runs that already did not find it.
+
+**Screen:** the class, badge and filter already existed, and the reason line now gives the counts: "No sighting for 40 days and 3 successful runs of this search. Last seen 2026-09-25". `composeJobList` already kept Stale out of Active unless worked; tests now hold that. `isActionable` is false for Stale, on a stored row (`isStale`) or a composed one (`class`).
+
+**`isActionable` has two callers:** the action buckets in `computeJobStats` (Apply, Maybe, P1, P2) and the top jobs in the AI context. Both read stored rows, which never hold a class, so `view_guard.derive_view` writes `isStale` on a held row that is Stale, the only way a Stale row is in the file. The average score and other numbers still count such a row, as they count a closed one.
+
+**Measured on a copy of the real data (2026-11-04):**
+
+| | Stale | Active | All |
+|---|---|---|---|
+| Before this slice | 0 | 1,238 | 3,491 |
+| After, today | 0 | 1,238 | 3,491 |
+| What-if, 3 proven runs by 2026-11-15, same rows | 0 | 696 | 3,491 |
+| What-if, 3 proven runs by 2026-12-04, same rows | 846 | 459 | 3,491 |
+
+Nothing can be Stale yet: the ledger has no proven runs and its oldest sighting is under 30 days old. **Stale barely changes Active.** An unworked absent row leaves Active after 14 days anyway, well before it can be Stale at 30. The two what-if Active counts above come from the 14 days. What Stale adds is the label and reason in All, and leaving the action buckets for a held row.
+
 ## offList rows keep the owner's data (2026-11-03)
 
 **Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,

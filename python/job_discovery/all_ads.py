@@ -4,14 +4,15 @@
     all_ads.py --root ROOT    prints the answer as JSON; exit 0, or 3 with {"ok": false, "message"} when the ledger cannot be read
 
 It reads job_history.json and filtered_ads.json and writes nothing. Stdlib only and no job module, so the route starts it fast.
-It never reads discovered_jobs.json: a class comes only from what the ledger entry itself says, so regenerating the view or
-enrichment rewriting it cannot change one. No time is compared to decide a class (`lastImport.at`, `meta.generatedAt`, `lastSeen`).
+It never reads discovered_jobs.json: a class comes only from what the ledger says, so regenerating the view or enrichment rewriting
+it cannot change one. The clock is never read, nor `lastImport.at` or `meta.generatedAt`. The one class that compares times is stale,
+and only `lastSeen` against the ledger's own record of proven runs (job_scoring/stale_rule.py).
 
 The classes, first match wins (`classify`):
 
     found         lastRunId == lastImport.runId                 the last import found it
     closed        closedAt                                      its own mark
-    stale         staleSince                                    its own mark; nothing writes it until S5f
+    stale         stale_rule.evidence                           30 days and 3 proven runs of its source and search since it was seen
     absent        absentSince                                   its own mark: a board proven complete did not list it
     held          heldRunId == lastImport.runId                 its source or board could say nothing in the last import
     older_key     seenUnder differs from the current search     out of the search that ran
@@ -45,8 +46,13 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import importlib.util
 import sys
 from pathlib import Path
+
+_spec = importlib.util.spec_from_file_location("_all_ads_stale_rule", Path(__file__).resolve().parents[1] / "job_scoring" / "stale_rule.py")
+stale_rule = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(stale_rule)
 
 CLASSES = ("found", "held", "absent", "closed", "older_key", "stale", "filtered", "filtered_incomplete", "unclassified")
 INCOMPLETE = {"detail_cap", "no_detail_text"}
@@ -89,13 +95,13 @@ def _source_left_out(entry: dict, providers: set | None) -> bool:
     return providers is not None and entry.get("provider") not in providers
 
 
-def classify(entry: dict, run_id: str | None, key: str | None, providers: set | None) -> str:
-    """Exactly one class for a ledger entry. Pure: only the entry, the last import's id, its search and its sources."""
+def classify(entry: dict, run_id: str | None, key: str | None, providers: set | None, source_runs: dict | None = None) -> str:
+    """Exactly one class for a ledger entry. Pure: only the entry, the last import's id, its search, its sources and the proven runs."""
     if run_id and entry.get("lastRunId") == run_id:
         return "found"
     if entry.get("closedAt"):
         return "closed"
-    if entry.get("staleSince"):
+    if stale_rule.evidence(entry, source_runs):
         return "stale"
     if entry.get("absentSince"):
         return "absent"
@@ -125,7 +131,7 @@ def _day(value) -> str:
     return str(value)[:10] if value else "unknown"
 
 
-def ledger_reason(kind: str, entry: dict, listed_elsewhere: bool = False, source_left_out: bool = False) -> str:
+def ledger_reason(kind: str, entry: dict, listed_elsewhere: bool = False, source_left_out: bool = False, source_runs: dict | None = None) -> str:
     seen = _day(entry.get("lastSeen"))
     if kind == "found":
         return "Found by the latest run"
@@ -134,7 +140,10 @@ def ledger_reason(kind: str, entry: dict, listed_elsewhere: bool = False, source
         day = _day(entry.get("closedAt"))
         return f"Not on the company's board in {checks} complete checks, closed {day}" if checks >= 2 else f"No longer listed since {day}"
     if kind == "stale":
-        return f"Not seen for a long time. Last seen {seen}"
+        proof = stale_rule.evidence(entry, source_runs)
+        what = "checks of its board" if entry.get("provider") in stale_rule.SNAPSHOT_PROVIDERS else "runs of this search"
+        count = f"{proof['runs']} or more" if proof["capped"] else str(proof["runs"])
+        return f"No sighting for {proof['days']} days and {count} successful {what}. Last seen {seen}"
     if kind == "held":
         return f"Its source or board could not say in the latest run. Last seen {seen}"
     if kind == "older_key":
@@ -173,6 +182,7 @@ def build(ledger: dict | None, store: dict | None, filtered_state: str = "ok") -
     run_id = (ledger.get("lastImport") or {}).get("runId") or None
     key = current_key(ledger)
     providers = run_providers(ledger)
+    source_runs = ledger.get(stale_rule.FIELD)
     counts = {name: 0 for name in CLASSES}
     rows = []
     no_ad = elsewhere = left_out = 0
@@ -182,13 +192,13 @@ def build(ledger: dict | None, store: dict | None, filtered_state: str = "ok") -
         if not isinstance(job, dict):
             no_ad += 1
             continue
-        kind = classify(entry, run_id, key, providers)
+        kind = classify(entry, run_id, key, providers, source_runs)
         counts[kind] += 1
         listed_elsewhere = kind == "absent" and not entry.get("absentSince") and entry.get("roleKey") in found_roles
         elsewhere += listed_elsewhere
         source_left_out = kind == "unclassified" and _source_left_out(entry, providers)
         left_out += source_left_out
-        rows.append(_row(job_id, kind, ledger_reason(kind, entry, listed_elsewhere, source_left_out), None, "ledger", job.get("title"), job.get("company"), job.get("location"), job.get("jobUrl"),
+        rows.append(_row(job_id, kind, ledger_reason(kind, entry, listed_elsewhere, source_left_out, source_runs), None, "ledger", job.get("title"), job.get("company"), job.get("location"), job.get("jobUrl"),
                          entry.get("provider") or job.get("provider"), job.get("site"), job.get("isRemote"), job.get("datePosted"),
                          entry.get("firstSeen"), entry.get("lastSeen"), entry.get("closedAt"), entry.get("absentSince"), entry.get("roleKey") or None))
     also_in_ledger = not_shown = 0

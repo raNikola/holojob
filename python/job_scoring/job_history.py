@@ -57,7 +57,8 @@ PRUNE_AFTER_DAYS = 90  # how long a closed job stays in the ledger
 # Fields the ledger adds to a job; they are not part of the stored snapshot.
 # On a row a run kept open without finding it: see row_state.py. Comes from the entry's `heldRunId`, so it survives any rebuild of the view.
 NOT_FOUND_MARK = "notFoundThisRun"
-HISTORY_FIELDS = ("firstSeen", "lastSeen", "closedAt", "isNew", "isClosed", "llmFacts", "isAbsent", "absentSince", "closedAfterChecks", NOT_FOUND_MARK)
+STALE_MARK = "isStale"  # on a row the ledger shows without finding it, when `stale_rule.py` says so; written by `view_guard.derive_view`
+HISTORY_FIELDS = ("firstSeen", "lastSeen", "closedAt", "isNew", "isClosed", "llmFacts", "isAbsent", "absentSince", "closedAfterChecks", NOT_FOUND_MARK, STALE_MARK)
 
 
 def now_iso() -> str:

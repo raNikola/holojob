@@ -42,6 +42,7 @@ def _load(name: str, filename: str):
 job_history = _load("_importer_job_history", "job_history.py")
 _atomic = _load("_importer_atomic_write", "atomic_write.py")
 view_guard = _load("_importer_view_guard", "view_guard.py")
+stale_rule = _load("_importer_stale_rule", "stale_rule.py")
 ViewError = view_guard.ViewError
 derive_view = view_guard.derive_view  # the view from the ledger alone lives beside the readers that need it
 ROW_WARNING = 5000  # rows in discovered_jobs.json past which the log warns; nothing is ever dropped for it (owner, S4a)
@@ -182,6 +183,36 @@ def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bo
     return found
 
 
+def _search_run_proven(run: staging.RunStage, stage, footer, state: str, anomalies: list) -> bool:
+    """A search-based source's run that counts towards Stale (S5f), by the rules a board is proven by: finished with status ok, no ad
+    lost, files that add up, and something actually read. A source can answer ok with nothing when it is throttled; that proves nothing."""
+    if state != "complete" or anomalies or not footer or stage.torn or footer.get("discardMismatch") or footer.get("boardsFailed"):
+        return False
+    if run.discards is None or run.discards.torn or run.discards.unreadable_lines or run.discards.rejected:
+        return False
+    return (footer.get("read") or 0) > 0
+
+
+def _record_stale_evidence(ledger: dict, run: staging.RunStage, moment: str, key: str, proven_searches: list, evidence: dict) -> list[str]:
+    """The ledger's record for `stale_rule.py`: this run's proven sources and boards, and when a filter-dropped ad the ledger holds was last
+    listed. Additive: `lastSeen` and the rest of an entry's history do not change. Returns what was counted, for the report."""
+    counted = []
+    if key:
+        for name in proven_searches:
+            stale_rule.record_run(ledger, name, key, run.run_id, moment)
+            counted.append(name)
+    for name, boards in evidence.items():
+        for board, one in boards.items():
+            if one["complete"]:
+                stale_rule.record_run(ledger, name, stale_rule.board_bucket(board), run.run_id, moment)
+                counted.append(f"{name}/{board}")
+    for record in (run.discards.records if run.discards else []):
+        entry = ledger["jobs"].get(record.get("jobId"))
+        if entry is not None and moment > (entry.get("lastListedAt") or ""):
+            entry["lastListedAt"] = moment
+    return counted
+
+
 def plan_import(
     run: staging.RunStage, ledger: dict, previous=None, *, now: str | None = None, force: bool = False,
     allow_older: bool = False,
@@ -237,6 +268,7 @@ def plan_import(
     empty_boards: dict[str, set[str]] = {}
     not_run: set[str] = set()
     evidence: dict[str, dict] = {}
+    proven_searches: list[str] = []
     rejected_total = 0
 
     for name in providers:
@@ -275,6 +307,8 @@ def plan_import(
         if name in job_history.CLOSURE_PROVIDERS:
             in_doubt = name in not_run or bool(stage and stage.torn) or bool(footer and footer.get("discardMismatch"))
             evidence[name] = board_evidence(run, name, stage, footer, in_doubt)
+        elif _search_run_proven(run, stage, footer, state, anomalies):
+            proven_searches.append(name)
         if footer:
             if footer.get("boardsFailed"):
                 failed_boards[name] = set(footer["boardsFailed"])
@@ -308,6 +342,7 @@ def plan_import(
         empty_boards=empty_boards, sources_not_run=not_run, run_id=run.run_id, prune=False, board_evidence=evidence,
     )
     result.stats = stats
+    report["provenRuns"] = _record_stale_evidence(result.ledger, run, moment, manifest.get("searchKey") or "", proven_searches, evidence)
     meta = {
         "searchTerms": manifest.get("terms") or [], "locations": manifest.get("locations") or [],
         "remoteFilters": manifest.get("remoteFilters") or [], "country": manifest.get("country") or "",
@@ -348,10 +383,12 @@ def ledger_bytes(ledger: dict) -> bytes:
 
 # --- the dry run -----------------------------------------------------------------------------------------------------
 
-LEDGER_STAMPS = ("lastRunId", "lastRunPos", "heldRunId")  # what the importer adds to an entry
+LEDGER_STAMPS = ("lastRunId", "lastRunPos", "heldRunId", "lastListedAt")  # what the importer adds to an entry
 EXCLUDED = [
     "ledger.updatedAt (the time of the save)", "ledger.lastImport (the importer's own record of the run)",
-    "ledger.jobs.*.lastRunId / lastRunPos / heldRunId (the importer's stamps, from which the view is derived)",
+    "ledger.jobs.*.lastRunId / lastRunPos / heldRunId / lastListedAt (the importer's stamps, from which the view is derived)",
+    "ledger.sourceRuns (the importer's record of proven runs for the Stale rule; absent before S5f)",
+    "discovered_jobs.json jobs.*.isStale (derived from that record; absent before S5f)",
     "ledger.generation / discovered_jobs.json meta.ledgerGeneration (the counter that keeps the two together; absent before S4a)",
     "discovered_jobs.json meta.generatedAt (the time of the save)",
     "discovered_jobs.json jobs.*.notFoundThisRun (derived from the importer's stamps; absent before S5d2)",
@@ -395,7 +432,7 @@ def diff_json(a, b, path: str, out: Differences, label_a: str, label_b: str) -> 
 
 def normalized_ledger(ledger: dict) -> dict:
     out = copy.deepcopy(ledger)
-    for key in ("updatedAt", "lastImport", "generation"):
+    for key in ("updatedAt", "lastImport", "generation", stale_rule.FIELD):
         out.pop(key, None)
     for entry in out.get("jobs", {}).values():
         for stamp in LEDGER_STAMPS:
@@ -433,7 +470,7 @@ def compare_views(a: dict, b: dict, label_a: str, label_b: str) -> Differences:
             seen[base] = seen.get(base, 0) + 1
             key = base if seen[base] == 1 else f"{base}#{seen[base]}"
             keys.append(key)
-            by_key[key] = {k: v for k, v in job.items() if k != job_history.NOT_FOUND_MARK}
+            by_key[key] = {k: v for k, v in job.items() if k not in (job_history.NOT_FOUND_MARK, job_history.STALE_MARK)}
         return keys, by_key
 
     keys_a, map_a = keyed(a.get("jobs") or [])

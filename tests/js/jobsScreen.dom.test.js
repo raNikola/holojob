@@ -202,6 +202,29 @@ describe('Active and All', () => {
   })
 })
 
+describe('a Stale ad', () => {
+  const STALE = routeRow('old1', 'stale', { title: 'A stale ad', reason: 'No sighting for 40 days and 3 successful runs of this search. Last seen 2026-09-25' })
+  const stale = () => routeAnswer([routeRow('s1'), STALE])
+
+  it('is out of Active, in All with its badge and counts, and under the Stale filter', async () => {
+    stubServer({ route: stale })
+    screen = await mountScreen({ stored: [storedJob('s1')] })
+    expect(screen.row('A stale ad')).toBeUndefined()
+    await screen.click(screen.button(/^All$/))
+    expect(screen.row('A stale ad').textContent).toContain('Stale')
+    expect(screen.row('A stale ad').textContent).toContain('No sighting for 40 days and 3 successful runs')
+    await screen.click(screen.box(/Stale \(1\)/))
+    expect(screen.rows()).toHaveLength(1)
+  })
+
+  it('stays in Active with work on it', async () => {
+    stubServer({ route: stale })
+    screen = await mountScreen({ stored: [storedJob('s1'), storedJob('old1', { status: 'saved', offList: true })] })
+    expect(screen.row('A stale ad').textContent).toContain('Stale')
+    expect(screen.row('A stale ad').querySelector('button[aria-label="Reject"]').disabled).toBe(false)
+  })
+})
+
 describe('when the route does not give a whole list', () => {
   it('a 503 keeps the local list, says so and offers another try', async () => {
     const server = stubServer({ route: failed })

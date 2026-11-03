@@ -36,6 +36,7 @@ def entry(n, **fields):
 def ledger_of(*entries, **top):
     return {"generation": 5, "version": 1, "updatedAt": NOW,
             "lastImport": {"runId": RUN, "at": NOW, "startedAt": NOW, "meta": {"providers": ["greenhouse"]}, "marksNotFound": True},
+            "sourceRuns": {"jobspy": {KEY: [{"runId": f"p{n}", "at": f"2026-11-2{n}T10:00:00+00:00"} for n in (0, 1, 2)]}},
             "jobs": {e["job"]["jobId"]: e for e in entries}, **top}
 
 
@@ -45,7 +46,7 @@ PROVEN = entry(3, lastRunId="r1", heldRunId=RUN, absentSince=NOW, absentRuns=1, 
 NOT_RETURNED = entry(4, lastRunId="r1")
 OLDER = entry(5, seenUnder="older-key")
 CLOSED = entry(6, closedAt="2026-10-30T10:00:00+00:00", absentRuns=2)
-STALE = entry(7, staleSince=NOW)
+STALE = entry(7, provider="jobspy")
 ALL_KINDS = [FOUND, HELD, PROVEN, NOT_RETURNED, OLDER, CLOSED, STALE]
 EXPECTED = {"j1": "found", "j2": "held", "j3": "absent", "j4": "absent", "j5": "older_key", "j6": "closed", "j7": "stale"}
 
@@ -87,8 +88,7 @@ def test_a_found_ad_is_found_whatever_older_marks_it_still_has():
 
 
 @pytest.mark.parametrize("fields, expected", [
-    ({"closedAt": NOW, "absentSince": NOW, "staleSince": NOW, "heldRunId": RUN}, "closed"),
-    ({"staleSince": NOW, "absentSince": NOW, "heldRunId": RUN}, "stale"),
+    ({"closedAt": NOW, "absentSince": NOW, "heldRunId": RUN}, "closed"),
     ({"absentSince": NOW, "heldRunId": RUN, "seenUnder": "older-key"}, "absent"),
     ({"heldRunId": RUN, "seenUnder": "older-key"}, "held"),
     ({"heldRunId": "r1"}, "absent"),
@@ -122,7 +122,6 @@ def test_no_time_moves_a_class():
     moved["updatedAt"] = "2030-01-01T00:00:00+00:00"
     moved["lastImport"]["meta"]["generatedAt"] = "2000-01-01T00:00:00+00:00"
     for one in moved["jobs"].values():
-        one["lastSeen"] = moved["lastImport"]["at"]
         one["firstSeen"] = "2000-01-01T00:00:00+00:00"
     assert classes(all_ads.build(moved, None)) == base
 
@@ -272,7 +271,7 @@ def test_a_row_whose_source_was_left_out_is_not_absent_and_says_why():
 
 
 @pytest.mark.parametrize("fields, expected", [
-    ({"heldRunId": RUN}, "held"), ({"absentSince": NOW}, "absent"), ({"closedAt": NOW}, "closed"), ({"staleSince": NOW}, "stale"),
+    ({"heldRunId": RUN}, "held"), ({"absentSince": NOW}, "absent"), ({"closedAt": NOW}, "closed"),
     ({"seenUnder": "older-key"}, "older_key"), ({"lastRunId": RUN, "seenUnder": KEY}, "found"),
 ])
 def test_a_left_out_source_changes_no_class_a_mark_or_key_already_proves(fields, expected):
@@ -490,4 +489,4 @@ def test_scoring_and_the_job_list_are_the_same_with_it_or_without_it(tmp_path, m
 
 def test_it_needs_only_the_standard_library():
     source = Path(all_ads.__file__).read_text(encoding="utf-8")
-    assert set(re.findall(r"^(?:from|import) (\w+)", source, re.M)) <= {"__future__", "argparse", "json", "re", "sys", "pathlib"}
+    assert set(re.findall(r"^(?:from|import) (\w+)", source, re.M)) <= {"__future__", "argparse", "importlib", "json", "re", "sys", "pathlib"}

@@ -121,7 +121,8 @@ Plan, approved decisions and rollback per slice: [DECISIONS.md](DECISIONS.md#scr
 | S5e3c | The visible Active/All view: toggle, class and 14-day filters, badges and reasons, "Not scored", notices, read-only filtered rows with an "Add job" prefill. Server-only rows stay in memory; actions on them wait for S5e3d | **Built, not deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e3c-as-built-the-visible-activeall-view-2026-11-03) |
 | S5e3d (1) | `jsdom` as a dev dependency; real clicks on the Jobs screen become permanent tests. No production change | **Built, not deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e3d-commit-1-jsdom-and-permanent-click-tests-2026-11-03) |
 | S5e3d (2) | "Keep this ad": the only way a server-only row becomes a stored row, marked `keptByUser` so it lasts; Mark Applied the same in the drawer and Job Details, with no promotion; the reason line hidden on found rows | **Built, not deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e3d-commit-2-keep-this-ad-and-promotion-2026-11-03) |
-| S5 | Lifecycle by source class (snapshot or search-based), Stale as a flag only; after a dry-run comparison on real data | Not built |
+| S5f | Stale flag: 30 days and 3 proven runs of the same source and search, from a new additive ledger record. Class, reason with the counts, badge, filter; not actionable; out of Active unless worked | **Built, not deployed** (2026-11-04). [Decisions](DECISIONS.md#s5f-as-built-the-stale-flag-2026-11-04) |
+| S5 | Lifecycle by source class (snapshot or search-based), Stale as a flag only | **Built in slices S5a to S5f, not deployed** (2026-11-04) |
 | S6 | Cancel a running Re-scrape (was 2b): stop the scrape, import what is written, skip scoring; its own outcome, not a failed run | Not built |
 | S7 | `GET /api/runs` read API and the Activity screen (was 3) | Not built |
 | later | Source order and per-source timeout policy (was 2c) | Not built |
