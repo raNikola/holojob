@@ -38,9 +38,9 @@ class Lock:
             self.fd = -1
 
 
-def _take(fd: int) -> bool:
+def _take(fd: int, wait: bool = False) -> bool:
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
         return True
     except BlockingIOError:
         return False
@@ -62,15 +62,15 @@ def _handed_down(path: Path) -> Lock | None:
     return Lock(fd)
 
 
-def acquire() -> Lock | None:
-    """The lock, without waiting, or None when another process holds it."""
+def acquire(wait: bool = False) -> Lock | None:
+    """The lock, or None when another process holds it. With `wait`, blocks until that process lets go, which can be a whole run."""
     path = lock_path()
     handed = _handed_down(path)
     if handed:
         return handed
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o644)
-    if _take(fd):
+    if _take(fd, wait):
         return Lock(fd)
     os.close(fd)
     return None

@@ -367,9 +367,9 @@ def test_the_export_discovery_uses_does_not_know_the_manual_file():
     assert "manual_jobs" not in source
 
 
-def test_tailoring_writes_every_row_back_by_id():
+def test_tailoring_changes_one_field_of_its_rows_and_never_replaces_the_list():
     source = (ROOT / "python" / "resume_generator" / "run_tailor.py").read_text()
-    assert 'by_id = {j.get("jobId"): j for j in jobs}' in source and 'scored_doc["jobs"] = list(by_id.values())' in source
+    assert 'job["tailoredAssets"] = assets_by_id[job["jobId"]]' in source and 'scored_doc["jobs"] =' not in source
 
 
 def test_with_manual_prefers_the_manual_row_by_id_and_by_url():
