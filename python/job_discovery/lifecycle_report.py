@@ -41,18 +41,18 @@ AGE_BUCKETS = ((0, 7, "0-7d"), (8, 14, "8-14d"), (15, 30, "15-30d"), (31, 10**6,
 BOARD_EVIDENCE = {
     "greenhouse": {
         "provesToday": ["HTTP 200 and the whole body parsed as JSON (_fetch_board raises otherwise)", "read == kept + dropped for the board"],
-        "cannotProveToday": ["that the list is the whole board: `meta.total` is in the answer and the code does not read or stage it"],
-        "couldProve": "Stage `meta.total` per board and require it to equal the postings read (seen: jobs 40, meta.total 40).",
+        "cannotProveToday": ["that a run staged before S5b read the whole board: `meta.total` is staged only since S5b"],
+        "couldProve": "Since S5b: `meta.total` is staged per board and must equal the postings read (seen: jobs 40, meta.total 40).",
     },
     "lever": {
         "provesToday": ["HTTP 200 and the whole body parsed as a JSON list", "read == kept + dropped for the board"],
-        "cannotProveToday": ["that the list is the whole board: no total in the answer, and the API does take skip and limit, so a server-side cap could not be told from the end"],
-        "couldProve": "A second request `skip=<read>&limit=1` must return an empty list (seen: skip=1000 gives [], limit=2 gives 2 rows). Costs one request per board.",
+        "cannotProveToday": ["that the list is the whole board: no total in the answer, and the API does take skip and limit, so before S5b a server-side cap could not be told from the end"],
+        "couldProve": "Since S5b: a second request `skip=<read>&limit=1` must return an empty list (seen: skip=1000 gives [], limit=2 gives 2 rows). One request per board.",
     },
     "ashby": {
         "provesToday": ["HTTP 200 and the whole body parsed as JSON", "read == kept + dropped for the board"],
         "cannotProveToday": ["that the list is the whole board: the answer has only `jobs` and `apiVersion`, no total and no paging field"],
-        "couldProve": "Nothing from the answer itself. Weak evidence only: fail if a paging or `next` field ever appears, and hold a board whose count falls sharply against its last read.",
+        "couldProve": "Nothing from the answer itself, so no right to close (D7). Since S5b a paging field appearing is recorded as an anomaly.",
     },
 }
 
@@ -600,7 +600,7 @@ def render(report: dict) -> list:
         lines.append("    cannot prove: " + "; ".join(evidence["cannotProveToday"]))
         lines.append("    could prove:  " + evidence["couldProve"])
     latest = report["runsReplayed"][-1] if report["runsReplayed"] else None
-    lines.append(f"  per board, run {latest} (reliable proof today: none, no reported total is staged)")
+    lines.append(f"  per board, run {latest} (this report does not read the S5b proof in boardsRead: the balance below is not proof)")
     for row in [b for b in report["boards"] if b["runId"] == latest]:
         lines.append(f"    {row['provider']:<11}{row['board']:<18} read {row['read']:>4} = kept {row['kept']:>3} + dropped {row['dropped']:>4}: {'balanced' if row['balanced'] else 'NOT BALANCED'}"
                      + (", ids known" if row["idsKnown"] else ", IDS MISSING") + (", failed" if row["failed"] else "") + (", empty" if row["empty"] else ""))

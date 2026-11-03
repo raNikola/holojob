@@ -42,13 +42,33 @@ class ProviderOutcome:
     warnings: list[str] = field(default_factory=list)
     skip_reason: str | None = None
     total_reported: int | None = None  # the total the source itself reports for its search (Infostud), for the staging footer
+    # Per board of a snapshot source (S5b): {"board", "read", "postings", "complete", "reason", ...}. Staged in the footer; nothing reads it yet.
+    boards_read: list[dict] = field(default_factory=list)
+
+
+def board_read(board: str, *, read: int, postings: int, complete: bool, reason: str | None, **facts) -> dict:
+    """One board's line in `boards_read`. `postings` is what the answer held, `read` the ones with a title. `reason` says why it is not complete."""
+    return {"board": board, "read": read, "postings": postings, "complete": bool(complete), "reason": None if complete else reason, **facts}
+
+
+def _settled_boards(boards_read: list[dict], failures: dict[str, str], empty: list[str]) -> list[dict]:
+    """The one place that says a failed or empty board is not complete, whatever its provider's proof said. Every such board gets a line."""
+    settled = {row["board"]: dict(row) for row in boards_read}
+    for board in failures:
+        settled[board] = board_read(board, read=0, postings=0, complete=False, reason="the board could not be read")
+    for board in empty:
+        settled[board] = {**settled.get(board, board_read(board, read=0, postings=0, complete=False, reason=None)),
+                          "complete": False, "reason": "the board answered with no ads"}
+    return list(settled.values())
 
 
 def parts_outcome(
-    *, read: int, kept: int, total: int, failures: dict[str, str], empty: list[str] | None = None, named: bool = True
+    *, read: int, kept: int, total: int, failures: dict[str, str], empty: list[str] | None = None, named: bool = True,
+    boards_read: list[dict] | None = None,
 ) -> ProviderOutcome:
     """The outcome of a fetch made of several parts (boards, feeds, searches). `failures` maps a part to its error;
-    `named` says the parts are boards or feeds, which the record lists by name."""
+    `named` says the parts are boards or feeds, which the record lists by name. `boards_read` is what a snapshot source can
+    say about each board's read (S5b); a source that does not pass it has none."""
     status = "ok"
     if failures:
         status = "failed" if len(failures) >= total else "partial"
@@ -60,6 +80,7 @@ def parts_outcome(
         boards_failed=list(failures) if named else [],
         boards_empty=list(empty or []),
         warnings=[f"board {board} answered with 0 ads; its open ads were kept" for board in empty or []],
+        boards_read=_settled_boards(boards_read, failures, list(empty or [])) if boards_read is not None else [],
     )
 
 

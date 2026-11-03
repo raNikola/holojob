@@ -358,17 +358,31 @@ Accepted consequence: the ads of that run are lost (they were only in memory); t
 
 ## S5: owner decisions so far, and S5a as built: the lifecycle report (2026-11-03)
 
-**Owner decisions (D3 open, D1 pending the report's numbers):**
+**Owner decisions:**
 
 - **D1:** the 14-day default list window is temporary, to be confirmed after this report.
 - **D2:** Stale rows may leave `discovered_jobs.json`, but "Include stale" must bring them back from the ledger. A row missing from the file must never mean the owner cannot find it. Application tracking stays independent of the discovery list.
-- **D3, not decided:** no automatic removal of rows under an old search key after 30 days. The report measures it first.
+- **D3:** no automatic removal of rows under an old search key after 30 days (decided in S5b: they stay in the ledger).
 - **D4:** snapshot closing ignores the search key, and only for a board proven completely read.
 - **D5:** no minimum gap between the two fetches.
 - **D6, naming:** in the rules of 2026-11-02 below, **Missing = Absent and Expired = Closed**. An explicit close by the source stays unbuilt, no provider reads one.
-- **D7:** per board, but only for boards with reliable proof of a complete read. `read == kept + dropped` alone is not enough, a provider may have stopped early. The extra evidence is proposed per provider in `lifecycle_report.BOARD_EVIDENCE`, not decided.
+- **D7:** per board, but only for boards with reliable proof of a complete read. `read == kept + dropped` alone is not enough, a provider may have stopped early. The evidence per provider is decided and built in S5b.
 
 **S5a, no behaviour change.** `python/job_discovery/lifecycle_report.py` and `import_run.py --latest --lifecycle-report [--report-file]`: pure functions (`simulate`, `build_report`) replay the staged runs under the S5 rules. `apply_run`, the importer, the ledger and the view are not touched, and these rules are not live until S5c to S5f. It writes nothing, except `staging/<runId>/lifecycle-report.json` with `--report-file`; it takes the pipeline lock like `--dry-run`. Scoring is timed in a child process with no model call. Closing is shown twice: strict (today: no board has proof, so nothing closes) and if proven. User data is what the backend can see; the browser's status, insights and outreach state cannot be seen. One live GET per provider on 2026-11-03 checked the answer shapes (Greenhouse `meta.total`, Lever `skip`/`limit`, Ashby only `jobs` and `apiVersion`). **The application store stays closed to Python** (`test_no_python_code_names_the_application_store`, TRACKER_PLAN 6a). The report does not read it: application job ids come through `--application-job-ids FILE`, and without it the report prints that applications were not joined. The file citations live in `python/job_discovery/lifecycle_storage_map.json`, a data file. Tests: `tests/python/test_lifecycle_report.py`.
+
+## S5b as built: board completeness evidence (2026-11-03)
+
+**Owner decisions:** D1, 14 days, stays temporary. D3, older-key rows stay in the ledger with no automatic removal. D7, closing is per board and only with proof of a complete read; `read == kept + dropped` alone is not proof, and **Ashby has no right to close an ad until reliable proof exists**. These replace "D3 not decided" and "not decided" for D7 in the S5a section.
+
+**Staged only; nothing reads it.** The footer of a snapshot source now has `boardsRead`, one line per board: `board`, `read` (ads with a title), `postings` (what the answer held), `complete`, `reason` (why not; none when complete). `apply_run`, the importer's closing, the ledger, the view, scoring and the UI are unchanged.
+
+| Provider | Complete when | Extra fields |
+|---|---|---|
+| Greenhouse | `meta.total` equals the postings in the answer (a boolean or text total is no total) | `reportedTotal` |
+| Lever | `skip=<postings>&limit=1` on the host that answered returns an empty list. One extra request per non-empty board; a check that fails leaves the board unproven and fails nothing | `endChecked` |
+| Ashby | Never: `no completeness proof available` | `anomalies`: a top-level field that looks like paging, also a run warning |
+
+`parts_outcome` is the one place that forces a failed or empty board to `complete: false` and gives it a line, whatever its provider said. Limit: Greenhouse's total comes from the same answer, so it catches a list cut short of its own total, not a server that lies about both. `lifecycle_report` still does not read the field; only its wording changed. Tests: `tests/python/test_board_completeness.py`, through the real staging writer.
 
 ### S4a follow-up (2026-11-03): the older-run override is confirmed by a human; Node view recovery has a safe live check
 
