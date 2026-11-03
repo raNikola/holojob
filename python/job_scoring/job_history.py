@@ -80,7 +80,12 @@ def ledger_path(jobs_file: Path) -> Path:
     return jobs_file.with_name(LEDGER_FILE)
 
 
-def load(path: Path) -> dict:
+def load(path: Path, *, read_only: bool = False) -> dict:
+    """The ledger, or an empty one when there is none. An unreadable ledger is moved aside by the run that commits.
+
+    `read_only` is for a reader that must change nothing (a scrape): it gets an empty ledger for an unreadable file and
+    leaves the file where it is, so the committing run, or the owner, still finds it.
+    """
     if not path.exists():
         return empty_ledger()
     try:
@@ -89,6 +94,8 @@ def load(path: Path) -> dict:
             return data
     except (OSError, ValueError):
         pass
+    if read_only:
+        return empty_ledger()
     # An unreadable ledger is moved aside, never overwritten: it is the only copy.
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
     path.rename(path.with_name(f"{path.name}.corrupt-{stamp}"))

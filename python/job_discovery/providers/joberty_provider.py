@@ -88,7 +88,7 @@ def known_ids(ledger_path: Path | None = None) -> set[str]:
     """JobIds the ledger already holds with a real description: their detail is not fetched again."""
     path = ledger_path or default_ledger_path()
     try:
-        entries = job_history.load(path)["jobs"]
+        entries = job_history.load(path, read_only=True)["jobs"]  # a scrape never renames a ledger it cannot read
     except OSError:
         return set()
     return {

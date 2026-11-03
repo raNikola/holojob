@@ -35,6 +35,7 @@ from providers.jobspy_provider import JobSpyProvider  # noqa: E402
 from providers.provider_registry import PROVIDER_GROUPS, get_provider, resolve_providers  # noqa: E402
 import run_log  # noqa: E402
 import source_settings  # noqa: E402
+import staging  # noqa: E402
 
 # The ledger lives beside the scorer's shared modules; it is loaded by path so
 # that module's siblings do not shadow this package's.
@@ -158,16 +159,35 @@ def stop(record: dict, message: str) -> int:
     return 1
 
 
-def fetch_source(provider, name: str, search_terms, locations, remote_filters, country) -> tuple[list[dict], ProviderOutcome]:
-    """One provider's jobs and outcome. A provider that raises is one failed source, not a stopped run."""
+def fetch_source(
+    provider, name: str, search_terms, locations, remote_filters, country, stage=None
+) -> tuple[list[dict], ProviderOutcome]:
+    """One provider's jobs and outcome. A provider that raises is one failed source, not a stopped run.
+
+    `stage` is the source's staging file. A provider may have appended to it while it collected; when the fetch is over
+    (or has raised) the source's footer is written, and a provider that appended nothing has its list staged whole.
+    Staging copies what the source returns and changes nothing of it.
+    """
+    try:
+        provider.stage_writer = stage
+    except AttributeError:
+        pass  # a provider that cannot hold it is staged whole when it returns
     try:
         jobs = provider.fetch_jobs(search_terms, locations, remote_filters, country)
         if provider.last_outcome is None:
             raise RuntimeError("the provider reported no outcome")
-        return jobs, provider.last_outcome
+        result = jobs, provider.last_outcome
     except Exception as exc:
         logger.exception("Provider %s failed", name)
-        return [], ProviderOutcome(status="failed", error=str(exc))
+        result = [], ProviderOutcome(status="failed", error=str(exc))
+    finally:
+        try:
+            provider.stage_writer = None
+        except AttributeError:
+            pass
+    if stage is not None:
+        stage.close_source(*result)
+    return result
 
 
 def discover(args: argparse.Namespace, record: dict) -> int:
@@ -194,6 +214,15 @@ def discover(args: argparse.Namespace, record: dict) -> int:
     if not provider_names:
         return stop(record, f"No valid providers resolved from: {args.providers}")
 
+    # What the scrape collects is written to data/jobs/staging/<runId>/ as it comes. Nothing reads it yet, so the commit
+    # below is unchanged; the ledger as it is now is kept beside it, because the commit replaces the ledger.
+    search_key = job_history.search_key(search_terms, locations, country, remote_filters)
+    stage_run = staging.StagingRun.begin(
+        ROOT, record["runId"], search_key=search_key, terms=search_terms, locations=locations, country=country,
+        remote_filters=remote_filters, providers=provider_names,
+        ledger_path=job_history.ledger_path(ROOT / "data" / "jobs" / "discovered_jobs.json"),
+    )
+
     all_jobs: list[dict] = []
     provider_counts: dict[str, int] = {}
     failed_boards: dict[str, set[str] | None] = {}
@@ -205,7 +234,9 @@ def discover(args: argparse.Namespace, record: dict) -> int:
         logger.info("Running provider: %s", name)
         provider = get_provider(name)
         run_log.event(record, "source_start", source=name)
-        jobs, outcome = fetch_source(provider, name, search_terms, locations, remote_filters, country)
+        jobs, outcome = fetch_source(
+            provider, name, search_terms, locations, remote_filters, country, stage=stage_run.open_source(name)
+        )
         run_log.add_source(record, name, outcome)
         run_log.save(record)
         run_log.event(record, "source_end", source=name, status=outcome.status, read=outcome.read, kept=outcome.kept,
@@ -225,6 +256,9 @@ def discover(args: argparse.Namespace, record: dict) -> int:
 
         if name == "jobspy" and isinstance(provider, JobSpyProvider):
             raw_df = provider.last_raw_df
+
+    for warning in stage_run.warnings:
+        run_log.add_issue(record, "warning", warning)
 
     raw_count = len(all_jobs)
 
@@ -258,7 +292,7 @@ def discover(args: argparse.Namespace, record: dict) -> int:
         deduped,
         now=job_history.now_iso(),
         providers_returned=provider_counts,
-        key=job_history.search_key(search_terms, locations, country, remote_filters),
+        key=search_key,
         role_key=_crosspost_key,
         previous_facts=previous_facts,
         seen_before=seen_before,

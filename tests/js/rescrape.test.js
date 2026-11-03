@@ -364,4 +364,30 @@ describe('backup restore and the lock file', () => {
     expect(fs.statSync(lock).ino).toBe(before)
     expect(fs.existsSync(path.join(root, 'data/analytics/runs/.commit-in-progress.json'))).toBe(false)
   })
+
+  it('staging (a run\'s collected ads and its ledger link) is neither exported nor restored', async () => {
+    const { createRequire } = await import('node:module')
+    const AdmZip = createRequire(import.meta.url)('adm-zip')
+    const { importBackupZip, createBackupStream } = await vi.importActual('../../scripts/backup-handler.js')
+    const root = fs.mkdtempSync(path.join(dir, 'root-'))
+    const jobs = path.join(root, 'data/jobs')
+    fs.mkdirSync(path.join(jobs, 'staging/run1'), { recursive: true })
+    fs.writeFileSync(path.join(jobs, 'staging/run1/jobspy.jsonl'), '{"t":"header"}\n')
+    fs.writeFileSync(path.join(jobs, 'staging/run1.ledger-before.json'), '{}')
+    fs.writeFileSync(path.join(jobs, 'scored_jobs.json'), '{}')
+
+    const chunks = []
+    for await (const chunk of createBackupStream(root)) chunks.push(chunk)
+    const names = new AdmZip(Buffer.concat(chunks)).getEntries().map((e) => e.entryName)
+    expect(names).toContain('data/jobs/scored_jobs.json')
+    expect(names.filter((n) => n.includes('staging'))).toEqual([])
+
+    const zip = new AdmZip()
+    zip.addFile('data/jobs/staging/run9/jobspy.jsonl', Buffer.from('x'))
+    zip.addFile('data/jobs/staging/run9.ledger-before.json', Buffer.from('x'))
+    zip.addFile('data/jobs/discovered_jobs.json', Buffer.from('{}'))
+    const result = await importBackupZip(root, zip.toBuffer())
+    expect(result.restored).toEqual(['data/jobs/discovered_jobs.json'])
+    expect(fs.existsSync(path.join(jobs, 'staging/run9'))).toBe(false)
+  })
 })
