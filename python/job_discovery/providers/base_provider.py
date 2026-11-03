@@ -70,14 +70,26 @@ class JobProvider(ABC):
     # Set by run_discovery before each fetch: the staging file of this source (staging.SourceWriter), or None.
     stage_writer = None
 
-    def stage(self, jobs: list[dict], *, part: str | None = None, read: int | None = None) -> None:
+    def stage(
+        self,
+        jobs: list[dict],
+        *,
+        part: str | None = None,
+        read: int | None = None,
+        external_ids: dict | None = None,
+        dropped: list[dict] | None = None,
+    ) -> None:
         """Append ads to this source's staging file as they are collected. Does nothing when there is none.
 
         What a provider stages must be what it returns, in the same order: the runner checks the count. A provider that
         does not call this gets its whole list staged when its fetch returns.
+
+        `external_ids` maps a staged ad's jobId to the id the source itself gives it; it lives beside the canonical job, in
+        the staging line only. `dropped` is the ads this part dropped, each from `dropped_ad(job, reason, external_id)`: they
+        go to discards.jsonl, so read == kept + dropped can be checked.
         """
         if self.stage_writer is not None:
-            self.stage_writer.append(jobs, part=part, read=read)
+            self.stage_writer.append(jobs, part=part, read=read, external_ids=external_ids, dropped=dropped)
 
     @abstractmethod
     def fetch_jobs(
@@ -208,14 +220,61 @@ def matches_country(job: dict, country: str) -> bool:
     return not job_loc
 
 
+def terms_drop_reason(job: dict, search_terms: list[str]) -> str | None:
+    return None if matches_search_terms(job, search_terms) else "search_terms_not_matched"
+
+
+def location_drop_reason(job: dict, locations: list[str], remote_filters: list[str]) -> str | None:
+    return None if matches_location_filters(job, locations, remote_filters) else "location_not_matched"
+
+
+def country_drop_reason(job: dict, country: str) -> str | None:
+    return None if matches_country(job, country) else "country_not_matched"
+
+
+def place_drop_reason(job: dict, locations: list[str], remote_filters: list[str], country: str) -> str | None:
+    """The place check of Infostud, Workable and Joberty: the location filter AND the country, both strict."""
+    return location_drop_reason(job, locations, remote_filters) or country_drop_reason(job, country)
+
+
+def filter_drop_reason(
+    job: dict, search_terms: list[str], locations: list[str], remote_filters: list[str], country: str = "Serbia"
+) -> str | None:
+    """Why `filter_jobs` drops this ad, or None when it keeps it: the same three checks in the same order, and a country
+    miss is forgiven when the job is in a place the search names (`in_searched_place`)."""
+    return (
+        terms_drop_reason(job, search_terms)
+        or location_drop_reason(job, locations, remote_filters)
+        or (None if matches_country(job, country) or in_searched_place(job, locations) else "country_not_matched")
+    )
+
+
+def split_by_filter(
+    jobs: list[dict], search_terms: list[str], locations: list[str], remote_filters: list[str], country: str = "Serbia"
+) -> tuple[list[dict], list[tuple[dict, str]]]:
+    """(kept, [(dropped job, reason)]): `filter_jobs` with the reasons. `kept` is what `filter_jobs` returns."""
+    kept, dropped = [], []
+    for job in jobs:
+        reason = filter_drop_reason(job, search_terms, locations, remote_filters, country)
+        if reason is None:
+            kept.append(job)
+        else:
+            dropped.append((job, reason))
+    return kept, dropped
+
+
+def dropped_ad(job, reason: str, external_id=None, *, counted: bool = True) -> dict:
+    """One ad a provider drops, as `JobProvider.stage(dropped=[...])` takes it. `counted` is False for a row that never
+    entered the provider's `read` count (it had no title, no id, ...)."""
+    return {"job": job, "reason": reason, "externalId": external_id, "counted": counted}
+
+
 def filter_jobs(
     jobs: list[dict],
     search_terms: list[str],
     locations: list[str],
     remote_filters: list[str],
     country: str = "Serbia",
-    *,
-    log: bool = True,
 ) -> list[dict]:
     kept = [
         job
@@ -226,6 +285,5 @@ def filter_jobs(
     ]
     # "0 jobs" is two different results: nothing was fetched (a broken or empty
     # board), or everything fetched was filtered out. The log says which.
-    if log:  # a provider that stages board by board filters quietly and logs once at the end
-        logger.info("%d postings fetched, %d kept after search, location and country filters", len(jobs), len(kept))
+    logger.info("%d postings fetched, %d kept after search, location and country filters", len(jobs), len(kept))
     return kept

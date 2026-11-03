@@ -232,6 +232,39 @@ provider staged is not what it returned (tested for every provider below). `test
 
 **Open points:** pruning to 3 runs can remove a run's staging that was never imported, once import exists (S3/S4a must stop pruning an unimported run); a source's staged ads are kept in the order the provider returned them and are not de-duplicated (the existing dedupe still runs on the returned lists).
 
+### S2 as built: discard reasons and externalId
+
+**Behaviour change for readers: none.** No filter rule or result changed; the old commit path writes the same files (`tests/python/test_discards.py` runs a discovery with and without staging and compares them).
+`tests/python/test_discards.py` also holds the old `is_relevant_role` and `filter_jobs` answers against the new reason-returning functions over a table of titles, positions, places and search terms.
+
+- **`staging/<runId>/discards.jsonl`:** one line for every ad a provider drops at source stage, written while it collects, with the same rules as the ad files (exclusive create, one whole line per write, fsync, 700 / 600; a torn last line is ignored by `staging.read_discards`).
+  A line is `{t, source, externalId, reason, jobId, title, company, location, url, counted, part}`. **Never a description.** `jobId` is the id the ad would have had (the same function as the canonical job), when it can be computed.
+- **Reason codes (stable):** `title_excluded:<phrase>` (the first excluded phrase in the title; it beats a board's own position), `title_not_matched`, `search_terms_not_matched` (none of the search terms in title or description: the `filter_jobs` test), `location_not_matched`,
+  `country_not_matched`, `no_title`, `no_url` (Workable), `unparsable_row` (a row that is not an ad: RemoteOK's legal notice, a Joberty row with no numeric id), `not_listed` (Ashby), `no_detail_text` and `detail_cap` (Joberty).
+  The rules are `role_filter.role_drop_reason` and `base_provider.filter_drop_reason` / `place_drop_reason` / `split_by_filter`; `is_relevant_role` now answers `role_drop_reason(...) is None`, and `filter_jobs` is untouched.
+  Infostud, Workable and Joberty keep their strict place check (location AND country, no forgiveness for a place the search names); they use `place_drop_reason`, and so does the list they return.
+- **Invariant, per source:** `read == kept + discarded`. `counted` is true for an ad that was part of the source's `read` count; a row dropped before it was counted (no title, no id, an address-less Workable row after the first) is `counted: false` and is not in the sum.
+  The footer holds `discarded`, `discardedUncounted`, `discardReasons` and `discardMismatch` (true when the sum fails; null for a failed source, whose reading stopped half way, or when staging itself failed). A repeat of an ad already seen in the same fetch (Infostud pages, WWR feeds, Workable terms, Joberty ids) is a copy, not a drop, and is not recorded.
+- **`externalId`:** the id the source itself gives an ad (Infostud's row `id`, Workable's `id`, Greenhouse / Lever / Ashby `id`, Remote OK / YC `id`, LinkedIn's `id` from JobSpy, the RSS `guid` of We Work Remotely, Joberty's `joberty:<id>`). It is kept **beside** the canonical job: in the batch line (`externalIds`: jobId -> id) and in the discard line; the canonical job, `jobId` and every live file are unchanged
+  (Joberty's canonical job has carried an `externalId` field since it was built; that is unchanged). A source that gives no id (some JobSpy boards, RSS items without a guid) leaves it null; nothing is invented. `normalize()` of Infostud and Workable now keeps the id in their raw row; their canonical ads are built from named fields and do not carry it.
+  `staging.SourceStage.external_ids` reads it.
+
+| Source | Reasons recorded (counted) | Not counted (before `read`) | Not recorded |
+|---|---|---|---|
+| JobSpy | `title_excluded:*`, `title_not_matched` | `no_title` (rows `normalize_jobs` drops) | - |
+| Greenhouse, Lever | `search_terms_not_matched`, `location_not_matched`, `country_not_matched` | `no_title` | a board that failed (no ads known) |
+| Ashby | the same | `no_title`, `not_listed` | the same |
+| We Work Remotely | `search_terms_not_matched`, `location_not_matched`, `country_not_matched` | `no_title` | a repeat in another feed |
+| Remote OK | the same | `no_title`, `unparsable_row` | - |
+| Y Combinator | the same | `no_title` | - |
+| Infostud | `title_excluded:*`, `title_not_matched`, `location_not_matched`, `country_not_matched` | - | a repeated row (a later page) |
+| Workable | `title_excluded:*`, `title_not_matched`, `location_not_matched`, `country_not_matched`, `no_url` | further rows with no address | an ad seen again under another term |
+| Joberty | `title_excluded:*`, `title_not_matched`, `location_not_matched`, `country_not_matched`, `no_detail_text`, `detail_cap` | `unparsable_row` | a repeated id |
+| Wellfound | none (skipped) | - | - |
+
+Limits: Infostud's role drops are known after the listing and are written then (`part: "listing"`), before any description is read; a source killed before its footer has discards for what it had finished, and no `discardMismatch`.
+`staging.problems` still only requires `jobId`, `provider` and `title`: the import needs full validation (ROADMAP, review requirements for S3 / S4a).
+
 ## offList rows keep the owner's data (2026-11-03)
 
 **Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,

@@ -45,17 +45,33 @@ def _has_phrase(haystack: str, phrase: str) -> bool:
     return re.search(rf"\b{re.escape(phrase)}\b", haystack) is not None
 
 
+def role_drop_reason(
+    title: str,
+    position: str = "",
+    extra_terms: tuple[str, ...] = (),
+) -> str | None:
+    """Why the role filter drops this ad, or None when it keeps it. This is the rule; `is_relevant_role` is its yes/no.
+
+    `title_excluded:<term>` names the first excluded phrase the title holds (the exclusion beats a board's own position),
+    `title_not_matched` says nothing in the title or the position let it in.
+    """
+    title_lower = (title or "").lower()
+    position_lower = (position or "").lower()
+
+    for term in TITLE_EXCLUDE:
+        if _has_phrase(title_lower, term):
+            return f"title_excluded:{term}"
+    if position_lower in POSITION_WHITELIST:
+        return None
+    includes = TITLE_INCLUDE + tuple(t.lower() for t in extra_terms if t)
+    if any(_has_phrase(title_lower, term) for term in includes):
+        return None
+    return "title_not_matched"
+
+
 def is_relevant_role(
     title: str,
     position: str = "",
     extra_terms: tuple[str, ...] = (),
 ) -> bool:
-    title_lower = (title or "").lower()
-    position_lower = (position or "").lower()
-
-    if any(_has_phrase(title_lower, term) for term in TITLE_EXCLUDE):
-        return False
-    if position_lower in POSITION_WHITELIST:
-        return True
-    includes = TITLE_INCLUDE + tuple(t.lower() for t in extra_terms if t)
-    return any(_has_phrase(title_lower, term) for term in includes)
+    return role_drop_reason(title, position, extra_terms) is None

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-from providers.base_provider import JobProvider, build_canonical_job, filter_jobs, parts_outcome
+from providers.base_provider import JobProvider, build_canonical_job, dropped_ad, filter_jobs, parts_outcome, split_by_filter
 
 logger = logging.getLogger(__name__)
 
@@ -104,16 +104,20 @@ class LeverProvider(JobProvider):
                 continue
             if not postings:
                 empty.append(company)
-            board_jobs = []
+            board_jobs, external, dropped = [], {}, []
             for posting in postings:
                 job = self._normalize_posting(posting, company, primary_term, primary_loc)
                 if job["title"]:
                     board_jobs.append(job)
+                    external[job["jobId"]] = posting.get("id")
+                else:  # never counted as read
+                    dropped.append(dropped_ad(job, "no_title", posting.get("id"), counted=False))
             all_jobs.extend(board_jobs)
             # The board is staged as soon as it is read (filtered the way the whole list is below), so a stop keeps it.
+            board_kept, board_dropped = split_by_filter(board_jobs, search_terms, locations, remote_filters, country)
             self.stage(
-                filter_jobs(board_jobs, search_terms, locations, remote_filters, country, log=False),
-                part=company, read=len(board_jobs),
+                board_kept, part=company, read=len(board_jobs), external_ids=external,
+                dropped=dropped + [dropped_ad(job, reason, external.get(job["jobId"])) for job, reason in board_dropped],
             )
 
         kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)

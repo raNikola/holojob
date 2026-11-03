@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from providers.base_provider import JobProvider, build_canonical_job, filter_jobs, parts_outcome
+from providers.base_provider import JobProvider, build_canonical_job, dropped_ad, filter_jobs, parts_outcome, split_by_filter
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class WWRProvider(JobProvider):
             pub_date = (item.findtext("pubDate") or "").strip()
             company, title = self._split_title(title_raw)
             items.append({
+                "guid": (item.findtext("guid") or "").strip(),
                 "title": title,
                 "company": company,
                 "link": link,
@@ -71,7 +72,7 @@ class WWRProvider(JobProvider):
                 logger.warning("WWR feed %s failed: %s", feed_url, exc)
                 failures[feed_url] = str(exc)
                 continue
-            feed_jobs = []
+            feed_jobs, external, dropped = [], {}, []
             for posting in postings:
                 url = posting.get("link") or ""
                 if url in seen_urls:
@@ -94,11 +95,15 @@ class WWRProvider(JobProvider):
                 )
                 if job["title"]:
                     feed_jobs.append(job)
+                    external[job["jobId"]] = posting.get("guid")
+                else:  # never counted as read
+                    dropped.append(dropped_ad(job, "no_title", posting.get("guid"), counted=False))
             all_jobs.extend(feed_jobs)
             # The feed is staged as soon as it is read (filtered the way the whole list is below), so a stop keeps it.
+            feed_kept, feed_dropped = split_by_filter(feed_jobs, search_terms, locations, remote_filters, country)
             self.stage(
-                filter_jobs(feed_jobs, search_terms, locations, remote_filters, country, log=False),
-                part=feed_url, read=len(feed_jobs),
+                feed_kept, part=feed_url, read=len(feed_jobs), external_ids=external,
+                dropped=dropped + [dropped_ad(job, reason, external.get(job["jobId"])) for job, reason in feed_dropped],
             )
 
         kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
