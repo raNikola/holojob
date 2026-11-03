@@ -18,7 +18,8 @@ Record, version 1. A later slice adds fields; a reader ignores what it does not 
       "status": "running" | "ok" | "partial" | "failed" | "skipped" | "interrupted",
       "sources": [{"name", "status": "ok" | "partial" | "failed" | "skipped", "read", "kept", "new", "error",
                    "boardsFailed", "skipReason"}],
-      "issues": [{"level": "error" | "warning", "source": "<name>" | null, "message"}]
+      "issues": [{"level": "error" | "warning", "source": "<name>" | null, "message"}],
+      "staging": {"ok": true | false, "problems": ["..."]}      (S3; absent in older records = unknown)
     }
 
 read: ads parsed before the search, role and location filters. kept: past them, before dedupe. new: ads no earlier run
@@ -125,6 +126,15 @@ def add_source(record: dict, name: str, outcome) -> None:
         add_issue(record, "warning", f"0 ads kept ({detail}); nothing was closed for this source", name)
 
 
+def set_staging(record: dict, ok: bool, problems: list[str]) -> None:
+    """Did staging (the copy of what the scrape collected, see staging.py) itself work? A failure is an error in the record,
+    and a run that would be `ok` is `partial`: it is not fully saved, and an import must not take its staging for a complete
+    scrape. Discovery's own output is not affected."""
+    record["staging"] = {"ok": bool(ok), "problems": [_clean(problem) for problem in problems][:10]}
+    if not ok:
+        add_issue(record, "error", "Staging failed, so this run is not fully saved: " + "; ".join(problems[:3]))
+
+
 def set_new_counts(record: dict, counts: dict[str, int]) -> None:
     for source in record["sources"]:
         source["new"] = counts.get(source["name"], 0)
@@ -142,6 +152,8 @@ def finish(record: dict, *, exit_ok: bool) -> dict:
         record["status"] = "partial"
     else:
         record["status"] = "ok"
+    if record.get("staging", {}).get("ok") is False and record["status"] == "ok":
+        record["status"] = "partial"  # not fully saved: the staging copy is incomplete
     record["finishedAt"] = _now().isoformat()
     return record
 

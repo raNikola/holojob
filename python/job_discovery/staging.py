@@ -15,8 +15,12 @@ A line is the unit of "written": the reader ignores a last line with no newline 
 parse, and drops an ad that fails `problems()`, so what it returns is always whole. Nothing here ever raises into a run:
 a writer that cannot write disables itself, logs once and lets the scrape carry on.
 
-Next to the folder the run keeps `<runId>.ledger-before.json`, a hard link to the ledger as it was when the run began. The
-ledger is replaced by rename, never rewritten in place, so the link keeps the old bytes. Only the last KEEP_RUNS runs stay.
+Next to the folder the run keeps `<runId>.ledger-before.json` and `<runId>.discovered-before.json`, hard links to the two
+files as they were when the run began. Both are replaced by rename, never rewritten in place, so the links keep the old bytes
+and an import can be replayed on exactly what the run started from.
+
+Nothing removes a staging run until slice S4a: it will delete by status (never a run still waiting for import or recovery), and
+until then `usage()` says how much room staging takes. `status.json` in a run's folder says whether staging itself worked.
 """
 
 from __future__ import annotations
@@ -42,11 +46,12 @@ _atomic_spec.loader.exec_module(_atomic)
 logger = logging.getLogger(__name__)
 
 VERSION = 1
-KEEP_RUNS = 3
 STAGING_DIR = "staging"
 MANIFEST = "run.json"
 DISCARDS = "discards.jsonl"
 LEDGER_BEFORE_SUFFIX = ".ledger-before.json"
+DISCOVERED_BEFORE_SUFFIX = ".discovered-before.json"
+STATUS = "status.json"
 RUN_ID = re.compile(r"^[0-9A-Za-z]{1,32}$")
 SOURCE_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
 EXAMPLES_KEPT = 5  # invalid ads named in a footer; the count is always complete
@@ -204,6 +209,7 @@ class SourceWriter(_AppendFile):
         self.discarded = 0  # dropped ads that were part of the source's `read` count: read == kept + discarded
         self.discarded_uncounted = 0  # rows dropped before they were counted (no title, no id, ...)
         self.discard_reasons: dict[str, int] = {}
+        self.mismatch = False  # set when the source is closed: staged ads differ from the ones returned
         super().__init__(path, header, disabled=disabled)
 
     def append(
@@ -301,6 +307,7 @@ class SourceWriter(_AppendFile):
                 mode = "as it went" if self.batches else "nothing to stage"
             accounted = self.staged + self.invalid_count
             judged = self.failed is None and outcome.status != "failed"
+            self.mismatch = bool(self.failed is None and accounted != len(jobs))
             self.finish(
                 status=outcome.status,
                 complete=outcome.status == "ok",
@@ -341,12 +348,13 @@ class StagingRun:
         self.disabled: str | None = None
         self.warnings: list[str] = []
         self.discards: DiscardLog | None = None
+        self.writers: list["SourceWriter"] = []
         self._header: dict = {}
 
     @classmethod
     def begin(
         cls, root: Path, run_id: str, *, search_key: str, terms, locations, country, remote_filters, providers,
-        ledger_path: Path | None = None,
+        ledger_path: Path | None = None, discovered_path: Path | None = None,
     ) -> "StagingRun":
         run = cls(root, run_id)
         try:
@@ -357,17 +365,25 @@ class StagingRun:
             run.dir = base / run_id
             run.dir.mkdir(mode=_atomic.PRIVATE_DIR_MODE)
             started = _now()
-            try:
-                ledger_before = _keep_ledger(base, run_id, ledger_path)
-            except OSError as exc:  # the rest of staging does not depend on it
-                ledger_before = {"error": f"{type(exc).__name__}: {exc}"}
-                run.warnings.append(f"The ledger as it was before this run could not be kept: {exc}")
+            kept_before = {}
+            for label, source, suffix in (
+                ("ledger", ledger_path, LEDGER_BEFORE_SUFFIX), ("discovered file", discovered_path, DISCOVERED_BEFORE_SUFFIX),
+            ):
+                try:
+                    kept_before[label] = _keep_file(base, run_id, source, suffix)
+                except OSError as exc:  # the rest of staging does not depend on it
+                    kept_before[label] = {"error": f"{type(exc).__name__}: {exc}"}
+                    run.warnings.append(f"The {label} as it was before this run could not be kept: {exc}")
+            ledger_before, discovered_before = kept_before["ledger"], kept_before["discovered file"]
             run._header = {
                 "version": VERSION, "runId": run_id, "searchKey": search_key, "terms": list(terms or []),
                 "locations": list(locations or []), "country": country or "", "remoteFilters": list(remote_filters or []),
                 "startedAt": started,
             }
-            manifest = {**run._header, "providers": list(providers or []), "ledgerBefore": ledger_before}
+            manifest = {
+                **run._header, "providers": list(providers or []), "ledgerBefore": ledger_before,
+                "discoveredBefore": discovered_before,
+            }
             _atomic.write_text_atomic(run.dir / MANIFEST, json.dumps(manifest, indent=2), _atomic.PRIVATE_FILE_MODE)
             run.discards = DiscardLog(
                 run.dir / DISCARDS, {"version": VERSION, "runId": run_id, "kind": "discards", "startedAt": started}
@@ -379,10 +395,6 @@ class StagingRun:
             run.warnings.append(f"Staging is off for this run ({run.disabled}); the scrape carries on without it.")
             logger.warning("%s", run.warnings[-1])
             return run
-        try:
-            prune(root, keep=KEEP_RUNS, protect=run_id)
-        except OSError as exc:
-            run.warnings.append(f"Old staging could not be pruned: {exc}")
         return run
 
     def open_source(self, name: str) -> SourceWriter:
@@ -395,20 +407,52 @@ class StagingRun:
         )
         if writer.failed:
             self.warnings.append(f"Staging for {name} is off ({writer.failed}).")
+        self.writers.append(writer)
         return writer
 
+    def finish(self) -> tuple[bool, list[str]]:
+        """When the sources are done: did staging itself work? Writes status.json (best effort) and returns (ok, problems).
 
-def _keep_ledger(base: Path, run_id: str, ledger_path: Path | None) -> dict | None:
-    """Hard link the ledger as it is now, so the bytes this run started from survive the run's own commit."""
-    if ledger_path is None or not Path(ledger_path).is_file():
+        Not ok when the run folder could not be made, a source or the discards log stopped writing, a source's staged ads are
+        not what it returned, or ads were left out of staging for not being whole. A staged run that is not ok must not be imported
+        as if it were a complete scrape. This marks the run record and the folder; it changes no discovery output.
+        """
+        problems = []
+        if self.disabled:
+            problems.append(f"staging is off for this run: {self.disabled}")
+        for writer in self.writers:
+            if writer.failed:
+                problems.append(f"{writer.source}: staging stopped writing ({writer.failed})")
+            elif writer.mismatch:
+                problems.append(f"{writer.source}: what was staged is not what the provider returned")
+            if writer.invalid_count:
+                problems.append(f"{writer.source}: {writer.invalid_count} ads were not whole and are not staged")
+        if self.discards is not None and self.discards.failed:
+            problems.append(f"discard reasons stopped being recorded ({self.discards.failed})")
+        ok = not problems
+        if self.dir is not None and not self.disabled:
+            try:
+                _atomic.write_text_atomic(
+                    self.dir / STATUS,
+                    json.dumps({"version": VERSION, "ok": ok, "problems": problems, "finishedAt": _now()}, indent=2),
+                    _atomic.PRIVATE_FILE_MODE,
+                )
+            except Exception as exc:  # the record still carries it
+                logger.warning("Staging status not written: %s", exc)
+        return ok, problems
+
+
+def _keep_file(base: Path, run_id: str, source: Path | None, suffix: str) -> dict | None:
+    """Hard link a data file as it is now, so the bytes this run started from survive the run's own commit."""
+    if source is None or not Path(source).is_file():
         return None
-    target = base / f"{run_id}{LEDGER_BEFORE_SUFFIX}"
+    target = base / f"{run_id}{suffix}"
     digest = hashlib.sha256()
     try:
-        os.link(ledger_path, target)
+        os.link(source, target)
         linked = True
     except OSError:  # another filesystem, or none that links: an ordinary copy, private
-        shutil.copyfile(ledger_path, target)
+        shutil.copyfile(source, target)
         os.chmod(target, _atomic.PRIVATE_FILE_MODE)
         linked = False
     with open(target, "rb") as handle:
@@ -427,30 +471,26 @@ def _started(folder: Path) -> str:
     return datetime.fromtimestamp(folder.stat().st_mtime, tz=timezone.utc).isoformat()
 
 
-def prune(root: Path, *, keep: int = KEEP_RUNS, protect: str | None = None) -> list[str]:
-    """Remove all but the newest `keep` runs (and ledger links with no run). Returns the run ids removed."""
+def usage(root: Path) -> dict:
+    """What staging takes on disk: runs, files and bytes, each inode once (a hard link to a data file is not a second copy)."""
     base = staging_dir(root)
-    if not base.is_dir():
-        return []
-    runs = []
-    for entry in base.iterdir():
-        if entry.is_dir() and not entry.is_symlink() and RUN_ID.match(entry.name):
-            runs.append((_started(entry), entry.name))
-    runs.sort(reverse=True)
-    keepers = {name for _, name in runs[:keep]}
-    if protect:
-        keepers.add(protect)
-    removed = []
-    for _, name in runs:
-        if name not in keepers:
-            shutil.rmtree(base / name, ignore_errors=True)
-            (base / f"{name}{LEDGER_BEFORE_SUFFIX}").unlink(missing_ok=True)
-            removed.append(name)
-    for entry in base.iterdir():
-        if entry.name.endswith(LEDGER_BEFORE_SUFFIX) and entry.is_file():
-            if entry.name[: -len(LEDGER_BEFORE_SUFFIX)] not in {name for _, name in runs}:
-                entry.unlink(missing_ok=True)
-    return removed
+    runs = 0
+    files = 0
+    total = 0
+    seen: set[tuple[int, int]] = set()
+    if base.is_dir():
+        runs = sum(1 for e in base.iterdir() if e.is_dir() and not e.is_symlink() and RUN_ID.match(e.name))
+        for current, _dirs, names in os.walk(base):
+            for name in names:
+                try:
+                    info = os.stat(os.path.join(current, name))
+                except OSError:
+                    continue
+                files += 1
+                if (info.st_dev, info.st_ino) not in seen:
+                    seen.add((info.st_dev, info.st_ino))
+                    total += info.st_size
+    return {"runs": runs, "files": files, "bytes": total}
 
 
 # --- reading ---------------------------------------------------------------------------------------------------
@@ -618,6 +658,15 @@ class RunStage:
     manifest: dict | None
     sources: dict[str, SourceStage]
     discards: DiscardStage | None = None
+    status: dict | None = None  # status.json: did staging itself work (absent: the run never reached its end)
+
+    @property
+    def discovered_before(self) -> Path | None:
+        info = (self.manifest or {}).get("discoveredBefore")
+        if isinstance(info, dict) and isinstance(info.get("file"), str):
+            candidate = self.dir.parent / info["file"]
+            return candidate if candidate.is_file() else None
+        return None
 
     @property
     def ledger_before(self) -> Path | None:
@@ -640,8 +689,14 @@ def read_run(root: Path, run_id: str) -> RunStage | None:
     except (OSError, ValueError):
         manifest = None
     sources = {p.stem: read_source(p) for p in sorted(folder.glob("*.jsonl")) if p.name != DISCARDS}
+    try:
+        status = json.loads((folder / STATUS).read_text(encoding="utf-8"))
+        status = status if isinstance(status, dict) else None
+    except (OSError, ValueError):
+        status = None
     return RunStage(
-        run_id=run_id, dir=folder, manifest=manifest, sources=sources, discards=read_discards(folder / DISCARDS)
+        run_id=run_id, dir=folder, manifest=manifest, sources=sources, discards=read_discards(folder / DISCARDS),
+        status=status,
     )
 
 

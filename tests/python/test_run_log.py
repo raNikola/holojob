@@ -37,7 +37,7 @@ from providers.base_provider import JobProvider, ProviderOutcome
 
 TERMS = ["product manager"]
 REMOTE = ["Remote"]
-RECORD_KEYS = {"version", "runId", "trigger", "startedAt", "finishedAt", "status", "sources", "issues"}
+RECORD_KEYS = {"version", "runId", "trigger", "startedAt", "finishedAt", "status", "sources", "issues", "staging"}
 SOURCE_KEYS = {"name", "status", "read", "kept", "new", "error", "boardsFailed", "skipReason"}
 # Decided on purpose: discovery does not know these yet, and a later slice fills them.
 NOT_KNOWN_YET = {"scored", "closed", "missing", "expired"}

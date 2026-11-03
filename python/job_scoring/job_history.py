@@ -154,6 +154,7 @@ def apply_run(
     failed_boards: dict[str, set[str] | None] | None = None,
     empty_boards: dict[str, set[str]] | None = None,
     sources_not_run: set[str] | None = None,
+    run_id: str | None = None,
 ) -> tuple[list[dict], dict]:
     """Record one discovery run; return the jobs to write and what changed.
 
@@ -174,6 +175,10 @@ def apply_run(
     `sources_not_run` are the providers that skipped or failed this run, of any kind. They looked at nothing, so their
     open ads stay in the output unchanged. The search does not have to match: a source skipped for an unsupported country
     is by definition on a different search from the one that found its ads.
+
+    `run_id` (the importer passes it; the live commit path does not) stamps each entry with how this run saw it, so the
+    discovered view can be derived from the ledger alone: `lastRunId` and `lastRunPos` (its place in the output) on an ad this
+    run found, `heldRunId` on one kept open. Nothing else changes, and without it nothing is stamped.
     """
     moment = _parse(now) or datetime.now(timezone.utc)
     entries = ledger["jobs"]
@@ -190,7 +195,7 @@ def apply_run(
     found_roles = set()
     out = []
 
-    for job in jobs:
+    for position, job in enumerate(jobs):
         job_id = job["jobId"]
         found_ids.add(job_id)
         entry = entries.get(job_id)
@@ -232,6 +237,8 @@ def apply_run(
         entry.update(
             provider=job.get("provider"), roleKey=role_key(job), seenUnder=key, job=_snapshot(job)
         )
+        if run_id is not None:
+            entry.update(lastRunId=run_id, lastRunPos=position)
         record = _annotate(job, entry, now=moment, closed=False)
         if entry["llmFacts"]:
             record["llmFacts"] = entry["llmFacts"]
@@ -252,6 +259,8 @@ def apply_run(
             else None
         )
         if held_by:
+            if run_id is not None:
+                entry["heldRunId"] = run_id
             record = _annotate(entry["job"], entry, now=moment, closed=False)
             if entry.get("llmFacts"):
                 record["llmFacts"] = entry["llmFacts"]

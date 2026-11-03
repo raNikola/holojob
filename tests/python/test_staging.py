@@ -205,7 +205,8 @@ def test_where_a_hard_link_is_not_possible_the_ledger_is_copied_private(tmp_path
     assert mode(ledger) == 0o644, "the live ledger's mode is not touched"
 
 
-def test_only_the_last_three_runs_stay_with_their_ledger_links(tmp_path, monkeypatch):
+def test_no_staging_run_is_removed_and_usage_counts_a_hard_linked_file_once(tmp_path, monkeypatch):
+    """Until S4a deletes by status, nothing removes a run: a run still waiting for import must never be lost."""
     ledger = tmp_path / "data/jobs/job_history.json"
     ledger.parent.mkdir(parents=True)
     ledger.write_text('{"version":1,"jobs":{}}')
@@ -214,10 +215,13 @@ def test_only_the_last_three_runs_stay_with_their_ledger_links(tmp_path, monkeyp
     for n in range(1, 6):
         begin(tmp_path, run_id=f"r{n}", ledger=ledger)
     base = tmp_path / "data/jobs/staging"
-    assert sorted(p.name for p in base.iterdir()) == [
-        "r3", "r3.ledger-before.json", "r4", "r4.ledger-before.json", "r5", "r5.ledger-before.json",
-    ]
-    assert staging.list_runs(tmp_path) == ["r5", "r4", "r3"]
+    assert sorted(p.name for p in base.iterdir()) == sorted(
+        [f"r{n}" for n in range(1, 6)] + [f"r{n}.ledger-before.json" for n in range(1, 6)])
+    assert staging.list_runs(tmp_path) == ["r5", "r4", "r3", "r2", "r1"]
+    used = staging.usage(tmp_path)
+    assert used["runs"] == 5
+    assert used["bytes"] < 5 * ledger.stat().st_size + 5 * 2000, "the five links to one ledger are one copy"
+    assert not hasattr(staging, "prune"), "pruning by status is S4a's"
 
 
 def test_a_bad_run_id_or_source_name_cannot_leave_the_staging_folder(tmp_path):
