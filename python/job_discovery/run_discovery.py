@@ -278,6 +278,8 @@ def discover(args: argparse.Namespace, record: dict) -> int:
     for warning in result.report.get("warnings", []):
         run_log.add_issue(record, "warning", warning)
         logger.warning("%s", warning)
+    for warning in outcome.warnings:  # the log only: the store of dropped ads has no screen yet (S5e1)
+        logger.warning("%s", warning)
     if not result.report.get("complete"):
         logger.info("Import: not a complete scrape (%s)", ", ".join(result.report.get("incompleteSources") or ["see the report"]))
 

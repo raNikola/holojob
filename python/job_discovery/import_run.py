@@ -5,6 +5,11 @@
     import_run.py --latest  --dry-run
     import_run.py --latest  --lifecycle-report [--report-file] [--application-job-ids FILE]  what the S5 lifecycle rules would do (lifecycle_report.py); read-only
     import_run.py --run RUNID --import [--allow-older --confirm-overwrite-newer]   recovery: import a staged run that was never imported
+    import_run.py --backfill-filtered [--dry-run]   count the dropped ads of every staged run into filtered_ads.json (filtered_ads.py)
+
+--backfill-filtered reads staging and the ledger and writes filtered_ads.json and nothing else: no import, no scoring, no marker, no
+ledger or view change, whether or not a run was imported. Twice gives the same file. With --dry-run it writes nothing. It prints
+counts only, never an ad. Exit 0 done, 2 stopped (a store or ledger that cannot be read, or a run that is active).
 
 --dry-run is read-only. It writes no live file; with --report-file it writes staging/RUNID/import-report.json and nothing else.
 --import is the same import a Re-scrape makes (the importer: full validation, ledger then derived view, run marked imported). It
@@ -32,6 +37,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+import filtered_ads  # noqa: E402
 import importer  # noqa: E402
 import lifecycle_report  # noqa: E402
 import staging  # noqa: E402
@@ -136,15 +142,32 @@ def exit_code(dry: importer.DryRun) -> int:
     return 0 if dry.difference_count == 0 else 1
 
 
+def render_backfill(report: dict) -> list[str]:
+    lines = [f"Backfill of {filtered_ads.FILE_NAME}" + (" (dry run; nothing was written)" if report["dryRun"] else "")]
+    lines.append(f"Runs, oldest first: {len(report['runs'])}: counted {report['applied']}, already counted {report['alreadyApplied']}, "
+                 f"no discards file {report['noDiscards']}, no usable time {report['noTime']}")
+    for run in report["runs"]:
+        line = f"  {run['runId']}  {'imported    ' if run['imported'] else 'not imported'}  {run['state']}"
+        if "lines" in run:
+            line += (f"  {run.get('at', '')}  lines {run['lines']}, ads {run['ads']}, new {run['new']}, moved forward {run['moved']}, older {run['older']}, "
+                     f"no id {run['noId']}, torn {'yes' if run['torn'] else 'no'}, unreadable {run['unreadable']}, rejected {run['rejected']}")
+        lines.append(line)
+    lines.append(f"Result: {report['ads']} ads ({report['newAds']} new), {report['inLedger']} also in the ledger; " + ", ".join(f"{k} {v}" for k, v in report["bySource"].items()))
+    lines.append(f"File: {megabytes(report['bytes'])}, {report['appliedRuns']} run ids; "
+                 + ("would be written" if report["dryRun"] else "written" if report["written"] else "no change, not written"))
+    return lines
+
+
 def main(argv=None, root: Path | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    which = parser.add_mutually_exclusive_group(required=True)
+    which = parser.add_mutually_exclusive_group()
     which.add_argument("--run", help="the run id (a folder in data/jobs/staging)")
     which.add_argument("--latest", action="store_true", help="the newest run in staging")
-    mode = parser.add_mutually_exclusive_group(required=True)
+    mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="replay and compare; writes nothing")
     mode.add_argument("--import", dest="do_import", action="store_true", help="import the run for real (recovery)")
     mode.add_argument("--lifecycle-report", action="store_true", help="what the S5 lifecycle rules would do; writes nothing (--report-file: its own file)")
+    parser.add_argument("--backfill-filtered", action="store_true", help="count every staged run's dropped ads into filtered_ads.json; with --dry-run writes nothing")
     parser.add_argument("--allow-older", action="store_true", help="with --import: import a run older than the last imported one")
     parser.add_argument("--limit", type=int, default=20, help="how many differences to print (default 20)")
     parser.add_argument("--report-file", action="store_true", help="also write staging/RUNID/import-report.json (the only file written)")
@@ -153,6 +176,28 @@ def main(argv=None, root: Path | None = None) -> int:
                         help="with --allow-older: yes, this may overwrite newer ledger data with older data")
     args = parser.parse_args(argv)
     root = Path(root or ROOT)
+    if args.backfill_filtered:
+        if args.run or args.latest or args.do_import or args.lifecycle_report or args.allow_older or args.confirm_overwrite_newer or args.report_file or args.application_job_ids:
+            print("--backfill-filtered covers every staged run and goes only with --dry-run.", file=sys.stderr)
+            return 2
+        lock = pipeline_lock.acquire()
+        if lock is None:
+            print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
+            return 2
+        try:
+            report = filtered_ads.backfill(root, importer.import_time, dry_run=args.dry_run)
+        except (filtered_ads.FilteredAdsError, OSError, ValueError) as exc:
+            print(f"Backfill stopped, nothing was written: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+        finally:
+            lock.release()
+        for line in render_backfill(report):
+            print(line)
+        return 0
+    if not (args.run or args.latest):
+        parser.error("one of --run, --latest or --backfill-filtered is required")
+    if not (args.dry_run or args.do_import or args.lifecycle_report):
+        parser.error("one of --dry-run, --import, --lifecycle-report or --backfill-filtered is required")
     if args.confirm_overwrite_newer and not args.allow_older:
         print("--confirm-overwrite-newer only goes with --allow-older.", file=sys.stderr)
         return 2
@@ -208,6 +253,8 @@ def main(argv=None, root: Path | None = None) -> int:
             print(f"  ledger: " + ", ".join(f"{k} {v}" for k, v in rep["ledgerChanges"].items()))
             print(f"  complete scrape: {'yes' if rep['complete'] else 'NO (' + ', '.join(rep['incompleteSources'] or ['see the rejections']) + ')'}")
         print(f"  staging: {outcome.usage['runs']} runs, {megabytes(outcome.usage['bytes'])}; removed {outcome.pruned or 'nothing'}")
+        for warning in outcome.warnings:
+            print(f"  WARNING: {warning}", file=sys.stderr)
         return 0
     try:
         dry = importer.dry_run(root, run_id)

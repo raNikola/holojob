@@ -490,14 +490,17 @@ def is_imported(root: Path, run_id: str) -> bool:
     return (staging_dir(Path(root)) / run_id / IMPORTED).is_file()
 
 
-def prune(root: Path, keep: int = KEEP_IMPORTED) -> list[str]:
+def prune(root: Path, keep: int = KEEP_IMPORTED, protect=frozenset()) -> list[str]:
     """Remove imported runs beyond the newest `keep` of them, with their two hard links. Never a run that is not imported:
-    one awaiting an import or recovery, one with no marker (every run before S4a), one whose staging failed. Returns the ids removed."""
+    one awaiting an import or recovery, one with no marker (every run before S4a), one whose staging failed. Never one in `protect`:
+    its dropped ads are not recorded yet (filtered_ads.unrecorded). Returns the ids removed."""
     base = staging_dir(Path(root))
     imported = [(started, name) for started, name in
                 sorted(((_started(base / r), r) for r in list_runs(root)), reverse=True) if (base / name / IMPORTED).is_file()]
     removed = []
     for _, name in imported[max(0, keep):]:
+        if name in protect:
+            continue
         shutil.rmtree(base / name, ignore_errors=True)
         for suffix in (LEDGER_BEFORE_SUFFIX, DISCOVERED_BEFORE_SUFFIX):
             (base / f"{name}{suffix}").unlink(missing_ok=True)

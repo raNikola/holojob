@@ -849,6 +849,30 @@ Fields added later, in the browser job store and not in this file until saved:
 ```
 
 
+## Filtered ads
+
+- **Path:** `data/jobs/filtered_ads.json`
+- **Purpose:** Every ad a source returned and a filter dropped, kept after its staging run is pruned. No reader yet (S5e2).
+- **Written by:** `job_discovery/filtered_ads.py`, from the real import and `import_run.py --backfill-filtered`. A dry run never writes it. Not in backups, like the ledger.
+
+```json
+{
+ "version": 1,
+ "appliedRuns": ["4ceb98880ded", "307c5e408af3"],
+ "ads": {
+  "<jobId>": {
+   "source": "infostud", "title": "...", "company": "...", "location": "...", "url": "https://...", "externalId": "...",
+   "reason": "title_not_matched", "firstSeen": "<ISO>", "lastSeen": "<ISO>", "lastRunId": "307c5e408af3", "timesSeen": 2,
+   "searchKey": "980db72deba8", "inLedger": false
+  }
+ }
+}
+```
+
+- **`appliedRuns`:** every run already counted, so a run counts once in any order. The newest 500 ids, never dropping one still in staging.
+- **`firstSeen`, `lastSeen`:** the run's own time (`importer.import_time`), not the clock.
+- **`inLedger`:** the ledger also holds this ad, so it is shown once, from the ledger. Refreshed at every write. Records are never removed.
+
 ## Job history ledger
 
 - **Path:** `data/jobs/job_history.json`

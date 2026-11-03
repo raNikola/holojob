@@ -441,6 +441,55 @@ Tests: `tests/python/test_readers_not_found.py`.
 
 In the real container every request of `scripts/check-view-recovery.js` answered 403 "Host not allowed": the container's `.env` sets `CAREER_OS_ALLOWED_ORIGINS`, and `request-guard.js` then accepts only those Host values, while the script called `127.0.0.1:<port>`. The guard is unchanged. The script now sends the Host the guard allows (the first entry of `CAREER_OS_ALLOWED_ORIGINS`, as the reverse proxy does; none configured = the local address passes). A 403 is reported as `ENVIRONMENT: the request guard refused ...`, the recovery steps are not run or reported, the result line says `ENVIRONMENT FAILURE (not a recovery failure)` and the exit code is 2 (1 stays for a recovery failure). Tests: `tests/js/viewRecoveryCheck.test.js` runs the check with the guard configured (passes) and with a wrong Host (environment failure, no `(a)/(b)/(c)` failure line). Reproduced in a throwaway container with the guard config set and the live data mounted read-only: all steps pass, live ledger and view sha256 identical before and after.
 
+## S5e1 as built: dropped ads kept in `filtered_ads.json` (2026-11-03)
+
+**Why:** the owner must be able to see every ad, including the ones a role or location filter dropped at scrape time (Infostud keeps 3 of 441). Those exist only in `staging/<runId>/discards.jsonl`, and a run is pruned after three newer imports. No screen or route reads the file yet; `GET /api/jobs/all` is S5e2.
+
+**Owner decisions (2026-11-03):**
+
+- A separate file, not the ledger: every ledger reader assumes an entry holds a full ad.
+- The backfill covers all 5 staged runs, including the 3 never imported, for this file only. Those runs stay not imported.
+- No last-score file. Hidden rows show no score.
+- What "Active" and "All" hold is decided at S5e3.
+- Archiving at 20 MB is a future idea and is not built.
+
+**The file:** one record per `jobId`, updated in place: `source, title, company, location, url, externalId, reason, firstSeen, lastSeen, lastRunId, timesSeen, searchKey, inLedger`. Never a description. Atomic write, `version` 1, no link to the ledger's generation. Written as ASCII, so an odd character in a title cannot stop the write. Shape: [data-shapes.md](redesign/data-shapes.md#filtered-ads).
+
+**Rules, in `python/job_discovery/filtered_ads.py`:**
+
+- **A run counts once.** `appliedRuns` holds the id of every counted run, so A, B, A counts A once, which `lastRunId` alone could not say. The list keeps the newest 500 ids (about 8 KB) and never drops an id whose run is still in staging, the only runs that could be applied again.
+- **Time is the run's own** (`importer.import_time`), so a run gives the same record whenever it is applied. An older run moves `firstSeen` back and adds to the count; it never moves `lastSeen`, the reason or the shown fields. The final record does not depend on the order runs are applied in.
+- **One ad under several searches** is one sighting, with the first line's reason.
+- **Skipped:** a torn last line, an unparsable line, a line that fails `discard_problems`, a line with no `jobId` (counted as `noId`).
+- **Kept later:** the record stays, and `inLedger` is set from the ledger at every write. Readers show the ad once, from the ledger. Being kept is not a sighting, so `lastSeen` and `timesSeen` do not move.
+
+**Import order: ledger, view, this file, `imported.json`, prune.** The S5e plan said "before the ledger"; after it is cleaner, because `inLedger` then describes a ledger that was really written and a run killed earlier leaves no record of a run that was not imported.
+
+| Stopped or failed at | State | What finishes it |
+|---|---|---|
+| Between the ledger and this file | Run not marked and not in `appliedRuns` | Importing the run again (`alreadyImported`) records it, once |
+| Between this file and `imported.json` | Counted, not marked | Importing again changes no counter and writes the marker |
+| Inside the rename | Old file whole | Importing again |
+| Later run imported first (order guard refuses the old one) | Old run stays staged, not counted | `--backfill-filtered` |
+| Write fails (disk full, bad store) | The import stands, the marker is written, a warning goes to the log | The run stays out of pruning until it is counted |
+| Store unreadable or another version | Never overwritten. Nothing is pruned, since nothing can say what was counted | The owner moves it aside, then backfills what staging still holds |
+
+**Pruning guard:** `staging.prune(root, protect=filtered_ads.unrecorded(root))`. A run that is staged, has a discards file and is not in `appliedRuns` is never pruned. So until the first backfill, deployed code keeps every imported run, and the log says so at each import. This also means a late backfill loses nothing.
+
+**Backfill:** `import_run.py --backfill-filtered [--dry-run]`. Takes the pipeline lock, reads staging and the ledger, writes only this file. No import, scoring, marker, ledger or view change; it reads the ledger directly, so a bad ledger stops it and is not set aside as `job_history.load` would. Twice gives the same bytes, and the second pass does not rewrite the file. It prints counts only.
+
+**Same id, kept or dropped (checked 2026-11-03):** no mismatch.
+
+- **Rule:** `jobId` is `sha256(url)[:16]`, or a hash of title, company and location when there is no address.
+- **Real data (read-only, counts only):** all 7,778 dropped lines and 4,292 kept ads of the 5 staged runs, and all 1,981 ledger entries, reproduce from their own fields, for every provider present.
+- **Tests:** an ad kept in one run and dropped in another has one id for all 10 providers.
+- **Infostud separately:** both of its drop paths give the canonical id, not the sha1 its raw row carries.
+- **Joberty:** the address holds a slug of the title, so a retitled ad gets a new id. Both paths do this, so it is not a mismatch, but it is one more way a Joberty ad can look new.
+
+**Measured on a copy of the real data:** 7,778 lines become 1,508 ads, 0 in the ledger, in a file of 814 KB. The earlier estimate of 581 KB left out indentation and ASCII escapes.
+
+**DEFERRED: ledger growth.** At about 10 KB per entry and about 150 new ads a day, `job_history.json` grows about 1.5 MB a day, about 550 MB a year, and every import reads and rewrites all of it. D3 removes nothing. The likely fix is moving descriptions out of the main file (they are about 6.3 KB of each entry). Not scheduled; this will hurt long before `filtered_ads.json` does.
+
 ## offList rows keep the owner's data (2026-11-03)
 
 **Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,
