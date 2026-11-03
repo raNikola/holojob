@@ -542,7 +542,6 @@ def enrich(args: argparse.Namespace) -> int:
 
     pending: list[tuple[int, dict]] = []
     skipped = from_ledger = outside = not_active = 0
-    stamp = row_state.found_stamp(payload.get("meta") if isinstance(payload, dict) else None)
     for index, job in enumerate(jobs, start=1):
         cached = job.get("llmFacts") or {}
         if not args.force and cached.get("_fingerprint") == _fingerprint(job):
@@ -556,7 +555,7 @@ def enrich(args: argparse.Namespace) -> int:
             from_ledger += 1
             continue
         # This run did not find it: facts it already has are kept above, and it is not worth a new call.
-        if row_state.not_found(job, stamp):
+        if row_state.not_found(job):
             not_active += 1
             continue
         if outside_allowed_before_enrichment(job, prefs):

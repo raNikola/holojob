@@ -123,8 +123,10 @@ def derive_view(ledger: dict) -> dict:
             out["llmFacts"] = entry["llmFacts"]
         return out
 
+    # Only an import that says so marks its held rows, so a ledger from before (S5d2) gives the very bytes it always gave.
+    marks = {job_history.NOT_FOUND_MARK: True} if info.get("marksNotFound") else {}
     jobs = [record(e, False) for e in found]
-    jobs += [record(e, False) for e in entries.values() if e.get("heldRunId") == run_id and e["job"]["jobId"] not in found_ids]
+    jobs += [{**record(e, False), **marks} for e in entries.values() if e.get("heldRunId") == run_id and e["job"]["jobId"] not in found_ids]
     for job_id, entry in entries.items():
         closed_at = job_history._parse(entry.get("closedAt"))
         if not closed_at:

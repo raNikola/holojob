@@ -315,7 +315,7 @@ def plan_import(
     }
     generation = (result.ledger.get("generation") or 0) + 1
     result.ledger["generation"] = generation
-    result.ledger["lastImport"] = {"runId": run.run_id, "at": moment, "startedAt": manifest.get("startedAt"), "meta": meta}
+    result.ledger["lastImport"] = {"runId": run.run_id, "at": moment, "startedAt": manifest.get("startedAt"), "meta": meta, "marksNotFound": True}
     result.ledger["updatedAt"] = moment
     result.view = view_guard.view_payload(to_write, meta, moment, generation)
     if len(to_write) > ROW_WARNING:
@@ -353,6 +353,7 @@ EXCLUDED = [
     "ledger.jobs.*.lastRunId / lastRunPos / heldRunId (the importer's stamps, from which the view is derived)",
     "ledger.generation / discovered_jobs.json meta.ledgerGeneration (the counter that keeps the two together; absent before S4a)",
     "discovered_jobs.json meta.generatedAt (the time of the save)",
+    "discovered_jobs.json jobs.*.notFoundThisRun (derived from the importer's stamps; absent before S5d2)",
     "discovered_jobs.json meta.sourceRunId (checked to be the run's id instead)",
 ]
 MAX_STORED_DIFFERENCES = 500
@@ -431,7 +432,7 @@ def compare_views(a: dict, b: dict, label_a: str, label_b: str) -> Differences:
             seen[base] = seen.get(base, 0) + 1
             key = base if seen[base] == 1 else f"{base}#{seen[base]}"
             keys.append(key)
-            by_key[key] = job
+            by_key[key] = {k: v for k, v in job.items() if k != job_history.NOT_FOUND_MARK}
         return keys, by_key
 
     keys_a, map_a = keyed(a.get("jobs") or [])

@@ -358,7 +358,7 @@ class LlmFitEnhancer:
         eligible = [
             (-r["matchScore"], index, self._key(r))
             for index, r in enumerate(results)
-            if r["matchScore"] >= self.threshold and not r.get("isClosed") and not row_state.inactive(r)
+            if r["matchScore"] >= self.threshold and not r.get("isClosed") and not row_state.not_found(r)
         ]
         eligible.sort()
         self._selected = {key for _, _, key in eligible[: max(0, self.limit)]}
@@ -373,7 +373,7 @@ class LlmFitEnhancer:
             if not self.cache_only:
                 ai_gate.record_cache_hit(self.provider, self.model, feature="fit-judge", job_id=job.get("jobId"))
             return cached, fingerprint, True
-        if row_state.inactive(job):
+        if row_state.not_found(job):
             # A judgement already paid for still applies, so the score does not jump. A new one is not worth a call.
             self._count("not_active")
             raise NotCached(fingerprint)

@@ -30,7 +30,6 @@ from llm_enhancer import (  # noqa: E402
 )
 import manual_jobs  # noqa: E402
 import pipeline_lock  # noqa: E402
-import row_state  # noqa: E402
 import view_guard  # noqa: E402
 import job_history  # noqa: E402
 from scorer import resolve_weights, score_jobs  # noqa: E402
@@ -145,7 +144,6 @@ def score(args: argparse.Namespace) -> int:
         return 1
     # A hand-entered job is scored with every run and wins over a discovered row with the same URL.
     discovered_rows = len(jobs)
-    jobs = row_state.mark(jobs, discovered.get("meta") if isinstance(discovered, dict) else None)
     jobs = manual_jobs.with_manual(jobs, manual)
     replaced_rows = discovered_rows + len(manual) - len(jobs)
     if manual:
