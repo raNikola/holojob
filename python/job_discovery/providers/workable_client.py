@@ -163,11 +163,14 @@ def fetch_jobs(
     extra_terms: tuple[str, ...] = (),
     delay: float = 1.0,
     counts: dict | None = None,
+    on_batch=None,
 ) -> list[dict]:
-    """The relevant ads. `counts`, when given, receives "read": how many different ads came back before the role filter."""
+    """The relevant ads. `counts`, when given, receives "read": how many different ads came back before the role filter.
+    `on_batch`, when given, is called after each search term with the ads that term added (term, new ads)."""
     by_url: dict[str, dict] = {}
     read: set[str] = set()
     for term in search_terms:
+        added = []
         for row in search(term, location):
             job = normalize(row)
             read.add(job["jobUrl"])
@@ -175,6 +178,9 @@ def fetch_jobs(
                 continue
             if is_relevant_role(job["title"], "", extra_terms or search_terms):
                 by_url[job["jobUrl"]] = job
+                added.append(job)
+        if on_batch is not None:
+            on_batch(term, added)
         time.sleep(delay)
     if counts is not None:
         counts["read"] = len(read)

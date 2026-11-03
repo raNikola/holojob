@@ -239,8 +239,11 @@ def fetch_jobs(
     enrich_matches: bool = True,
     extra_terms: tuple[str, ...] = (),
     counts: dict | None = None,
+    on_job=None,
 ) -> list[dict]:
-    """The relevant ads. `counts`, when given, receives "read" (ads fetched before the role filter) and "reported" (the total the site says its search has)."""
+    """The relevant ads. `counts`, when given, receives "read" (ads fetched before the role filter) and "reported" (the total the site says its search has).
+    `on_job`, when given, is called with each relevant ad as soon as it is complete (after its full description is read),
+    so a caller can keep it before the next, slow request."""
     raw, reported = fetch_raw(categories)
     jobs = [normalize(row) for row in raw]
     if counts is not None:
@@ -255,7 +258,15 @@ def fetch_jobs(
         )
     ]
     if enrich_matches:
-        matches = [enrich(job) for job in matches]
+        done = []
+        for job in matches:
+            done.append(enrich(job))
+            if on_job is not None:
+                on_job(done[-1])
+        matches = done
+    elif on_job is not None:
+        for job in matches:
+            on_job(job)
     return matches
 
 

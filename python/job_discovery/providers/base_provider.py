@@ -214,6 +214,8 @@ def filter_jobs(
     locations: list[str],
     remote_filters: list[str],
     country: str = "Serbia",
+    *,
+    log: bool = True,
 ) -> list[dict]:
     kept = [
         job
@@ -224,5 +226,6 @@ def filter_jobs(
     ]
     # "0 jobs" is two different results: nothing was fetched (a broken or empty
     # board), or everything fetched was filtered out. The log says which.
-    logger.info("%d postings fetched, %d kept after search, location and country filters", len(jobs), len(kept))
+    if log:  # a provider that stages board by board filters quietly and logs once at the end
+        logger.info("%d postings fetched, %d kept after search, location and country filters", len(jobs), len(kept))
     return kept

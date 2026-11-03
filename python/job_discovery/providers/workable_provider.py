@@ -36,8 +36,22 @@ class WorkableProvider(JobProvider):
     ) -> list[dict]:
         terms = tuple(search_terms or ("Product Manager",))
         counts: dict = {}
+        canonical: list[dict] = []
+
+        def keep_as_it_comes(term: str, added: list[dict]) -> None:
+            # One search term is one request: its ads are staged before the next term. The same objects are returned below.
+            jobs = [self._to_canonical(raw) for raw in added]
+            canonical.extend(jobs)
+            self.stage(
+                [
+                    job for job in jobs
+                    if matches_location_filters(job, locations, remote_filters) and matches_country(job, country)
+                ],
+                part=term,
+            )
+
         try:
-            raw_jobs = workable_client.fetch_jobs(terms, location=country, counts=counts)
+            raw_jobs = workable_client.fetch_jobs(terms, location=country, counts=counts, on_batch=keep_as_it_comes)
         except Exception as exc:
             logger.exception("Workable fetch failed; continuing without it")
             self.last_outcome = ProviderOutcome(status="failed", error=str(exc))
@@ -45,7 +59,7 @@ class WorkableProvider(JobProvider):
 
         logger.info("Workable: %d relevant ads before geo filtering", len(raw_jobs))
 
-        jobs = [self._to_canonical(job) for job in raw_jobs]
+        jobs = canonical if len(canonical) == len(raw_jobs) else [self._to_canonical(job) for job in raw_jobs]
         kept = [
             job
             for job in jobs
