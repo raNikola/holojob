@@ -22,6 +22,7 @@ vi.mock('../../scripts/save-profile.js', async (original) => ({ ...(await origin
 vi.mock('../../scripts/cv-store.js', async (original) => ({ ...(await original()), saveCvFile: mocks.saveCv }))
 vi.mock('../../scripts/backup-handler.js', () => ({ importBackupZip: mocks.importZip, createBackupStream: mocks.exportZip }))
 vi.mock('../../scripts/run-rescrape.js', async (original) => ({ ...(await original()), withRunLock: async (action) => ({ busy: false, value: await action() }) }))
+vi.mock('../../scripts/view-guard.js', async (original) => ({ ...(await original()), ensureViewCurrent: async () => ({ regenerated: false }) }))
 vi.mock('../../scripts/run-manual-job.js', async (original) => ({ ...(await original()), runManualJobs: mocks.manualJobs }))
 
 const servers = []

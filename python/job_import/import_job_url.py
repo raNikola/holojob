@@ -35,6 +35,7 @@ from atomic_write import write_text_atomic  # noqa: E402
 import claude_code  # noqa: E402
 import manual_jobs  # noqa: E402
 import pipeline_lock  # noqa: E402
+import view_guard  # noqa: E402
 import safe_fetch  # noqa: E402
 from scorer import score_jobs  # noqa: E402
 
@@ -273,6 +274,8 @@ def run_job_json(args) -> int:
         return _fail(2, error="invalid", field="json")
     batch = isinstance(payload, list)
     items = payload if batch else [payload]
+    if args.discovered.exists():
+        view_guard.ensure_or_exit(args.discovered, view_guard.job_history.ledger_path(args.discovered))
     if args.check_only:
         return _check_only(items, args)
 

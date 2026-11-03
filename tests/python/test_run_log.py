@@ -178,7 +178,7 @@ def test_a_run_that_crashes_still_writes_a_failed_record_and_the_crash_is_not_hi
     def crash(*args, **kwargs):
         raise RuntimeError("disk gone")
 
-    monkeypatch.setattr(run_discovery, "export_discovered_json", crash)
+    monkeypatch.setattr(run_discovery.importer, "import_staged_run", crash)
     with pytest.raises(RuntimeError, match="disk gone"):
         discovery({"greenhouse": greenhouse({"acme": [posting(1)]})})
     record = only_record()
@@ -239,13 +239,23 @@ def test_the_allowed_run_statuses():
     assert run_log.RUN_STATUSES == ("ok", "partial", "failed", "skipped", "running", "interrupted")
 
 
+def whole_ad(job_id, provider, source, title, company, description, url):
+    """A complete canonical ad (the importer validates every field), with the id the test wants."""
+    from providers.base_provider import build_canonical_job
+
+    return {**build_canonical_job(provider=provider, source=source, title=title, company=company, location="Remote",
+                                  job_url=url, description=description), "jobId": job_id}
+
+
 def infostud_job(job_id="i1", title="Product Lead"):
-    return {"jobId": job_id, "provider": "infostud", "source": "infostud", "title": title, "company": "A",
-            "location": "Remote", "description": "Own it.", "jobUrl": f"https://i/{job_id}"}
+    return whole_ad(job_id, "infostud", "infostud", title, "A", "Own it.", f"https://i/{job_id}")
 
 
 def ledger_entry(tmp_path, job_id):
-    return json.loads((tmp_path / "data" / "jobs" / "job_history.json").read_text())["jobs"][job_id]
+    """An entry as the history sees it: without the importer's stamps (lastRunId, lastRunPos, heldRunId), which say how the
+    latest run saw it and so change on every run."""
+    entry = json.loads((tmp_path / "data" / "jobs" / "job_history.json").read_text())["jobs"][job_id]
+    return {k: v for k, v in entry.items() if k not in ("lastRunId", "lastRunPos", "heldRunId")}
 
 
 def test_a_skipped_source_keeps_its_ads_in_the_file_with_nothing_changed(discovery, tmp_path):
@@ -423,8 +433,7 @@ def test_read_counts_what_the_filter_saw_and_kept_what_passed(discovery):
 
 def test_new_is_counted_per_source_after_dedupe_and_adds_up_to_the_history_figure(discovery, tmp_path):
     def lever_job(job_id, title):
-        return {"jobId": job_id, "provider": "lever", "source": "acme", "title": title, "company": "Acme",
-                "location": "Remote", "description": "Own the roadmap.", "jobUrl": f"https://y/{job_id}"}
+        return whole_ad(job_id, "lever", "acme", title, "Acme", "Own the roadmap.", f"https://y/{job_id}")
 
     providers = {
         "greenhouse": greenhouse({"acme": [posting(1)]}),

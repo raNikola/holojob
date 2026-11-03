@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const run = vi.hoisted(() => ({
   discovery: vi.fn(), pipeline: vi.fn(), scoring: vi.fn(), judged: vi.fn(), manual: vi.fn(), importUrl: vi.fn(),
-  start: vi.fn(), status: vi.fn(), busy: vi.fn(), lock: vi.fn(), restore: vi.fn(), exportZip: vi.fn(),
+  start: vi.fn(), status: vi.fn(), busy: vi.fn(), lock: vi.fn(), restore: vi.fn(), exportZip: vi.fn(), ensureView: vi.fn(),
 }))
 
 vi.mock('../../scripts/run-discovery.js', () => ({ buildDiscoveryCommand: () => '', getDiscoveryStatus: () => ({}), runDiscovery: run.discovery }))
@@ -19,10 +19,12 @@ vi.mock('../../scripts/run-rescrape.js', async (original) => ({
   ...(await original()),
   startRescrape: run.start, rescrapeStatus: run.status, isRunBusy: run.busy, withRunLock: run.lock,
 }))
+vi.mock('../../scripts/view-guard.js', async (original) => ({ ...(await original()), ensureViewCurrent: run.ensureView }))
 vi.mock('../../src/utils/apiAvailability.js', async (original) => ({ ...(await original()), ensureApiAvailable: async () => true }))
 vi.mock('../../scripts/backup-handler.js', () => ({ importBackupZip: run.restore, createBackupStream: run.exportZip }))
 
 const { handleApiRoutes } = await import('../../scripts/api-handler.js')
+const { ViewUnrecoverable } = await import('../../scripts/view-guard.js')
 const { default: RescrapeProgress } = await import('../../src/components/jobs/RescrapeProgress.jsx')
 const { RUN_ACTIVE, runHttpStatus } = await import('../../scripts/run-rescrape.js')
 const { applyStatus, emptyRunView, eventText, latestEventText } = await import('../../src/modules/jobs/rescrapeRun.js')
@@ -265,6 +267,7 @@ describe('backup export', () => {
   const marker = () => path.join(process.env.CAREER_OS_ANALYTICS_DIR, 'runs', '.commit-in-progress.json')
   const clearMarker = () => fs.rmSync(marker(), { force: true })
   beforeEach(clearMarker)
+  beforeEach(() => run.ensureView.mockReset())
   afterEach(clearMarker)
   const payload = { profile: { a: 1 } }
 
@@ -327,6 +330,29 @@ describe('backup export', () => {
     expect(headers['Content-Type']).toBe('application/zip')
     expect(run.exportZip.mock.calls[0][1].profile).toEqual({ a: 1 })
     expect(order).toEqual(['locked', 'first bytes', 'last bytes', 'released'])
+  })
+
+  it('rebuilds the job list under the lock before it copies anything, and refuses with the reason when it cannot', async () => {
+    const order = []
+    run.lock.mockImplementation(async (fn) => ({ busy: false, value: await fn() }))
+    run.ensureView.mockImplementation(async () => { order.push('ensure'); return { regenerated: true } })
+    run.exportZip.mockImplementation(() => { order.push('archive'); return Readable.from([Buffer.from('zip')]) })
+    expect((await exportCall()).status).toBe(200)
+    expect(order).toEqual(['ensure', 'archive'])
+
+    run.exportZip.mockClear()
+    run.ensureView.mockImplementationOnce(async () => { throw new ViewUnrecoverable('the ledger cannot be read') })
+    const { status, json } = await exportCall()
+    expect(status).toBe(503)
+    expect(json).toEqual({ ok: false, error: 'view_unrecoverable', message: 'the ledger cannot be read' })
+    expect(run.exportZip).not.toHaveBeenCalled()
+  })
+
+  it('does not look at the job list at all while a run is active', async () => {
+    run.ensureView.mockClear()
+    run.lock.mockResolvedValue({ busy: true })
+    expect((await exportCall()).status).toBe(409)
+    expect(run.ensureView).not.toHaveBeenCalled()
   })
 
   it('refuses when the lock cannot be checked', async () => {

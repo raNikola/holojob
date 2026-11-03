@@ -20,7 +20,7 @@ const PRIVATE_RESTORE = /^data\/(profile|profile\.bak-[^/]+|ai|config|backups|in
 
 // Never restored. The lock must stay the same file: flock holds an inode, and renaming a copy over it would free it for the
 // next process. A commit marker from an archive would report an incomplete save that did not happen here.
-const RUN_STATE_FILES = new Set(['data/jobs/.pipeline.lock', 'data/analytics/runs/.commit-in-progress.json'])
+const RUN_STATE_FILES = new Set(['data/jobs/.pipeline.lock', 'data/jobs/.view.lock', 'data/analytics/runs/.commit-in-progress.json'])
 
 // What a scrape has collected so far, and the ledger as the run found it (hard link): working state of one run, private,
 // pruned to the last three runs. Neither exported nor restored: a restored folder would look like an unimported run.
@@ -40,7 +40,7 @@ export function createBackupStream(root, clientPayload = {}) {
       // Credentials are left out here, in the one place that lists them (secret-paths.js).
       archive.directory(abs, `data/${dir}`, (entry) => {
         const name = `data/${dir}/${entry.name}`
-        return isSecretPath(name) || isStagingPath(name) ? false : entry
+        return isSecretPath(name) || isStagingPath(name) || name === 'data/jobs/.view.lock' ? false : entry
       })
     }
   }

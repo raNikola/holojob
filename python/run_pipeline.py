@@ -37,6 +37,7 @@ PY = ROOT / "python"
 sys.path.insert(0, str(PY / "job_scoring"))
 from atomic_write import write_text_atomic  # noqa: E402
 import pipeline_lock  # noqa: E402
+import view_guard  # noqa: E402
 from work_authorization import outside_allowed_before_enrichment  # noqa: E402
 DATA = ROOT / "data"
 INTELLIGENCE = DATA / "intelligence" / "candidate-intelligence.json"
@@ -61,6 +62,15 @@ class StepFailed(Exception):
     def __init__(self, step: str, reason: str, code: int = EXIT_FAILED):
         super().__init__(reason)
         self.step, self.reason, self.code = step, reason, code
+
+
+def read_view() -> dict:
+    """discovered_jobs.json, after making sure it matches the ledger it is derived from (view_guard)."""
+    try:
+        view_guard.ensure(DISCOVERED, view_guard.job_history.ledger_path(DISCOVERED))
+    except view_guard.ViewRecoveryError as exc:
+        raise StepFailed("discovery", f"the job list is out of date and could not be rebuilt: {exc}")
+    return read_json(DISCOVERED)
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -109,7 +119,7 @@ def run_step(name: str, cmd: list[str], steps: list[dict]) -> str:
 def check_discovery(started_at: datetime) -> dict:
     if not DISCOVERED.exists():
         raise StepFailed("discovery", f"{DISCOVERED.name} was not written")
-    payload = read_json(DISCOVERED)
+    payload = read_view()
     meta = payload.get("meta") or {}
     stamp = meta.get("generatedAt")
     if not stamp or datetime.fromisoformat(stamp) < started_at:
@@ -133,7 +143,7 @@ def enriched_share(jobs: list[dict], prefs: dict | None = None) -> float:
 
 def check_enrichment(minimum: float, refusal: str | None = None) -> float:
     """The enriched share. Too low stops the run, unless the AI budget gate is why: then scoring goes on, reduced."""
-    jobs = read_json(DISCOVERED).get("jobs") or []
+    jobs = read_view().get("jobs") or []
     prefs = (read_json(INTELLIGENCE).get("jobFitPreferences") or {}) if INTELLIGENCE.exists() else {}
     share = enriched_share(jobs, prefs)
     if share < minimum and refusal:
@@ -152,7 +162,10 @@ def summarize(args, steps: list[dict], enrich_line: str | None, share: float | N
               reduced: str | None = None) -> dict:
     summary: dict = {"steps": steps}
     if DISCOVERED.exists():
-        meta = read_json(DISCOVERED).get("meta") or {}
+        try:
+            meta = read_view().get("meta") or {}
+        except StepFailed:
+            meta = {}
         summary["discovery"] = {
             "providerCounts": meta.get("providerCounts") or {},
             "raw": meta.get("rawCount"), "deduped": meta.get("dedupedCount"),

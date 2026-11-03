@@ -1,0 +1,17 @@
+{
+  "note": "Cases for the ledger/view generation check. python/job_scoring/view_guard.py (state) and scripts/view-guard.js (viewState) both run them: each case builds a ledger file and a view file from these first bytes and expects `consistent`.",
+  "cases": [
+    {"name": "both generation 3", "ledger": "{\n  \"generation\": 3,\n  \"version\": 1,\n  \"jobs\": {}\n}", "view": "{\n  \"meta\": {\n    \"ledgerGeneration\": 3,\n    \"generatedAt\": \"x\"\n  },\n  \"jobs\": []\n}", "consistent": true},
+    {"name": "view one behind", "ledger": "{\n  \"generation\": 4,\n  \"version\": 1,\n  \"jobs\": {}\n}", "view": "{\n  \"meta\": {\n    \"ledgerGeneration\": 3,\n    \"generatedAt\": \"x\"\n  },\n  \"jobs\": []\n}", "consistent": false},
+    {"name": "view ahead of the ledger", "ledger": "{\n  \"generation\": 2,\n  \"jobs\": {}\n}", "view": "{\"meta\": {\"ledgerGeneration\": 3, \"generatedAt\": \"x\"}, \"jobs\": []}", "consistent": false},
+    {"name": "pre-S4a pair: neither has a generation", "ledger": "{\n  \"version\": 1,\n  \"updatedAt\": \"x\",\n  \"jobs\": {}\n}", "view": "{\n  \"meta\": {\n    \"generatedAt\": \"x\"\n  },\n  \"jobs\": []\n}", "consistent": true},
+    {"name": "ledger has a generation, the view is the old one", "ledger": "{\n  \"generation\": 1,\n  \"jobs\": {}\n}", "view": "{\n  \"meta\": {\n    \"generatedAt\": \"x\"\n  },\n  \"jobs\": []\n}", "consistent": false},
+    {"name": "ledger is the old one, the view has a generation", "ledger": "{\n  \"version\": 1,\n  \"jobs\": {}\n}", "view": "{\n  \"meta\": {\n    \"ledgerGeneration\": 1\n  },\n  \"jobs\": []\n}", "consistent": false},
+    {"name": "ledger has a generation and there is no view", "ledger": "{\n  \"generation\": 1,\n  \"jobs\": {}\n}", "view": null, "consistent": false},
+    {"name": "no ledger: nothing to derive from", "ledger": null, "view": "{\n  \"meta\": {},\n  \"jobs\": []\n}", "consistent": true},
+    {"name": "neither file exists", "ledger": null, "view": null, "consistent": true},
+    {"name": "generation 10 is not generation 1", "ledger": "{\n  \"generation\": 10,\n  \"jobs\": {}\n}", "view": "{\n  \"meta\": {\n    \"ledgerGeneration\": 1,\n    \"generatedAt\": \"x\"\n  },\n  \"jobs\": []\n}", "consistent": false},
+    {"name": "a generation that is not first does not count", "ledger": "{\n  \"version\": 1,\n  \"generation\": 5,\n  \"jobs\": {}\n}", "view": "{\n  \"meta\": {\n    \"generatedAt\": \"x\"\n  },\n  \"jobs\": []\n}", "consistent": true},
+    {"name": "a corrupt ledger looks like a pre-S4a one to the peek", "ledger": "\u0000\u0001 not json", "view": "{\n  \"meta\": {\n    \"generatedAt\": \"x\"\n  },\n  \"jobs\": []\n}", "consistent": true}
+  ]
+}

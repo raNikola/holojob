@@ -42,6 +42,7 @@ import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
 import { handleApplicationsRequest } from './application-store.js'
 import { handleJobHistoryRequest } from './job-history-read.js'
+import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
 import { RUN_ACTIVE, incompleteCommit, isRunBusy, rescrapeStatus, runHttpStatus, startRescrape, withRunLock } from './run-rescrape.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -226,6 +227,15 @@ export async function handleApiRequest(req, res) {
   }
 
   if (url === '/api/discovery/status' && req.method === 'GET') {
+    try {
+      await ensureViewCurrent()
+    } catch (e) {
+      if (e instanceof ViewUnrecoverable) {
+        sendJson(res, 503, viewUnrecoverableAnswer(e))
+        return true
+      }
+      throw e
+    }
     sendJson(res, 200, {
       available: true,
       ...getDiscoveryStatus(),
@@ -236,6 +246,7 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/discovery/jobs' && req.method === 'GET') {
     try {
+      await ensureViewCurrent() // the job list is a view of the ledger: never serve one that is behind it
       if (!fs.existsSync(JOBS_PATH)) {
         sendJson(res, 404, { error: 'No discovered_jobs.json yet' })
         return true
@@ -243,7 +254,8 @@ export async function handleApiRequest(req, res) {
       const payload = JSON.parse(fs.readFileSync(JOBS_PATH, 'utf-8'))
       sendJson(res, 200, payload)
     } catch (e) {
-      sendJson(res, 500, { error: e.message })
+      if (e instanceof ViewUnrecoverable) sendJson(res, 503, viewUnrecoverableAnswer(e))
+      else sendJson(res, 500, { error: e.message })
     }
     return true
   }
@@ -708,6 +720,14 @@ export async function handleApiRequest(req, res) {
         held = await withRunLock(async () => {
           const unfinished = incompleteCommit()
           if (unfinished) return { refused: commitIncompleteAnswer(unfinished) }
+          // The job files must agree in the archive. The pipeline lock is held, so no commit can happen during the export;
+          // the rebuild takes only the view lock, so it can run under it.
+          try {
+            await ensureViewCurrent()
+          } catch (e) {
+            if (e instanceof ViewUnrecoverable) return { refused: viewUnrecoverableAnswer(e), status: 503 }
+            throw e
+          }
           res.statusCode = 200
           res.setHeader('Content-Type', 'application/zip')
           res.setHeader('Content-Disposition', 'attachment; filename="career-os-backup.zip"')
@@ -730,7 +750,7 @@ export async function handleApiRequest(req, res) {
         throw e
       }
       if (held.busy) sendJson(res, 409, RUN_ACTIVE)
-      else if (held.value.refused) sendJson(res, 409, held.value.refused)
+      else if (held.value.refused) sendJson(res, held.value.status ?? 409, held.value.refused)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }

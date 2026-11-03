@@ -3,13 +3,16 @@
 
     import_run.py --run RUNID --dry-run [--limit N] [--report-file]
     import_run.py --latest  --dry-run
+    import_run.py --run RUNID --import [--allow-older]          recovery: import a staged run that was never imported
 
-Read-only. It writes no live file; with --report-file it writes staging/RUNID/import-report.json and nothing else. It takes the
-pipeline lock while it reads, so a run cannot be half way through its commit under it (it stops with 2 when one is active).
-A real import is not built yet (slice S4a): without --dry-run this refuses.
+--dry-run is read-only. It writes no live file; with --report-file it writes staging/RUNID/import-report.json and nothing else.
+--import is the same import a Re-scrape makes (the importer: full validation, ledger then derived view, run marked imported). It
+is for a staged run whose import did not happen (the run stopped after staging). It REFUSES a run that started before the last
+imported run, with the reason; --allow-older overrides that for recovery only, and is off by default.
+Both take the pipeline lock (exit 2 when a run is active).
 
-Exit codes: 0 compared and ZERO differences; 1 differences; 2 error, refused import or a run that is active; 3 nothing to compare
-with (the committed files belong to another run: dry-run right after the run you want to check).
+Exit codes (dry run): 0 compared and ZERO differences; 1 differences; 2 error, refused import or a run that is active; 3 nothing to
+compare with (the committed files belong to another run: dry-run right after the run you want to check). Import: 0 imported, 2 not.
 """
 
 from __future__ import annotations
@@ -110,13 +113,16 @@ def main(argv=None, root: Path | None = None) -> int:
     which = parser.add_mutually_exclusive_group(required=True)
     which.add_argument("--run", help="the run id (a folder in data/jobs/staging)")
     which.add_argument("--latest", action="store_true", help="the newest run in staging")
-    parser.add_argument("--dry-run", action="store_true", help="required: a real import is not built yet")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--dry-run", action="store_true", help="replay and compare; writes nothing")
+    mode.add_argument("--import", dest="do_import", action="store_true", help="import the run for real (recovery)")
+    parser.add_argument("--allow-older", action="store_true", help="with --import: import a run older than the last imported one")
     parser.add_argument("--limit", type=int, default=20, help="how many differences to print (default 20)")
     parser.add_argument("--report-file", action="store_true", help="also write staging/RUNID/import-report.json (the only file written)")
     args = parser.parse_args(argv)
     root = Path(root or ROOT)
-    if not args.dry_run:
-        print("A real import is not built yet (slice S4a). Use --dry-run.", file=sys.stderr)
+    if args.allow_older and not args.do_import:
+        print("--allow-older only goes with --import.", file=sys.stderr)
         return 2
     run_id = args.run
     if args.latest:
@@ -129,6 +135,26 @@ def main(argv=None, root: Path | None = None) -> int:
     if lock is None:
         print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
         return 2
+    if args.do_import:
+        try:
+            outcome = importer.import_staged_run(root, run_id, allow_older=args.allow_older)
+        except Exception as exc:  # noqa: BLE001 - say what stopped; the next reader rebuilds the view if the ledger was written
+            print(f"Import stopped: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+        finally:
+            lock.release()
+        if not outcome.ok:
+            print(f"Import of run {run_id} REFUSED; nothing was changed:", file=sys.stderr)
+            for reason in outcome.refused:
+                print(f"  {reason}", file=sys.stderr)
+            return 2
+        rep = outcome.result.report
+        print(f"Imported run {run_id}: generation {outcome.generation}" + (" (it was already imported; the view was checked)" if not outcome.committed else ""))
+        if outcome.committed:
+            print(f"  ledger: " + ", ".join(f"{k} {v}" for k, v in rep["ledgerChanges"].items()))
+            print(f"  complete scrape: {'yes' if rep['complete'] else 'NO (' + ', '.join(rep['incompleteSources'] or ['see the rejections']) + ')'}")
+        print(f"  staging: {outcome.usage['runs']} runs, {megabytes(outcome.usage['bytes'])}; removed {outcome.pruned or 'nothing'}")
+        return 0
     try:
         dry = importer.dry_run(root, run_id)
     finally:

@@ -221,7 +221,7 @@ def test_no_staging_run_is_removed_and_usage_counts_a_hard_linked_file_once(tmp_
     used = staging.usage(tmp_path)
     assert used["runs"] == 5
     assert used["bytes"] < 5 * ledger.stat().st_size + 5 * 2000, "the five links to one ledger are one copy"
-    assert not hasattr(staging, "prune"), "pruning by status is S4a's"
+    assert staging.prune(tmp_path) == [], "and nothing is pruned: none of these runs was imported"
 
 
 def test_a_bad_run_id_or_source_name_cannot_leave_the_staging_folder(tmp_path):
@@ -345,16 +345,19 @@ def _strip(value):
     return value
 
 
-def test_staging_changes_nothing_the_old_commit_path_writes(tmp_path, monkeypatch):
-    jobs = [ad("a"), ad("b", title="Senior Product Manager")]
-    with_staging, without = tmp_path / "with", tmp_path / "without"
-    with_staging.mkdir(), without.mkdir()
-    assert discover(with_staging, monkeypatch, {"greenhouse": Fake(jobs)}) == 0
-    assert discover(without, monkeypatch, {"greenhouse": Fake(jobs)}, staging_on=False) == 0
-    assert settled(with_staging) == settled(without)
-    assert not (without / "data/jobs/staging").exists()
-    assert sorted(p.name for p in (with_staging / "data/jobs").iterdir()) == sorted(
-        p.name for p in (without / "data/jobs").iterdir()) + ["staging"]
+def test_with_staging_off_nothing_is_committed_and_the_run_says_so(tmp_path, monkeypatch):
+    """S4a: the import reads staging, so a run without it commits nothing: the ledger and the view stay as they were."""
+    root = tmp_path / "root"
+    (root / "data/jobs").mkdir(parents=True)
+    (root / "data/jobs/job_history.json").write_text('{"version":1,"updatedAt":null,"jobs":{}}')
+    (root / "data/jobs/discovered_jobs.json").write_text('{"meta":{},"jobs":[]}')
+    before = {p.name: p.read_bytes() for p in (root / "data/jobs").iterdir()}
+    assert discover(root, monkeypatch, {"greenhouse": Fake([ad("a")])}, staging_on=False) == 1
+    assert {p.name: p.read_bytes() for p in (root / "data/jobs").iterdir()} == before
+    record = max(run_log.runs_dir().glob("*.json"), key=lambda p: p.stat().st_mtime)
+    body = json.loads(record.read_text())
+    assert body["status"] == "failed" and body["staging"]["ok"] is False
+    assert any(i["level"] == "error" and "Nothing was imported" in i["message"] for i in body["issues"])
 
 
 def test_a_provider_that_does_not_stream_has_its_list_staged_whole_when_it_returns(tmp_path, monkeypatch):
@@ -398,14 +401,15 @@ def test_a_provider_that_stages_less_than_it_returns_is_flagged_in_the_footer(tm
     assert stage.footer["mismatch"] is True and stage.footer["written"] == "as it went"
 
 
-def test_a_run_whose_staging_cannot_start_still_commits_and_says_so_in_its_record(tmp_path, monkeypatch):
+def test_a_run_whose_staging_cannot_start_commits_nothing_and_says_so_in_its_record(tmp_path, monkeypatch):
     (tmp_path / "data/jobs").mkdir(parents=True)
     (tmp_path / "data/jobs/staging").write_text("in the way")
-    assert discover(tmp_path, monkeypatch, {"greenhouse": Fake([ad("a")])}) == 0
-    assert json.loads((tmp_path / "data/jobs/discovered_jobs.json").read_text())["jobs"]
+    assert discover(tmp_path, monkeypatch, {"greenhouse": Fake([ad("a")])}) == 1
+    assert not (tmp_path / "data/jobs/discovered_jobs.json").exists()
     record = max(run_log.runs_dir().glob("*.json"), key=lambda p: p.stat().st_mtime)
     issues = json.loads(record.read_text())["issues"]
     assert any(i["level"] == "warning" and "Staging is off" in i["message"] for i in issues)
+    assert any(i["level"] == "error" and "Nothing was imported" in i["message"] for i in issues)
 
 
 def test_the_run_keeps_the_ledger_it_started_from(tmp_path, monkeypatch):

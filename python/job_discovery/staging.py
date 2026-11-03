@@ -19,8 +19,10 @@ Next to the folder the run keeps `<runId>.ledger-before.json` and `<runId>.disco
 files as they were when the run began. Both are replaced by rename, never rewritten in place, so the links keep the old bytes
 and an import can be replayed on exactly what the run started from.
 
-Nothing removes a staging run until slice S4a: it will delete by status (never a run still waiting for import or recovery), and
-until then `usage()` says how much room staging takes. `status.json` in a run's folder says whether staging itself worked.
+`status.json` in a run's folder says whether staging itself worked. `imported.json` says the run was imported (written only by a
+real import). Staging is removed by status (`prune`): only runs that were imported, and only beyond the newest KEEP_IMPORTED of
+them. A run that waits for an import or for recovery, and a run whose staging failed (evidence, never importable), stay.
+`usage()` says how much room staging takes.
 """
 
 from __future__ import annotations
@@ -52,6 +54,8 @@ DISCARDS = "discards.jsonl"
 LEDGER_BEFORE_SUFFIX = ".ledger-before.json"
 DISCOVERED_BEFORE_SUFFIX = ".discovered-before.json"
 STATUS = "status.json"
+IMPORTED = "imported.json"
+KEEP_IMPORTED = 3
 RUN_ID = re.compile(r"^[0-9A-Za-z]{1,32}$")
 SOURCE_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
 EXAMPLES_KEPT = 5  # invalid ads named in a footer; the count is always complete
@@ -469,6 +473,35 @@ def _started(folder: Path) -> str:
     except (OSError, ValueError):
         pass
     return datetime.fromtimestamp(folder.stat().st_mtime, tz=timezone.utc).isoformat()
+
+
+def mark_imported(root: Path, run_id: str, info: dict | None = None) -> Path:
+    """The run was imported for real (never by a dry run): staging/<runId>/imported.json, 600, atomic."""
+    folder = staging_dir(Path(root)) / run_id
+    if not RUN_ID.match(str(run_id)) or not folder.is_dir():
+        raise ValueError("no staging folder for this run")
+    path = folder / IMPORTED
+    _atomic.write_text_atomic(path, json.dumps({"runId": run_id, "importedAt": _now(), **(info or {})}, indent=2), _atomic.PRIVATE_FILE_MODE)
+    return path
+
+
+def is_imported(root: Path, run_id: str) -> bool:
+    return (staging_dir(Path(root)) / run_id / IMPORTED).is_file()
+
+
+def prune(root: Path, keep: int = KEEP_IMPORTED) -> list[str]:
+    """Remove imported runs beyond the newest `keep` of them, with their two hard links. Never a run that is not imported:
+    one awaiting an import or recovery, one with no marker (every run before S4a), one whose staging failed. Returns the ids removed."""
+    base = staging_dir(Path(root))
+    imported = [(started, name) for started, name in
+                sorted(((_started(base / r), r) for r in list_runs(root)), reverse=True) if (base / name / IMPORTED).is_file()]
+    removed = []
+    for _, name in imported[max(0, keep):]:
+        shutil.rmtree(base / name, ignore_errors=True)
+        for suffix in (LEDGER_BEFORE_SUFFIX, DISCOVERED_BEFORE_SUFFIX):
+            (base / f"{name}{suffix}").unlink(missing_ok=True)
+        removed.append(name)
+    return removed
 
 
 def usage(root: Path) -> dict:

@@ -33,7 +33,7 @@ from providers import (
     wwr_provider,
     yc_provider,
 )
-from test_staging import discover, settled
+from test_staging import discover
 from test_staging_streaming import collect, SERBIA
 
 TERMS = ["Product Manager", "Product Lead"]
@@ -509,20 +509,16 @@ def test_infostud_and_workable_raw_rows_carry_the_id_but_the_canonical_ad_does_n
 # --- no change for readers --------------------------------------------------------------------------------------------------
 
 
-def test_what_the_old_commit_path_writes_is_the_same_with_discards_recorded(tmp_path, monkeypatch):
-    def provider():
-        p = greenhouse_provider.GreenhouseProvider()
-        monkeypatch.setattr(p, "_load_boards", lambda: [{"board": "b1"}])
-        monkeypatch.setattr(p, "_fetch_board", lambda board: board_postings("greenhouse"))
-        return p
-
-    with_staging, without = tmp_path / "with", tmp_path / "without"
-    with_staging.mkdir(), without.mkdir()
-    # discover() uses the intelligence's own search; the fixture's place is not in it, so drops differ by place only.
-    assert discover(with_staging, monkeypatch, {"greenhouse": provider()}) == 0
-    assert discover(without, monkeypatch, {"greenhouse": provider()}, staging_on=False) == 0
-    assert settled(with_staging) == settled(without)
-    [run_id] = staging.list_runs(with_staging)
-    found = staging.read_run(with_staging, run_id)
+def test_a_run_that_records_its_drops_still_commits_what_it_kept(tmp_path, monkeypatch):
+    p = greenhouse_provider.GreenhouseProvider()
+    monkeypatch.setattr(p, "_load_boards", lambda: [{"board": "b1"}])
+    monkeypatch.setattr(p, "_fetch_board", lambda board: board_postings("greenhouse"))
+    root = tmp_path / "root"
+    root.mkdir()
+    assert discover(root, monkeypatch, {"greenhouse": p}) == 0
+    [run_id] = staging.list_runs(root)
+    found = staging.read_run(root, run_id)
     assert found.discards.records, "the run recorded its drops"
     assert found.sources["greenhouse"].footer["discardMismatch"] is False
+    view = json.loads((root / "data/jobs/discovered_jobs.json").read_text())
+    assert view["meta"]["ledgerGeneration"] == 1 and view["meta"]["sourceRunId"] == run_id
