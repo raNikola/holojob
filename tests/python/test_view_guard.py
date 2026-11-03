@@ -700,21 +700,27 @@ def test_more_than_5000_rows_is_a_warning_in_the_log_and_nothing_is_dropped(tmp_
     assert any(i["level"] == "warning" and "rows" in i["message"] for i in json.loads(record.read_text())["issues"])
 
 
-def test_the_debug_files_are_written_after_the_commit_and_a_failure_to_write_them_fails_nothing(tmp_path, monkeypatch):
+def test_a_run_no_longer_writes_the_debug_mirror_files_and_leaves_existing_ones_alone(tmp_path, monkeypatch):
+    """S4b: raw_jobs.csv and normalized_jobs.json are not written any more; files from older runs are not touched or deleted."""
     root = tmp_path / "root"
-    root.mkdir()
-    import run_discovery
-
-    def boom(*args, **kwargs):
-        raise OSError("read-only file system")
-
-    monkeypatch.setattr(run_discovery, "export_raw_csv", boom)
-    monkeypatch.setattr(run_discovery, "export_normalized_json", boom)
+    (root / "data/jobs").mkdir(parents=True)
+    old = {"raw_jobs.csv": b"old,csv\n", "normalized_jobs.json": b'[{"old": true}]'}
+    for name, data in old.items():
+        (root / "data/jobs" / name).write_bytes(data)
     assert discover(root, monkeypatch, {"greenhouse": Prov([canon(1)])}) == 0
-    assert view_guard.state(*paths(root))["consistent"] and not (root / "data/jobs/normalized_jobs.json").exists()
+    assert view_guard.state(*paths(root))["consistent"]
+    for name, data in old.items():
+        assert (root / "data/jobs" / name).read_bytes() == data, f"{name} from an earlier run is left as it was"
+    fresh = tmp_path / "fresh"
+    fresh.mkdir()
+    assert discover(fresh, monkeypatch, {"greenhouse": Prov([canon(1)])}) == 0
+    assert not (fresh / "data/jobs/raw_jobs.csv").exists() and not (fresh / "data/jobs/normalized_jobs.json").exists()
+    import export_jobs
+
+    assert not hasattr(export_jobs, "export_raw_csv") and not hasattr(export_jobs, "export_normalized_json")
     record = max(run_log.runs_dir().glob("*.json"), key=lambda p: p.stat().st_mtime)
     body = json.loads(record.read_text())
-    assert body["status"] == "ok" and sum("debug output" in i["message"] for i in body["issues"]) == 2
+    assert body["status"] == "ok" and not any("debug output" in i["message"] for i in body["issues"])
 
 
 def test_unfinished_and_failed_sources_import_what_they_wrote_through_the_live_path(tmp_path, monkeypatch):

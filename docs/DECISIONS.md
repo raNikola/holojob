@@ -338,7 +338,7 @@ Accepted consequence: the ads of that run are lost (they were only in memory); t
 
 **Ledger prune off.** `job_history.apply_run(prune=False)` for the importer: no entry is deleted automatically, whatever its age (it stops showing in the view 14 days after it closed). The default of `apply_run` is unchanged for its other callers and tests. More than 5,000 rows in the view is a **warning** (log and run record), never a limit. `offList` logic is unchanged (browser only).
 
-**Debug files.** `raw_jobs.csv` and `normalized_jobs.json` are written after the commit, best effort; a failure is a warning in the run record and fails nothing. They are outside the commit set. Stopping the writes entirely is S4b.
+**Debug files.** (Superseded by S4b: no longer written.) `raw_jobs.csv` and `normalized_jobs.json` were written after the commit, best effort, outside the commit set.
 
 **Unfinished, failed and skipped sources** import what they wrote and never close or change another ad (the S3 importer rules), tested through the live path. **Live path = old path:** `test_a_full_discovery_through_staging_and_import_gives_what_the_old_path_gave_from_the_same_inputs` runs four discoveries (a seeded install, a cross-post, a duplicate, a thin description, a failed board, an empty board, a failed and a skipped source) and compares the ledger and the view with the old commit reproduced from its code on the same inputs: no difference.
 
@@ -351,6 +351,10 @@ Accepted consequence: the ads of that run are lost (they were only in memory); t
 - `copy.deepcopy` of the whole ledger in `plan_import` costs about 0.4 s and a few hundred MB of memory at 19 MB; fine today, watch it if the ledger grows tenfold.
 - Staging keeps about 25 to 30 MB per run until it is imported; imported runs beyond 3 go. The three runs the owner dry-ran have no marker and stay until deleted by hand.
 - Order is guarded only against the last import (`lastImport.startedAt`), not against a history of imports.
+
+## S4b as built: the debug mirror files are no longer written (2026-11-03)
+
+`raw_jobs.csv` and `normalized_jobs.json` are not written by a run any more. `export_raw_csv` and `export_normalized_json` are removed from `export_jobs.py`, and the best-effort block after the commit is removed from `run_discovery.py` (with the now unused `raw_df`, `pandas` and `JobSpyProvider` imports there). Re-confirmed by search before removing: nothing reads them (no Python module, Node script or route, `src/` component, backup or restore list, `.gitignore` entry; the backup copies whole folders, so an absent file cannot fail it). Files left by earlier runs stay on disk, untouched and not deleted; they are stale and nothing uses them, so the owner may delete them by hand. No change to discovery, import, ledger, view, scoring or the run record (the "debug output was not written" warning no longer exists). `JobSpyProvider.last_raw_df` stays (a test and the provider use it). Test: `test_a_run_no_longer_writes_the_debug_mirror_files_and_leaves_existing_ones_alone` (`tests/python/test_view_guard.py`); the failed-export test in `test_atomic_writers.py` now covers `discovered_jobs.json` only. `docs/redesign/data-shapes.md` marks both files as no longer written.
 
 ### S4a follow-up (2026-11-03): the older-run override is confirmed by a human; Node view recovery has a safe live check
 

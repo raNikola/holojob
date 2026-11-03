@@ -1,4 +1,4 @@
-"""Export raw, normalized, and discovered job files."""
+"""The discovered_jobs.json payload and writer. (raw_jobs.csv and normalized_jobs.json are no longer written: S4b.)"""
 
 from __future__ import annotations
 
@@ -6,8 +6,6 @@ import importlib.util
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-
-import pandas as pd
 
 # Loaded by path, as run_discovery loads the ledger: job_scoring on sys.path would let its modules shadow this package's.
 _atomic_spec = importlib.util.spec_from_file_location(
@@ -22,21 +20,6 @@ def _jobs_dir(root: Path) -> Path:
     path = root / "data" / "jobs"
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def export_raw_csv(df: pd.DataFrame, root: Path) -> Path:
-    out = _jobs_dir(root) / "raw_jobs.csv"
-    if df is None or df.empty:
-        out.write_text("", encoding="utf-8")
-    else:
-        df.to_csv(out, index=False)
-    return out
-
-
-def export_normalized_json(jobs: list[dict], root: Path) -> Path:
-    out = _jobs_dir(root) / "normalized_jobs.json"
-    write_text_atomic(out, json.dumps(jobs, indent=2))
-    return out
 
 
 def discovered_payload(
