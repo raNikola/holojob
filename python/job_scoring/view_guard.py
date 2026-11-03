@@ -49,6 +49,7 @@ def _load(name: str, filename: str):
 
 job_history = _load("_view_guard_job_history", "job_history.py")
 _atomic = _load("_view_guard_atomic_write", "atomic_write.py")
+stale_rule = _load("_view_guard_stale_rule", "stale_rule.py")
 
 LOCK_NAME = ".view.lock"
 LOCK_WAIT_SECONDS = 60.0
@@ -126,7 +127,12 @@ def derive_view(ledger: dict) -> dict:
     # Only an import that says so marks its held rows, so a ledger from before (S5d2) gives the very bytes it always gave.
     marks = {job_history.NOT_FOUND_MARK: True} if info.get("marksNotFound") else {}
     jobs = [record(e, False) for e in found]
-    jobs += [{**record(e, False), **marks} for e in entries.values() if e.get("heldRunId") == run_id and e["job"]["jobId"] not in found_ids]
+    source_runs = ledger.get(stale_rule.FIELD)
+
+    def stale_mark(entry: dict) -> dict:
+        return {job_history.STALE_MARK: True} if stale_rule.evidence(entry, source_runs) else {}
+
+    jobs += [{**record(e, False), **marks, **stale_mark(e)} for e in entries.values() if e.get("heldRunId") == run_id and e["job"]["jobId"] not in found_ids]
     for job_id, entry in entries.items():
         closed_at = job_history._parse(entry.get("closedAt"))
         if not closed_at:

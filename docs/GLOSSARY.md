@@ -64,3 +64,5 @@ delivery, ...). Today's scorer caps a job at 50 when its track is not one the ca
 
 **Shadow mode** - Running the new Fit next to the current `matchScore` and showing both, while the new one changes no
 ranking, label or priority until the owner has compared them on real runs.
+
+- **Stale:** an ad with no sighting for 30 days and at least 3 proven runs of its source and search since. A flag only: nothing is deleted. It leaves Active unless the owner has worked on it, and stays in All. See `docs/DECISIONS.md` (S5f).

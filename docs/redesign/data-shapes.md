@@ -878,6 +878,7 @@ Fields added later, in the browser job store and not in this file until saved:
 - **Path:** `data/jobs/job_history.json`
 - **Purpose:** Survives discovery rewrites: first/last seen, closed, a snapshot of each job, and the enrichment facts (reused while the ad fingerprint is unchanged). Dropped after 90 days closed.
 - **Written by:** `job_scoring/job_history.py`.
+- **Stale evidence (S5f), optional and additive:** top-level `sourceRuns` (`{provider: {bucket: [{runId, at}]}}`, oldest first, newest 100 kept per bucket; the bucket is the search key, or `board:<name>` for a snapshot source) and `lastListedAt` on an entry (a run last returned the ad and a filter dropped it). `job_scoring/stale_rule.py` reads them. A held row that is Stale carries `isStale` in `discovered_jobs.json` and `scored_jobs.json`.
 - **Snapshot lifecycle (S5c), optional fields on an entry:** `absentRuns` (consecutive complete fetches of the board that did not list the ad), `absentSince`, `lastAbsentRunId`. Gone when the ad is found again; the version stays 1. A row in `discovered_jobs.json` or `scored_jobs.json` carries, only when it applies, `isAbsent` and `absentSince`, or `closedAfterChecks` on an ad closed by that rule. A row a run kept without finding it also carries `notFoundThisRun` (S5d2), when the ledger's `lastImport.marksNotFound` is set.
 
 ```json
