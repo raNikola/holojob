@@ -664,7 +664,15 @@ In the real container every request of `scripts/check-view-recovery.js` answered
 - **A selection or page resets** on a change of mode, class or the 14-day filter too, as for any filter.
 - **"Not scored" now shows in the Jobs table** in both layouts, for any row without a score. Other screens keep "—".
 
-**Testing:** committed tests use pure functions, server-rendered markup and source checks, since the repo has no DOM for tests. Real clicks on the real screen ran once in throwaway jsdom, outside the repo. Some wiring is proven only there: the toggle and class clicks reaching state, a filtered row not opening the drawer, and the refetch after Re-score.
+**Testing:** first with pure functions, server-rendered markup and source checks; real clicks ran once in throwaway jsdom. Since S5e3d commit 1 those clicks are permanent tests.
+
+## S5e3d, commit 1: jsdom and permanent click tests (2026-11-03)
+
+**Owner decision:** `jsdom` is approved as a dev dependency, with the existing Vitest and no new test framework.
+
+- **Added:** `jsdom` to `devDependencies`. Test files opt in with `// @vitest-environment jsdom`; every other test keeps the `node` environment.
+- **Production is not affected:** the build output is byte-identical with and without it (sha256 of every file in `dist`). The image's final stage runs `npm ci --omit=dev`, so it does not ship.
+- **Tests:** `tests/js/jobsScreen.dom.test.js` runs real clicks on the real Jobs screen, with the server stubbed by `tests/js/setup/jobsScreenHarness.js`. This covers the checks that until now ran only once, outside the repo. No production code changed for them.
 
 ## offList rows keep the owner's data (2026-11-03)
 
