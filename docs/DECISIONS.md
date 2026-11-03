@@ -583,6 +583,52 @@ In the real container every request of `scripts/check-view-recovery.js` answered
 
 **Measured on a copy of the real data (compose takes about 50 ms):** Active 1,238 (found 455, absent 781, hand-entered 2), 774 of them with no score. All 3,491. 75 copies hidden. All 4 applications are visible, including the one on a copy the deterministic choice would not have picked. With the store loading, Active is 1,313 with nothing collapsed. With the route failed, the 465 stored rows stay. Moved 14 days ahead with no import, Active is 459.
 
+## S5e3b as built: the Jobs table on a long list (2026-11-03)
+
+**Why first:** Active will hold about 1,200 rows and All about 3,500, and the table mounted every row twice. This slice applies to today's list and uses neither `useAllAds` nor `composeJobList`.
+
+**Owner rules (2026-11-03):**
+
+- Show more, paging and selection never touch `localStorage`.
+- Existing filters keep their current persistence.
+- `state.jobs` and stored user data stay byte-identical.
+- A filter change resets the selection. A sort change and Show more do not.
+- A sort change or a filter change goes back to the first batch.
+
+**Built:**
+
+- **One layout:** `JobTable` mounts the table or the cards, by `useMediaQuery('(min-width: 768px)')`, Tailwind's `md`, the width they always switched at. With no `matchMedia`, the table.
+- **Paging:** the whole list is sorted first, then the first 100 are shown, with "Show 100 more" and "Showing N of M". The Score and Provider columns are still judged on the whole list.
+- **Selection** is a Set of `jobId`s. State for both lives in `modules/jobs/jobTableModel.js`, in memory only.
+- **Select all** means every filtered row. A line above the list says so ("Select all 350 filtered jobs"), as do the header checkbox's label and tooltip, and it also counts selected rows not on screen. The line also gives narrow windows a select-all, which they never had. Selecting all replaces the selection, and with all selected it clears.
+- **Bulk actions** read the Set and still act on `state.jobs`.
+- **`FitScore`** has an optional `emptyLabel`. The default stays "—" and nothing sets it yet.
+
+**How a reset works:** each state keeps the key it was made under, and a state from another key reads as the starting one. So there is no effect to forget, and only a real change of filters or sort resets. The list being rebuilt does not: changing a row's status on row 350 keeps the rows loaded and the selection.
+
+**Numbers. All SYNTHETIC: React in jsdom in a test container, with a made-up list. Not a browser benchmark.** jsdom does no layout or paint, so a real browser spends its time differently and the old table would suffer more there.
+
+| At 3,500 rows | Before | After, table | After, cards |
+|---|---|---|---|
+| DOM nodes | 269,544 | 3,248 | 4,506 |
+| Mount | 10.9 s | 0.3 s | 0.5 s |
+| Re-render on a list change | 3.1 s | 0.13 s | 0.17 s |
+| Click on a sort header | 7.2 s | 0.2 s | not applicable |
+
+| At today's size (465 rows) | Before | After |
+|---|---|---|
+| DOM nodes | 35,849 | 3,248 |
+| Mount | 1.6 s | 0.15 s |
+
+- **Sort time alone** (`sortRows` on 3,500 rows, unchanged): about 1.5 ms. Sorting the whole list was never the cost.
+- **Search, on the real Jobs screen, per keystroke:** at 465 stored rows, 415 ms before and 56 ms after. `saveJobs` alone takes about 11 ms of that (3.3M characters).
+
+**Search and the re-save:** the save on every state change was not the cause of the lag; rendering the table was. Storage is not changed. jsdom's `localStorage` is not a browser's, so if typing still lags in the browser, the fix to try first is writing only `filters` less often (debouncing the save effect), not changing what is stored.
+
+**Testing:** the repo has no DOM for tests, and adding one was out of scope. Committed tests use the pure state functions and server-rendered markup. Real clicks on the real screen ran once in the same throwaway jsdom setup, outside the repo: Show more, sort, select all, a filter change, a status change. Two of the mutations are caught only there: the Score column judged on the whole list after a re-sort, and focus moving when the last Show more button goes.
+
+**Visible changes:** today's list starts at 100 rows, not all of them, so the browser's own find sees only what is loaded. A filter change now clears the selection; before, it stayed.
+
 ## offList rows keep the owner's data (2026-11-03)
 
 **Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,
