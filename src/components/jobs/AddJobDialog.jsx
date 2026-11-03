@@ -19,15 +19,20 @@ const EMPTY = {
   title: '', company: '', description: '', jobUrl: '', sourceUrl: '', location: '', salary: '', notes: '', extraLinks: [],
 }
 
+/** What `initial` may start a new job's form with. A new job, not an edit: saving it goes through every check, and nothing is saved until Save. */
+function startingFields(initial) {
+  return Object.fromEntries(['title', 'company', 'jobUrl'].map((field) => [field, initial?.[field] ?? '']))
+}
+
 /**
  * Adds a job typed in by hand, or (with `job`) edits one that was: the same form, prefilled. "Fill from ad" asks the server to read the Job URL and proposes values for the fields that
  * are still empty (marked "suggested", editable, saved only by Save); Notes, extra links and the Source URL stay in this
  * browser's job record and are never part of any request.
  */
-export default function AddJobDialog({ onClose, onSaved, job = null, apiAvailable = true }) {
+export default function AddJobDialog({ onClose, onSaved, job = null, initial = null, apiAvailable = true }) {
   const editing = Boolean(job)
   // The form, the "suggested" marks and the note change together, in one transition (applyFill), so they cannot disagree.
-  const [draft, setDraft] = useState(() => ({ form: editing ? formFromJob(job) : EMPTY, suggested: {}, note: null }))
+  const [draft, setDraft] = useState(() => ({ form: editing ? formFromJob(job) : { ...EMPTY, ...startingFields(initial) }, suggested: {}, note: null }))
   const { form, suggested, note: adNote } = draft
   const setForm = (update) => setDraft((prev) => ({ ...prev, form: typeof update === 'function' ? update(prev.form) : update }))
   const setNote = (note) => setDraft((prev) => ({ ...prev, note }))

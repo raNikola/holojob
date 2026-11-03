@@ -45,11 +45,11 @@ export function createAllAdsLoader({ fetchFn } = {}) {
 
 const shared = createAllAdsLoader()
 
-/** `{ status, rows, meta, error, refetch }`. Loads once when first used; `enabled: false` (no API, demo data) never asks. */
+/** `{ status, rows, meta, error, refetch }`. Asks each time a screen using it opens, keeping what it holds until the answer comes; `enabled: false` (no API, demo data) never asks. */
 export function useAllAds({ enabled = true, loader = shared } = {}) {
   const state = useSyncExternalStore(loader.subscribe, loader.getState, loader.getState)
   useEffect(() => {
-    if (enabled && loader.getState().status === 'idle') loader.refetch()
+    if (enabled) loader.refetch()
   }, [enabled, loader])
   return { ...state, refetch: loader.refetch }
 }

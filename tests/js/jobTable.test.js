@@ -166,7 +166,7 @@ describe('selection', () => {
 
   it('Show more and a sort do not reset it: they are not in its key', () => {
     const screen = fs.readFileSync('src/components/jobs/JobDiscoveryScreen.jsx', 'utf-8')
-    expect(screen).toContain('const filterKey = useMemo(() => JSON.stringify(effectiveFilters), [effectiveFilters])')
+    expect(screen).toContain('() => JSON.stringify([effectiveFilters, listMode, [...listClasses].sort(), seenRecentlyOnly])')
     expect(screen).toContain('const selectedJobIds = selectionFor(selection, filterKey)')
     expect(screen).toContain('filterKey={filterKey}')
   })
@@ -250,7 +250,7 @@ describe('select all means every filtered row', () => {
   })
 
   it('the screen hands it every filtered row', () => {
-    expect(fs.readFileSync('src/components/jobs/JobDiscoveryScreen.jsx', 'utf-8')).toContain('toggleAllSelected(prev, filterKey, filteredJobs.map((j) => j.jobId))')
+    expect(fs.readFileSync('src/components/jobs/JobDiscoveryScreen.jsx', 'utf-8')).toContain('toggleAllSelected(prev, filterKey, selectableIds(filteredJobs))')
   })
 
   it('nothing off screen says nothing', () => {
@@ -291,9 +291,11 @@ describe('FitScore', () => {
     expect(score({ score: 0, emptyLabel: 'Not scored' })).not.toContain('Not scored')
   })
 
-  it('the table does not set it yet: the list looks as it did', () => {
+  it('the Jobs table says Not scored, in both layouts', () => {
     viewport(true)
-    expect(render([job(1, { matchScore: null }), job(2)])).not.toContain('Not scored')
+    expect(render([job(1, { matchScore: null }), job(2)])).toContain('Not scored')
+    viewport(false)
+    expect(render([job(1, { matchScore: null }), job(2)])).toContain('Not scored')
   })
 })
 
