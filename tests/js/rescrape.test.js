@@ -305,6 +305,33 @@ describe('status with nothing to report', () => {
     expect(s.events).toEqual([{ type: 'run_end' }])
   })
 
+  describe('scores that do not come from the latest discovery', () => {
+    function files(discovered, scoredFrom) {
+      const discoveredPath = path.join(dir, 'discovered.json')
+      const scoredPath = path.join(dir, 'scored.json')
+      fs.writeFileSync(discoveredPath, JSON.stringify({ meta: { sourceRunId: discovered } }))
+      fs.writeFileSync(scoredPath, JSON.stringify({ meta: { discoveryRunId: scoredFrom } }))
+      return { discoveredPath, scoredPath }
+    }
+    const lockFree = { reconcile: async () => ({ busy: false }) }
+
+    it('are reported when nothing is running', async () => {
+      plant('done', 'failed')
+      expect((await rescrapeStatus(0, { ...files('new', 'old'), ...lockFree })).body.scoringBehind).toBe(true)
+    })
+
+    it('are not reported while a pipeline still has its scoring to do', async () => {
+      plant('done', 'ok')
+      expect((await rescrapeStatus(0, { ...files('new', 'old'), reconcile: async () => ({ busy: true }) })).body.scoringBehind).toBe(false)
+    })
+
+    it('are not reported when they match, or when either side does not say', async () => {
+      plant('done', 'ok')
+      expect((await rescrapeStatus(0, { ...files('same', 'same'), ...lockFree })).body.scoringBehind).toBe(false)
+      expect((await rescrapeStatus(0, { ...files('new', null), ...lockFree })).body.scoringBehind).toBe(false)
+    })
+  })
+
   it('the cursor is a number or nothing', async () => {
     plant('done', 'ok', '{"type":"run_end"}\n')
     for (const bad of ['x', -1, '1;2', null, undefined]) {
@@ -330,9 +357,11 @@ describe('backup restore and the lock file', () => {
     const before = fs.statSync(lock).ino
     const zip = new AdmZip()
     zip.addFile('data/jobs/.pipeline.lock', Buffer.from('copy'))
+    zip.addFile('data/analytics/runs/.commit-in-progress.json', Buffer.from('{}'))
     zip.addFile('data/jobs/scored_jobs.json', Buffer.from('{}'))
     const result = await importBackupZip(root, zip.toBuffer())
     expect(result.restored).toEqual(['data/jobs/scored_jobs.json'])
     expect(fs.statSync(lock).ino).toBe(before)
+    expect(fs.existsSync(path.join(root, 'data/analytics/runs/.commit-in-progress.json'))).toBe(false)
   })
 })

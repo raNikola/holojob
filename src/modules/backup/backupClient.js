@@ -53,6 +53,6 @@ export async function importBackupZip(file) {
     body: buffer,
   })
   const payload = await res.json()
-  if (!res.ok) throw new Error(payload.error || 'Backup import failed')
+  if (!res.ok) throw new Error(payload.message || payload.error || 'Backup import failed')
   return payload
 }

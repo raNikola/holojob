@@ -461,7 +461,7 @@ export async function handleApiRequest(req, res) {
     try {
       const body = await readJsonBody(req, res)
       if (await isRunBusy()) {
-        sendJson(res, 409, { ...RUN_ACTIVE, stderr: RUN_ACTIVE.message })
+        sendJson(res, 409, RUN_ACTIVE)
         return true
       }
       const result = await runJobImport({

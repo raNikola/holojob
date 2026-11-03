@@ -31,11 +31,10 @@ const MAX_COUNTRY_CHARS = 100
 const START_WAIT_MS = 15000
 const START_POLL_MS = 50
 
-export const RUN_ACTIVE = {
-  ok: false,
-  error: 'run_active',
-  message: 'A job run is in progress (Re-scrape, scoring or pipeline); nothing started. Try again when it has finished.',
-}
+const BUSY_TEXT = 'A job run is in progress (Re-scrape, scoring or pipeline); nothing started. Try again when it has finished.'
+
+// `stderr` too: the older clients show that field, as they do for a run's own refusal.
+export const RUN_ACTIVE = { ok: false, error: 'run_active', message: BUSY_TEXT, stderr: BUSY_TEXT }
 
 /** A scripted run's HTTP status: exit code 75 means another run holds the lock. */
 export function runHttpStatus(result) {
@@ -227,11 +226,19 @@ function incompleteCommit() {
   return { runId: marker.runId ?? null, startedAt: marker.startedAt ?? null, written, pending: (marker.files ?? []).filter((name) => !written.includes(name)) }
 }
 
-/** True when the scored file does not come from the latest discovery file: scoring did not finish, or did not run. Unknown is false. */
-function scoringIsBehind() {
-  const discovered = readJson(JOBS_PATH)?.meta?.sourceRunId
-  const scoredFrom = readJson(SCORED_PATH)?.meta?.discoveryRunId
-  return Boolean(discovered && scoredFrom && discovered !== scoredFrom)
+/**
+ * True when the scored file does not come from the latest discovery file: scoring did not finish, or did not run. Unknown is false.
+ * Also false while the lock is held: a pipeline's record ends with its discovery, and its scoring is still to come.
+ */
+async function scoringIsBehind({ discoveredPath = JOBS_PATH, scoredPath = SCORED_PATH, reconcile = reconcileRuns, ...options }) {
+  const discovered = readJson(discoveredPath)?.meta?.sourceRunId
+  const scoredFrom = readJson(scoredPath)?.meta?.discoveryRunId
+  if (!discovered || !scoredFrom || discovered === scoredFrom) return false
+  try {
+    return !(await reconcile(options)).busy
+  } catch {
+    return false
+  }
 }
 
 /** Python cleans what it writes by pattern; only this process knows the stored key values, so every string is masked here too. */
@@ -265,6 +272,6 @@ export async function rescrapeStatus(after, options = {}) {
     }
   }
   const { events, next } = readEventsFile(path.join(runsDir(), name.replace(/\.json$/, '.events.jsonl')), cursor)
-  const answer = { ok: true, active, run, events, next, incompleteCommit: active ? null : incompleteCommit(), scoringBehind: active ? false : scoringIsBehind() }
+  const answer = { ok: true, active, run, events, next, incompleteCommit: active ? null : incompleteCommit(), scoringBehind: active ? false : await scoringIsBehind(options) }
   return { status: 200, body: maskStrings(answer) }
 }
