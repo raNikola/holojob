@@ -15,6 +15,16 @@ export const ROUTE_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup
 /** From the route when it has a value, else the stored one. */
 export const AD_FIELDS = ['title', 'company', 'location', 'jobUrl', 'provider', 'site', 'isRemote', 'datePosted']
 
+/** On a composed row for display, and never on a stored one. */
+export const DISPLAY_ONLY_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'serverOnly']
+
+/** A composed row without what must not be stored or sent on. */
+export function stripDisplayFields(row) {
+  const copy = { ...row }
+  for (const field of DISPLAY_ONLY_FIELDS) delete copy[field]
+  return copy
+}
+
 const CLASS_LABELS = {
   found: null,
   held: 'Not checked this run',

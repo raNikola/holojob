@@ -5,6 +5,7 @@ import Button from '../ui/Button'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { JOB_PAGE_SIZE, everySelected, pageLimit, selectedNotShown, showMore } from '../../modules/jobs/jobTableModel'
 import { SERVER_ONLY_NOTE, classBadges, rowKind, selectableIds } from '../../modules/jobs/jobListView'
+import KeepAdButton from './KeepAdButton'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
@@ -66,7 +67,7 @@ function HistoryBadges({ job, classView }) {
 
 /** The route's words for where this row stands. */
 function ReasonLine({ job, classView }) {
-  if (!classView || !job.reason) return null
+  if (!classView || !job.reason || job.class === 'found') return null
   return <p className="mt-1 text-xs font-normal text-stone-500 dark:text-stone-400">{job.reason}</p>
 }
 
@@ -190,7 +191,10 @@ function JobCard({
                 Open link <ExternalLink className="h-3.5 w-3.5" />
               </a>
             ) : <span />}
-            <JobActions job={job} onStatusChange={onStatusChange} />
+            <div className="flex flex-col items-end gap-1">
+              <JobActions job={job} onStatusChange={onStatusChange} />
+              {kind === 'server' && <KeepAdButton row={job} />}
+            </div>
           </>
         )}
       </div>
@@ -316,6 +320,7 @@ export default function JobTable({
                 <td className="px-3 py-2 align-top"><StatusBadge status={job.status} /></td>
                 <td className="px-3 py-2 align-top" onClick={(e) => e.stopPropagation()}>
                   {rowKind(job) === 'filtered' ? <FilteredRowActions job={job} onAddFromRow={onAddFromRow} /> : <JobActions job={job} onStatusChange={onStatusChange} />}
+                  {rowKind(job) === 'server' && <div className="mt-1"><KeepAdButton row={job} /></div>}
                 </td>
               </tr>
             ))}

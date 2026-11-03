@@ -117,11 +117,12 @@ function hasContent(value) {
   return value !== null && value !== undefined && value !== '' && value !== false
 }
 
-/** Whether the row holds something only the owner's work put there: a triage status, AI insights, tailored assets, outreach or legacy tracking. */
+/** Whether the row holds something only the owner's work put there: "Keep this ad", a triage status, AI insights, tailored assets, outreach or legacy tracking. */
 export function hasUserData(job) {
   if (!job) return false
   const { status: outreachStatus, ...outreach } = job.outreach || {}
-  return Boolean(job.status && job.status !== 'new')
+  return job.keptByUser === true
+    || Boolean(job.status && job.status !== 'new')
     || hasContent(job.aiInsights)
     || hasContent(job.tailoredAssets)
     || (Boolean(outreachStatus) && outreachStatus !== 'none')
@@ -139,6 +140,7 @@ export function mergeStatusOnImport(existingJobs, incomingJobs) {
       tailoredAssets: job.tailoredAssets,
       aiInsights: job.aiInsights,
       outreach: job.outreach,
+      kept: job.keptByUser === true ? { keptByUser: true, keptAt: job.keptAt } : null,
       manual: Object.fromEntries([...MANUAL_FIELDS, ...(job.manualEntry ? MANUAL_ONLY_FIELDS : [])].filter((f) => f in job).map((f) => [f, job[f]])),
     }
     preservedByKey.set(jobMatchKey(job), entry)
@@ -153,6 +155,7 @@ export function mergeStatusOnImport(existingJobs, incomingJobs) {
     return {
       ...fresh,
       ...preserved?.manual,
+      ...preserved?.kept, // the owner kept this ad, whatever later runs say: it must outlast its next absence too
       status: preserved?.status || job.status || 'new',
       applicationTracking: preserved?.applicationTracking || job.applicationTracking,
       tailoredAssets: job.tailoredAssets || preserved?.tailoredAssets,

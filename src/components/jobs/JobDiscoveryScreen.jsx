@@ -17,7 +17,7 @@ import BulkActionsBar from './BulkActionsBar'
 import JobTable from './JobTable'
 import JobListControls from './JobListControls'
 import { useDemoBootstrapContext } from '../demo/DemoBootstrapGate'
-import { composeJobList } from '../../modules/jobs/allAds'
+import { composeJobList, stripDisplayFields } from '../../modules/jobs/allAds'
 import { useAllAds } from '../../modules/jobs/useAllAds'
 import { ALL_SEARCH_NOTE, EXPORT_NOTE, OFF_LIST_NOTE, applyAllControls, classOptions, filterComposed, listNotices, selectableIds } from '../../modules/jobs/jobListView'
 import JobDetailDrawer from './JobDetailDrawer'
@@ -164,7 +164,9 @@ export default function JobDiscoveryScreen() {
   const useComposed = routeEnabled && (allAds.rows !== null || listMode === 'all')
   const composedRows = useMemo(() => {
     if (!useComposed) return null
-    return overlayTracking(listMode === 'all' ? composed.all : composed.active, applicationStore, applications.settings)
+    const rows = overlayTracking(listMode === 'all' ? composed.all : composed.active, applicationStore, applications.settings)
+    // An application needs no stored row: the row says Applied as Job Details does, for display only.
+    return rows.map((row) => (row.serverOnly && row.applicationTracking ? { ...row, status: 'applied_manually' } : row))
   }, [useComposed, listMode, composed, applicationStore, applications.settings])
   const shownRows = useMemo(
     () => (useComposed && listMode === 'all' ? applyAllControls(composedRows, { classes: listClasses, recent: seenRecentlyOnly, reference }) : composedRows),
@@ -298,7 +300,7 @@ export default function JobDiscoveryScreen() {
   const handleJobUpdated = useCallback((updatedJob) => {
     setState((prev) => ({
       ...prev,
-      jobs: updateJobRecord(prev.jobs, updatedJob.jobId, updatedJob),
+      jobs: updateJobRecord(prev.jobs, updatedJob.jobId, stripDisplayFields(updatedJob)), // the row may be a composed one
     }))
     setSelectedJob((prev) => (prev?.jobId === updatedJob.jobId ? updatedJob : prev))
   }, [])

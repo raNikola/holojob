@@ -8,7 +8,8 @@ import { filterJobs } from './jobFilters.js'
 /** The nine classes of the route, and one label for display only: a stored row the route does not hold has no class. */
 export const SAVED_IN_BROWSER = 'saved_in_browser'
 export const CLASS_FILTERS = ['found', 'held', 'absent', 'closed', 'older_key', 'stale', 'filtered', 'filtered_incomplete', 'unclassified', SAVED_IN_BROWSER]
-export const SERVER_ONLY_NOTE = 'Keep this ad is coming in the next update'
+export const SERVER_ONLY_NOTE = 'Press Keep this ad first'
+export const KEEP_FIRST_NOTE = 'This ad is not saved in this browser. AI tools, outreach, tailoring and status changes need it saved: press Keep this ad first. Mark Applied works without it.'
 export const ALL_SEARCH_NOTE = 'In All, search does not match the ad text of rows not saved in this browser, only their title, company and source.'
 export const INCOMPLETE_FILTERED = 'This list is incomplete: filtered ads could not be read'
 export const INCOMPLETE_ROUTE = 'This list is incomplete: the full list could not be loaded, so only rows saved in this browser are shown'
@@ -77,6 +78,6 @@ export function listNotices({ mode, status, error, meta, rows, copies, hasServer
   }
   if (rows && copies?.state === 'waiting') notices.push({ kind: 'info', text: 'Copies of the same ad are shown separately until your applications have loaded.' })
   if (rows && copies?.state === 'failed') notices.push({ kind: 'error', text: 'Your applications could not be loaded: copies of the same ad are shown separately, and a row with an application may be missing from Active.' })
-  if (hasServerOnly) notices.push({ kind: 'info', text: `Rows not saved in this browser are read-only. ${SERVER_ONLY_NOTE}.` })
+  if (hasServerOnly) notices.push({ kind: 'info', text: `Rows not saved in this browser are read-only until you press Keep this ad on them. Selecting and bulk actions cover saved rows only.` })
   return notices
 }

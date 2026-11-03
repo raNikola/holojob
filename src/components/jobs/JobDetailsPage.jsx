@@ -1,3 +1,5 @@
+import KeepAdButton from './KeepAdButton'
+import { KEEP_FIRST_NOTE } from '../../modules/jobs/jobListView'
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import Button from '../ui/Button'
@@ -96,6 +98,12 @@ export default function JobDetailsPage({ jobId }) {
         </div>
       </div>
       {resolved.notInLatest && <NotInLatestRun resolved={resolved} />}
+      {resolved.source === 'ledger' && (
+        <div className="space-y-2">
+          <p className="text-sm text-stone-600 dark:text-stone-400">{KEEP_FIRST_NOTE}</p>
+          <KeepAdButton row={job} />
+        </div>
+      )}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
         <main className="min-w-0">
           <JobDetailBody job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} onStatusChange={onStatusChange} includeTracker={false} includeTailor={!resolved.readOnly} includeAiTools={!resolved.readOnly} includeContacts={!resolved.readOnly} />

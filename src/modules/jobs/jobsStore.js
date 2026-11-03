@@ -8,6 +8,7 @@
 // result instead of a silent overwrite. Nothing here talks to the server.
 import { JOBS_STORAGE_KEY, loadJobs, onJobsSaved, saveJobs } from './jobStorage.js'
 import { findDuplicateByUrl } from './manualJob.js'
+import { stripDisplayFields } from './allAds.js'
 
 /** Never part of a patch: the id names the record, `updatedAt` is stamped here, and tracking lives in the application store. */
 const RESERVED = ['jobId', 'updatedAt', 'applicationTracking']
@@ -130,6 +131,20 @@ export function addJobIfAbsent(job) {
   if (state.jobs.some((j) => j.jobId === job.jobId)) return false
   withPatching(() => saveJobs({ ...state, jobs: [...state.jobs, job] }))
   return true
+}
+
+/**
+ * "Keep this ad": `row` is a row only the server holds, `ad` the ledger's copy of it. The one exception to "only rows from the file are
+ * added". `keptByUser` is what makes it last with no other work on it. Display fields stay out, and so do the route's empty values.
+ * A blank description is marked, not passed off as a whole ad. A record another tab stored meanwhile keeps its data and gets the mark.
+ */
+export function promoteRow(row, ad) {
+  const { matchScore: _score, closedAt: _closed, absentSince: _absent, ...slim } = stripDisplayFields(row)
+  const job = { ...slim, ...ad, status: 'new', keptByUser: true, keptAt: new Date().toISOString() }
+  if (String(job.description ?? '').trim()) delete job.descriptionIncomplete
+  else job.descriptionIncomplete = true
+  if (addJobIfAbsent(job)) return job
+  return patchJob(row.jobId, { keptByUser: true, keptAt: job.keptAt }).job
 }
 
 /**
