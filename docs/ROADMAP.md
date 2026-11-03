@@ -122,7 +122,14 @@ Plan, approved decisions and rollback per slice: [DECISIONS.md](DECISIONS.md#scr
 3. **S3 import validates in full before it changes the ledger.** Staging validation (`staging.problems`) only requires `jobId`, `provider` and `title`; the import must
    check everything the commit path relies on (types, URL, dates, sizes, duplicates) on every ad, and refuse the whole import, touching nothing, if it cannot.
 
-Backlog: Infostud completeness measurement (end of this work). Infostud is **not** classified snapshot-based until it is done.
+Backlog: Infostud completeness measurement (end of this work). Infostud is **not** classified snapshot-based until it is done. The six checks are postponed to the end of this work (owner, 2026-11-03).
+
+**Backlog from owner decisions, 2026-11-03** (reasons in [DECISIONS.md](DECISIONS.md#owner-decisions-baseline-score-role-filter-infostud-testing-2026-11-03)). None is started:
+
+- [ ] **Scoring baseline for junk or empty ads.** A made-up manual job with a junk description scored 44 (Weak, P3, Maybe; Role 45, Skill 20, Industry 55, Experience 65, Location 50, Culture 58). The owner expects at most about 5 and an "insufficient data" label. Deferred to the end of the current Activity work and solved with [Fix scoring](#fix-scoring-skill-extraction-scope-requirement-weighting-domain-transferability---todo).
+- [ ] **Role filter too strict across platforms.** `role_filter.py` checks `TITLE_EXCLUDE` ("project manager", ...) first, and an ad with no include term is dropped silently (Infostud: 392 of 409 dropped with no reason; for example ad 765172 "Medior Dev Project Manager Niš", position "IT Project Manager"). Idea: three tiers (clear no / clear yes / borderline kept with a "for review" flag; AI only on a borderline title plus a short description). Depends on the scoring fix and on the discard-reason data from S2. Deferred.
+- [ ] **Infostud stays unclassified** (not snapshot-based) until its fetch coverage is confirmed; the six checks are postponed to the end.
+- **Testing rule:** the owner tests everything at the end. No merge and no production before the real-container integration check.
 
 Owner corrections to slice A1, all done: an empty board holds its ads; a source that does not apply is `skipped`; a run where every
 source was skipped is `skipped`; a source that skipped or failed keeps its ads in `discovered_jobs.json`.
