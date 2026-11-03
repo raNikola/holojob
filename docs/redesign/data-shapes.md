@@ -943,7 +943,9 @@ Fields added later, in the browser job store and not in this file until saved:
 
 ## Discovery run log
 
-- **Path:** `data/analytics/runs/<startedAt>-<runId>.json`, one file per run, kept 90 days.
+- **Path:** `data/analytics/runs/<startedAt>-<runId>.json`, one file per run, kept 90 days. Status also `running` and `interrupted`; a Re-scrape adds `steps`, an interrupted record may add `incompleteCommit` (DECISIONS.md, Activity slice 2a).
+- **Event log:** `data/analytics/runs/<startedAt>-<runId>.events.jsonl`, append-only, one JSON object per line (`type`, `at`, then fields of that type), pruned with its record.
+- **Commit marker:** `data/analytics/runs/.commit-in-progress.json` (`runId`, `startedAt`, `files`, `written`), on disk only during discovery's writes. There with the lock free: an incomplete commit.
 - **Purpose:** What each discovery run did per source, for the Activity screen.
 - **Written by:** `run_discovery.py` through `run_log.py`. Field meanings: [DECISIONS.md](../DECISIONS.md#activity-slice-1-as-built-2026-11-02).
 
@@ -1076,7 +1078,7 @@ Fields added later, in the browser job store and not in this file until saved:
 
 - `data/jobs/normalized_jobs.json` - discovery output before dedupe (same job fields as discovered jobs, list under `jobs`).
 - `data/jobs/raw_jobs.csv` - raw provider rows, one column per job field above plus provider-specific extras.
-- `data/jobs/.pipeline.lock` - empty lock file while a pipeline runs.
+- `data/jobs/.pipeline.lock` - empty file that carries the flock over every run that replaces the job files (`python/job_scoring/pipeline_lock.py`). Its presence means nothing; a restore never replaces it.
 
 ## Fit judgement cache
 
