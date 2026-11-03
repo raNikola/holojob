@@ -39,6 +39,44 @@ def export_normalized_json(jobs: list[dict], root: Path) -> Path:
     return out
 
 
+def discovered_payload(
+    jobs: list[dict],
+    *,
+    search_terms: list[str],
+    locations: list[str],
+    remote_filters: list[str],
+    raw_count: int,
+    country: str = "",
+    source_run_id: str = "",
+    providers: list[str] | None = None,
+    provider_counts: dict[str, int] | None = None,
+    deduped_count: int | None = None,
+    history: dict | None = None,
+    generated_at: str | None = None,
+) -> dict:
+    """What discovered_jobs.json holds. A function of its arguments, so the importer builds the same thing without a file."""
+    # The jobs written can include recently closed ones; the count is what was found.
+    deduped_count = len(jobs) if deduped_count is None else deduped_count
+    duplicate_count = max(0, raw_count - deduped_count)
+    return {
+        "meta": {
+            "generatedAt": generated_at or datetime.now(timezone.utc).isoformat(),
+            "sourceRunId": source_run_id,
+            "searchTerms": search_terms,
+            "locations": locations,
+            "remoteFilters": remote_filters,
+            "country": country,
+            "providers": providers or [],
+            "providerCounts": provider_counts or {},
+            "rawCount": raw_count,
+            "dedupedCount": deduped_count,
+            "duplicateCount": duplicate_count,
+            "history": history or {},
+        },
+        "jobs": jobs,
+    }
+
+
 def export_discovered_json(
     jobs: list[dict],
     root: Path,
@@ -54,26 +92,11 @@ def export_discovered_json(
     deduped_count: int | None = None,
     history: dict | None = None,
 ) -> Path:
-    # The jobs written can include recently closed ones; the count is what was found.
-    deduped_count = len(jobs) if deduped_count is None else deduped_count
-    duplicate_count = max(0, raw_count - deduped_count)
-    payload = {
-        "meta": {
-            "generatedAt": datetime.now(timezone.utc).isoformat(),
-            "sourceRunId": source_run_id,
-            "searchTerms": search_terms,
-            "locations": locations,
-            "remoteFilters": remote_filters,
-            "country": country,
-            "providers": providers or [],
-            "providerCounts": provider_counts or {},
-            "rawCount": raw_count,
-            "dedupedCount": deduped_count,
-            "duplicateCount": duplicate_count,
-            "history": history or {},
-        },
-        "jobs": jobs,
-    }
+    payload = discovered_payload(
+        jobs, search_terms=search_terms, locations=locations, remote_filters=remote_filters, raw_count=raw_count,
+        country=country, source_run_id=source_run_id, providers=providers, provider_counts=provider_counts,
+        deduped_count=deduped_count, history=history,
+    )
     out = _jobs_dir(root) / "discovered_jobs.json"
     write_text_atomic(out, json.dumps(payload, indent=2))
     return out

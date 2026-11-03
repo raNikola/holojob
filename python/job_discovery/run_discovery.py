@@ -221,6 +221,7 @@ def discover(args: argparse.Namespace, record: dict) -> int:
         ROOT, record["runId"], search_key=search_key, terms=search_terms, locations=locations, country=country,
         remote_filters=remote_filters, providers=provider_names,
         ledger_path=job_history.ledger_path(ROOT / "data" / "jobs" / "discovered_jobs.json"),
+        discovered_path=ROOT / "data" / "jobs" / "discovered_jobs.json",
     )
 
     all_jobs: list[dict] = []
@@ -259,6 +260,8 @@ def discover(args: argparse.Namespace, record: dict) -> int:
 
     for warning in stage_run.warnings:
         run_log.add_issue(record, "warning", warning)
+    staging_ok, staging_problems = stage_run.finish()
+    run_log.set_staging(record, staging_ok, staging_problems)  # record and diagnostics only: the commit below is unchanged
 
     raw_count = len(all_jobs)
 
