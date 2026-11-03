@@ -16,7 +16,7 @@ import job_history as jh
 import run_scoring
 import view_guard
 from test_filtered_ads import T, ad, imported, stage_run
-from test_import import canon
+from test_import import OK, canon, hand_run
 from test_readers_not_found import INTEL, enrich
 
 
@@ -35,7 +35,7 @@ def entry(n, **fields):
 
 def ledger_of(*entries, **top):
     return {"generation": 5, "version": 1, "updatedAt": NOW,
-            "lastImport": {"runId": RUN, "at": NOW, "startedAt": NOW, "meta": {}, "marksNotFound": True},
+            "lastImport": {"runId": RUN, "at": NOW, "startedAt": NOW, "meta": {"providers": ["greenhouse"]}, "marksNotFound": True},
             "jobs": {e["job"]["jobId"]: e for e in entries}, **top}
 
 
@@ -83,7 +83,7 @@ def test_a_cross_post_still_listed_under_another_copy_says_so():
 
 
 def test_a_found_ad_is_found_whatever_older_marks_it_still_has():
-    assert all_ads.classify(entry(1, lastRunId=RUN, closedAt=NOW, absentSince=NOW, heldRunId=RUN, staleSince=NOW, seenUnder="older-key"), RUN, KEY) == "found"
+    assert all_ads.classify(entry(1, lastRunId=RUN, closedAt=NOW, absentSince=NOW, heldRunId=RUN, staleSince=NOW, seenUnder="older-key"), RUN, KEY, {"greenhouse"}) == "found"
 
 
 @pytest.mark.parametrize("fields, expected", [
@@ -95,7 +95,7 @@ def test_a_found_ad_is_found_whatever_older_marks_it_still_has():
     ({"heldRunId": "r1", "seenUnder": "older-key"}, "older_key"),
 ])
 def test_the_order_of_the_marks(fields, expected):
-    assert all_ads.classify(entry(9, **fields), RUN, KEY) == expected
+    assert all_ads.classify(entry(9, **fields), RUN, KEY, {"greenhouse"}) == expected
 
 
 def test_reasons_say_what_happened_in_plain_words():
@@ -255,6 +255,79 @@ def test_an_entry_with_no_search_key_is_not_guessed(value):
     missing = entry(4)
     del missing["seenUnder"]
     assert classes(all_ads.build(ledger_of(FOUND, missing), None))["j4"] == "unclassified"
+
+
+# --- a source that was not part of the latest run ---------------------------------------------------------------------------------
+
+
+LEFT_OUT = entry(10, lastRunId="r1", provider="workable")
+
+
+def test_a_row_whose_source_was_left_out_is_not_absent_and_says_why():
+    answer = all_ads.build(ledger_of(FOUND, NOT_RETURNED, LEFT_OUT), None)
+    row = next(r for r in answer["rows"] if r["jobId"] == "j10")
+    assert row["class"] == "unclassified" and row["reason"] == "Its source was not part of the latest run"
+    assert classes(answer)["j4"] == "absent", "a row of a source that did run stays absent"
+    assert answer["meta"]["diagnostics"]["sourceNotInLatestRun"] == 1 and answer["meta"]["counts"]["unclassified"] == 1
+
+
+@pytest.mark.parametrize("fields, expected", [
+    ({"heldRunId": RUN}, "held"), ({"absentSince": NOW}, "absent"), ({"closedAt": NOW}, "closed"), ({"staleSince": NOW}, "stale"),
+    ({"seenUnder": "older-key"}, "older_key"), ({"lastRunId": RUN, "seenUnder": KEY}, "found"),
+])
+def test_a_left_out_source_changes_no_class_a_mark_or_key_already_proves(fields, expected):
+    assert all_ads.classify({**LEFT_OUT, **fields}, RUN, KEY, {"greenhouse"}) == expected
+
+
+@pytest.mark.parametrize("meta", [{}, {"providers": None}, {"providers": "greenhouse"}])
+def test_a_ledger_that_does_not_list_its_sources_gives_no_absent_and_no_invented_reason(meta):
+    ledger = ledger_of(FOUND, NOT_RETURNED, OLDER, HELD, PROVEN)
+    ledger["lastImport"]["meta"] = meta
+    answer = all_ads.build(ledger, None)
+    assert classes(answer) == {"j1": "found", "j4": "unclassified", "j5": "older_key", "j2": "held", "j3": "absent"}
+    assert next(r for r in answer["rows"] if r["jobId"] == "j4")["reason"].startswith("Not enough information to say")
+    assert answer["meta"]["diagnostics"]["sourceNotInLatestRun"] == 0
+
+
+def test_only_a_row_it_decided_counts_as_left_out():
+    answer = all_ads.build(ledger_of(FOUND, {**LEFT_OUT, "seenUnder": "older-key"}, {**LEFT_OUT, "closedAt": NOW}), None)
+    assert answer["meta"]["diagnostics"]["sourceNotInLatestRun"] == 0
+    assert all("not part of the latest run" not in row["reason"] for row in answer["rows"])
+
+
+def test_a_cross_post_of_a_left_out_source_gives_the_source_reason():
+    answer = all_ads.build(ledger_of(FOUND, entry(11, lastRunId="r1", provider="workable", roleKey=FOUND["roleKey"])), None)
+    row = next(r for r in answer["rows"] if r["jobId"] == "j11")
+    assert row["reason"] == "Its source was not part of the latest run" and answer["meta"]["diagnostics"]["absentListedElsewhere"] == 0
+
+
+def two_sources(root, later_sources):
+    """Through the real importer: jobspy and workable both run, then a second run with `later_sources`, under the same search."""
+    found, gone = canon(1, provider="jobspy"), canon(2, provider="workable")
+    hand_run(root, "first", {"jobspy": ([found], OK), "workable": ([gone], OK)})
+    imported(root, "first")
+    hand_run(root, "second", later_sources(found))
+    imported(root, "second")
+    return gone
+
+
+def test_a_disabled_source_through_the_real_import(tmp_path):
+    gone = two_sources(tmp_path, lambda found: {"jobspy": ([found], OK)})
+    answer = answer_at(tmp_path)
+    assert classes(answer)[gone["jobId"]] == "unclassified"
+    assert next(r for r in answer["rows"] if r["jobId"] == gone["jobId"])["reason"] == "Its source was not part of the latest run"
+    assert answer["meta"]["currentSearchKey"] == "k", "the search key is the same: only the sources tell this apart"
+
+
+@pytest.mark.parametrize("footer", [{"status": "failed", "complete": False}, {"status": "skipped", "complete": False}], ids=["failed", "skipped"])
+def test_a_failed_or_skipped_source_stays_held_through_the_real_import(tmp_path, footer):
+    gone = two_sources(tmp_path, lambda found: {"jobspy": ([found], OK), "workable": ([], footer)})
+    assert classes(answer_at(tmp_path))[gone["jobId"]] == "held"
+
+
+def test_a_source_that_ran_and_did_not_return_the_ad_is_absent_through_the_real_import(tmp_path):
+    gone = two_sources(tmp_path, lambda found: {"jobspy": ([found], OK), "workable": ([], OK)})
+    assert classes(answer_at(tmp_path))[gone["jobId"]] == "absent"
 
 
 # --- filtered ads --------------------------------------------------------------------------------------------------------------

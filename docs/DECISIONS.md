@@ -457,7 +457,7 @@ In the real container every request of `scripts/check-view-recovery.js` answered
 
 **Rules, in `python/job_discovery/filtered_ads.py`:**
 
-- **A run counts once.** `appliedRuns` holds the id of every counted run, so A, B, A counts A once, which `lastRunId` alone could not say. The list keeps the newest 500 ids (about 8 KB) and never drops an id whose run is still in staging, the only runs that could be applied again.
+- **A run counts once.** `appliedRuns` holds the id of every counted run, so A, B, A counts A once, which `lastRunId` alone could not say. The list only grows, ids only (changed by S5e2b; it first kept the newest 500).
 - **Time is the run's own** (`importer.import_time`), so a run gives the same record whenever it is applied. An older run moves `firstSeen` back and adds to the count; it never moves `lastSeen`, the reason or the shown fields. The final record does not depend on the order runs are applied in.
 - **One ad under several searches** is one sighting, with the first line's reason.
 - **Skipped:** a torn last line, an unparsable line, a line that fails `discard_problems`, a line with no `jobId` (counted as `noId`).
@@ -531,7 +531,19 @@ In the real container every request of `scripts/check-view-recovery.js` answered
 
 **Measured on a copy of the real data:** 3,489 rows, 2.0 MB (the plan's 1.1 MB estimate was low). Counts: found 455, absent 856, closed 1, older_key 669, filtered 1,508; held, stale, filtered_incomplete and unclassified 0. The view's 463 rows are exactly the 455 found, the 7 proven absent and the 1 closed.
 
-**`appliedRuns` bound, tested as asked.** Through the code a repeat never counts twice: `_trim` never drops an id whose run is in staging, even past the bound. An id missing from the list with its run on disk is counted again; that test is a strict xfail. The code cannot reach that state alone. Only a run folder restored after its id was dropped, or a hand-edited file, can. **Smallest fix, not applied (scope):** remove `_trim`. The list then only grows, by about 15 bytes a run (about 27 KB a year at 5 runs a day), and a restored folder is covered; only a hand-edited file is left.
+**`appliedRuns` bound, tested as asked (fixed by S5e2b, below).** Through the code a repeat never counts twice: `_trim` never drops an id whose run is in staging, even past the bound. An id missing from the list with its run on disk is counted again; that test is a strict xfail. The code cannot reach that state alone. Only a run folder restored after its id was dropped, or a hand-edited file, can. **Smallest fix, not applied (scope):** remove `_trim`. The list then only grows, by about 15 bytes a run (about 27 KB a year at 5 runs a day), and a restored folder is covered; only a hand-edited file is left.
+
+## S5e2b as built: two fixes after S5e2 (2026-11-03)
+
+**A source left out of the run is not "absent" (owner, 2026-11-03).** The search key does not hold the list of sources, so turning a source off leaves its rows under the current key, and S5e2 called them "not returned by the latest search" though nothing searched for them. `all_ads.classify` now also needs the row's source in `lastImport.meta.providers`. If it is not there, the row is `unclassified` with the reason "Its source was not part of the latest run". `searchKey` and the importer did not change.
+
+- **Unchanged:** a failed or skipped source is in that list and its rows are held, as before. A class the row's own mark or its older key proves stays.
+- **No list in the ledger:** nothing can say the source ran, so the row is `unclassified`, "Not enough information to say". Real ledgers have the list.
+- **Real data:** 0 rows change, because all 7 sources ran.
+
+**`appliedRuns` only grows (owner, 2026-11-03).** The trim step and its bound of 500 are gone. It costs about 15 bytes a run. A run folder restored from a copy now counts once, and the code has no way left to remove an id. The protection of staged runs (`filtered_ads.unrecorded`, the pruning guard) is unchanged.
+
+**Not fixed by this: an id taken out of the list by hand.** With its run on disk, that run is counted again, so that test stays a strict xfail. A guard on `lastRunId` would pass the one-run case only and still double count after a later run, so it is not used. A true fix needs a list of runs on each ad, about 1,500 ads times the runs that saw them, which is not worth it for a hand edit.
 
 ## offList rows keep the owner's data (2026-11-03)
 

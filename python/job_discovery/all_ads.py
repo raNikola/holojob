@@ -15,6 +15,7 @@ The classes, first match wins (`classify`):
     absent        absentSince                                   its own mark: a board proven complete did not list it
     held          heldRunId == lastImport.runId                 its source or board could say nothing in the last import
     older_key     seenUnder differs from the current search     out of the search that ran
+    unclassified  its source was not part of the last import    nothing searched for it, so its absence says nothing
     absent        seenUnder equals the current search           the search ran and did not return it
     unclassified  any mark needed above is missing              never a guess
 
@@ -24,6 +25,11 @@ ledger field is needed and a ledger from before works. `lastImport.marksNotFound
 Documented fallback, `unclassified`: with no `lastImport.runId`, or when the last import found no row (or rows under two keys), or an
 entry with no `seenUnder`, nothing can tell held, absent and older_key apart. Such a row says so instead of getting a status it may
 not have. A class proven by the entry's own mark (closed, stale, absent) still holds.
+
+The search key does not hold the list of sources, so a source turned off leaves its rows under the current key. `absent` therefore
+also needs the row's source in `lastImport.meta.providers`. A source that failed or was skipped is in that list and its rows are held,
+which comes first. With no such list nothing can say the source ran, so the row is unclassified too. older_key needs no list: its
+key alone shows the search that found it is not the one that ran.
 
 Filtered ads come from filtered_ads.json. An ad the ledger holds shows once, from the ledger, whatever its `inLedger` mark says. One
 with no title or no web address is left out and only counted: it stays in the file as a diagnostic. An ad dropped because its
@@ -70,8 +76,19 @@ def current_key(ledger: dict) -> str | None:
     return next(iter(keys)) or None
 
 
-def classify(entry: dict, run_id: str | None, key: str | None) -> str:
-    """Exactly one class for a ledger entry. Pure: only the entry, the last import's id and the current search."""
+def run_providers(ledger: dict) -> set | None:
+    """The sources of the last import, or None when the ledger does not say."""
+    providers = ((ledger.get("lastImport") or {}).get("meta") or {}).get("providers")
+    return set(providers) if isinstance(providers, list) else None
+
+
+def _source_left_out(entry: dict, providers: set | None) -> bool:
+    """The last import says which sources it had, and this row's is not one of them."""
+    return providers is not None and entry.get("provider") not in providers
+
+
+def classify(entry: dict, run_id: str | None, key: str | None, providers: set | None) -> str:
+    """Exactly one class for a ledger entry. Pure: only the entry, the last import's id, its search and its sources."""
     if run_id and entry.get("lastRunId") == run_id:
         return "found"
     if entry.get("closedAt"):
@@ -87,7 +104,11 @@ def classify(entry: dict, run_id: str | None, key: str | None) -> str:
     seen_under = entry.get("seenUnder")
     if not seen_under or not key:
         return "unclassified"
-    return "older_key" if seen_under != key else "absent"
+    if seen_under != key:
+        return "older_key"
+    if providers is None or _source_left_out(entry, providers):
+        return "unclassified"
+    return "absent"
 
 
 def classify_filtered(record: dict) -> str | None:
@@ -102,7 +123,7 @@ def _day(value) -> str:
     return str(value)[:10] if value else "unknown"
 
 
-def ledger_reason(kind: str, entry: dict, listed_elsewhere: bool = False) -> str:
+def ledger_reason(kind: str, entry: dict, listed_elsewhere: bool = False, source_left_out: bool = False) -> str:
     seen = _day(entry.get("lastSeen"))
     if kind == "found":
         return "Found by the latest run"
@@ -122,6 +143,8 @@ def ledger_reason(kind: str, entry: dict, listed_elsewhere: bool = False) -> str
         if listed_elsewhere:
             return f"Still listed under another copy of this ad. Last seen {seen}"
         return f"Not returned by the latest search. Last seen {seen}"
+    if source_left_out:
+        return "Its source was not part of the latest run"
     return f"Not enough information to say. Last seen {seen}"
 
 
@@ -147,20 +170,23 @@ def build(ledger: dict | None, store: dict | None, filtered_state: str = "ok") -
     ledger = ledger if ledger is not None else {"jobs": {}}
     run_id = (ledger.get("lastImport") or {}).get("runId") or None
     key = current_key(ledger)
+    providers = run_providers(ledger)
     counts = {name: 0 for name in CLASSES}
     rows = []
-    no_ad = elsewhere = 0
+    no_ad = elsewhere = left_out = 0
     found_roles = {e.get("roleKey") for e in ledger["jobs"].values() if isinstance(e, dict) and run_id and e.get("lastRunId") == run_id and e.get("roleKey")}
     for job_id, entry in ledger["jobs"].items():
         job = entry.get("job") if isinstance(entry, dict) else None
         if not isinstance(job, dict):
             no_ad += 1
             continue
-        kind = classify(entry, run_id, key)
+        kind = classify(entry, run_id, key, providers)
         counts[kind] += 1
         listed_elsewhere = kind == "absent" and not entry.get("absentSince") and entry.get("roleKey") in found_roles
         elsewhere += listed_elsewhere
-        rows.append(_row(job_id, kind, ledger_reason(kind, entry, listed_elsewhere), None, "ledger", job.get("title"), job.get("company"), job.get("location"), job.get("jobUrl"),
+        source_left_out = kind == "unclassified" and _source_left_out(entry, providers)
+        left_out += source_left_out
+        rows.append(_row(job_id, kind, ledger_reason(kind, entry, listed_elsewhere, source_left_out), None, "ledger", job.get("title"), job.get("company"), job.get("location"), job.get("jobUrl"),
                          entry.get("provider") or job.get("provider"), job.get("site"), job.get("isRemote"), job.get("datePosted"),
                          entry.get("firstSeen"), entry.get("lastSeen"), entry.get("closedAt"), entry.get("absentSince")))
     also_in_ledger = not_shown = 0
@@ -181,7 +207,7 @@ def build(ledger: dict | None, store: dict | None, filtered_state: str = "ok") -
         "meta": {
             "ledgerGeneration": ledger.get("generation"), "lastImportRunId": run_id, "currentSearchKey": key, "filteredFile": filtered_state,
             "counts": counts, "total": len(rows),
-            "diagnostics": {"ledgerEntriesWithoutAd": no_ad, "absentListedElsewhere": elsewhere, "filteredAlsoInLedger": also_in_ledger, "filteredWithoutTitleOrUrl": not_shown},
+            "diagnostics": {"ledgerEntriesWithoutAd": no_ad, "absentListedElsewhere": elsewhere, "sourceNotInLatestRun": left_out, "filteredAlsoInLedger": also_in_ledger, "filteredWithoutTitleOrUrl": not_shown},
         },
         "rows": rows,
     }

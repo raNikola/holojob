@@ -6,7 +6,8 @@ staging reader refuses a discard line that has one, and only the fields in `_SHO
 
 Independent of the ledger's generation. The real import writes it after the ledger and before the run's `imported.json`, so a stop
 anywhere leaves it behind or ahead of the marker and a repeat fixes that: `appliedRuns` holds the id of every run already counted,
-so A, B, A counts A once. `lastRunId` alone could not say that. A run with its id in the list changes no counter.
+so A, B, A counts A once. `lastRunId` alone could not say that. A run with its id in the list changes no counter. The list only
+grows, by an id a run, so a run folder restored from a copy still counts once.
 
 Nothing here removes a record. An ad the ledger also holds keeps its record, marked `inLedger`: readers show it once, from the ledger.
 
@@ -24,7 +25,6 @@ import staging
 
 VERSION = 1
 FILE_NAME = "filtered_ads.json"
-MAX_APPLIED_RUNS = 500  # ids only (about 8 KB). An id whose run is still in staging is never dropped: only a run on disk could be applied twice
 _SHOWN = ("source", "title", "company", "location", "url", "externalId", "reason")
 
 
@@ -132,18 +132,6 @@ def mark_ledger(store: dict, ledger_ids) -> int:
     return held
 
 
-def _trim(store: dict, staged) -> None:
-    extra = len(store["appliedRuns"]) - MAX_APPLIED_RUNS
-    if extra > 0:
-        kept = []
-        for run_id in store["appliedRuns"]:
-            if extra > 0 and run_id not in staged:
-                extra -= 1
-            else:
-                kept.append(run_id)
-        store["appliedRuns"] = kept
-
-
 def _discards_of(run: staging.RunStage) -> list[dict]:
     """The run's whole, valid discard lines. A file that is there but cannot be read is an error, not a run that dropped nothing."""
     path = run.dir / staging.DISCARDS
@@ -160,7 +148,6 @@ def record_run(root: Path, run: staging.RunStage, moment: str, ledger_ids) -> di
     store = load(root)
     stats = apply_run(store, run.run_id, moment, (run.manifest or {}).get("searchKey") or "", _discards_of(run))
     mark_ledger(store, ledger_ids)
-    _trim(store, set(staging.list_runs(root)))
     stats["written"] = save(root, store)
     return stats
 
@@ -202,8 +189,7 @@ def backfill(root: Path, time_of, *, dry_run: bool = False) -> dict:
     before = set(store["ads"])
     report = {"dryRun": dry_run, "runs": [], "applied": 0, "alreadyApplied": 0, "noDiscards": 0, "noTime": 0}
     base = staging.staging_dir(root)
-    staged = staging.list_runs(root)
-    for run_id in reversed(staged):
+    for run_id in reversed(staging.list_runs(root)):
         run = staging.read_run(root, run_id)
         if run is None:
             continue
@@ -225,7 +211,6 @@ def backfill(root: Path, time_of, *, dry_run: bool = False) -> dict:
                     rejected=discards.rejected if discards else 0)
         report["alreadyApplied" if stats["alreadyApplied"] else "applied"] += 1
     in_ledger = mark_ledger(store, ledger_ids)
-    _trim(store, set(staged))
     by_source: dict[str, int] = {}
     for ad in store["ads"].values():
         by_source[str(ad.get("source"))] = by_source.get(str(ad.get("source")), 0) + 1

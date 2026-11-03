@@ -131,7 +131,7 @@ const job = (n) => ({ jobId: `j${n}`, title: `Ad ${n}`, company: 'Acme', locatio
 const LEDGER = {
   generation: 4,
   version: 1,
-  lastImport: { runId: 'r2', at: '2026-11-03T10:00:00+00:00', meta: {} },
+  lastImport: { runId: 'r2', at: '2026-11-03T10:00:00+00:00', meta: { providers: ['greenhouse'] } },
   jobs: {
     j1: { firstSeen: 'x', lastSeen: 'x', provider: 'greenhouse', seenUnder: 'k', lastRunId: 'r2', job: job(1) },
     j2: { firstSeen: 'x', lastSeen: 'x', provider: 'greenhouse', seenUnder: 'k', lastRunId: 'r1', job: job(2) },
