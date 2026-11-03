@@ -323,6 +323,7 @@ class SourceWriter(_AppendFile):
                 error=(str(outcome.error)[:300] if outcome.error else None),
                 boardsFailed=list(outcome.boards_failed),
                 boardsEmpty=list(outcome.boards_empty),
+                boardsRead=[dict(row) for row in getattr(outcome, "boards_read", None) or []],
                 skipReason=outcome.skip_reason,
                 mismatch=(accounted != len(jobs)) if self.failed is None else None,
                 discarded=self.discarded,
