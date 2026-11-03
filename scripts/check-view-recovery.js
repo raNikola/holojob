@@ -15,7 +15,10 @@
  *   a) the ledger generation is raised so the view is behind it; GET /api/discovery/jobs must answer 200 with a regenerated view;
  *   b) the generations of the two files then match, and the answer carries that generation;
  *   c) the ledger is made unreadable with the view still behind; the route must answer 503 view_unrecoverable and send no job list.
- * Exit 0 when all of it holds, 1 otherwise.
+ * The request guard (scripts/request-guard.js) stays on: the requests carry the Host the container's HOLOJOB_ALLOWED_ORIGINS allows,
+ * exactly as the reverse proxy does. A 403 from the guard is reported as an ENVIRONMENT failure (the check could not reach the
+ * recovery), never as a recovery failure.
+ * Exit 0 when all of it holds, 1 when the recovery failed, 2 when the environment stopped the check.
  */
 
 import crypto from 'node:crypto'
@@ -31,6 +34,8 @@ const LEDGER = 'job_history.json'
 const VIEW = 'discovered_jobs.json'
 const GENERATION_PATTERN = /^\s*\{\s*"generation"\s*:\s*(\d+)/
 const VIEW_PATTERN = /^\s*\{\s*"meta"\s*:\s*\{\s*"ledgerGeneration"\s*:\s*(\d+)/
+
+class EnvironmentStop extends Error {}
 
 function sha(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
@@ -64,10 +69,16 @@ function copyRoot({ sourceRoot, tempRoot, python }) {
   fs.symlinkSync(python, path.join(tempRoot, '.venv/bin/python'))
 }
 
-function get(port, route) {
+/** The Host the production guard accepts: the first of HOLOJOB_ALLOWED_ORIGINS (the container's .env), else the plain local address. */
+export function allowedHost(env = process.env) {
+  const first = String(env.HOLOJOB_ALLOWED_ORIGINS ?? '').split(',')[0].trim().replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, '')
+  return first || null
+}
+
+function get(port, route, host) {
   return new Promise((resolve, reject) => {
     http
-      .get({ host: '127.0.0.1', port, path: route }, (res) => {
+      .get({ host: '127.0.0.1', port, path: route, headers: host ? { Host: host } : {} }, (res) => {
         let body = ''
         res.on('data', (chunk) => { body += chunk })
         res.on('end', () => {
@@ -81,8 +92,9 @@ function get(port, route) {
 }
 
 /** Returns {ok, steps[], liveUnchanged}. `log` receives each line. Exported for the test. */
-export async function runCheck({ sourceRoot = SOURCE_ROOT, python, log = console.log, keep = false } = {}) {
+export async function runCheck({ sourceRoot = SOURCE_ROOT, python, log = console.log, keep = false, host = allowedHost() } = {}) {
   const steps = []
+  let environmentFailure = false
   const step = (name, ok, detail) => {
     steps.push({ name, ok, detail })
     log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`)
@@ -127,7 +139,14 @@ export async function runCheck({ sourceRoot = SOURCE_ROOT, python, log = console
     step('setup: the copy is stale (view generation differs from the ledger)', peek(viewCopy, VIEW_PATTERN) !== peek(ledgerCopy, GENERATION_PATTERN),
       `ledger ${peek(ledgerCopy, GENERATION_PATTERN)}, view ${peek(viewCopy, VIEW_PATTERN) ?? 'none'}`)
 
-    const first = await get(port, '/api/discovery/jobs')
+    log(`Requests are sent with Host: ${host ?? '(none configured: the guard takes the local address)'}`)
+    const first = await get(port, '/api/discovery/jobs', host)
+    if (first.status === 403) {
+      environmentFailure = true
+      step('ENVIRONMENT: the request guard refused the check\'s own request (HTTP 403); the view recovery was not reached',
+        false, `${first.json?.error ?? 'no message'}; Host sent: ${host ?? 'none'}. Check HOLOJOB_ALLOWED_ORIGINS`)
+      throw new EnvironmentStop()
+    }
     step('(a) the route answers 200 and the view was regenerated automatically', first.status === 200 && sha(viewCopy) !== viewBytes,
       `HTTP ${first.status}`)
     const afterLedger = peek(ledgerCopy, GENERATION_PATTERN)
@@ -138,17 +157,22 @@ export async function runCheck({ sourceRoot = SOURCE_ROOT, python, log = console
     // c) ledger unreadable, view behind: the generation can still be read from the head, the rest is cut
     fs.writeFileSync(ledgerCopy, `{ "generation": ${target + 1}, "jobs": { "broken`)
     const before503 = sha(viewCopy)
-    const second = await get(port, '/api/discovery/jobs')
+    const second = await get(port, '/api/discovery/jobs', host)
+    if (second.status === 403) {
+      environmentFailure = true
+      step('ENVIRONMENT: the request guard refused the 503 check (HTTP 403); not a recovery result', false, second.json?.error)
+      throw new EnvironmentStop()
+    }
     step('(c) unreadable ledger: 503 view_unrecoverable', second.status === 503 && second.json?.error === 'view_unrecoverable',
       `HTTP ${second.status}, ${second.json?.error ?? 'no error field'}`)
     step('(c) no stale job list was served', second.json?.jobs === undefined && second.json?.meta === undefined && second.bytes < 2000,
       `${second.bytes} bytes in the answer`)
     step('(c) the stale view file was left as it was (not truncated or replaced)', sha(viewCopy) === before503)
-    const status = await get(port, '/api/discovery/status')
+    const status = await get(port, '/api/discovery/status', host)
     step('(c) /api/discovery/status refuses too', status.status === 503 && status.json?.error === 'view_unrecoverable', `HTTP ${status.status}`)
     if (second.json?.message) log(`      reason given: ${second.json.message}`)
   } catch (error) {
-    step('the check itself ran', false, `${error.name}: ${error.message}`)
+    if (error instanceof EnvironmentStop) { /* already reported */ } else step('the check itself ran', false, `${error.name}: ${error.message}`)
   } finally {
     server?.close()
     process.chdir(sourceRoot)
@@ -157,11 +181,11 @@ export async function runCheck({ sourceRoot = SOURCE_ROOT, python, log = console
   const liveUnchanged = Object.entries(liveBefore).every(([file, hash]) => fs.existsSync(file) && sha(file) === hash)
   step('live data/jobs/job_history.json and discovered_jobs.json unchanged (sha256 before = after)', liveUnchanged)
   const ok = steps.every((s) => s.ok)
-  log(ok ? 'RESULT: ALL PASS' : 'RESULT: FAILED')
-  return { ok, steps, liveUnchanged }
+  log(ok ? 'RESULT: ALL PASS' : environmentFailure ? 'RESULT: ENVIRONMENT FAILURE (not a recovery failure)' : 'RESULT: FAILED')
+  return { ok, steps, liveUnchanged, environmentFailure }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const result = await runCheck({ keep: process.argv.includes('--keep'), python: process.env.CHECK_VIEW_PYTHON || undefined })
-  process.exit(result.ok ? 0 : 1)
+  process.exit(result.ok ? 0 : result.environmentFailure ? 2 : 1)
 }
