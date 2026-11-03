@@ -4,6 +4,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import { buildDiscoveryCommand, getDiscoveryStatus, runDiscovery } from './run-discovery.js'
 import { runPipeline } from './run-pipeline.js'
@@ -41,7 +42,7 @@ import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
 import { handleApplicationsRequest } from './application-store.js'
 import { handleJobHistoryRequest } from './job-history-read.js'
-import { RUN_ACTIVE, isRunBusy, rescrapeStatus, runHttpStatus, startRescrape, withRunLock } from './run-rescrape.js'
+import { RUN_ACTIVE, incompleteCommit, isRunBusy, rescrapeStatus, runHttpStatus, startRescrape, withRunLock } from './run-rescrape.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -158,6 +159,15 @@ function sendJson(res, status, data) {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify(maskErrorField(data)))
+}
+
+function commitIncompleteAnswer(commit) {
+  const files = commit.unreadable ? '' : ` Written: ${commit.written.join(', ') || 'none'}. Not written: ${commit.pending.join(', ') || 'none'}.`
+  return {
+    ok: false,
+    error: 'commit_incomplete',
+    message: `No backup was made: a save of the job files did not finish, so they may not match each other.${files} Run a Re-scrape to the end, then back up.`,
+  }
 }
 
 function contentTypeFor(filePath) {
@@ -692,14 +702,35 @@ export async function handleApiRequest(req, res) {
     try {
       const { createBackupStream } = await import('./backup-handler.js')
       const body = await readJsonBody(req, res, { limit: MAX_LARGE_BODY_BYTES })
-      res.statusCode = 200
-      res.setHeader('Content-Type', 'application/zip')
-      res.setHeader('Content-Disposition', 'attachment; filename="holojob-backup.zip"')
-      createBackupStream(ROOT, {
-        profile: body.profile,
-        intelligence: body.intelligence,
-        jobs: body.jobs,
-      }).pipe(res)
+      // The lock is held until the last byte, so every file in the archive comes from one state: no run writes during it.
+      let held
+      try {
+        held = await withRunLock(async () => {
+          const unfinished = incompleteCommit()
+          if (unfinished) return { refused: commitIncompleteAnswer(unfinished) }
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/zip')
+          res.setHeader('Content-Disposition', 'attachment; filename="holojob-backup.zip"')
+          await pipeline(createBackupStream(ROOT, {
+            profile: body.profile,
+            intelligence: body.intelligence,
+            jobs: body.jobs,
+          }), res)
+          return {}
+        })
+      } catch (e) {
+        if (res.headersSent) {
+          res.destroy() // the download broke off: there is no status left to send
+          return true
+        }
+        if (e.lockUnknown) {
+          sendJson(res, 503, { ok: false, error: 'lock_unknown', message: 'Could not check for a running job run, so no backup was made.' })
+          return true
+        }
+        throw e
+      }
+      if (held.busy) sendJson(res, 409, RUN_ACTIVE)
+      else if (held.value.refused) sendJson(res, 409, held.value.refused)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }

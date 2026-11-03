@@ -217,7 +217,8 @@ function readJson(file) {
   }
 }
 
-function incompleteCommit() {
+/** The commit marker in report form, or null. With the lock held (or no run active) a marker means a commit did not finish. */
+export function incompleteCommit() {
   const file = path.join(runsDir(), COMMIT_MARKER)
   if (!fs.existsSync(file)) return null
   const marker = readJson(file)
