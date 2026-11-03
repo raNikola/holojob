@@ -312,6 +312,7 @@ def discover(args: argparse.Namespace, record: dict) -> int:
           f"{history_stats['keptSourceNotRun']} of sources that did not run, {history_stats['keptUnproven']} of unproven boards, "
           f"{history_stats['keptBoardNotRead']} of boards not read")
     closed_written = sum(1 for job in to_write if job.get("isClosed"))
+    print(f"  absent rows shown: {sum(1 for job in to_write if job.get('isAbsent') and not job.get('isClosed'))}")
     print(f"  jobs written: {len(to_write)} ({closed_written} closed, kept {job_history.CLOSED_KEEP_DAYS} days)")
     print("")
     print(f"Output: {discovered_path.relative_to(ROOT)}")
