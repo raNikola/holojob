@@ -6,6 +6,8 @@ import { dirtyDraftLabels, leaveDecision } from '../../modules/jobs/draftGuard'
 import ApplicationTrackingSummary from './ApplicationTrackingSummary'
 import { canOpenJobPage, MISSING_JOB_HINT, openJobPage } from '../../modules/jobs/jobRoute'
 import { hasFallback } from '../../modules/jobs/jobResolve'
+import { SERVER_ONLY_NOTE } from '../../modules/jobs/jobListView'
+import { applicationsForJob } from '../../modules/applications/trackingView'
 import { mergeLive } from '../../modules/jobs/jobsStore'
 import { loadJobHistory } from '../../modules/jobs/pipelineRunner'
 import { useApplications } from '../../hooks/useApplications'
@@ -18,8 +20,8 @@ import { useJobPatcher } from '../../hooks/useJobPatcher'
  */
 export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
   const stored = useStoredJob(row?.jobId)
-  const job = useMemo(() => (row ? mergeLive(row, stored) : null), [row, stored])
-  const { onJobUpdated, onStatusChange } = useJobPatcher(job)
+  const merged = useMemo(() => (row ? mergeLive(row, stored) : null), [row, stored])
+  const { onJobUpdated, onStatusChange } = useJobPatcher(merged)
   const applications = useApplications()
   const jobId = row?.jobId
   const [ledger, setLedger] = useState(null)
@@ -32,6 +34,9 @@ export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
     return () => { cancelled = true }
   }, [jobId, needsLedger])
 
+  // A row only the server holds is shown, never stored: its ad text comes from the ledger, and what would write to it waits for "Keep this ad".
+  const readOnly = Boolean(row?.serverOnly) && !stored
+  const job = readOnly && !merged.description && ledger?.jobId === jobId ? { ...merged, description: ledger.job?.description } : merged
   if (!job) return null
 
   // The drawer stays open when the owner declines, so nothing typed is lost.
@@ -65,9 +70,12 @@ export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
 
         <div className="p-4">
           <JobDetailBody job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} onStatusChange={onStatusChange} includeAiTools={false} includeContacts={false} includeTracker={false} />
-          <div className="mt-5">
-            <ApplicationTrackingSummary job={job} onStatusChange={onStatusChange} onOpenFull={openFullDetails} canOpenFull={canOpen} />
-          </div>
+          {readOnly && <p className="mt-5 text-sm text-stone-600 dark:text-stone-400">This ad is not saved in this browser, so it is read-only here. {SERVER_ONLY_NOTE}.</p>}
+          {(!readOnly || applicationsForJob(store, jobId).length > 0) && (
+            <div className="mt-5">
+              <ApplicationTrackingSummary job={job} onStatusChange={onStatusChange} onOpenFull={openFullDetails} canOpenFull={canOpen} />
+            </div>
+          )}
         </div>
       </aside>
     </div>

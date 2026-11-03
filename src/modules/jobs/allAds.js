@@ -57,7 +57,7 @@ function toTime(value) {
 }
 
 /** Seen within the window of `now`, the end included. A row with no usable date is not: nothing says it was seen. */
-function seenRecently(lastSeen, now) {
+export function seenRecently(lastSeen, now) {
   const seen = toTime(lastSeen)
   return seen !== null && now - seen <= ACTIVE_WINDOW_MS
 }

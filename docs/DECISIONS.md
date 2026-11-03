@@ -629,6 +629,43 @@ In the real container every request of `scripts/check-view-recovery.js` answered
 
 **Visible changes:** today's list starts at 100 rows, not all of them, so the browser's own find sees only what is loaded. A filter change now clears the selection; before, it stayed.
 
+## S5e3c as built: the visible Active/All view (2026-11-03)
+
+**Owner decisions (2026-11-03):**
+
+- The Jobs screen gets an Active/All toggle, default Active, using the composed lists of S5e3a. Inside All: a class filter (nine classes plus "Saved in this browser", a display label) and "Seen in the last 14 days".
+- Server-only rows live in memory only. The new controls never write to storage. Existing filters keep their persistence. `state.jobs` stays byte-identical.
+- Only the list count and the filter counts and options read the composed list. KPIs, AI statistics and application tracking keep their logic and inputs, so a server-only row with no score cannot move the average fit score or any other metric. Export stays stored rows only and says so.
+- Until S5e3d, actions on server-only rows are disabled and say why: "Keep this ad is coming in the next update". No button is clickable and does nothing.
+- Filtered rows are read-only, with a link and an "Add job" form prefilled with title, company and URL. Nothing is saved until Save.
+
+**States:**
+
+| Situation | Active | All |
+|---|---|---|
+| Route not answered yet | Today's list, exactly | Stored rows; "Loading the full list. This list is incomplete until it arrives." |
+| Route failed or 503, first time | Today's list, an error and "Try again" | Stored rows, the error and "This list is incomplete: the full list could not be loaded…" |
+| Route failed later | The last list loaded, and the error | The same |
+| Answer with no rows | Stored rows stay | Stored rows stay |
+| `filteredFile` not `ok` | Unchanged | "This list is incomplete: filtered ads could not be read" |
+| No API, or demo data | Today's list, no toggle, the route is never asked | Not offered |
+| Application store loading or failed | Copies not collapsed, with a note | Unchanged |
+
+**The two old filters while a composed list shows:** "Show jobs absent from current results" is off and disabled, with the tooltip "Active and All already include these rows", since the two lists decide that. "Hide jobs no longer listed" still works, reading the route's class when a row has one. On today's list (route not answered, failed, no API) both behave exactly as before.
+
+**Choices made while building:**
+
+- **The reason line shows on every row of a composed list,** found ones too ("Found by the latest run"), as asked. It is one line to hide it on found rows if that turns out noisy.
+- **Select all covers stored rows only,** since bulk actions act on those, and says so ("Select all 2 filtered jobs saved in this browser"). Server-only rows have a disabled checkbox with the note; filtered rows have none.
+- **The drawer of a server-only row** shows the ad, reads its text from the ledger and stores nothing. It hides "Mark Applied" until S5e3d, unless the job already has an application. The tailoring tools in cards are for stored rows only.
+- **Job Details for a server-only row is unchanged:** it already opens from the ledger, stores nothing and shows no section that writes job fields, and its tracker writes to the application store, so "Mark Applied" works there. This is the one action on such a row that is not disabled; S5e3d should make the two places agree.
+- **The route is asked each time the screen opens,** after every import (`importedAt` moving covers Re-scrape, Re-score, auto-refresh and URL import), and after a Re-scrape however it ended, since the ledger may have moved. `useAllAds` keeps what it holds until the answer comes.
+- **The current date** for the 14 days refreshes hourly while the screen is open.
+- **A selection or page resets** on a change of mode, class or the 14-day filter too, as for any filter.
+- **"Not scored" now shows in the Jobs table** in both layouts, for any row without a score. Other screens keep "—".
+
+**Testing:** committed tests use pure functions, server-rendered markup and source checks, since the repo has no DOM for tests. Real clicks on the real screen ran once in throwaway jsdom, outside the repo. Some wiring is proven only there: the toggle and class clicks reaching state, a filtered row not opening the drawer, and the refetch after Re-score.
+
 ## offList rows keep the owner's data (2026-11-03)
 
 **Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,

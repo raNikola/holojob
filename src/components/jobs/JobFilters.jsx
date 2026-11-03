@@ -23,12 +23,13 @@ import { MATCH_LABELS, PRIORITIES, hasMatchScores } from '../../modules/jobs/mat
 const SHOWN_PRIORITIES = PRIORITIES.filter((p) => p !== 'Reject')
 const tip = (key, label) => <InfoTip text={FILTER_HELP[key]} label={`About ${label}`} />
 
-function Checkbox({ label, help, checked, onChange, className = 'self-end pb-2.5' }) {
+function Checkbox({ label, help, checked, onChange, className = 'self-end pb-2.5', disabledNote = null }) {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <label className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
+      <label className={`flex items-center gap-2 text-sm ${disabledNote ? 'text-stone-400' : 'text-stone-700 dark:text-stone-300'}`} title={disabledNote ?? undefined}>
         <input
           type="checkbox"
+          disabled={Boolean(disabledNote)}
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
           className="rounded border-stone-300 text-teal-600 focus:ring-teal-500"
@@ -40,7 +41,7 @@ function Checkbox({ label, help, checked, onChange, className = 'self-end pb-2.5
   )
 }
 
-export default function JobFilters({ filters, sites, providers, jobs, applicationStore = null, basicProfile = null, onChange }) {
+export default function JobFilters({ filters, sites, providers, jobs, applicationStore = null, basicProfile = null, onChange, searchNote = null, offListDisabledNote = null }) {
   const showScoreFilters = hasMatchScores(jobs)
   const [moreOpen, setMoreOpen] = useState(false)
   // Until the open animation ends the extras clip their content; afterwards dropdowns may extend past the box.
@@ -72,6 +73,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
 
   return (
     <Card title="Filters" className="!p-4">
+      {searchNote && <p className="mb-2 text-xs text-stone-500 dark:text-stone-400">{searchNote}</p>}
       <div className="flex flex-wrap items-end gap-3">
         <Input
           className="min-w-[10rem] flex-[2_1_10rem]"
@@ -221,6 +223,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                   help={tip('showOffList', 'Show jobs absent from current results')}
                   checked={Boolean(filters.showOffList)}
                   onChange={(v) => onChange({ showOffList: v })}
+                  disabledNote={offListDisabledNote}
                 />
                 <Checkbox
                   className=""
