@@ -135,6 +135,23 @@ def set_staging(record: dict, ok: bool, problems: list[str]) -> None:
         add_issue(record, "error", "Staging failed, so this run is not fully saved: " + "; ".join(problems[:3]))
 
 
+def set_staging_usage(record: dict, usage: dict) -> None:
+    """How much room staging takes after this run's import and pruning (staging.usage)."""
+    record.setdefault("staging", {"ok": True, "problems": []}).update(
+        runs=int(usage.get("runs", 0)), bytes=int(usage.get("bytes", 0))
+    )
+
+
+def clear_commit_marker(record: dict) -> None:
+    """A commit marker left by the pre-S4a commit protocol is stale once a commit has finished: the files agree again."""
+    try:
+        if commit_marker_path().exists():
+            commit_marker_path().unlink()
+            event(record, "commit_end", files=["marker cleared after a finished commit"])
+    except OSError as exc:
+        add_issue(record, "warning", f"An old commit marker could not be removed: {exc}")
+
+
 def set_new_counts(record: dict, counts: dict[str, int]) -> None:
     for source in record["sources"]:
         source["new"] = counts.get(source["name"], 0)

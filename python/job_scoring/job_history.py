@@ -155,6 +155,7 @@ def apply_run(
     empty_boards: dict[str, set[str]] | None = None,
     sources_not_run: set[str] | None = None,
     run_id: str | None = None,
+    prune: bool = True,
 ) -> tuple[list[dict], dict]:
     """Record one discovery run; return the jobs to write and what changed.
 
@@ -176,7 +177,10 @@ def apply_run(
     open ads stay in the output unchanged. The search does not have to match: a source skipped for an unsupported country
     is by definition on a different search from the one that found its ads.
 
-    `run_id` (the importer passes it; the live commit path does not) stamps each entry with how this run saw it, so the
+    `prune=False` (the importer) keeps closed entries for good: nothing is deleted automatically (owner, S4a). The default is the
+    old 90-day prune, for the callers and tests that still rely on it.
+
+    `run_id` (the importer passes it) stamps each entry with how this run saw it, so the
     discovered view can be derived from the ledger alone: `lastRunId` and `lastRunPos` (its place in the output) on an ad this
     run found, `heldRunId` on one kept open. Nothing else changes, and without it nothing is stamped.
     """
@@ -275,7 +279,7 @@ def apply_run(
         if not closed_at:
             continue
         age = moment - closed_at
-        if age > timedelta(days=PRUNE_AFTER_DAYS):
+        if prune and age > timedelta(days=PRUNE_AFTER_DAYS):
             del entries[job_id]
         elif age <= timedelta(days=CLOSED_KEEP_DAYS) and job_id not in found_ids:
             record = _annotate(entry["job"], entry, now=moment, closed=True)

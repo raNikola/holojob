@@ -334,7 +334,8 @@ def test_apply_run_alone_is_idempotent_on_the_ledger_data(tmp_path):
 
 
 def test_import_order_changes_the_result_exactly_as_apply_run_does(tmp_path, monkeypatch):
-    """No ordering rule is added. Applied backwards, an older run moves lastSeen back: that is apply_run, and it is documented."""
+    """apply_run itself has no ordering rule: applied backwards (here, with the recovery override), an older run moves lastSeen
+    back. The importer's order guard (S4a) refuses that by default."""
     root = tmp_path / "root"
     root.mkdir()
     assert discover(root, monkeypatch, {"greenhouse": Prov([canon(1), canon(2)])}) == 0
@@ -342,7 +343,10 @@ def test_import_order_changes_the_result_exactly_as_apply_run_does(tmp_path, mon
     older, newer = (staging.read_run(root, r) for r in reversed(staging.list_runs(root)))
     empty = job_history.empty_ledger()
     forward = importer.plan_import(newer, importer.plan_import(older, empty, None).ledger, None)
-    backward = importer.plan_import(older, importer.plan_import(newer, empty, None).ledger, None)
+    refused = importer.plan_import(older, importer.plan_import(newer, empty, None).ledger, None)
+    assert not refused.ok and refused.refused[0].startswith("older_run"), "S4a: a real import refuses to go backwards"
+    assert "lastSeen backwards" in refused.refused[0] and "allow_older" in refused.refused[0], "with an explicit message"
+    backward = importer.plan_import(older, importer.plan_import(newer, empty, None).ledger, None, allow_older=True)
     ad1 = canon(1)["jobId"]
     assert forward.ledger["jobs"][ad1]["lastSeen"] == importer.import_time(newer) != importer.import_time(older)
     assert backward.ledger["jobs"][ad1]["lastSeen"] == importer.import_time(older), "an older run moved lastSeen back"
@@ -398,16 +402,19 @@ def test_the_replay_of_every_run_of_a_history_equals_the_committed_files(tmp_pat
     assert stats[0]["carriedFacts"] == 1, "the seed's facts came from the discovered file the run replaced"
 
 
-def test_the_old_commit_path_stamps_nothing_and_the_importer_only_adds_its_own_fields(tmp_path, monkeypatch):
+def test_the_live_commit_writes_the_ledger_with_a_generation_and_the_view_derived_from_it(tmp_path, monkeypatch):
     root = tmp_path / "root"
     root.mkdir()
-    _, dry = run_and_replay(root, monkeypatch, {"greenhouse": Prov([canon(1), canon(2)])})
+    run_id, dry = run_and_replay(root, monkeypatch, {"greenhouse": Prov([canon(1), canon(2)])})
     committed = load(root, "job_history.json")
-    assert "lastImport" not in committed and all(
-        not set(importer.LEDGER_STAMPS) & set(entry) for entry in committed["jobs"].values())
-    stamped = dry.result.ledger
-    assert stamped["lastImport"]["runId"] == latest(root)
-    assert all({"lastRunId", "lastRunPos"} <= set(e) for e in stamped["jobs"].values()), "both ads were found by this run"
+    assert committed["lastImport"]["runId"] == run_id and committed["generation"] == 1
+    assert next(iter(committed)) == "generation", "first in the file, so a reader can peek at it"
+    assert all({"lastRunId", "lastRunPos"} <= set(e) for e in committed["jobs"].values())
+    view = load(root, "discovered_jobs.json")
+    assert next(iter(view["meta"])) == "ledgerGeneration" and view["meta"]["ledgerGeneration"] == 1
+    assert json.dumps(view, indent=2) == json.dumps(importer.derive_view(committed), indent=2), "the file is the derivation, byte for byte"
+    _, second = run_and_replay(root, monkeypatch, {"greenhouse": Prov([canon(1)])})
+    assert load(root, "job_history.json")["generation"] == 2 == load(root, "discovered_jobs.json")["meta"]["ledgerGeneration"]
 
 
 def test_a_difference_in_the_committed_files_is_found_and_named(tmp_path, monkeypatch):
@@ -614,8 +621,12 @@ def test_cli_exit_codes_for_nothing_to_compare_errors_and_a_busy_run(tmp_path, m
     assert import_run.main(["--run", older, "--dry-run"], root=root) == 3
     assert "NOT POSSIBLE" in capsys.readouterr().out
     assert import_run.main(["--run", "nosuchrun", "--dry-run"], root=root) == 2
-    assert import_run.main(["--latest"], root=root) == 2, "a real import is not built yet"
-    assert "S4a" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as stop:
+        import_run.main(["--latest"], root=root)
+    assert stop.value.code == 2, "one of --dry-run and --import is required"
+    capsys.readouterr()
+    assert import_run.main(["--latest", "--dry-run", "--allow-older"], root=root) == 2
+    assert "--allow-older only goes with --import" in capsys.readouterr().err
     lock = pipeline_lock.acquire()
     try:
         assert import_run.main(["--latest", "--dry-run"], root=root) == 2
@@ -649,20 +660,22 @@ def test_a_run_whose_staging_works_is_marked_ok(tmp_path, monkeypatch):
     root.mkdir()
     assert discover(root, monkeypatch, {"greenhouse": Prov([canon(1)])}) == 0
     record = only_record()
-    assert record["staging"] == {"ok": True, "problems": []} and record["status"] == "ok"
+    assert record["staging"]["ok"] is True and record["staging"]["problems"] == [] and record["status"] == "ok"
+    assert record["staging"]["runs"] >= 1 and record["staging"]["bytes"] > 0, "the disk use is in the record too"
     status = json.loads((root / "data/jobs/staging" / latest(root) / "status.json").read_text())
     assert status["ok"] is True and stat.S_IMODE((root / "data/jobs/staging" / latest(root) / "status.json").stat().st_mode) == 0o600
 
 
 @pytest.mark.parametrize("how", ["source_stops_writing", "staging_folder_cannot_be_made", "provider_stages_less_than_it_returns"])
-def test_a_staging_failure_marks_the_record_and_changes_no_live_output(tmp_path, monkeypatch, how):
-    healthy, broken = tmp_path / "healthy", tmp_path / "broken"
-    healthy.mkdir(), broken.mkdir()
-    jobs = [canon(1), canon(2)]
-    assert discover(healthy, monkeypatch, {"greenhouse": Prov(jobs)}) == 0
-    shutil_records = list(run_log.runs_dir().glob("*"))
-    for p in shutil_records:
+def test_a_staging_failure_marks_the_run_commits_nothing_and_is_refused_by_the_importer(tmp_path, monkeypatch, how):
+    """S4a: incomplete staging is never imported as if it were a complete scrape. The run fails; the ledger and the view are untouched."""
+    root = tmp_path / "root"
+    (root / "data/jobs").mkdir(parents=True)
+    assert discover(root, monkeypatch, {"greenhouse": Prov([canon(1)])}) == 0, "a healthy first run"
+    live = {p.name: p.read_bytes() for p in (root / "data/jobs").iterdir() if p.is_file()}
+    for p in list(run_log.runs_dir().glob("*")):
         p.unlink()
+    jobs = [canon(1), canon(2)]
 
     class Careless(Prov):
         def fetch_jobs(self, *args):
@@ -671,8 +684,10 @@ def test_a_staging_failure_marks_the_record_and_changes_no_live_output(tmp_path,
 
     provider = Careless(jobs) if how == "provider_stages_less_than_it_returns" else Prov(jobs)
     if how == "staging_folder_cannot_be_made":
-        (broken / "data/jobs").mkdir(parents=True)
-        (broken / "data/jobs/staging").write_text("in the way")
+        import shutil
+        shutil.rmtree(root / "data/jobs/staging")
+        (root / "data/jobs/staging").write_text("in the way")
+        live = {p.name: p.read_bytes() for p in (root / "data/jobs").iterdir() if p.is_file()}
     if how == "source_stops_writing":
         real = staging.os.write
 
@@ -683,20 +698,23 @@ def test_a_staging_failure_marks_the_record_and_changes_no_live_output(tmp_path,
 
         with monkeypatch.context() as patch:
             patch.setattr(staging.os, "write", failing)
-            assert discover(broken, monkeypatch, {"greenhouse": provider}) == 0
+            assert discover(root, monkeypatch, {"greenhouse": provider}) == 1
     else:
-        assert discover(broken, monkeypatch, {"greenhouse": provider}) == 0
+        assert discover(root, monkeypatch, {"greenhouse": provider}) == 1
 
     record = only_record()
     assert record["staging"]["ok"] is False and record["staging"]["problems"]
-    assert record["status"] == "partial", "not fully saved"
+    assert record["status"] == "failed", "never reported as saved"
     assert any(i["level"] == "error" and "Staging failed" in i["message"] for i in record["issues"])
-    assert settled(broken) == settled(healthy), "the ledger, discovered_jobs.json and the other outputs are the same as without a failure"
+    assert any(i["level"] == "error" and "Nothing was imported" in i["message"] for i in record["issues"])
+    assert {p.name: p.read_bytes() for p in (root / "data/jobs").iterdir() if p.is_file()} == live, "ledger and view untouched"
     if how != "staging_folder_cannot_be_made":
-        status = json.loads((broken / "data/jobs/staging" / latest(broken) / "status.json").read_text())
-        assert status["ok"] is False
-        result = importer.plan_import(staging.read_run(broken, latest(broken)), job_history.empty_ledger(), None)
+        folder = root / "data/jobs/staging" / latest(root)
+        assert json.loads((folder / "status.json").read_text())["ok"] is False
+        result = importer.plan_import(staging.read_run(root, latest(root)), job_history.empty_ledger(), None)
         assert not result.ok and result.refused[0].startswith("staging_failed")
+        outcome = importer.import_staged_run(root, latest(root))
+        assert not outcome.ok and outcome.refused[0].startswith("staging_failed") and not staging.is_imported(root, latest(root))
 
 
 def test_apply_run_without_a_run_id_stamps_nothing():

@@ -30,6 +30,8 @@ from llm_enhancer import (  # noqa: E402
 )
 import manual_jobs  # noqa: E402
 import pipeline_lock  # noqa: E402
+import view_guard  # noqa: E402
+import job_history  # noqa: E402
 from scorer import resolve_weights, score_jobs  # noqa: E402
 from match_engine import shadow  # noqa: E402
 from redact import identity_of  # noqa: E402 (on the path through llm_enhancer)
@@ -131,6 +133,9 @@ def score(args: argparse.Namespace) -> int:
         print(f"Missing jobs: {args.jobs}", file=sys.stderr)
         return 1
 
+    if args.jobs.exists():
+        # The job list is a view of the ledger: one left behind by a stopped commit is rebuilt before it is scored.
+        view_guard.ensure_or_exit(args.jobs, job_history.ledger_path(args.jobs))
     intelligence = json.loads(args.intelligence.read_text(encoding="utf-8"))
     discovered = json.loads(args.jobs.read_text(encoding="utf-8")) if args.jobs.exists() else {"jobs": []}
     jobs = discovered.get("jobs") if isinstance(discovered, dict) else discovered

@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url'
 import { writeIntelligenceFile } from './save-intelligence.js'
 import { writeProfileFile } from './save-profile.js'
 import { maskSecrets } from './secret-mask.js'
+import { ensureViewCurrent } from './view-guard.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -231,7 +232,11 @@ export function incompleteCommit() {
  * True when the scored file does not come from the latest discovery file: scoring did not finish, or did not run. Unknown is false.
  * Also false while the lock is held: a pipeline's record ends with its discovery, and its scoring is still to come.
  */
-async function scoringIsBehind({ discoveredPath = JOBS_PATH, scoredPath = SCORED_PATH, reconcile = reconcileRuns, ...options }) {
+async function scoringIsBehind({ discoveredPath = JOBS_PATH, scoredPath = SCORED_PATH, reconcile = reconcileRuns, ensureView = ensureViewCurrent, ...options }) {
+  // The run id is read from the job list, which must be the ledger's view first. If it cannot be rebuilt, nothing is claimed.
+  if (discoveredPath === JOBS_PATH) {
+    try { await ensureView() } catch { return false }
+  }
   const discovered = readJson(discoveredPath)?.meta?.sourceRunId
   const scoredFrom = readJson(scoredPath)?.meta?.discoveryRunId
   if (!discovered || !scoredFrom || discovered === scoredFrom) return false

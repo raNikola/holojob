@@ -314,8 +314,10 @@ def test_nothing_is_resumed_a_reconcile_starts_no_process(monkeypatch):
 
 
 def job(job_id="g1"):
-    return {"jobId": job_id, "title": "PM", "company": "Acme", "jobUrl": f"https://a.example/{job_id}",
-            "description": "Own the roadmap.", "provider": "greenhouse", "location": "Remote"}
+    from providers.base_provider import build_canonical_job
+
+    return {**build_canonical_job(provider="greenhouse", source="acme", title="PM", company="Acme", location="Remote",
+                                  job_url=f"https://a.example/{job_id}", description="Own the roadmap."), "jobId": job_id}
 
 
 class Provider(JobProvider):
@@ -351,45 +353,40 @@ def test_a_clean_commit_leaves_no_marker_and_says_so_in_the_events(discovery):
     assert run_log.read_commit_marker() is None
 
 
-def test_the_marker_is_written_before_the_first_file_and_records_each_file(discovery, monkeypatch):
-    seen, modes = [], []
-    real = run_discovery.job_history.save
+def test_the_commit_writes_no_marker_and_writes_the_ledger_before_the_view(discovery, monkeypatch, tmp_path):
+    """S4a: the ledger is the commit point and the view follows it; there is no marker to write."""
+    order, markers = [], []
+    real = run_discovery.importer.view_guard._atomic.write_text_atomic
 
-    def save(*args):
-        seen.append(run_log.read_commit_marker())
-        modes.append(stat.S_IMODE(run_log.commit_marker_path().stat().st_mode))
-        return real(*args)
+    def write(path, *args, **kwargs):
+        order.append(Path(path).name)
+        markers.append(run_log.read_commit_marker())
+        return real(path, *args, **kwargs)
 
-    monkeypatch.setattr(run_discovery.job_history, "save", save)
-    discovery()
-    assert seen[0]["written"] == [] and "job_history" in seen[0]["files"] and "discovered_jobs" in seen[0]["files"]
-    assert modes == [0o600]
-
-
-def test_a_write_that_fails_leaves_the_marker_and_the_next_run_reports_it_and_repairs_nothing(discovery, monkeypatch, tmp_path):
-    def boom(*args, **kwargs):
-        raise OSError("disk full")
-
-    real = run_discovery.export_discovered_json
-    monkeypatch.setattr(run_discovery, "export_discovered_json", boom)
-    with pytest.raises(OSError):
-        discovery()
-    marker = run_log.read_commit_marker()
-    assert marker["written"] == ["job_history", "raw_jobs", "normalized_jobs"]
-    assert "discovered_jobs" not in marker["written"]
-    assert not (tmp_path / "data" / "jobs" / "discovered_jobs.json").exists(), "the file stays as the failure left it"
-
-    assert run_rescrape.reconcile()["incompleteCommit"]["runId"] == marker["runId"]
-    assert run_log.read_commit_marker() == marker, "reporting it does not clear it"
-
-    # A run that stops before its own commit leaves the marker for the next one to report as well.
-    monkeypatch.setattr(run_discovery, "export_discovered_json", real)
+    monkeypatch.setattr(run_discovery.importer.view_guard._atomic, "write_text_atomic", write)
     assert discovery() == 0
-    found = sorted((p for p in run_log.runs_dir().iterdir() if run_log.is_record_name(p.name)), key=lambda p: p.stat().st_mtime)
-    latest = json.loads(found[-1].read_text())
-    assert any(i["level"] == "error" and "incomplete" in i["message"] and marker["runId"] in i["message"] for i in latest["issues"])
-    assert any(e["type"] == "commit_incomplete" and e["runId"] == marker["runId"] for e in events_of(latest))
-    assert run_log.read_commit_marker() is None, "this run's own commit finished, so its files agree again"
+    commit_writes = [name for name in order if name in ("job_history.json", "discovered_jobs.json")]
+    assert commit_writes == ["job_history.json", "discovered_jobs.json"]
+    assert markers == [None] * len(markers) and run_log.read_commit_marker() is None
+
+
+def test_a_view_write_that_fails_leaves_the_ledger_committed_and_the_next_reader_rebuilds_the_view(discovery, monkeypatch, tmp_path):
+    jobs = tmp_path / "data" / "jobs"
+    real = run_discovery.importer.view_guard._atomic.write_text_atomic
+
+    def write(path, *args, **kwargs):
+        if Path(path).name == "discovered_jobs.json":
+            raise OSError("disk full")
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(run_discovery.importer.view_guard._atomic, "write_text_atomic", write)
+    assert discovery() == 1, "the run says it did not finish"
+    monkeypatch.undo()
+    assert run_log.read_commit_marker() is None
+    assert not (jobs / "discovered_jobs.json").exists()
+    assert run_discovery.view_guard.state(jobs / "discovered_jobs.json", jobs / "job_history.json")["consistent"] is False
+    fixed = run_discovery.view_guard.ensure(jobs / "discovered_jobs.json", jobs / "job_history.json")
+    assert fixed["regenerated"] is True and json.loads((jobs / "discovered_jobs.json").read_text())["jobs"]
 
 
 def test_a_marker_seen_while_the_lock_is_held_is_the_live_commit_not_a_stale_one(held):
@@ -404,8 +401,8 @@ def test_an_unreadable_marker_still_counts_as_incomplete():
     assert run_rescrape.reconcile()["incompleteCommit"]["unreadable"] is True
 
 
-def test_sigkill_during_the_commit_is_recognised(tmp_path):
-    """The real thing: a discovery killed between two of its writes."""
+def test_sigkill_between_the_ledger_and_the_view_is_recovered_by_the_next_reader(tmp_path):
+    """The real thing: a discovery killed after the ledger was written and before the view was."""
     intelligence = tmp_path / "intel.json"
     intelligence.write_text(json.dumps({"searchStrategy": {
         "country": "Serbia", "jobSpySearchTerms": ["pm"], "locationFilters": ["Remote"], "remoteFilters": ["remote"],
@@ -419,34 +416,41 @@ def test_sigkill_during_the_commit_is_recognised(tmp_path):
         sys.path.insert(0, str(Path({str(ROOT)!r}) / "tests" / "python"))
         sys.path.insert(0, str(Path({str(ROOT)!r}) / "python" / "job_discovery"))
         import run_discovery
-        from providers.base_provider import JobProvider, ProviderOutcome
+        from providers.base_provider import JobProvider, ProviderOutcome, build_canonical_job
         class P(JobProvider):
             name = "greenhouse"
             last_outcome = None
             def fetch_jobs(self, *a):
                 self.last_outcome = ProviderOutcome(status="ok", read=1, kept=1)
-                return [{{"jobId": "g1", "title": "PM", "company": "A", "jobUrl": "https://a.example/1", "description": "d",
-                          "provider": "greenhouse", "location": "Remote"}}]
+                return [build_canonical_job(provider="greenhouse", source="acme", title="PM", company="A", location="Remote",
+                                            job_url="https://a.example/1", description="d")]
         run_discovery.ROOT = Path({str(tmp_path)!r})
         run_discovery.get_provider = lambda name: P()
-        run_discovery.export_normalized_json = lambda *a: os.kill(os.getpid(), signal.SIGKILL)
+        real = run_discovery.importer.view_guard._atomic.write_text_atomic
+        def write(path, *a, **k):
+            if Path(path).name == "discovered_jobs.json":
+                os.kill(os.getpid(), signal.SIGKILL)
+            return real(path, *a, **k)
+        run_discovery.importer.view_guard._atomic.write_text_atomic = write
         sys.argv = ["run_discovery.py", "--providers", "greenhouse", "--intelligence", {str(intelligence)!r}]
         run_discovery.main()
     """))
     done = subprocess.run([sys.executable, str(driver)], env=dict(os.environ), capture_output=True)
     assert done.returncode == -signal.SIGKILL, done.stderr.decode()[-800:]
-    marker = run_log.read_commit_marker()
-    assert marker and marker["written"] == ["job_history", "raw_jobs"]
+    jobs = tmp_path / "data" / "jobs"
+    assert run_log.read_commit_marker() is None, "there is no marker any more"
+    assert (jobs / "job_history.json").exists() and not (jobs / "discovered_jobs.json").exists()
 
     result = run_rescrape.reconcile()
-    assert result["incompleteCommit"]["runId"] == marker["runId"]
-    assert result["interrupted"] == [marker["runId"]]
-    saved = on_disk(marker["runId"])
-    assert saved["status"] == "interrupted"
-    assert saved["incompleteCommit"]["written"] == ["job_history", "raw_jobs"]
-    assert any("normalized_jobs" in i["message"] for i in saved["issues"])
-    assert run_log.read_commit_marker() == marker
-    assert not (tmp_path / "data" / "jobs" / "discovered_jobs.json").exists()
+    assert result["incompleteCommit"] is None
+    [dead] = result["interrupted"]
+    assert on_disk(dead)["status"] == "interrupted"
+
+    guard = run_discovery.view_guard
+    assert guard.state(jobs / "discovered_jobs.json", jobs / "job_history.json")["consistent"] is False
+    assert guard.ensure(jobs / "discovered_jobs.json", jobs / "job_history.json")["regenerated"] is True
+    view = json.loads((jobs / "discovered_jobs.json").read_text())
+    assert view["meta"]["ledgerGeneration"] == 1 and [j["title"] for j in view["jobs"]] == ["PM"]
 
 
 # --- discovery under the orchestrator ------------------------------------------------------------------------------

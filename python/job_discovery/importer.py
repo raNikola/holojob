@@ -27,15 +27,23 @@ from pathlib import Path
 
 import staging
 from dedupe_jobs import _collapse, _crosspost_key, _exact_key
-from export_jobs import discovered_payload
 
 _SCORING = Path(__file__).resolve().parents[1] / "job_scoring"
-_history_spec = importlib.util.spec_from_file_location("_importer_job_history", _SCORING / "job_history.py")
-job_history = importlib.util.module_from_spec(_history_spec)
-_history_spec.loader.exec_module(job_history)
-_atomic_spec = importlib.util.spec_from_file_location("_importer_atomic_write", _SCORING / "atomic_write.py")
-_atomic = importlib.util.module_from_spec(_atomic_spec)
-_atomic_spec.loader.exec_module(_atomic)
+
+
+def _load(name: str, filename: str):
+    spec = importlib.util.spec_from_file_location(name, _SCORING / filename)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+job_history = _load("_importer_job_history", "job_history.py")
+_atomic = _load("_importer_atomic_write", "atomic_write.py")
+view_guard = _load("_importer_view_guard", "view_guard.py")
+ViewError = view_guard.ViewError
+derive_view = view_guard.derive_view  # the view from the ledger alone lives beside the readers that need it
+ROW_WARNING = 5000  # rows in discovered_jobs.json past which the log warns; nothing is ever dropped for it (owner, S4a)
 
 REPORT_FILE = "import-report.json"
 EXAMPLES = 50  # rejected ads named in a report; the count is always complete
@@ -101,10 +109,6 @@ def _parse_time(value) -> datetime | None:
 # --- the plan --------------------------------------------------------------------------------------------------------
 
 
-class ViewError(Exception):
-    """The ledger cannot give a view: it has never been imported from a run."""
-
-
 @dataclass
 class ImportResult:
     refused: list[str] = field(default_factory=list)  # why nothing would be changed; empty when the plan holds
@@ -112,6 +116,7 @@ class ImportResult:
     view: dict | None = None  # what the old commit path would have written to discovered_jobs.json
     stats: dict = field(default_factory=dict)  # apply_run's counts
     report: dict = field(default_factory=dict)
+    new_by_provider: dict = field(default_factory=dict)  # ads no earlier run recorded, by the provider of the copy that won
 
     @property
     def ok(self) -> bool:
@@ -134,14 +139,18 @@ def _previous(previous) -> tuple[dict, dict]:
 
 
 def plan_import(
-    run: staging.RunStage, ledger: dict, previous=None, *, now: str | None = None, force: bool = False
+    run: staging.RunStage, ledger: dict, previous=None, *, now: str | None = None, force: bool = False,
+    allow_older: bool = False,
 ) -> ImportResult:
     """What importing this staged run would do. `ledger` is the ledger as it stands, `previous` the discovered file the run
     replaced (None: there was none, or it is not known; then `report["replayExact"]` says so). Nothing is written or mutated.
 
     A ledger whose last import is this very run is returned as it is (`report["alreadyImported"]`): the same run twice gives the same
     bytes. That is the only memory the importer keeps, and it is not an ordering rule: any other run is applied as `apply_run` applies
-    it, in whatever order it is given. `force` applies the run again anyway (the tests use it to show that apply_run alone is idempotent).
+    it. `force` applies the run again anyway (the tests use it to show that apply_run alone is idempotent).
+
+    **Order guard (S4a, owner decision):** a run that started before `ledger.lastImport.startedAt` is refused (`older_run`), because
+    applying it would move `lastSeen` back. `allow_older=True` is the explicit override for recovery; nothing else passes it.
     """
     result = ImportResult(ledger=copy.deepcopy(ledger))
     report = result.report = {"runId": run.run_id, "sources": [], "reasons": {}, "rejectedExamples": []}
@@ -162,6 +171,14 @@ def plan_import(
         report.update(alreadyImported=True, complete=None)
         result.stats = copy.deepcopy((last.get("meta") or {}).get("history") or {})
         result.view = derive_view(result.ledger)
+        return result
+    this_start, last_start = _parse_time(manifest.get("startedAt")), _parse_time((last or {}).get("startedAt"))
+    if not allow_older and not force and isinstance(last, dict) and this_start and last_start and this_start < last_start:
+        result.refused.append(
+            f"older_run: run {run.run_id} started {manifest.get('startedAt')}, before the last imported run "
+            f"{last.get('runId')} ({last.get('startedAt')}). Importing it would move lastSeen backwards and could reopen ads "
+            "the newer run closed. Recovery only: pass allow_older (import_run.py --allow-older)."
+        )
         return result
 
     moment = now or import_time(run)
@@ -234,10 +251,13 @@ def plan_import(
     report["crosspostsMerged"] = len(after_exact) - len(deduped)
 
     previous_facts, seen_before = _previous(previous)
+    for job in deduped:
+        if job["jobId"] not in result.ledger["jobs"]:
+            result.new_by_provider[job.get("provider")] = result.new_by_provider.get(job.get("provider"), 0) + 1
     to_write, stats = job_history.apply_run(
         result.ledger, deduped, now=moment, providers_returned=provider_counts, key=manifest.get("searchKey") or "",
         role_key=_crosspost_key, previous_facts=previous_facts, seen_before=seen_before, failed_boards=failed_boards,
-        empty_boards=empty_boards, sources_not_run=not_run, run_id=run.run_id,
+        empty_boards=empty_boards, sources_not_run=not_run, run_id=run.run_id, prune=False,
     )
     result.stats = stats
     meta = {
@@ -246,9 +266,13 @@ def plan_import(
         "providers": providers, "providerCounts": provider_counts, "rawCount": len(all_jobs),
         "dedupedCount": len(deduped), "history": stats, "sourceRunId": run.run_id,
     }
+    generation = (result.ledger.get("generation") or 0) + 1
+    result.ledger["generation"] = generation
     result.ledger["lastImport"] = {"runId": run.run_id, "at": moment, "startedAt": manifest.get("startedAt"), "meta": meta}
     result.ledger["updatedAt"] = moment
-    result.view = _view_from(to_write, meta, moment)
+    result.view = view_guard.view_payload(to_write, meta, moment, generation)
+    if len(to_write) > ROW_WARNING:
+        report["warnings"] = [f"discovered_jobs.json would hold {len(to_write)} rows (more than {ROW_WARNING}); nothing is dropped for it"]
 
     report.update(
         rejected=rejected_total,
@@ -265,57 +289,9 @@ def plan_import(
     return result
 
 
-def _view_from(jobs: list[dict], meta: dict, generated_at: str) -> dict:
-    return discovered_payload(
-        jobs, search_terms=meta["searchTerms"], locations=meta["locations"], remote_filters=meta["remoteFilters"],
-        raw_count=meta["rawCount"], country=meta["country"], source_run_id=meta["sourceRunId"], providers=meta["providers"],
-        provider_counts=meta["providerCounts"], deduped_count=meta["dedupedCount"], history=meta["history"],
-        generated_at=generated_at,
-    )
-
-
 def ledger_bytes(ledger: dict) -> bytes:
-    """The ledger exactly as job_history.save writes it."""
-    return json.dumps(ledger, indent=2).encode("utf-8")
-
-
-# --- the view, from the ledger alone ----------------------------------------------------------------------------------
-
-
-def derive_view(ledger: dict) -> dict:
-    """discovered_jobs.json as it follows from this ledger: the same jobs, in the same order, as the import that left it.
-
-    Reads only the ledger (the stamps `apply_run(run_id=...)` and `lastImport`). Mutates nothing; the same ledger always gives the same
-    output. Raises ViewError for a ledger that no import has produced.
-    """
-    info = ledger.get("lastImport") if isinstance(ledger, dict) else None
-    if not isinstance(info, dict) or not info.get("runId") or not isinstance(info.get("meta"), dict):
-        raise ViewError("this ledger has no lastImport: no import produced it, so no view can be derived")
-    run_id, now = info["runId"], info["at"]
-    moment = _parse_time(now)
-    entries = ledger["jobs"]
-    found = sorted((e for e in entries.values() if e.get("lastRunId") == run_id), key=lambda e: e.get("lastRunPos", 0))
-    found_ids = {entry["job"]["jobId"] for entry in found}
-
-    def record(entry: dict, closed: bool) -> dict:
-        out = job_history._annotate(entry["job"], entry, now=moment, closed=closed)
-        if entry.get("llmFacts"):
-            out["llmFacts"] = entry["llmFacts"]
-        return out
-
-    jobs = [record(e, False) for e in found]
-    jobs += [record(e, False) for e in entries.values() if e.get("heldRunId") == run_id and e["job"]["jobId"] not in found_ids]
-    for job_id, entry in entries.items():
-        closed_at = job_history._parse(entry.get("closedAt"))
-        if not closed_at:
-            continue
-        age = moment - closed_at
-        if age > timedelta(days=job_history.PRUNE_AFTER_DAYS):
-            continue
-        if age <= timedelta(days=job_history.CLOSED_KEEP_DAYS) and job_id not in found_ids:
-            jobs.append(record(entry, True))
-    meta = copy.deepcopy(info["meta"])
-    return copy.deepcopy(_view_from(jobs, meta, now))
+    """The ledger exactly as the commit writes it."""
+    return view_guard.serialize_ledger(ledger).encode("utf-8")
 
 
 # --- the dry run -----------------------------------------------------------------------------------------------------
@@ -324,6 +300,7 @@ LEDGER_STAMPS = ("lastRunId", "lastRunPos", "heldRunId")  # what the importer ad
 EXCLUDED = [
     "ledger.updatedAt (the time of the save)", "ledger.lastImport (the importer's own record of the run)",
     "ledger.jobs.*.lastRunId / lastRunPos / heldRunId (the importer's stamps, from which the view is derived)",
+    "ledger.generation / discovered_jobs.json meta.ledgerGeneration (the counter that keeps the two together; absent before S4a)",
     "discovered_jobs.json meta.generatedAt (the time of the save)",
     "discovered_jobs.json meta.sourceRunId (checked to be the run's id instead)",
 ]
@@ -365,7 +342,7 @@ def diff_json(a, b, path: str, out: Differences, label_a: str, label_b: str) -> 
 
 def normalized_ledger(ledger: dict) -> dict:
     out = copy.deepcopy(ledger)
-    for key in ("updatedAt", "lastImport"):
+    for key in ("updatedAt", "lastImport", "generation"):
         out.pop(key, None)
     for entry in out.get("jobs", {}).values():
         for stamp in LEDGER_STAMPS:
@@ -391,8 +368,8 @@ def compare_ledgers(a: dict, b: dict, label_a: str, label_b: str) -> Differences
 
 def compare_views(a: dict, b: dict, label_a: str, label_b: str) -> Differences:
     out = Differences()
-    meta_a = {k: v for k, v in (a.get("meta") or {}).items() if k not in ("generatedAt", "sourceRunId")}
-    meta_b = {k: v for k, v in (b.get("meta") or {}).items() if k not in ("generatedAt", "sourceRunId")}
+    meta_a = {k: v for k, v in (a.get("meta") or {}).items() if k not in ("generatedAt", "sourceRunId", "ledgerGeneration")}
+    meta_b = {k: v for k, v in (b.get("meta") or {}).items() if k not in ("generatedAt", "sourceRunId", "ledgerGeneration")}
     diff_json(meta_a, meta_b, "discovered.meta", out, label_a, label_b)
 
     def keyed(jobs):
@@ -452,7 +429,11 @@ class DryRun:
 
 
 def _infer_commit_time(committed_ledger: dict) -> str | None:
-    """The `now` the old commit used: every ad found in that run has it as `lastSeen`, and nothing is later."""
+    """The `now` the commit used: the importer records it (`lastImport.at`); for a ledger the old path wrote, every ad found in
+    that run has it as `lastSeen` and nothing is later."""
+    recorded = (committed_ledger.get("lastImport") or {}).get("at")
+    if isinstance(recorded, str):
+        return recorded
     stamps = []
     for entry in (committed_ledger.get("jobs") or {}).values():
         for key in ("lastSeen", "closedAt"):
@@ -538,3 +519,56 @@ def write_report(root: Path, run_id: str, dry: DryRun) -> Path:
     path = folder / REPORT_FILE
     _atomic.write_text_atomic(path, json.dumps(body, indent=2, default=str), _atomic.PRIVATE_FILE_MODE)
     return path
+
+
+# --- the real import --------------------------------------------------------------------------------------------------------
+
+
+@dataclass
+class ImportOutcome:
+    ok: bool
+    run_id: str
+    refused: list[str] = field(default_factory=list)
+    result: ImportResult | None = None
+    committed: bool = False  # the ledger and the view were written
+    generation: int | None = None
+    pruned: list[str] = field(default_factory=list)
+    usage: dict = field(default_factory=dict)
+
+
+def import_staged_run(root: Path, run_id: str, *, allow_older: bool = False) -> ImportOutcome:
+    """Import a staged run for real: the one commit of the live path. The caller holds the pipeline lock.
+
+    Read the ledger and the discovered file the run replaced, plan the import (full validation, the order guard, the same rules
+    as ever), write the ledger and then the view derived from it (inside the view lock), mark the run imported, prune old
+    staging. Refusals change nothing. A stop between the two writes leaves a view one generation behind; the next reader
+    rebuilds it. Import is final: scoring does not undo it, and a failed scoring is redone with Re-score alone.
+    """
+    root = Path(root)
+    out = ImportOutcome(ok=False, run_id=run_id)
+    run = staging.read_run(root, run_id)
+    if run is None:
+        out.refused.append(f"no_staging: there is no staging folder for run {run_id!r}")
+        return out
+    jobs_file = staging.jobs_dir(root) / "discovered_jobs.json"
+    ledger_file = job_history.ledger_path(jobs_file)
+    ledger = job_history.load(ledger_file)  # an unreadable ledger is set aside, as it always was; the run then starts from none
+    manifest = run.manifest or {}
+    previous = None
+    if manifest.get("discoveredBefore"):
+        previous = _load_json(run.discovered_before)
+    result = out.result = plan_import(run, ledger, previous, allow_older=allow_older)
+    if not result.ok:
+        out.refused += result.refused
+        return out
+    if not result.report.get("alreadyImported"):
+        view_guard.commit(result.ledger, jobs_file, ledger_file)
+        out.committed = True
+    else:
+        view_guard.ensure(jobs_file, ledger_file)
+    out.generation = result.ledger.get("generation")
+    staging.mark_imported(root, run_id, {"generation": out.generation, "committed": out.committed})
+    out.pruned = staging.prune(root)
+    out.usage = staging.usage(root)
+    out.ok = True
+    return out

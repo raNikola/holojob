@@ -19,14 +19,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from dedupe_jobs import _crosspost_key, dedupe_jobs  # noqa: E402
 from discovery_common import (  # noqa: E402
     INTELLIGENCE_PATH,
     load_intelligence,
     resolve_search_config,
 )
 from export_jobs import (  # noqa: E402
-    export_discovered_json,
     export_normalized_json,
     export_raw_csv,
 )
@@ -35,6 +33,7 @@ from providers.jobspy_provider import JobSpyProvider  # noqa: E402
 from providers.provider_registry import PROVIDER_GROUPS, get_provider, resolve_providers  # noqa: E402
 import run_log  # noqa: E402
 import source_settings  # noqa: E402
+import importer  # noqa: E402
 import staging  # noqa: E402
 
 # The ledger lives beside the scorer's shared modules; it is loaded by path so
@@ -44,6 +43,9 @@ _history_spec = importlib.util.spec_from_file_location(
 )
 job_history = importlib.util.module_from_spec(_history_spec)
 _history_spec.loader.exec_module(job_history)
+_guard_spec = importlib.util.spec_from_file_location("view_guard", SCRIPT_DIR.parent / "job_scoring" / "view_guard.py")
+view_guard = importlib.util.module_from_spec(_guard_spec)
+_guard_spec.loader.exec_module(view_guard)
 _lock_spec = importlib.util.spec_from_file_location(
     "pipeline_lock", SCRIPT_DIR.parent / "job_scoring" / "pipeline_lock.py"
 )
@@ -214,8 +216,16 @@ def discover(args: argparse.Namespace, record: dict) -> int:
     if not provider_names:
         return stop(record, f"No valid providers resolved from: {args.providers}")
 
-    # What the scrape collects is written to data/jobs/staging/<runId>/ as it comes. Nothing reads it yet, so the commit
-    # below is unchanged; the ledger as it is now is kept beside it, because the commit replaces the ledger.
+    # A view left behind by a stopped commit is rebuilt first, so the discovered file the run keeps beside its staging (and
+    # takes facts from) is the one the ledger says it is.
+    jobs_file = ROOT / "data" / "jobs" / "discovered_jobs.json"
+    try:
+        view_guard.ensure(jobs_file, job_history.ledger_path(jobs_file))
+    except view_guard.ViewRecoveryError as exc:
+        return stop(record, f"The job list is out of date and could not be rebuilt: {exc}")
+
+    # What the scrape collects is written to data/jobs/staging/<runId>/ as it comes; the importer reads it from there. The
+    # ledger and the discovered file as they are now are kept beside it, because the import replaces both.
     search_key = job_history.search_key(search_terms, locations, country, remote_filters)
     stage_run = staging.StagingRun.begin(
         ROOT, record["runId"], search_key=search_key, terms=search_terms, locations=locations, country=country,
@@ -226,9 +236,6 @@ def discover(args: argparse.Namespace, record: dict) -> int:
 
     all_jobs: list[dict] = []
     provider_counts: dict[str, int] = {}
-    failed_boards: dict[str, set[str] | None] = {}
-    empty_boards: dict[str, set[str]] = {}
-    sources_not_run: set[str] = set()
     raw_df = pd.DataFrame()
 
     for name in provider_names:
@@ -245,89 +252,53 @@ def discover(args: argparse.Namespace, record: dict) -> int:
         provider_counts[name] = len(jobs)
         all_jobs.extend(jobs)
         logger.info("Provider %s returned %d jobs", name, len(jobs))
-        if outcome.boards_failed:
-            failed_boards[name] = set(outcome.boards_failed)
-            logger.warning("Provider %s could not read: %s", name, ", ".join(outcome.boards_failed))
-        elif outcome.status == "failed":
-            failed_boards[name] = None  # it stopped before naming any board
-        if outcome.status in ("skipped", "failed"):
-            sources_not_run.add(name)
-        if outcome.boards_empty:
-            empty_boards[name] = set(outcome.boards_empty)
-
         if name == "jobspy" and isinstance(provider, JobSpyProvider):
             raw_df = provider.last_raw_df
 
     for warning in stage_run.warnings:
         run_log.add_issue(record, "warning", warning)
     staging_ok, staging_problems = stage_run.finish()
-    run_log.set_staging(record, staging_ok, staging_problems)  # record and diagnostics only: the commit below is unchanged
+    run_log.set_staging(record, staging_ok, staging_problems)
 
     raw_count = len(all_jobs)
+    if not staging_ok:
+        # What was collected is not safely on disk, so it is not imported as if it were a complete scrape. Nothing is
+        # committed: the ledger and the view stay exactly as they were, and the run says so.
+        return stop(record, "Nothing was imported: staging failed (" + "; ".join(staging_problems[:3]) + "). The ledger and the job list are unchanged.")
 
-    deduped = dedupe_jobs(all_jobs)
-    found_count = len(deduped)
+    # The switch (S4a): what the scrape wrote to staging is imported by the importer, the ledger is the one source of truth and
+    # discovered_jobs.json is derived from it. The commit is: ledger, then view (view_guard.commit). No marker: a stop between
+    # the two writes leaves a view one generation behind, which every reader rebuilds before it uses it.
+    run_log.event(record, "commit_start", files=["job_history", "discovered_jobs"])
+    try:
+        outcome = importer.import_staged_run(ROOT, source_run_id)
+    except (view_guard.ViewRecoveryError, OSError) as exc:
+        return stop(record, f"The import stopped while writing: {exc}. The next reader rebuilds the job list from the ledger.")
+    if not outcome.ok:
+        return stop(record, "Import refused: " + "; ".join(outcome.refused))
+    run_log.clear_commit_marker(record)  # a marker left by the old commit protocol: this commit finished, so the files agree again
+    run_log.event(record, "commit_end", files=["job_history", "discovered_jobs"])
+    result = outcome.result
+    history_stats = result.stats
+    to_write = result.view["jobs"]
+    run_log.set_new_counts(record, Counter(result.new_by_provider))
+    run_log.set_staging_usage(record, outcome.usage)
+    logger.info("Staging: %d runs, %.1f MB on disk; removed %s", outcome.usage["runs"], outcome.usage["bytes"] / 1e6, outcome.pruned or "nothing")
+    for warning in result.report.get("warnings", []):
+        run_log.add_issue(record, "warning", warning)
+        logger.warning("%s", warning)
+    if not result.report.get("complete"):
+        logger.info("Import: not a complete scrape (%s)", ", ".join(result.report.get("incompleteSources") or ["see the report"]))
 
-    # Facts from the file this run replaces seed a ledger that has not seen the
-    # jobs yet, so a first run on an existing install keeps what enrichment read.
-    jobs_file = ROOT / "data" / "jobs" / "discovered_jobs.json"
-    previous_facts: dict[str, dict] = {}
-    seen_before: dict[str, str] = {}
-    if jobs_file.exists():
+    # Debug output only (S4a): after the commit, best effort. A failure here never fails or blocks a run.
+    for label, write in (("raw_jobs.csv", lambda: export_raw_csv(raw_df, ROOT)), ("normalized_jobs.json", lambda: export_normalized_json(all_jobs, ROOT))):
         try:
-            previous = json.loads(jobs_file.read_text(encoding="utf-8"))
-            previous_jobs = previous.get("jobs") if isinstance(previous, dict) else previous
-            previous_facts = {
-                j["jobId"]: j["llmFacts"] for j in previous_jobs or [] if j.get("jobId") and j.get("llmFacts")
-            }
-            written = (previous.get("meta") or {}).get("generatedAt") if isinstance(previous, dict) else None
-            seen_before = {j["jobId"]: written for j in previous_jobs or [] if j.get("jobId") and written}
-        except (OSError, ValueError):
-            previous_facts = {}
-
-    ledger_file = job_history.ledger_path(jobs_file)
-    ledger = job_history.load(ledger_file)
-    run_log.set_new_counts(record, Counter(
-        job.get("provider") for job in deduped if job["jobId"] not in ledger["jobs"]
-    ))
-    to_write, history_stats = job_history.apply_run(
-        ledger,
-        deduped,
-        now=job_history.now_iso(),
-        providers_returned=provider_counts,
-        key=search_key,
-        role_key=_crosspost_key,
-        previous_facts=previous_facts,
-        seen_before=seen_before,
-        failed_boards=failed_boards,
-        empty_boards=empty_boards,
-        sources_not_run=sources_not_run,
-    )
-    # Each file is replaced whole, the set is not: a stop between them leaves this marker for the next look to report.
-    commit = run_log.begin_commit(record, ["job_history", "raw_jobs", "normalized_jobs", "discovered_jobs"])
-    job_history.save(ledger_file, ledger)
-    run_log.commit_wrote(commit, "job_history")
-
-    export_raw_csv(raw_df, ROOT)
-    run_log.commit_wrote(commit, "raw_jobs")
-    export_normalized_json(all_jobs, ROOT)
-    run_log.commit_wrote(commit, "normalized_jobs")
-    discovered_path = export_discovered_json(
-        to_write,
-        ROOT,
-        search_terms=search_terms,
-        locations=locations,
-        remote_filters=remote_filters,
-        raw_count=raw_count,
-        country=country,
-        source_run_id=source_run_id,
-        providers=provider_names,
-        provider_counts=provider_counts,
-        deduped_count=found_count,
-        history=history_stats,
-    )
-    run_log.commit_wrote(commit, "discovered_jobs")
-    run_log.end_commit(record, commit)
+            write()
+        except Exception as exc:  # noqa: BLE001 - nothing may fail the run from here on
+            run_log.add_issue(record, "warning", f"{label} (debug output) was not written: {exc}")
+            logger.warning("%s not written: %s", label, exc)
+    found_count = result.view["meta"]["dedupedCount"]
+    discovered_path = ROOT / "data" / "jobs" / "discovered_jobs.json"
 
     print("")
     print("===================================")
