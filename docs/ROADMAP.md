@@ -102,7 +102,7 @@ Plan, approved decisions and rollback per slice: [DECISIONS.md](DECISIONS.md#scr
 | A1 | Per-source outcome and run log, including a fix so a failed board cannot close its existing ads | **Built.** `python/job_discovery/run_log.py`, records in `data/analytics/runs/`. [Shape and deviations](DECISIONS.md#activity-slice-1-as-built-2026-11-02) |
 | A2a | Background Re-scrape: one job with a lock over discovery and scoring, an event log, the interrupted state, a commit marker | **Built, not deployed.** `python/run_rescrape.py`, `python/job_scoring/pipeline_lock.py`, `scripts/run-rescrape.js`. Tailoring merges at write time and backup export refuses during a run or after an unfinished commit. [Mechanism and limits](DECISIONS.md#activity-slice-2a-background-re-scrape-2026-11-03) |
 | S1 | Staging store and ad records, then streaming. **1a:** `data/jobs/staging/<runId>/<source>.jsonl` (header, batches, footer), reader and validator, a hard link of the ledger as the run found it, last 3 runs kept, excluded from backup and restore, Joberty reads the ledger read-only. **1b:** providers append while they collect. No behaviour change: the old commit path is untouched and nothing reads staging yet | **1a and 1b built, not deployed.** `python/job_discovery/staging.py`; streaming in the providers. [What is staged, when, and what is not](DECISIONS.md#s1-as-built-1a-store-1b-streaming) |
-| S2 | Per-ad discard reasons plus `externalId`: source-stage reasons in the staging data | Not built |
+| S2 | Per-ad discard reasons plus `externalId`: every ad a provider drops is a line in `staging/<runId>/discards.jsonl` with a stable reason; kept ads carry the source's own id beside the canonical job; `read == kept + discarded` is checked per source. No filter rule changed | **Built, not deployed.** `python/job_discovery/staging.py`, `providers/role_filter.py`, `providers/base_provider.py`. [Reasons, invariant, limits](DECISIONS.md#s2-as-built-discard-reasons-and-externalid) |
 | S3 | `import --dry-run` (writes nothing) and the import report with import-stage discard reasons; compared with the current commit on real runs before the switch | Not built |
 | S4a | The switch: scrape -> import -> scoring, ledger as single source of truth with a derived `discovered_jobs.json`, generation check before any reader, automatic recovery, commit marker removed, closures stop, 90-day ledger prune off. Manual backup first | Not built |
 | S4b | Demote then remove the debug mirrors `raw_jobs.csv` and `normalized_jobs.json` (no reader exists; confirmed 2026-11-03) | Not built |
@@ -110,6 +110,17 @@ Plan, approved decisions and rollback per slice: [DECISIONS.md](DECISIONS.md#scr
 | S6 | Cancel a running Re-scrape (was 2b): stop the scrape, import what is written, skip scoring; its own outcome, not a failed run | Not built |
 | S7 | `GET /api/runs` read API and the Activity screen (was 3) | Not built |
 | later | Source order and per-source timeout policy (was 2c) | Not built |
+
+**Review requirements for S3 / S4a (recorded 2026-11-03, not built):**
+
+1. **A staging write failure must not pass as a saved run.** Today a failed staging write is only a warning in the run record. Before anything imports staging, a failed
+   write (a source writer, the discards log or the run folder) must be marked in the run status, must stop the run from being treated as fully saved, and must stop
+   the import from taking incomplete staging as if it were a complete scrape. The footer already says when it can: a source with no footer, `mismatch`, or
+   `discardMismatch` is not a complete source.
+2. **Retention must never delete a run that waits.** Keeping the last 3 runs (`staging.prune`) must skip any run that is still waiting for import or for recovery
+   (not imported, or imported with an unfinished commit). It prunes by age only today, because nothing records "imported" yet.
+3. **S3 import validates in full before it changes the ledger.** Staging validation (`staging.problems`) only requires `jobId`, `provider` and `title`; the import must
+   check everything the commit path relies on (types, URL, dates, sizes, duplicates) on every ad, and refuse the whole import, touching nothing, if it cannot.
 
 Backlog: Infostud completeness measurement (end of this work). Infostud is **not** classified snapshot-based until it is done.
 

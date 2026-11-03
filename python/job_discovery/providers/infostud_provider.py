@@ -19,8 +19,8 @@ from providers.base_provider import (
     JobProvider,
     ProviderOutcome,
     build_canonical_job,
-    matches_country,
-    matches_location_filters,
+    dropped_ad,
+    place_drop_reason,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,19 +48,29 @@ class InfostudProvider(JobProvider):
         counts: dict = {}
         canonical: list[dict] = []
 
+        def drop_at_listing(dropped: list) -> None:
+            # The role filter has run over the whole listing: its drops are known before the slow part begins.
+            self.stage([], part="listing", read=counts.get("read"), dropped=[
+                dropped_ad(self._to_canonical(raw), reason, raw.get("externalId")) for raw, reason in dropped
+            ])
+
         def keep_as_it_comes(raw: dict) -> None:
             # An ad is final once its full description is read, and that is one slow request per ad, so it is staged
             # here, not at the end. The same object is returned below, so what is staged is what the run gets.
             job = self._to_canonical(raw)
             canonical.append(job)
-            if matches_location_filters(job, locations, remote_filters) and matches_country(job, country):
-                self.stage([job], part=job["jobId"])
+            reason = place_drop_reason(job, locations, remote_filters, country)
+            if reason is None:
+                self.stage([job], part=job["jobId"], external_ids={job["jobId"]: raw.get("externalId")})
+            else:
+                self.stage([], part=job["jobId"], dropped=[dropped_ad(job, reason, raw.get("externalId"))])
 
         try:
             raw_jobs = infostud_client.fetch_jobs(
                 extra_terms=tuple(search_terms or ()),
                 counts=counts,
                 on_job=keep_as_it_comes,
+                on_drop=drop_at_listing,
             )
         except Exception as exc:
             logger.exception("Infostud fetch failed; continuing without it")
@@ -73,8 +83,7 @@ class InfostudProvider(JobProvider):
         kept = [
             job
             for job in jobs
-            if matches_location_filters(job, locations, remote_filters)
-            and matches_country(job, country)
+            if place_drop_reason(job, locations, remote_filters, country) is None
         ]
         logger.info("Infostud: %d jobs after geo filtering", len(kept))
         self.last_outcome = ProviderOutcome(

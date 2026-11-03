@@ -6,7 +6,14 @@ import logging
 
 import requests
 
-from providers.base_provider import JobProvider, ProviderOutcome, build_canonical_job, filter_jobs
+from providers.base_provider import (
+    JobProvider,
+    ProviderOutcome,
+    build_canonical_job,
+    dropped_ad,
+    filter_jobs,
+    split_by_filter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +43,8 @@ class YCProvider(JobProvider):
         primary_term = search_terms[0] if search_terms else ""
         primary_loc = locations[0] if locations else ""
         all_jobs: list[dict] = []
+        external: dict = {}
+        dropped: list[dict] = []
 
         try:
             postings = self._fetch_all()
@@ -70,7 +79,14 @@ class YCProvider(JobProvider):
             )
             if job["title"]:
                 all_jobs.append(job)
+                external[job["jobId"]] = posting.get("id")
+            else:  # never counted as read
+                dropped.append(dropped_ad(job, "no_title", posting.get("id"), counted=False))
 
         kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
+        _, filtered_out = split_by_filter(all_jobs, search_terms, locations, remote_filters, country)
+        dropped += [dropped_ad(job, reason, external.get(job["jobId"])) for job, reason in filtered_out]
+        # One HTTP response: nothing to stream, so the whole result is staged once, here.
+        self.stage(kept, part="all", read=len(all_jobs), external_ids=external, dropped=dropped)
         self.last_outcome = ProviderOutcome(read=len(all_jobs), kept=len(kept))
         return kept

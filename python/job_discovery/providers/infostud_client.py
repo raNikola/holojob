@@ -26,7 +26,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
-from providers.role_filter import is_relevant_role
+from providers.role_filter import is_relevant_role, role_drop_reason
 
 BASE = "https://poslovi.infostud.com/oglasi-za-posao"
 PAGE_SIZE = 30
@@ -173,6 +173,7 @@ def normalize(row: dict) -> dict:
         work_mode = "onsite"
 
     return {
+        "externalId": row.get("id"),  # Infostud's own number; the canonical job has no slot for it (staging keeps it beside)
         "jobId": hashlib.sha1(url.encode("utf-8")).hexdigest()[:16],
         "provider": "infostud",
         "source": "infostud",
@@ -240,23 +241,28 @@ def fetch_jobs(
     extra_terms: tuple[str, ...] = (),
     counts: dict | None = None,
     on_job=None,
+    on_drop=None,
 ) -> list[dict]:
     """The relevant ads. `counts`, when given, receives "read" (ads fetched before the role filter) and "reported" (the total the site says its search has).
     `on_job`, when given, is called with each relevant ad as soon as it is complete (after its full description is read),
-    so a caller can keep it before the next, slow request."""
+    so a caller can keep it before the next, slow request.
+    `on_drop`, when given, is called once with [(ad, reason)] for the ads the role filter dropped (see role_drop_reason),
+    before any description is read."""
     raw, reported = fetch_raw(categories)
     jobs = [normalize(row) for row in raw]
     if counts is not None:
         counts["read"] = len(jobs)
         counts["reported"] = reported
-    matches = [
-        job for job in jobs
-        if is_relevant_role(
-            job.get("title", ""),
-            job.get("standardizedPosition") or "",
-            extra_terms,
-        )
-    ]
+    matches = []
+    dropped = []
+    for job in jobs:
+        reason = role_drop_reason(job.get("title", ""), job.get("standardizedPosition") or "", extra_terms)
+        if reason is None:
+            matches.append(job)
+        else:
+            dropped.append((job, reason))
+    if on_drop is not None and dropped:
+        on_drop(dropped)
     if enrich_matches:
         done = []
         for job in matches:

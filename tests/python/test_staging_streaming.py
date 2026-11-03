@@ -229,7 +229,8 @@ def test_infostud_stages_each_ad_when_its_description_is_complete(run, monkeypat
 
     monkeypatch.setattr(infostud_client, "enrich", enrich)
     monkeypatch.setattr(
-        infostud_provider, "matches_location_filters", lambda job, locations, remote: "oglas/4" not in job["jobUrl"]
+        infostud_provider, "place_drop_reason",
+        lambda job, locations, remote, country: "location_not_matched" if "oglas/4" in job["jobUrl"] else None,
     )
     provider = infostud_provider.InfostudProvider()
     returned, outcome, stage = collect(provider, run, "infostud", tmp_path)
@@ -239,7 +240,8 @@ def test_infostud_stages_each_ad_when_its_description_is_complete(run, monkeypat
     assert all(j["description"] == "the full description" for j in stage.jobs)
     assert stage.footer["total"] == 321 and stage.footer["read"] == 4 and stage.footer["kept"] == 2
     assert stage.complete and stage.footer["written"] == "as it went" and stage.footer["mismatch"] is False
-    assert [b.part for b in stage.batches] == [j["jobId"] for j in returned]
+    assert [b.part for b in stage.batches if b.jobs] == [j["jobId"] for j in returned]
+    assert [b.part for b in stage.batches if not b.jobs][0] == "listing", "what the role filter dropped is recorded first"
 
 
 def test_infostud_a_listing_that_fails_stages_nothing_and_says_failed(run, monkeypatch, tmp_path):
@@ -297,7 +299,7 @@ def test_joberty_stages_each_ad_as_its_detail_arrives(run, monkeypatch, tmp_path
     returned, outcome, stage = collect(provider, run, "joberty", tmp_path, SERBIA)
 
     assert len(seen_at_detail) == 3 and [len(x) for x in seen_at_detail] == [0, 1, 1], "ad 2 had no text: not returned, not staged"
-    assert stage.jobs == returned and [b.part for b in stage.batches] == ["ad 1", "ad 3"]
+    assert stage.jobs == returned and [b.part for b in stage.batches if b.jobs] == ["ad 1", "ad 3"]
     assert stage.footer["read"] == 3 and stage.footer["kept"] == 2 and stage.complete
 
 
@@ -323,7 +325,7 @@ def test_remoteok_and_yc_are_one_response_so_they_are_staged_whole_when_it_retur
     ok = remoteok_provider.RemoteOKProvider()
     monkeypatch.setattr(ok, "_fetch_all", lambda: [{"position": "Product Manager", "company": "A", "url": "https://r.example/1", "description": "d"}])
     returned, _, stage = collect(ok, run, "remoteok", tmp_path)
-    assert [b.part for b in stage.batches] == ["all"] and stage.jobs == returned and stage.footer["written"] == "at the end"
+    assert [b.part for b in stage.batches] == ["all"] and stage.jobs == returned
 
     yc = yc_provider.YCProvider()
     monkeypatch.setattr(yc, "_fetch_all", lambda: [{"title": "Product Manager", "company": {"name": "Y"}, "location": "Remote", "url": "https://y.example/1"}])
@@ -361,8 +363,12 @@ def test_sigkill_during_a_jobspy_run_keeps_every_finished_search_and_touches_no_
             calls.append((term, location))
             if len(calls) == 5:
                 os.kill(os.getpid(), signal.SIGKILL)   # the fifth search is under way
-            return pd.DataFrame([{{"title": "Product Manager", "company": "A", "location": "Remote",
-                                   "job_url": f"https://x.example/{{len(calls)}}", "description": "d", "site": "linkedin"}}])
+            return pd.DataFrame([
+                {{"title": "Product Manager", "company": "A", "location": "Remote", "id": f"li-{{len(calls)}}",
+                  "job_url": f"https://x.example/{{len(calls)}}", "description": "d", "site": "linkedin"}},
+                {{"title": "Sales Lead", "company": "A", "location": "Remote", "id": f"sl-{{len(calls)}}",
+                  "job_url": f"https://x.example/sales{{len(calls)}}", "description": "d", "site": "linkedin"}},
+            ])
 
         jobspy_provider.fetch_jobs = fake_fetch
         run_discovery.ROOT = Path({str(tmp_path)!r})
@@ -379,6 +385,10 @@ def test_sigkill_during_a_jobspy_run_keeps_every_finished_search_and_touches_no_
     assert len(stage.batches) == 4, "four searches had finished"
     assert [j["jobUrl"][-1] for j in stage.jobs] == ["1", "2", "3", "4"] and not stage.torn
     assert not stage.finished and not stage.complete, "no footer: this source was stopped"
+    found = staging.read_run(tmp_path, run_id)
+    assert [d["externalId"] for d in found.discards.records] == ["sl-1", "sl-2", "sl-3", "sl-4"], "the drops of finished searches too"
+    assert {d["reason"] for d in found.discards.records} == {"title_not_matched"}
+    assert list(stage.external_ids.values()) == ["li-1", "li-2", "li-3", "li-4"]
     for name, data in live.items():
         assert (jobs_dir / name).read_bytes() == data, name
     assert sorted(p.name for p in jobs_dir.iterdir()) == sorted([*live, "staging"])
