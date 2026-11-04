@@ -6,7 +6,7 @@ while the owner has switched it on, with consent, in Settings > Sources
 says). The board's API is undocumented and its terms restrict commercial and
 unauthorized use (sections 7 and 8), see joberty_client.py.
 
-Role filtering is on the title (is_relevant_role). The board's own
+Role filtering is on the title (role_filter.role_drop_reason, the reason behind is_relevant_role). The board's own
 "Product Management" domain is only used to narrow the listing: it also holds
 ads such as "Implementation Manager", so it is not trusted as a role match.
 """
@@ -26,10 +26,10 @@ from providers.base_provider import (
     ProviderOutcome,
     _geography,
     build_canonical_job,
-    matches_country,
-    matches_location_filters,
+    dropped_ad,
+    place_drop_reason,
 )
-from providers.role_filter import is_relevant_role
+from providers.role_filter import role_drop_reason
 from providers.workable_client import _strip_html
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ def known_ids(ledger_path: Path | None = None) -> set[str]:
     """JobIds the ledger already holds with a real description: their detail is not fetched again."""
     path = ledger_path or default_ledger_path()
     try:
-        entries = job_history.load(path)["jobs"]
+        entries = job_history.load(path, read_only=True)["jobs"]  # a scrape never renames a ledger it cannot read
     except OSError:
         return set()
     return {
@@ -167,36 +167,58 @@ class JobertyProvider(JobProvider):
         terms = tuple(search_terms or ())
         wanted: dict[int, dict] = {}
         read: set[int] = set()
+        decided: set[int] = set()  # ids already judged: a repeat of one is a copy, not a second ad
+        listing_drops: list[dict] = []
         for item in joberty_client.fetch_listing():
-            if not isinstance(item.get("id"), int) or item["id"] in wanted:
+            if not isinstance(item.get("id"), int):
+                listing_drops.append(dropped_ad(
+                    {"title": item.get("jobTitle"), "company": item.get("companyName")}, "unparsable_row", None, counted=False
+                ))
                 continue
+            if item["id"] in wanted or item["id"] in decided:
+                continue
+            decided.add(item["id"])
             read.add(item["id"])
             job = to_canonical(item, country=country)
-            if (
-                is_relevant_role(job["title"], "", terms)
-                and matches_location_filters(job, locations, remote_filters)
-                and matches_country(job, country)
-            ):
+            reason = role_drop_reason(job["title"], "", terms) or place_drop_reason(job, locations, remote_filters, country)
+            if reason is None:
                 wanted[item["id"]] = item
+            else:
+                listing_drops.append(dropped_ad(job, reason, job["externalId"]))
         logger.info("Joberty: %d relevant ads in the listing", len(wanted))
+        # The listing is over and its drops are known; the slow part (one request per ad) follows.
+        self.stage([], part="listing", read=len(read), dropped=listing_drops)
 
         known = known_ids(self.ledger_path)
         jobs: list[dict] = []
         fetched = 0
         deferred = 0
+        deferred_drops: list[dict] = []
         for item in wanted.values():
             if to_canonical(item)["jobId"] in known:
                 # No description: the ledger restores the one it holds (job_history.apply_run).
-                jobs.append(to_canonical(item, country=country))
+                job = to_canonical(item, country=country)
+                jobs.append(job)
+                self.stage([job], part=f"ad {item['id']}", external_ids={job["jobId"]: job["externalId"]})
                 continue
 
             if fetched >= joberty_client.MAX_DETAILS:
                 deferred += 1  # an ad with no description is no use; it is read next run
+                thin = to_canonical(item, country=country)
+                deferred_drops.append(dropped_ad(thin, "detail_cap", thin["externalId"]))
                 continue
             fetched += 1
             detail = joberty_client.fetch_detail(item["id"])
             if detail.get("text"):
-                jobs.append(to_canonical(item, detail, country=country))
+                job = to_canonical(item, detail, country=country)
+                jobs.append(job)
+                # One request, then one ad staged: the details are the slow part (a pause between requests).
+                self.stage([job], part=f"ad {item['id']}", external_ids={job["jobId"]: job["externalId"]})
+            else:
+                thin = to_canonical(item, country=country)
+                self.stage([], part=f"ad {item['id']}", dropped=[dropped_ad(thin, "no_detail_text", thin["externalId"])])
+        if deferred_drops:
+            self.stage([], part="deferred", dropped=deferred_drops)
         if deferred:
             logger.info("Joberty: %d ads left for the next run (cap of %d details)", deferred, joberty_client.MAX_DETAILS)
         logger.info("Joberty: %d jobs (%d details read)", len(jobs), fetched)

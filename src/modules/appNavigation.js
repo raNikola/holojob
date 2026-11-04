@@ -15,6 +15,7 @@ export const VIEWS = {
   AI_COMMAND: 'ai-command',
   OUTREACH: 'outreach',
   QUALITY: 'quality',
+  ACTIVITY: 'activity',
 }
 
 export const VIEW_STORAGE_KEY = 'job-dashboard-active-view'
@@ -23,6 +24,7 @@ export const SETTINGS_CATEGORY_STORAGE_KEY = 'job-dashboard-settings-category'
 export const OPEN_SETTINGS_EVENT = 'holojob:open-settings'
 export const OPEN_QUESTIONNAIRE_EVENT = 'holojob:open-questionnaire'
 export const OPEN_ONBOARDING_EVENT = 'holojob:open-onboarding'
+export const OPEN_ACTIVITY_EVENT = 'holojob:open-activity'
 
 const SHELL_VIEWS = new Set([
   VIEWS.DASHBOARD,
@@ -38,6 +40,7 @@ const SHELL_VIEWS = new Set([
   VIEWS.AI_COMMAND,
   VIEWS.OUTREACH,
   VIEWS.QUALITY,
+  VIEWS.ACTIVITY,
 ])
 
 const LEGACY_VIEWS = new Set(['intelligence', 'jobs'])
@@ -151,6 +154,11 @@ export function openSettings(sectionId) {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { sectionId } }))
 }
 
+/** Opens the Activity screen (the Jobs screen's "Details" link); App listens. */
+export function openActivity() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(OPEN_ACTIVITY_EVENT))
+}
+
 /** Opens the profile editor on the questionnaire step; App listens. */
 export function openQuestionnaire() {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(OPEN_QUESTIONNAIRE_EVENT))
@@ -172,6 +180,7 @@ export const NAV_ITEMS = [
   { id: VIEWS.CAREER_STRATEGY, label: 'Career Strategy', icon: 'Target' },
   { id: VIEWS.AI_COMMAND, label: 'AI Copilot', icon: 'MessageSquare' },
   { id: VIEWS.OUTREACH, label: 'Outreach', icon: 'Users' },
+  { id: VIEWS.ACTIVITY, label: 'Activity', icon: 'Activity' },
   { id: VIEWS.QUALITY, label: 'Quality Audit', icon: 'ShieldCheck' },
   { id: VIEWS.SETTINGS, label: 'Settings', icon: 'Settings' },
 ]
@@ -198,4 +207,5 @@ export const VIEW_TITLES = {
   [VIEWS.AI_COMMAND]: 'AI Copilot',
   [VIEWS.OUTREACH]: 'Outreach',
   [VIEWS.QUALITY]: 'Quality Audit',
+  [VIEWS.ACTIVITY]: 'Activity',
 }

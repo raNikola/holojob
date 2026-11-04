@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { handleApiRoutes } from './api-handler.js'
 import { installLogMasking } from './secret-mask.js'
 import { ensureClaudeLogin } from './claude-auth.js'
+import { reconcileOnStart } from './run-rescrape.js'
 
 installLogMasking()
 
@@ -82,6 +83,8 @@ ensureClaudeLogin().then((status) => {
     console.log('✓ Claude Code logged in — AI generation active')
   }
 })
+
+reconcileOnStart() // a run that died with the last server becomes interrupted; none is resumed
 
 server.listen(PORT, () => {
   console.log(`Career OS running at http://localhost:${PORT}`)

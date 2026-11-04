@@ -1,0 +1,72 @@
+[
+  {
+    "what": "Applications and their events",
+    "where": "backend",
+    "file": "data/applications/applications.json",
+    "code": "scripts/application-store.js: createApplication, appendEvent, loadStore (append-only; the browser keeps a read cache)",
+    "protect": "Yes. Holds its own frozen posting (posting.jobId, description), independent of the ledger and the view."
+  },
+  {
+    "what": "Files sent with an application",
+    "where": "backend",
+    "file": "data/applications/files/<appId>/",
+    "code": "scripts/application-store.js: applicationFilePath",
+    "protect": "Yes."
+  },
+  {
+    "what": "Tailored documents",
+    "where": "backend",
+    "file": "data/resumes/<jobId>/",
+    "code": "python/resume_generator/run_tailor.py",
+    "protect": "Yes, the files. Keyed by jobId, so they can be joined to the ledger."
+  },
+  {
+    "what": "Tailored documents, the link on the row (tailoredAssets)",
+    "where": "both",
+    "file": "data/jobs/scored_jobs.json; browser job row",
+    "code": "python/resume_generator/run_tailor.py: job['tailoredAssets']; src/modules/jobs/jobStorage.js: mergeStatusOnImport",
+    "protect": "Partly. A row leaving the scored file loses the server copy of the link; the documents stay and the browser row keeps it."
+  },
+  {
+    "what": "Outreach contacts found by the server",
+    "where": "backend",
+    "file": "data/outreach/<jobId>/contacts.json",
+    "code": "scripts/run-outreach.js",
+    "protect": "Yes, the file."
+  },
+  {
+    "what": "Outreach state on the job (job.outreach: contacts, messages, status)",
+    "where": "browser",
+    "file": "localStorage job-dashboard-discovered-jobs",
+    "code": "src/modules/jobs/jobStorage.js: saveJobs, hasUserData",
+    "protect": "No. The backend cannot see it. Only the browser's offList rule keeps the row."
+  },
+  {
+    "what": "Saved AI answers (job analysis, company)",
+    "where": "backend",
+    "file": "data/ai/findings/<job|company>/<sha256(jobId)[:16]>.json",
+    "code": "scripts/ai-findings-store.js: jobEntityKey",
+    "protect": "Yes, the file; the key can be joined to a jobId."
+  },
+  {
+    "what": "AI insights on the job (job.aiInsights)",
+    "where": "browser",
+    "file": "localStorage job-dashboard-discovered-jobs",
+    "code": "src/modules/jobs/jobStorage.js: saveJobs, hasUserData",
+    "protect": "No. The backend cannot see it."
+  },
+  {
+    "what": "Triage status on the job (job.status other than new)",
+    "where": "browser",
+    "file": "localStorage job-dashboard-discovered-jobs",
+    "code": "src/modules/jobs/jobStorage.js: mergeStatusOnImport, hasUserData",
+    "protect": "No. The backend cannot see it. Only the browser's offList rule keeps the row."
+  },
+  {
+    "what": "Hand-entered jobs",
+    "where": "both",
+    "file": "data/jobs/manual_jobs.json; notes, links and sourceUrl in the browser only",
+    "code": "python/job_scoring/manual_jobs.py; src/modules/jobs/manualJob.js",
+    "protect": "Yes for the scored fields. They are not ledger rows, so lifecycle does not reach them."
+  }
+]

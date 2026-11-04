@@ -849,11 +849,38 @@ Fields added later, in the browser job store and not in this file until saved:
 ```
 
 
+## Filtered ads
+
+- **Path:** `data/jobs/filtered_ads.json`
+- **Purpose:** Every ad a source returned and a filter dropped, kept after its staging run is pruned. Read by `job_discovery/all_ads.py` for `GET /api/jobs/all` (S5e2).
+- **Cancelled runs (S6):** their dropped ads are counted once under `partialRuns` (a list of run ids), never in `appliedRuns`.
+- **Written by:** `job_discovery/filtered_ads.py`, from the real import and `import_run.py --backfill-filtered`. A dry run never writes it. Not in backups, like the ledger.
+
+```json
+{
+ "version": 1,
+ "appliedRuns": ["4ceb98880ded", "307c5e408af3"],
+ "ads": {
+  "<jobId>": {
+   "source": "infostud", "title": "...", "company": "...", "location": "...", "url": "https://...", "externalId": "...",
+   "reason": "title_not_matched", "firstSeen": "<ISO>", "lastSeen": "<ISO>", "lastRunId": "307c5e408af3", "timesSeen": 2,
+   "searchKey": "980db72deba8", "inLedger": false
+  }
+ }
+}
+```
+
+- **`appliedRuns`:** every run already counted, so a run counts once in any order. Ids only; the list only grows.
+- **`firstSeen`, `lastSeen`:** the run's own time (`importer.import_time`), not the clock.
+- **`inLedger`:** the ledger also holds this ad, so it is shown once, from the ledger. Refreshed at every write. Records are never removed.
+
 ## Job history ledger
 
 - **Path:** `data/jobs/job_history.json`
 - **Purpose:** Survives discovery rewrites: first/last seen, closed, a snapshot of each job, and the enrichment facts (reused while the ad fingerprint is unchanged). Dropped after 90 days closed.
 - **Written by:** `job_scoring/job_history.py`.
+- **Stale evidence (S5f), optional and additive:** top-level `sourceRuns` (`{provider: {bucket: [{runId, at}]}}`, oldest first, newest 100 kept per bucket; the bucket is the search key, or `board:<name>` for a snapshot source) and `lastListedAt` on an entry (a run last returned the ad and a filter dropped it). `job_scoring/stale_rule.py` reads them. A held row that is Stale carries `isStale` in `discovered_jobs.json` and `scored_jobs.json`.
+- **Snapshot lifecycle (S5c), optional fields on an entry:** `absentRuns` (consecutive complete fetches of the board that did not list the ad), `absentSince`, `lastAbsentRunId`. Gone when the ad is found again; the version stays 1. A row in `discovered_jobs.json` or `scored_jobs.json` carries, only when it applies, `isAbsent` and `absentSince`, or `closedAfterChecks` on an ad closed by that rule. A row a run kept without finding it also carries `notFoundThisRun` (S5d2), when the ledger's `lastImport.marksNotFound` is set.
 
 ```json
 {
@@ -943,7 +970,11 @@ Fields added later, in the browser job store and not in this file until saved:
 
 ## Discovery run log
 
-- **Path:** `data/analytics/runs/<startedAt>-<runId>.json`, one file per run, kept 90 days.
+- **Path:** `data/analytics/runs/<startedAt>-<runId>.json`, one file per run, kept 90 days. Status also `running` and `interrupted`; a Re-scrape adds `steps`, an interrupted record may add `incompleteCommit` (DECISIONS.md, Activity slice 2a).
+- **Event log:** `data/analytics/runs/<startedAt>-<runId>.events.jsonl`, append-only, one JSON object per line (`type`, `at`, then fields of that type), pruned with its record.
+- **Evidence (S7a, new records only):** `sources[].startedAt`, `sources[].finishedAt`, and `import` = `{kind, complete, saved, new, refreshed, duplicatesRemoved, crosspostsMerged, rejected, ledger?, nothingSaved?, sources: [{name, proof {proven, why[], boards[{board, proven, why[], detail}]}, filterReasons {reason: count}}]}`. Codes: `python/job_discovery/proof_reasons.py`, texts: `src/data/proofReasons.json`. Older records have none of it and read as Not recorded. `GET /api/runs` returns a projection of this, never the record (DECISIONS.md, S7a).
+- **Cancel (S6):** status also `cancelled`; a Re-scrape record has `orchestrator: "rescrape"`, and a cancel-touched one adds `cancel: {requestedAt, outcome, saved?}` (`collected_ads_saved`, `stopped_nothing_imported`, `imported_before_cancel`, `finished_before_cancel`). `<startedAt>-<runId>.cancel` is the request and `.decision` the commit/kill claim (`commit` or `kill`), both pruned with the record. A cancelled run's staging folder holds `cancelled.json`; its `imported.json` adds `cancelled` and `saved`. The ledger gains `partialRuns` (ids of cancelled runs saved, newest 200) and `lastImport` is not changed by them. DECISIONS.md, S6.
+- **Commit marker:** `data/analytics/runs/.commit-in-progress.json` (`runId`, `startedAt`, `files`, `written`), on disk only during discovery's writes. There with the lock free: an incomplete commit.
 - **Purpose:** What each discovery run did per source, for the Activity screen.
 - **Written by:** `run_discovery.py` through `run_log.py`. Field meanings: [DECISIONS.md](../DECISIONS.md#activity-slice-1-as-built-2026-11-02).
 
@@ -1074,9 +1105,9 @@ Fields added later, in the browser job store and not in this file until saved:
 
 ## Other job files
 
-- `data/jobs/normalized_jobs.json` - discovery output before dedupe (same job fields as discovered jobs, list under `jobs`).
-- `data/jobs/raw_jobs.csv` - raw provider rows, one column per job field above plus provider-specific extras.
-- `data/jobs/.pipeline.lock` - empty lock file while a pipeline runs.
+- `data/jobs/normalized_jobs.json` - **no longer written (S4b, 2026-11-03); an old copy may remain on disk and nothing reads it.** Was: discovery output before dedupe (same job fields as discovered jobs, list under `jobs`).
+- `data/jobs/raw_jobs.csv` - **no longer written (S4b, 2026-11-03); an old copy may remain, nothing reads it.** Was: raw provider rows, one column per job field above plus provider-specific extras.
+- `data/jobs/.pipeline.lock` - empty file that carries the flock over every run that replaces the job files (`python/job_scoring/pipeline_lock.py`). Its presence means nothing; a restore never replaces it.
 
 ## Fit judgement cache
 

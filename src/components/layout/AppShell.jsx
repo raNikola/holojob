@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Brain, MessageSquare, Settings, ShieldCheck, Target, Users, X } from 'lucide-react'
+import { Activity, Brain, MessageSquare, Settings, ShieldCheck, Target, Users, X } from 'lucide-react'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
+import StorageNotice from './StorageNotice'
 import { VIEWS, VIEW_TITLES } from '../../modules/appNavigation'
 import { useAppConfig } from '../../hooks/useAppConfig'
 
@@ -28,6 +29,7 @@ export default function AppShell({ activeView, onNavigate, children }) {
           </div>
         )}
         <TopBar title={title} />
+        <StorageNotice />
         <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 sm:px-6 md:pb-6">
           <div className="w-full min-w-0">
             {children}
@@ -81,6 +83,14 @@ export default function AppShell({ activeView, onNavigate, children }) {
             >
               <Users className="h-4 w-4" />
               Outreach
+            </button>
+            <button
+              type="button"
+              onClick={() => { onNavigate(VIEWS.ACTIVITY); setMoreOpen(false) }}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
+            >
+              <Activity className="h-4 w-4" />
+              Activity
             </button>
             <button
               type="button"

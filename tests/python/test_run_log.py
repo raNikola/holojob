@@ -37,8 +37,8 @@ from providers.base_provider import JobProvider, ProviderOutcome
 
 TERMS = ["product manager"]
 REMOTE = ["Remote"]
-RECORD_KEYS = {"version", "runId", "trigger", "startedAt", "finishedAt", "status", "sources", "issues"}
-SOURCE_KEYS = {"name", "status", "read", "kept", "new", "error", "boardsFailed", "skipReason"}
+RECORD_KEYS = {"version", "runId", "trigger", "startedAt", "finishedAt", "status", "sources", "issues", "staging", "import"}  # "import": S7a
+SOURCE_KEYS = {"name", "status", "read", "kept", "new", "error", "boardsFailed", "skipReason", "startedAt", "finishedAt"}  # the last two: S7a
 # Decided on purpose: discovery does not know these yet, and a later slice fills them.
 NOT_KNOWN_YET = {"scored", "closed", "missing", "expired"}
 
@@ -56,6 +56,7 @@ def greenhouse(boards):
     def fetch(board):
         if isinstance(boards[board], Exception):
             raise boards[board]
+        provider._reported_totals[board] = len(boards[board])  # as the real answer's meta.total: a complete read (S5b)
         return boards[board]
 
     provider._fetch_board = fetch
@@ -95,7 +96,7 @@ def discovery(tmp_path, monkeypatch):
 
 def records():
     folder = run_log.runs_dir()
-    found = [json.loads(p.read_text()) for p in folder.iterdir()] if folder.exists() else []
+    found = [json.loads(p.read_text()) for p in folder.iterdir() if run_log.is_record_name(p.name)] if folder.exists() else []
     return sorted(found, key=lambda record: record["startedAt"])
 
 
@@ -126,8 +127,11 @@ def test_a_run_writes_exactly_one_record_with_the_documented_fields(discovery, t
     assert record["version"] == 1 and record["status"] == "ok" and record["issues"] == []
     assert record["runId"] == discovered(tmp_path)["meta"]["sourceRunId"]
     assert datetime.fromisoformat(record["startedAt"]) <= datetime.fromisoformat(record["finishedAt"])
+    times = {key: record["sources"][0].pop(key) for key in ("startedAt", "finishedAt")}
+    assert datetime.fromisoformat(record["startedAt"]) <= datetime.fromisoformat(times["startedAt"]) <= datetime.fromisoformat(times["finishedAt"])
     assert record["sources"] == [{"name": "greenhouse", "status": "ok", "read": 1, "kept": 1, "new": 1, "error": None,
                                   "boardsFailed": [], "skipReason": None}]
+    record["sources"][0].update(times)
     assert set(record["sources"][0]) == SOURCE_KEYS and not NOT_KNOWN_YET & set(record["sources"][0])
 
 
@@ -178,7 +182,7 @@ def test_a_run_that_crashes_still_writes_a_failed_record_and_the_crash_is_not_hi
     def crash(*args, **kwargs):
         raise RuntimeError("disk gone")
 
-    monkeypatch.setattr(run_discovery, "export_discovered_json", crash)
+    monkeypatch.setattr(run_discovery.importer, "import_staged_run", crash)
     with pytest.raises(RuntimeError, match="disk gone"):
         discovery({"greenhouse": greenhouse({"acme": [posting(1)]})})
     record = only_record()
@@ -236,29 +240,46 @@ def test_a_run_that_crashed_is_failed_even_if_every_source_skipped():
 
 
 def test_the_allowed_run_statuses():
-    assert run_log.RUN_STATUSES == ("ok", "partial", "failed", "skipped")
+    assert run_log.RUN_STATUSES == ("ok", "partial", "failed", "skipped", "running", "interrupted", "cancelled")
+
+
+def whole_ad(job_id, provider, source, title, company, description, url):
+    """A complete canonical ad (the importer validates every field), with the id the test wants."""
+    from providers.base_provider import build_canonical_job
+
+    return {**build_canonical_job(provider=provider, source=source, title=title, company=company, location="Remote",
+                                  job_url=url, description=description), "jobId": job_id}
 
 
 def infostud_job(job_id="i1", title="Product Lead"):
-    return {"jobId": job_id, "provider": "infostud", "source": "infostud", "title": title, "company": "A",
-            "location": "Remote", "description": "Own it.", "jobUrl": f"https://i/{job_id}"}
+    return whole_ad(job_id, "infostud", "infostud", title, "A", "Own it.", f"https://i/{job_id}")
 
 
 def ledger_entry(tmp_path, job_id):
-    return json.loads((tmp_path / "data" / "jobs" / "job_history.json").read_text())["jobs"][job_id]
+    """An entry as the history sees it: without the importer's stamps (lastRunId, lastRunPos, heldRunId), which say how the
+    latest run saw it and so change on every run."""
+    entry = json.loads((tmp_path / "data" / "jobs" / "job_history.json").read_text())["jobs"][job_id]
+    return {k: v for k, v in entry.items() if k not in ("lastRunId", "lastRunPos", "heldRunId")}
 
 
 def test_a_skipped_source_keeps_its_ads_in_the_file_with_nothing_changed(discovery, tmp_path):
     discovery({"infostud": Fake([infostud_job()], ProviderOutcome(read=1, kept=1))})
     first_seen = ledger_entry(tmp_path, "i1")
+    before = job_files(tmp_path)
+    # S8b: every source skipped is no import at all (exit 0: skipped is not failed). The bytes are those of the first run; before S8b
+    # this run held the entries and moved the generation.
     assert discovery({"infostud": Fake(outcome=skipped())}) == 0
 
+    assert job_files(tmp_path) == before
     payload = discovered(tmp_path)
     assert [j["jobId"] for j in payload["jobs"]] == ["i1"]
     assert payload["jobs"][0]["isClosed"] is False and payload["jobs"][0]["closedAt"] is None
-    assert payload["meta"]["history"]["closed"] == 0 and payload["meta"]["history"]["keptSourceNotRun"] == 1
+    assert payload["meta"]["history"]["closed"] == 0
     assert ledger_entry(tmp_path, "i1") == first_seen
-    assert records()[-1]["status"] == "skipped"
+    record = records()[-1]
+    assert record["status"] == "skipped", "skipped stays skipped, not failed"
+    assert record["import"]["kind"] == "nothing" and record["import"]["nothingSaved"] == "no_usable_source"
+    assert "No source gave a usable result, so nothing was imported and the job list was not changed." in messages(record, "warning")
 
 
 def test_the_real_infostud_skip_for_another_country_keeps_its_ads(discovery, tmp_path, monkeypatch):
@@ -273,16 +294,35 @@ def test_the_real_infostud_skip_for_another_country_keeps_its_ads(discovery, tmp
     assert [j["jobUrl"] for j in jobs] == ["https://i/1"] and jobs[0]["isClosed"] is False
 
 
+def job_files(tmp_path):
+    """The ledger and the view as bytes: what 'nothing changed' means."""
+    return tuple((tmp_path / "data" / "jobs" / name).read_bytes() for name in ("job_history.json", "discovered_jobs.json"))
+
+
 def test_a_failed_search_source_keeps_its_ads_in_the_file_with_nothing_changed(discovery, tmp_path):
     discovery({"infostud": Fake([infostud_job()], ProviderOutcome(read=1, kept=1))})
     first_seen = ledger_entry(tmp_path, "i1")
-    assert discovery({"infostud": Fake(boom=RuntimeError("Infostud unreachable"))}) == 0
+    before = job_files(tmp_path)
+    # S8b: the only source failed, so the run gave no usable result and imports nothing (exit 1, a failed run). The ledger and the view
+    # are the same bytes as before: not even the generation moved, and no ad is held.
+    assert discovery({"infostud": Fake(boom=RuntimeError("Infostud unreachable"))}) == 1
 
+    assert job_files(tmp_path) == before
     payload = discovered(tmp_path)
     assert [j["jobId"] for j in payload["jobs"]] == ["i1"] and payload["jobs"][0]["isClosed"] is False
-    assert payload["meta"]["history"]["keptSourceNotRun"] == 1
     assert ledger_entry(tmp_path, "i1") == first_seen
-    assert source_of(records()[-1], "infostud")["status"] == "failed"
+    record = records()[-1]
+    assert source_of(record, "infostud")["status"] == "failed" and record["status"] == "failed"
+    assert record["import"]["kind"] == "nothing" and record["import"]["nothingSaved"] == "no_usable_source"
+    assert "No source gave a usable result, so nothing was imported and the job list was not changed." in messages(record, "error")
+
+
+def test_a_skipped_source_beside_a_failed_one_is_a_failed_run_not_a_skipped_one(discovery, tmp_path):
+    discovery({"infostud": Fake([infostud_job()], ProviderOutcome(read=1, kept=1))})
+    before = job_files(tmp_path)
+    assert discovery({"infostud": Fake(outcome=skipped()), "greenhouse": Fake(boom=RuntimeError("down"))}) == 1  # attempted, nothing usable
+    assert job_files(tmp_path) == before
+    assert records()[-1]["status"] == "failed"
 
 
 def test_a_search_source_that_ran_and_lost_an_ad_behaves_as_before(discovery, tmp_path):
@@ -296,6 +336,11 @@ def test_a_search_source_that_ran_and_lost_an_ad_behaves_as_before(discovery, tm
 
 def test_a_board_source_that_ran_and_lost_an_ad_still_closes_it(discovery, tmp_path):
     discovery({"greenhouse": greenhouse({"a": [posting(1), posting(2, "Senior Product Manager")]})})
+    discovery({"greenhouse": greenhouse({"a": [posting(1)]})})
+    payload = discovered(tmp_path)
+    assert {j["title"]: j["isClosed"] for j in payload["jobs"]} == {"Product Manager": False, "Senior Product Manager": False}
+    assert payload["meta"]["history"]["closed"] == 0 and payload["meta"]["history"]["absent"] == 1
+    assert next(j for j in payload["jobs"] if j["title"] == "Senior Product Manager")["isAbsent"] is True
     discovery({"greenhouse": greenhouse({"a": [posting(1)]})})
     payload = discovered(tmp_path)
     assert {j["title"]: j["isClosed"] for j in payload["jobs"]} == {"Product Manager": False, "Senior Product Manager": True}
@@ -327,9 +372,11 @@ def test_warnings_alone_leave_the_run_ok(discovery):
 
 
 def test_a_failed_board_among_working_boards_is_partial_and_named_and_its_ad_stays_open(discovery, tmp_path):
-    first = {"greenhouse": greenhouse({"good": [posting(1)], "bad": [posting(2, "Senior Product Manager")]})}
+    # A whole second source in both runs: a run whose only source is partial has no usable source and imports nothing (S8b).
+    whole = lambda: Fake([infostud_job()], ProviderOutcome(read=1, kept=1))  # noqa: E731
+    first = {"greenhouse": greenhouse({"good": [posting(1)], "bad": [posting(2, "Senior Product Manager")]}), "infostud": whole()}
     assert discovery(first) == 0
-    second = {"greenhouse": greenhouse({"good": [posting(1)], "bad": requests.ConnectionError("boom")})}
+    second = {"greenhouse": greenhouse({"good": [posting(1)], "bad": requests.ConnectionError("boom")}), "infostud": whole()}
     assert discovery(second) == 0
 
     record = records()[-1]
@@ -340,16 +387,19 @@ def test_a_failed_board_among_working_boards_is_partial_and_named_and_its_ad_sta
     assert [(i["level"], i["source"], i["message"]) for i in record["issues"]] == [("error", "greenhouse", "bad: boom")]
 
     payload = discovered(tmp_path)
-    assert {j["title"]: j["isClosed"] for j in payload["jobs"]} == {"Product Manager": False, "Senior Product Manager": False}
+    boards = {j["title"]: j["isClosed"] for j in payload["jobs"] if j["provider"] == "greenhouse"}
+    assert boards == {"Product Manager": False, "Senior Product Manager": False}
     assert payload["meta"]["history"]["closed"] == 0 and payload["meta"]["history"]["keptFailedBoard"] == 1
 
 
 def test_every_board_failing_is_a_failed_source_and_closes_nothing(discovery, tmp_path):
     discovery({"greenhouse": greenhouse({"acme": [posting(1)]})})
-    assert discovery({"greenhouse": greenhouse({"acme": requests.Timeout("slow")})}) == 0
+    before = job_files(tmp_path)
+    assert discovery({"greenhouse": greenhouse({"acme": requests.Timeout("slow")})}) == 1  # S8b: no usable source, nothing imported
     record = records()[-1]
     assert record["status"] == "failed" and source_of(record, "greenhouse")["boardsFailed"] == ["acme"]
     assert messages(record, "warning") == []  # the error says it already
+    assert job_files(tmp_path) == before
     assert [j["isClosed"] for j in discovered(tmp_path)["jobs"]] == [False]
 
 
@@ -363,8 +413,10 @@ def test_a_provider_that_raises_is_one_failed_source_the_others_still_run_and_it
 
 
 def test_a_provider_that_reports_no_outcome_is_a_failed_source_not_a_guess(discovery):
-    assert discovery({"greenhouse": Fake(outcome=None)}) == 0
+    # A second source that ran keeps the run importable (a run with no usable source at all imports nothing, S8b); the scenario is unchanged.
+    assert discovery({"greenhouse": Fake(outcome=None), "lever": Fake(outcome=ProviderOutcome())}) == 0
     assert "no outcome" in source_of(only_record(), "greenhouse")["error"]
+    assert source_of(only_record(), "greenhouse")["status"] == "failed"
 
 
 def test_a_source_with_no_ads_gets_a_warning_and_closes_nothing(discovery, tmp_path):
@@ -403,6 +455,7 @@ def test_an_ad_gone_from_a_non_empty_board_still_closes_when_another_board_is_em
     first = {"greenhouse": greenhouse({"good": [posting(1), posting(3, "Lead Product Manager")], "empty": [posting(2, "Senior Product Manager")]})}
     discovery(first)
     discovery({"greenhouse": greenhouse({"good": [posting(1)], "empty": []})})
+    discovery({"greenhouse": greenhouse({"good": [posting(1)], "empty": []})})
     states = {j["title"]: j["isClosed"] for j in discovered(tmp_path)["jobs"]}
     assert states == {"Product Manager": False, "Senior Product Manager": False, "Lead Product Manager": True}
 
@@ -423,8 +476,7 @@ def test_read_counts_what_the_filter_saw_and_kept_what_passed(discovery):
 
 def test_new_is_counted_per_source_after_dedupe_and_adds_up_to_the_history_figure(discovery, tmp_path):
     def lever_job(job_id, title):
-        return {"jobId": job_id, "provider": "lever", "source": "acme", "title": title, "company": "Acme",
-                "location": "Remote", "description": "Own the roadmap.", "jobUrl": f"https://y/{job_id}"}
+        return whole_ad(job_id, "lever", "acme", title, "Acme", "Own the roadmap.", f"https://y/{job_id}")
 
     providers = {
         "greenhouse": greenhouse({"acme": [posting(1)]}),
@@ -689,6 +741,22 @@ def test_records_older_than_ninety_days_are_pruned_at_write_time_and_nothing_els
     fresh = run_log.save(saved_record("fresh"))
     assert not old.exists(), "a record past 90 days goes when the next one is written"
     assert edge.exists() and fresh.exists() and foreign.exists() and bad_date.exists()
+
+
+def test_pruning_takes_a_run_s_events_log_with_its_record():
+    now = datetime.now(timezone.utc)
+    old = planted("old", now - timedelta(days=91))
+    old_events = old.with_name(old.name.replace(".json", ".events.jsonl"))
+    old_events.write_text('{"type": "run_start"}\n')
+    orphan_events = old.with_name(old.name.replace("-old.json", "-orphan.events.jsonl"))
+    orphan_events.write_text("")
+    young = planted("young", now - timedelta(days=89))
+    young_events = young.with_name(young.name.replace(".json", ".events.jsonl"))
+    young_events.write_text('{"type": "run_start"}\n')
+
+    assert run_log.prune(run_log.runs_dir(), now) == 3
+    assert not old.exists() and not old_events.exists() and not orphan_events.exists()
+    assert young.exists() and young_events.exists()
 
 
 def test_pruning_reads_the_start_time_not_the_file_time():

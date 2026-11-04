@@ -16,6 +16,7 @@ from labels import apply_recommendation, match_label, priority
 from llm_enhancer import NoOpEnhancer
 from red_flags import detect_red_flags
 from corpus import build_idf
+import row_state
 import work_authorization as wa
 from salary import salary_metadata
 
@@ -185,8 +186,9 @@ def score_jobs(
     jobs: list[dict], intelligence: dict, enhancer=None, workers: int = 8
 ) -> list[dict]:
     # Term rarity is measured over this run's corpus, so it is built once and
-    # shared by every job rather than recomputed per call.
-    idf = build_idf(jobs)
+    # shared by every job rather than recomputed per call. Rows this run did not
+    # find are scored with it but are no part of it: keeping them can move no other ad's score.
+    idf = build_idf([job for job in jobs if not row_state.not_found(job)])
     if enhancer is None or isinstance(enhancer, NoOpEnhancer):
         return [score_job(j, intelligence, enhancer, idf) for j in jobs]
 

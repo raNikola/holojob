@@ -5,6 +5,7 @@
 import { ensureClaudeLogin } from './claude-auth.js'
 import { handleApiRoutes } from './api-handler.js'
 import { installLogMasking } from './secret-mask.js'
+import { reconcileOnStart } from './run-rescrape.js'
 
 export { getPipelineHealth } from './api-handler.js'
 
@@ -13,6 +14,7 @@ export function discoveryApiPlugin() {
   return {
     name: 'discovery-api',
     configureServer(server) {
+      reconcileOnStart()
       ensureClaudeLogin().then((status) => {
         if (!status.installed) {
           server.config.logger.warn(`\n  ⚠ Claude Code: ${status.reason}\n`)

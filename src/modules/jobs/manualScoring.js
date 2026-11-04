@@ -22,6 +22,7 @@ const MESSAGES = {
   no_intelligence: 'Candidate intelligence is missing, so the job was saved but not scored. Generate it first, then score the job.',
   invalid: 'The server did not accept the job, so it was saved here but not scored.',
   failed: 'Scoring failed on the server, so the job was saved but not scored.',
+  run_active: 'A Re-scrape is running, so the job was saved here but not scored. Use "Score now" when it has finished.',
 }
 
 async function post(path, body, fetchFn) {
@@ -42,7 +43,7 @@ export async function scoreOnServer(job, { fetchFn = globalThis.fetch } = {}) {
   const { status, data } = await post('/api/jobs/manual/score', { job: scoringPayload(job) }, fetchFn)
   if (status === 200 && data.ok && data.jobs?.[0]) return { ok: true, scored: data.jobs[0] }
   if (status === 409 && data.existing) return { ok: false, reason: 'duplicate', existing: data.existing }
-  const reason = status === 0 ? 'unreachable' : data.error === 'no_python' ? 'no_python' : data.error === 'no_intelligence' ? 'no_intelligence' : data.error === 'invalid' ? 'invalid' : 'failed'
+  const reason = status === 0 ? 'unreachable' : data.error === 'run_active' ? 'run_active' : data.error === 'no_python' ? 'no_python' : data.error === 'no_intelligence' ? 'no_intelligence' : data.error === 'invalid' ? 'invalid' : 'failed'
   return { ok: false, reason, message: MESSAGES[reason] }
 }
 

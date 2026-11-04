@@ -76,7 +76,7 @@ export function isOffList(job) {
 export const onListJobs = (jobs) => (jobs || []).filter((job) => !isOffList(job))
 
 /** The jobs the Jobs screen lists under `filters`, before the other filters apply. */
-export const listedJobs = (jobs, filters = {}) => (filters?.showOffList ? (jobs || []) : onListJobs(jobs))
+export const listedJobs = (jobs, filters = {}) => (filters?.showOffList ? (jobs || []) : (jobs || []).filter((job) => !isOffList(job) || job.keptByUser === true))
 
 const lowerSet = (values) => new Set(values.map((v) => String(v).toLowerCase()))
 
@@ -110,7 +110,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
   const q = searchText.trim().toLowerCase()
 
   return (jobs || []).filter((job) => {
-    if (!showOffList && isOffList(job)) return false
+    if (!showOffList && isOffList(job) && job.keptByUser !== true) return false // an ad the owner kept stays listed; the numbers still leave it out
     if (status === 'applied') {
       if (!appliedJobIds?.has(job.jobId)) return false
     } else if (status && job.status !== status) return false

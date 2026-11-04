@@ -105,6 +105,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
         </a>
       )}
 
+      {job.descriptionIncomplete && <p className="text-sm text-amber-800 dark:text-amber-300">The ad's full text was not available when you kept it, so this copy is incomplete.</p>}
       <JobDescription text={job.description} />
 
       <ManualJobSection job={job} onJobUpdated={onJobUpdated} apiAvailable={apiAvailable} />
@@ -155,7 +156,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
         </>
       )}
 
-      {showScores && includeAiTools && (
+      {(showScores || job.keptByUser === true) && includeAiTools && (
         <JobAIToolsPanel job={job} onJobUpdated={onJobUpdated} />
       )}
 

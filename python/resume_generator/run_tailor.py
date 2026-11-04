@@ -19,6 +19,7 @@ if str(ROOT / "python" / "job_scoring") not in sys.path:
     sys.path.append(str(ROOT / "python" / "job_scoring"))
 
 from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic  # noqa: E402
+import pipeline_lock  # noqa: E402
 from cover_letter_generator import BANNED_PHRASES, build_cover_letter_context, lint_cover_letter  # noqa: E402
 from llm_tailor import generate_llm_content, load_project_intelligence  # noqa: E402
 from pdf_renderer import render_single_page_pdf  # noqa: E402
@@ -269,6 +270,37 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     return job
 
 
+def save_tailored(scored_path: Path, assets_by_id: dict[str, dict]) -> int:
+    """Add each job's tailoredAssets to the scored file as it stands now, and change nothing else in it. Returns an exit code.
+
+    Tailoring takes minutes and a run can replace the file meanwhile, so the copy read at the start is never written back.
+    The read and the write happen under the pipeline lock, so no run writes between them. During a run this waits for the
+    run to end: the documents are already on disk, and the assets then land on the run's own results.
+    """
+    lock = pipeline_lock.acquire()
+    if lock is None:
+        print("A job run is in progress: the documents are ready and are added to the job list when it has finished.", flush=True)
+        lock = pipeline_lock.acquire(wait=True)
+    try:
+        try:
+            scored_doc = json.loads(scored_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"Could not add the documents to the job list ({type(exc).__name__}); they stay in data/resumes/.", file=sys.stderr)
+            return 1
+        found = set()
+        for job in scored_doc.get("jobs") or []:
+            if job.get("jobId") in assets_by_id:
+                job["tailoredAssets"] = assets_by_id[job["jobId"]]
+                found.add(job["jobId"])
+        for job_id in assets_by_id.keys() - found:
+            print(f"Job {job_id} is no longer in the job list; its documents stay in data/resumes/{job_id}/.", file=sys.stderr)
+        if found:
+            write_text_atomic(scored_path, json.dumps(scored_doc, indent=2))
+        return 0
+    finally:
+        lock.release()
+
+
 def main() -> int:
     args = parse_args()
     for path, label in [(args.profile, "profile"), (args.intelligence, "intelligence"), (args.scored, "scored jobs")]:
@@ -286,16 +318,14 @@ def main() -> int:
         print("No jobs matched selection criteria", file=sys.stderr)
         return 1
 
-    by_id = {j.get("jobId"): j for j in jobs}
+    assets_by_id = {}
     for job in selected:
         updated = tailor_job(job, profile, intelligence, use_llm=not args.no_llm)
-        by_id[updated["jobId"]] = updated
+        assets_by_id[updated["jobId"]] = updated["tailoredAssets"]
         engine = updated.get("tailoredAssets", {}).get("contentEngine", "?")
         print(f"Tailored [{engine}]: {updated.get('title')} @ {updated.get('company')} -> data/resumes/{updated['jobId']}/")
 
-    scored_doc["jobs"] = list(by_id.values())
-    write_text_atomic(args.scored, json.dumps(scored_doc, indent=2))
-    return 0
+    return save_tailored(args.scored, assets_by_id)
 
 
 if __name__ == "__main__":

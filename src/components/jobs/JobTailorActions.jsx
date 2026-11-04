@@ -12,6 +12,8 @@ import {
 import { useProfile } from '../../context/ProfileContext'
 import { runAiFeature } from '../../modules/ai/aiClient'
 
+export const NOT_IN_SCORED_LIST = 'Tailoring works from the latest scored list, and this ad is not in it (it was kept, or it is no longer listed). It cannot be tailored until a search lists it again.'
+
 export default function JobTailorActions({ job, apiAvailable, onJobUpdated, compact = false }) {
   const { profile } = useProfile()
   const [running, setRunning] = useState(false)
@@ -24,6 +26,12 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
 
   const handleGenerate = async () => {
     setError(null)
+    // Tailoring reads the latest scored list on the server. A kept ad, or one no longer listed, is not in it, whatever text the browser holds.
+    if (job.keptByUser || job.offList) {
+      setError(NOT_IN_SCORED_LIST)
+      log.append(`Not started: ${NOT_IN_SCORED_LIST}`)
+      return
+    }
     setRunning(true)
     log.start('Queuing resume + cover letter generation…')
     try {
@@ -78,6 +86,7 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
 
   if (!apiAvailable) {
     if (compact) return null
+    if (job.keptByUser || job.offList) return <p className="text-xs text-stone-500">{NOT_IN_SCORED_LIST}</p>
     return (
       <p className="text-xs text-stone-500">
         Run: <code className="text-[length:calc(var(--text-xs)-0.125rem)]">{buildTailorCommand({ jobId: job.jobId })}</code>

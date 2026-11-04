@@ -30,7 +30,7 @@ function buildIndex(text) {
   const index = new Map()
   for (const [jobId, entry] of Object.entries(jobs)) {
     if (!entry?.job || typeof entry.job !== 'object') continue
-    index.set(jobId, { job: entry.job, firstSeen: entry.firstSeen ?? null, lastSeen: entry.lastSeen ?? null, closedAt: entry.closedAt ?? null })
+    index.set(jobId, { job: entry.job, firstSeen: entry.firstSeen ?? null, lastSeen: entry.lastSeen ?? null, closedAt: entry.closedAt ?? null, absentSince: entry.absentSince ?? null, absentRuns: entry.absentRuns ?? 0 })
   }
   return index
 }
@@ -97,5 +97,52 @@ export async function handleJobHistoryRequest(req, res, url, { root }) {
   const entry = index?.get(jobId)
   if (entry) send(res, 200, { found: true, jobId, ...entry })
   else send(res, 404, { found: false })
+  return true
+}
+
+// --- ad texts, in bulk (S8a) --------------------------------------------------------------------------------------------------
+//
+// The browser's stored job list may keep a shorter copy of the rows (jobStorage.js, tiers lean and minimal). On start it asks here for the
+// ad text of the rows it stored without one, in one request per 100 ids. Read-only, from the same ledger index as the route above, and
+// answering only the ad text: no contact, no note, no status. An id the ledger does not hold is named in `missing`, never invented.
+
+const TEXTS_URL = '/api/jobs/texts'
+export const MAX_TEXT_IDS = 100
+
+/** @returns {Promise<boolean>} true when the request was for this route. */
+export async function handleJobTextsRequest(req, res, url, { root, readBody }) {
+  if (url !== TEXTS_URL) return false
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST')
+    send(res, 405, { error: 'Method not allowed' })
+    return true
+  }
+  let body
+  try {
+    body = await readBody(req, res)
+  } catch {
+    if (!res.writableEnded) send(res, 400, { ok: false, error: 'invalid', message: 'The body must be JSON.' }) // too large: the reader has answered already
+    return true
+  }
+  const ids = body?.jobIds
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAX_TEXT_IDS || !ids.every((id) => typeof id === 'string' && JOB_ID.test(id))) {
+    send(res, 422, { ok: false, error: 'invalid', message: `jobIds must be 1 to ${MAX_TEXT_IDS} valid job ids.` })
+    return true
+  }
+  let index
+  try {
+    index = await ledgerIndex(storePaths(root).ledger)
+  } catch {
+    send(res, 503, { ok: false, error: 'unreadable', message: 'The job history could not be read' })
+    return true
+  }
+  const texts = {}
+  const missing = []
+  for (const id of new Set(ids)) {
+    const description = index?.get(id)?.job?.description
+    if (typeof description === 'string' && description.trim()) texts[id] = description
+    else missing.push(id)
+  }
+  send(res, 200, { ok: true, texts, missing })
   return true
 }

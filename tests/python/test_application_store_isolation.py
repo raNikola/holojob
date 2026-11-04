@@ -32,9 +32,9 @@ def test_an_application_survives_the_ledger_pruning_its_job(tmp_path):
     job = {"jobId": "g1", "provider": "greenhouse", "title": "Product Manager", "company": "Acme",
            "location": "Berlin", "description": "Own the roadmap.", "jobUrl": "https://x/g1"}
     providers = {"greenhouse": 1}
-    for days, jobs in ((0, [job]), (1, []), (1 + jh.PRUNE_AFTER_DAYS + 1, [])):
+    for days, jobs in ((0, [job]), (1, []), (2, []), (2 + jh.PRUNE_AFTER_DAYS + 1, [])):
         jh.apply_run(ledger, jobs, now=(T0 + timedelta(days=days)).isoformat(), providers_returned=providers,
-                     key="search-a", role_key=_crosspost_key)
+                     key="search-a", role_key=_crosspost_key, board_evidence={"greenhouse": {None: {"complete": True, "listed": set()}}})
         jh.save(ledger_file, ledger)
 
     assert "g1" not in jh.load(ledger_file)["jobs"]

@@ -40,7 +40,10 @@ if str(ROOT / "python") not in sys.path:
 from geography import WORLDWIDE, is_known  # noqa: E402
 from work_authorization import outside_allowed_before_enrichment  # noqa: E402
 from atomic_write import write_text_atomic  # noqa: E402
+import pipeline_lock  # noqa: E402
 import job_history  # noqa: E402
+import row_state  # noqa: E402
+import view_guard  # noqa: E402
 from job_fingerprint import (  # noqa: E402,F401
     MAX_DESCRIPTION_CHARS,
     PROMPT_VERSION,
@@ -499,6 +502,17 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    lock = pipeline_lock.acquire()
+    if lock is None:
+        print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
+        return pipeline_lock.EXIT_LOCKED
+    try:
+        return enrich(args)
+    finally:
+        lock.release()
+
+
+def enrich(args: argparse.Namespace) -> int:
     # Unconfirmed batch work: automatic unless the owner says otherwise (ai_gate.py).
     os.environ[ai_gate.TRIGGER_ENV] = ai_gate.MANUAL if args.manual else ai_gate.AUTOMATION
     try:
@@ -511,6 +525,8 @@ def main() -> int:
         print(f"Missing jobs file: {args.jobs}", file=sys.stderr)
         return 1
 
+    # The job list is a view of the ledger: a view left behind by a stopped commit is rebuilt before it is read.
+    view_guard.ensure_or_exit(args.jobs, args.ledger or job_history.ledger_path(args.jobs))
     payload = json.loads(args.jobs.read_text(encoding="utf-8"))
     jobs = payload.get("jobs") if isinstance(payload, dict) else payload
     if not isinstance(jobs, list):
@@ -525,7 +541,7 @@ def main() -> int:
         prefs = (json.loads(args.intelligence.read_text(encoding="utf-8")).get("jobFitPreferences")) or {}
 
     pending: list[tuple[int, dict]] = []
-    skipped = from_ledger = outside = 0
+    skipped = from_ledger = outside = not_active = 0
     for index, job in enumerate(jobs, start=1):
         cached = job.get("llmFacts") or {}
         if not args.force and cached.get("_fingerprint") == _fingerprint(job):
@@ -537,6 +553,10 @@ def main() -> int:
             job["llmFacts"] = stored
             skipped += 1
             from_ledger += 1
+            continue
+        # This run did not find it: facts it already has are kept above, and it is not worth a new call.
+        if row_state.not_found(job):
+            not_active += 1
             continue
         if outside_allowed_before_enrichment(job, prefs):
             outside += 1
@@ -550,6 +570,7 @@ def main() -> int:
     frames = requirement_frames.load()
     remapped = requirement_frames.apply_remap(frames, remap)
     if args.dry_run:
+        print(f"  not found by this run, so not read: {not_active}")
         return _dry_run(args, jobs, pending, skipped, from_ledger, outside, frames, remap, mapper)
     done = failed = refused = 0
     refusal = None
@@ -616,19 +637,33 @@ def main() -> int:
             )
             done += 1
 
-    write_text_atomic(args.jobs, json.dumps(payload, indent=2))
     if mapper:
         mapper.save()
         remapped += requirement_frames.apply_remap(frames, mapper.remap)
         print(f"competency suggestions: {mapper.summary()}")
     if done or remapped:
         requirement_frames.save(frames)
-    # Everything now known goes back into the ledger, so the next run can reuse it.
-    stored = [job_history.store_facts(ledger, job) for job in jobs]  # all of them, not the first
-    if any(stored):
-        job_history.save(ledger_file, ledger)
+    # Everything now known goes back into the ledger, so the next run can reuse it. The LEDGER is written first, then the view
+    # (S4a): a stop between the two leaves a view one generation behind, which the next reader rebuilds. A ledger no import
+    # produced (the pre-S4a one) has no view to derive; its jobs file is written after it, as before but in this order.
+    changed = False
+    for job in jobs:
+        entry = ledger["jobs"].get(job.get("jobId"))
+        if entry is not None and job.get("llmFacts") and entry.get("llmFacts") != job["llmFacts"]:
+            entry["llmFacts"] = job["llmFacts"]
+            changed = True
+    if isinstance(ledger.get("lastImport"), dict):
+        if changed:
+            ledger["generation"] = (ledger.get("generation") or 0) + 1
+            ledger["updatedAt"] = job_history.now_iso()
+            view_guard.commit(ledger, args.jobs, ledger_file)
+    else:
+        if changed:
+            job_history.save(ledger_file, ledger)
+        write_text_atomic(args.jobs, json.dumps(payload, indent=2))
     print(f"\nextracted {done}, cached {skipped} ({from_ledger} from the ledger), failed {failed}"
-          f", not read {outside} (outside your allowed locations), refused {refused} (AI budget gate)")
+          f", not read {outside} (outside your allowed locations), refused {refused} (AI budget gate)"
+          f", not found by this run {not_active} (no call)")
     if refusal:
         # run_pipeline.py reads this line: refused work degrades the run, it does not stop it.
         print(f"ai gate refused: {refusal}")

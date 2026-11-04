@@ -2,6 +2,8 @@
 import { salaryModeOf } from './salaryFilter.js'
 import { normalizeMultiFilter, normalizePriorityFilter } from './jobFilters.js'
 import { MANUAL_FIELDS, MANUAL_ONLY_FIELDS, identityJobUrl } from './manualJob.js'
+import { isBlank, mergeCachedTexts, rememberTexts } from './jobTexts.js'
+import { NEAR_RATIO, STORAGE_QUOTA_CHARS, getStorageHealth, setStorageHealth } from './storageHealth.js'
 
 export const JOBS_STORAGE_KEY = 'job-dashboard-discovered-jobs'
 
@@ -36,21 +38,36 @@ export function getDefaultJobsState() {
   }
 }
 
-/** @returns {{ meta: object|null, jobs: Job[], filters: object, importedAt: string|null }} */
+/**
+ * The stored list. A row stored without its ad text gets it from the text cache when the cache has it (jobTexts.js, the one place where
+ * texts are put back), so every reader of the list sees the same rows. `degraded` is how the list was last stored (see `saveJobs`).
+ * @returns {{ meta: object|null, jobs: Job[], filters: object, importedAt: string|null, degraded?: 'lean'|'minimal' }}
+ */
 export function loadJobs() {
   try {
     const raw = localStorage.getItem(JOBS_STORAGE_KEY)
     if (!raw) return getDefaultJobsState()
     const parsed = JSON.parse(raw)
+    const jobs = mergeCachedTexts(Array.isArray(parsed.jobs) ? parsed.jobs : [])
+    mirrorStoredTier(parsed.degraded, jobs)
     return {
       ...getDefaultJobsState(),
       ...parsed,
       filters: { ...DEFAULT_FILTERS, ...parsed.filters, priority: normalizePriorityFilter(parsed.filters?.priority), salaryMode: salaryModeOf(parsed.filters || {}), site: normalizeMultiFilter(parsed.filters?.site), provider: normalizeMultiFilter(parsed.filters?.provider), company: normalizeMultiFilter(parsed.filters?.company) },
-      jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
+      jobs,
     }
   } catch {
     return getDefaultJobsState()
   }
+}
+
+// What the notice says after a reload comes from how the list was stored. A failed save (`error`) is not undone by reading the older copy.
+function mirrorStoredTier(degraded, jobs) {
+  const level = getStorageHealth().level
+  if (level === 'error') return
+  const wanted = degraded === 'lean' || degraded === 'minimal' ? degraded : (level === 'lean' || level === 'minimal' ? 'ok' : level)
+  const droppedText = degraded ? jobs.filter((job) => !job.manualEntry && isBlank(job.description)).length : 0
+  setStorageHealth({ level: wanted, rows: jobs.length, droppedText })
 }
 
 // Read again from the scored-jobs file on every load while the API is up; the
@@ -64,6 +81,52 @@ export function slimJob(job) {
   return slim
 }
 
+// --- how the list is stored (S8a) ----------------------------------------------------------------------------------------------
+//
+// The browser storage holds about 5M characters for the whole site. The list is stored in the first of these shapes that fits:
+//   full     every row as it is
+//   lean     no `llmFacts` or `engineShadow` (the file and the ledger have them), and no `description` on rows the scored file carries.
+//            A kept ad, a row no longer in the file and a hand-entered job keep their text: the file has no copy of those.
+//   minimal  as lean, but a kept ad and a no-longer-listed row lose their text too. The ledger has it, and `jobTexts.js` gets it back at
+//            start, before any screen is shown. A hand-entered job always keeps its text: it is the owner's own and may not be on the server yet.
+// Every other field of every row is stored in every shape: status, notes, outreach, tracking, tailored assets, AI insights, links.
+// If not even `minimal` fits, nothing is written, the last saved copy stays where it is, and the notice says so (storageHealth.js).
+
+/** A row whose ad text exists nowhere in the scored file: the browser's copy is the only one next to the ledger's. */
+const ownText = (job) => Boolean(job.manualEntry || job.keptByUser || job.offList)
+
+export function leanJob(job) {
+  const { llmFacts: _facts, engineShadow: _shadow, ...rest } = job
+  if (!ownText(job)) delete rest.description
+  return rest
+}
+
+export function minimalJob(job) {
+  const { llmFacts: _facts, engineShadow: _shadow, ...rest } = job
+  if (!job.manualEntry) delete rest.description
+  return rest
+}
+
+const TIERS = [
+  { tier: 'full', shape: (job) => job },
+  { tier: 'lean', shape: leanJob },
+  { tier: 'minimal', shape: minimalJob },
+]
+
+/** The characters the rest of the site's storage takes, for the "near the limit" notice. 0 where the storage cannot be walked. */
+function otherKeysChars(storage) {
+  try {
+    let total = 0
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index)
+      if (key !== JOBS_STORAGE_KEY) total += key.length + (storage.getItem(key) ?? '').length
+    }
+    return total
+  } catch {
+    return 0
+  }
+}
+
 const savedListeners = new Set()
 
 /** Calls `listener` after every successful `saveJobs`; the jobs store uses it to tell mounted views. Returns the unsubscribe. */
@@ -73,9 +136,8 @@ export function onJobsSaved(listener) {
 }
 
 /**
- * Stores the job list. When it does not fit in localStorage (about 5M
- * characters; a few hundred enriched ads pass that), stores it without the
- * fields the file restores, and failing that keeps the list in memory only.
+ * Stores the job list in the first shape that fits (see above) and tells the user when it had to be shorter, or could not be stored.
+ * Returns the payload it was given, with `saved` (false when nothing was written) and `tier`.
  */
 export function saveJobs(state, storage = globalThis.localStorage) {
   const payload = {
@@ -84,23 +146,30 @@ export function saveJobs(state, storage = globalThis.localStorage) {
     filters: state.filters,
     importedAt: state.importedAt,
   }
-  let saved = false
-  try {
-    storage.setItem(JOBS_STORAGE_KEY, JSON.stringify(payload))
-    saved = true
-  } catch {
+  for (const { tier, shape } of TIERS) {
+    const jobs = tier === 'full' ? payload.jobs : payload.jobs.map(shape)
+    const json = JSON.stringify(tier === 'full' ? payload : { ...payload, jobs, slim: true, degraded: tier })
     try {
-      storage.setItem(JOBS_STORAGE_KEY, JSON.stringify({ ...payload, jobs: payload.jobs.map(slimJob), slim: true }))
-      saved = true
-    } catch (error) {
-      console.warn(`Job list not saved in this browser: ${error.message}`)
+      storage.setItem(JOBS_STORAGE_KEY, json)
+    } catch {
+      continue
     }
+    if (tier !== 'full') rememberTexts(payload.jobs.filter((job, index) => jobs[index].description !== job.description)) // the texts this page still holds
+    const percent = Math.round((100 * (json.length + otherKeysChars(storage))) / STORAGE_QUOTA_CHARS)
+    const droppedText = tier === 'full' ? 0 : payload.jobs.filter((job, index) => !isBlank(job.description) && isBlank(jobs[index].description)).length
+    setStorageHealth({
+      level: tier === 'full' ? (percent >= NEAR_RATIO * 100 ? 'near' : 'ok') : tier,
+      rows: jobs.length, chars: json.length, percent, droppedText,
+    })
+    savedListeners.forEach((listener) => listener())
+    return { ...payload, saved: true, tier }
   }
-  if (saved) savedListeners.forEach((listener) => listener())
-  return payload
+  console.warn('Job list not saved in this browser: it is over the storage limit even in its shortest form.')
+  setStorageHealth({ level: 'error', rows: payload.jobs.length })
+  return { ...payload, saved: false, tier: null }
 }
 
-function jobMatchKey(job) {
+export function jobMatchKey(job) {
   const url = (job.jobUrl || '').trim().toLowerCase()
   if (url) return `url:${url}`
   return `tcl:${(job.title || '').toLowerCase()}|${(job.company || '').toLowerCase()}|${(job.location || '').toLowerCase()}`
@@ -117,11 +186,12 @@ function hasContent(value) {
   return value !== null && value !== undefined && value !== '' && value !== false
 }
 
-/** Whether the row holds something only the owner's work put there: a triage status, AI insights, tailored assets, outreach or legacy tracking. */
+/** Whether the row holds something only the owner's work put there: "Keep this ad", a triage status, AI insights, tailored assets, outreach or legacy tracking. */
 export function hasUserData(job) {
   if (!job) return false
   const { status: outreachStatus, ...outreach } = job.outreach || {}
-  return Boolean(job.status && job.status !== 'new')
+  return job.keptByUser === true
+    || Boolean(job.status && job.status !== 'new')
     || hasContent(job.aiInsights)
     || hasContent(job.tailoredAssets)
     || (Boolean(outreachStatus) && outreachStatus !== 'none')
@@ -139,6 +209,7 @@ export function mergeStatusOnImport(existingJobs, incomingJobs) {
       tailoredAssets: job.tailoredAssets,
       aiInsights: job.aiInsights,
       outreach: job.outreach,
+      kept: job.keptByUser === true ? { keptByUser: true, keptAt: job.keptAt } : null,
       manual: Object.fromEntries([...MANUAL_FIELDS, ...(job.manualEntry ? MANUAL_ONLY_FIELDS : [])].filter((f) => f in job).map((f) => [f, job[f]])),
     }
     preservedByKey.set(jobMatchKey(job), entry)
@@ -153,6 +224,7 @@ export function mergeStatusOnImport(existingJobs, incomingJobs) {
     return {
       ...fresh,
       ...preserved?.manual,
+      ...preserved?.kept, // the owner kept this ad, whatever later runs say: it must outlast its next absence too
       status: preserved?.status || job.status || 'new',
       applicationTracking: preserved?.applicationTracking || job.applicationTracking,
       tailoredAssets: job.tailoredAssets || preserved?.tailoredAssets,
