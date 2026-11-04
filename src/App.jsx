@@ -16,6 +16,7 @@ import AICommandCenter from './components/ai/AICommandCenter'
 import OutreachDashboard from './components/outreach/OutreachDashboard'
 import QualityDashboard from './components/quality/QualityDashboard'
 import ActivityScreen from './components/activity/ActivityScreen'
+import JobTextGate from './components/jobs/JobTextGate'
 import JobDetailsPage from './components/jobs/JobDetailsPage'
 import { useJobRoute } from './hooks/useJobRoute'
 import { useBackgroundRefresh } from './hooks/useBackgroundRefresh'
@@ -134,7 +135,9 @@ export default function App() {
     <ProfileProvider>
         <div className="min-h-screen bg-[var(--color-surface)]">
           <DemoBootstrapGate>
-            <AppContent />
+            <JobTextGate>
+              <AppContent />
+            </JobTextGate>
           </DemoBootstrapGate>
         </div>
     </ProfileProvider>

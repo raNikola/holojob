@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Activity, Brain, MessageSquare, Settings, ShieldCheck, Target, Users, X } from 'lucide-react'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
+import StorageNotice from './StorageNotice'
 import { VIEWS, VIEW_TITLES } from '../../modules/appNavigation'
 import { useAppConfig } from '../../hooks/useAppConfig'
 
@@ -28,6 +29,7 @@ export default function AppShell({ activeView, onNavigate, children }) {
           </div>
         )}
         <TopBar title={title} />
+        <StorageNotice />
         <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 sm:px-6 md:pb-6">
           <div className="w-full min-w-0">
             {children}

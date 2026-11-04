@@ -1126,3 +1126,25 @@ Meaning today, confirmed in the code: the New badge is `job.isNew` (3 days or le
 | Compact rows | Done (`63f216c`) |
 | Remove the shadow badge from the table, keep it on Details | Not done: `EngineShadowBadge` is still in `JobTable.jsx` (table and cards), and is on Details |
 | Applied button goes to the tracker (a separate task) | Not done: the table button only sets `job.status` to `applied_manually` through `updateJobStatus` and writes no application |
+
+## S8a: the job list never silently loses data to the browser's storage limit (2026-11-04)
+
+`saveJobs` (`jobStorage.js`) stores the list in the first shape that fits, and `storageHealth.js` tells the user which one:
+
+| Shape | Stored | Dropped, and where it comes from instead |
+|---|---|---|
+| full | every row | nothing (a "near the limit" note from 85% of the assumed 5,242,880 characters) |
+| lean | as full | `llmFacts`, `engineShadow`, and the text of rows the scored file carries (reloaded from the server). A kept ad, a no-longer-listed row and a hand-entered job keep their text |
+| minimal | as lean | also the text of kept and no-longer-listed rows. A hand-entered job always keeps its text |
+| error | nothing is written | the last saved copy stays; a permanent warning says the change is not saved |
+
+Always kept in every shape: notes, statuses, outreach, tracking, tailored assets, AI insights.
+
+- **Single place for the text:** `jobTexts.js`. `JobTextGate` (wraps the app in `App.jsx`) asks `POST /api/jobs/texts` (read-only, from the
+  ledger index, 100 ids a request, ad text only) before any screen is shown; `loadJobs()` merges the cache into every row it returns, so search,
+  outreach providers, `buildAiContext`, `patchJob` and the screens all read the same rows. `saveJobs` also remembers the texts it leaves out.
+  Tests per consumer: `tests/js/jobTextsConsumers.test.js`.
+- **Cannot be made reliable:** if the ledger is unreachable or holds no text for an id, the app still opens and the notice names how many ads
+  have no text ("search, outreach and AI tools cannot read those ads"). Tailoring a kept or no-longer-listed ad is refused with a visible message:
+  the server reads only the scored file (functional gap, see DEFERRED).
+- The error shape never clears by reading the older copy, and nothing in the browser says "saved" for it.
