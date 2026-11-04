@@ -300,6 +300,23 @@ describe('asking the route again', () => {
   })
 })
 
+describe('a Re-scrape that found nothing usable', () => {
+  it.each(['failed', 'skipped'])('says the list was not changed (%s) and does not re-import the scored file', async (status) => {
+    let finished
+    vi.doMock('../../src/modules/jobs/useRescrapeRun', () => ({ useRescrapeRun: ({ onFinished }) => { finished = onFinished; return { start() {}, view: { active: false } } } }))
+    const server = stubServer({ route: good, scored: () => ({ meta: {}, jobs: [{ jobId: 'from-file', title: 'From file' }] }) })
+    screen = await mountScreen({ stored: STORED })
+    const before = screen.raw()
+    await screen.click(screen.container)
+    await (await import('react')).act(async () => { await finished({ status, import: { kind: 'nothing', nothingSaved: 'no_usable_source' } }) })
+    await settle()
+    expect(screen.text()).toContain('Re-scrape found nothing usable: no source gave a usable result, so the list was not changed.')
+    expect(screen.text()).not.toContain('Re-scrape failed')
+    expect(screen.raw()).toBe(before)
+    expect(server.allCalls).toBeGreaterThan(0)
+  })
+})
+
 describe('rows only the server holds', () => {
   it('a filtered row has no checkbox and opens nothing', async () => {
     stubServer({ route: good })

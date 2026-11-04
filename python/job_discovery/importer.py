@@ -289,6 +289,7 @@ def _record_stale_evidence(ledger: dict, run: staging.RunStage, moment: str, key
 
 
 PARTIAL_RUNS_KEPT = 200
+NO_USABLE_SOURCE = "no_usable_source"  # report["nothingSaved"] of a run that got no usable source (S8b)
 
 
 def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, manifest: dict, deduped: list[dict], moment: str) -> "ImportResult":
@@ -365,7 +366,7 @@ def evidence_block(report: dict, stats: dict) -> dict:
 
 def plan_import(
     run: staging.RunStage, ledger: dict, previous=None, *, now: str | None = None, force: bool = False,
-    allow_older: bool = False,
+    allow_older: bool = False, require_usable: bool = False,
 ) -> ImportResult:
     """What importing this staged run would do. `ledger` is the ledger as it stands, `previous` the discovered file the run
     replaced (None: there was none, or it is not known; then `report["replayExact"]` says so). Nothing is written or mutated.
@@ -376,6 +377,11 @@ def plan_import(
 
     **Order guard (S4a, owner decision):** a run that started before `ledger.lastImport.startedAt` is refused (`older_run`), because
     applying it would move `lastSeen` back. `allow_older=True` is the explicit override for recovery; nothing else passes it.
+
+    **No usable source (S8b, owner decision):** with `require_usable`, a run that was not cancelled, asked at least one source to run and got
+    no usable source (every one failed, partial, unfinished, skipped or held as not run) changes nothing: `report["nothingSaved"]` is
+    `no_usable_source` and the ledger comes back as it went in. Such a run has seen nothing, so it must not hold, close or rebuild anything.
+    Opt-in: the live path and `import_run.py --import` pass it; the plan itself, and every older caller, behave as before.
     """
     result = ImportResult(ledger=copy.deepcopy(ledger))
     report = result.report = {"runId": run.run_id, "sources": [], "reasons": {}, "rejectedExamples": []}
@@ -497,6 +503,14 @@ def plan_import(
 
     if run.cancelled is not None:
         return _plan_partial(result, report, run, manifest, deduped, moment)
+
+    # Usable: the source ran to its end (state complete) and its ads are whole (not held as not run). Failed, partial, skipped and unfinished are not.
+    if require_usable and providers and not any(one["state"] == "complete" and not one["heldAsNotRun"] for one in report["sources"]):
+        report.update(complete=False, saved=0, provenRuns=[], nothingSaved=NO_USABLE_SOURCE)
+        for one in (report.get("proof") or {}).values():
+            one["proven"] = False
+        result.ledger = copy.deepcopy(ledger)  # whatever was worked out above is dropped: this run changes nothing
+        return result
 
     previous_facts, seen_before = _previous(previous)
     for job in deduped:
@@ -795,7 +809,7 @@ class ImportOutcome:
     warnings: list[str] = field(default_factory=list)
 
 
-def import_staged_run(root: Path, run_id: str, *, allow_older: bool = False) -> ImportOutcome:
+def import_staged_run(root: Path, run_id: str, *, allow_older: bool = False, require_usable: bool = False) -> ImportOutcome:
     """Import a staged run for real: the one commit of the live path. The caller holds the pipeline lock.
 
     Read the ledger and the discovered file the run replaced, plan the import (full validation, the order guard, the same rules
@@ -818,14 +832,15 @@ def import_staged_run(root: Path, run_id: str, *, allow_older: bool = False) -> 
     previous = None
     if manifest.get("discoveredBefore"):
         previous = _load_json(run.discovered_before)
-    result = out.result = plan_import(run, ledger, previous, allow_older=allow_older)
+    result = out.result = plan_import(run, ledger, previous, allow_older=allow_older, require_usable=require_usable)
     if not result.ok:
         out.refused += result.refused
         return out
-    nothing = bool(run.cancelled is not None and result.report.get("nothingSaved"))
+    unusable = result.report.get("nothingSaved") == NO_USABLE_SOURCE and run.cancelled is None
+    nothing = bool(run.cancelled is not None and result.report.get("nothingSaved")) or unusable
     out.saved = int(result.report.get("saved") or 0)
     if nothing:
-        pass  # a cancelled run that collected nothing usable: no write at all, not even a generation
+        pass  # a cancelled run that collected nothing usable, or a run with no usable source: no write at all, not even a generation
     elif not result.report.get("alreadyImported"):
         view_guard.commit(result.ledger, jobs_file, ledger_file)
         out.committed = True
@@ -833,14 +848,16 @@ def import_staged_run(root: Path, run_id: str, *, allow_older: bool = False) -> 
         view_guard.ensure(jobs_file, ledger_file)
     out.generation = result.ledger.get("generation")
     try:
-        if run.cancelled is None:
+        if unusable:
+            pass  # nothing was imported, so its dropped ads are not counted either
+        elif run.cancelled is None:
             filtered_ads.record_run(root, run, import_time(run), result.ledger["jobs"])
         elif out.saved or result.report.get("alreadyImported"):
             # A cancelled run's dropped ads are saved once, under `partialRuns`; `appliedRuns` never holds its id.
             filtered_ads.record_run(root, run, import_time(run), result.ledger["jobs"], partial=True)
     except Exception as exc:  # noqa: BLE001 - the ledger is written and stays written; only the pruning of this run waits
         out.warnings.append(f"The dropped ads of run {run_id} were not recorded ({type(exc).__name__}).")
-    staging.mark_imported(root, run_id, {"generation": out.generation, "committed": out.committed, **({"cancelled": True, "saved": out.saved} if run.cancelled is not None else {})})
+    staging.mark_imported(root, run_id, {"generation": out.generation, "committed": out.committed, **({"cancelled": True, "saved": out.saved} if run.cancelled is not None else {}), **({"nothing": NO_USABLE_SOURCE} if unusable else {})})
     waiting = filtered_ads.unrecorded(root)
     held = sorted(r for r in waiting if staging.is_imported(root, r))
     if held:

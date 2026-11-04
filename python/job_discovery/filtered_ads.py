@@ -179,6 +179,8 @@ def unrecorded(root: Path) -> set[str]:
     for run_id in staging.list_runs(root):
         if not (base / run_id / staging.DISCARDS).is_file():
             continue
+        if (staging.imported_info(root, run_id) or {}).get("nothing"):
+            continue  # a run that got no usable source imported nothing (S8b): its dropped ads are not counted
         if (base / run_id / staging.CANCELLED).exists():
             # A cancelled run is saved once, under `partialRuns`, and only when it saved ads. One that saved none (or was never imported) is not waiting.
             saved = (staging.imported_info(root, run_id) or {}).get("saved") or 0
@@ -220,6 +222,10 @@ def backfill(root: Path, time_of, *, dry_run: bool = False) -> dict:
         line = {"runId": run_id, "imported": staging.is_imported(root, run_id)}
         report["runs"].append(line)
         cancelled = run.cancelled is not None
+        if (staging.imported_info(root, run_id) or {}).get("nothing"):
+            line["state"] = "run with no usable source: nothing was imported, not counted"
+            report["noUsableSource"] = report.get("noUsableSource", 0) + 1
+            continue
         if cancelled and not (staging.imported_info(root, run_id) or {}).get("saved"):
             line["state"] = "cancelled run that saved nothing: not counted"
             report["cancelled"] = report.get("cancelled", 0) + 1

@@ -77,7 +77,7 @@ export function statusSentence(run) {
     case 'skipped':
       return 'Every source was skipped, so nothing was searched.'
     case 'failed':
-      return 'This run failed. The issues below say where.'
+      return run.import?.nothingSaved === 'no_usable_source' ? 'No source gave a usable result, so nothing was imported and the job list was not changed.' : 'This run failed. The issues below say where.'
     case 'partial':
       return 'Some sources did not finish or did not read everything. The sources below say which.'
     case 'running':
@@ -143,7 +143,7 @@ export function stagingText(run) {
 export function ledgerText(run) {
   if (!run.import) return NOT_RECORDED
   if (run.import.kind === 'partial') return 'Nothing else changed: no ad was closed, marked absent or reopened.'
-  if (run.import.kind === 'nothing') return 'Nothing was saved, so nothing changed.'
+  if (run.import.kind === 'nothing') return run.import.nothingSaved === 'no_usable_source' ? 'No source gave a usable result, so nothing was imported and the job list was not changed.' : 'Nothing was saved, so nothing changed.'
   if (run.import.kind === 'refused') return 'The import was refused, so nothing changed.'
   const ledger = run.import.ledger
   if (!ledger) return NOT_RECORDED

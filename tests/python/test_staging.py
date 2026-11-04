@@ -30,6 +30,14 @@ def ad(job_id="g1", **extra):
             "isRemote": True, "status": "new", **extra}
 
 
+def whole_ad(job_id="g1"):
+    """A canonical ad that passes the importer's validation: a run whose only ads are not whole has no usable source and imports nothing."""
+    from providers.base_provider import build_canonical_job
+
+    return {**build_canonical_job(provider="greenhouse", source="acme", title="Product Manager", company="Acme", location="Remote",
+                                  job_url=f"https://a.example/{job_id}", description="Own the roadmap."), "jobId": job_id}
+
+
 def mode(path):
     return stat.S_IMODE(path.stat().st_mode)
 
@@ -361,7 +369,7 @@ def test_with_staging_off_nothing_is_committed_and_the_run_says_so(tmp_path, mon
 
 
 def test_a_provider_that_does_not_stream_has_its_list_staged_whole_when_it_returns(tmp_path, monkeypatch):
-    assert discover(tmp_path, monkeypatch, {"greenhouse": Fake([ad("a"), ad("b")])}) == 0
+    assert discover(tmp_path, monkeypatch, {"greenhouse": Fake([whole_ad("a"), whole_ad("b")])}) == 0
     [run_id] = staging.list_runs(tmp_path)
     stage = staging.read_run(tmp_path, run_id).sources["greenhouse"]
     assert [j["jobId"] for j in stage.jobs] == ["a", "b"]
@@ -383,7 +391,7 @@ def test_a_failed_and_a_skipped_source_get_a_footer_that_is_not_complete(tmp_pat
         def fetch_jobs(self, *args):
             raise RuntimeError("boom")
 
-    assert discover(tmp_path, monkeypatch, {"greenhouse": Fake([ad("a")]), "lever": Skips([]), "ashby": Raises([])}) == 0
+    assert discover(tmp_path, monkeypatch, {"greenhouse": Fake([whole_ad("a")]), "lever": Skips([]), "ashby": Raises([])}) == 0
     sources = staging.read_run(tmp_path, staging.list_runs(tmp_path)[0]).sources
     assert sources["lever"].footer["status"] == "skipped" and sources["lever"].footer["skipReason"] == "not here"
     assert sources["ashby"].footer["status"] == "failed" and "boom" in sources["ashby"].footer["error"]
@@ -413,9 +421,9 @@ def test_a_run_whose_staging_cannot_start_commits_nothing_and_says_so_in_its_rec
 
 
 def test_the_run_keeps_the_ledger_it_started_from(tmp_path, monkeypatch):
-    discover(tmp_path, monkeypatch, {"greenhouse": Fake([ad("a")])})
+    discover(tmp_path, monkeypatch, {"greenhouse": Fake([whole_ad("a")])})
     first = (tmp_path / "data/jobs/job_history.json").read_bytes()
-    discover(tmp_path, monkeypatch, {"greenhouse": Fake([ad("a"), ad("b")])})
+    discover(tmp_path, monkeypatch, {"greenhouse": Fake([whole_ad("a"), whole_ad("b")])})
     second_run = staging.list_runs(tmp_path)[0]
     kept = staging.read_run(tmp_path, second_run).ledger_before
     assert kept is not None and kept.read_bytes() == first

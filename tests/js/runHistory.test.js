@@ -338,6 +338,12 @@ describe('messages', () => {
     expect(message('Import refused: older_run: run abc started 2026-11-01, before CANARY-TITLE')).toBe('Import refused: details withheld (older_run)')
   })
 
+  it('shows the no-usable-source text whole, and only that exact text', () => {
+    const text = 'No source gave a usable result, so nothing was imported and the job list was not changed.'
+    expect(message(text)).toBe(text)
+    expect(message(`${text} CANARY-TITLE`)).toBe('Message details withheld')
+  })
+
   it('withholds any other text, naming only what is safe to name', () => {
     expect(message('We could not parse the ad "CANARY-TITLE" from Acme Corp')).toBe('Message details withheld')
     expect(message('ConnectionError while reading CANARY-TITLE')).toBe('Message details withheld (ConnectionError)')

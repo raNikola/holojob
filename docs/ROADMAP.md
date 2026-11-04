@@ -127,6 +127,8 @@ Plan, approved decisions and rollback per slice: [DECISIONS.md](DECISIONS.md#scr
 | S7a | Run evidence in new records (`import` block: saved, new, refreshed, ledger effect, per-source proof with reason codes, per-board reasons, filter-reason counts; per-source times) and `GET /api/runs`: read-only, bounded, allow-listed, no lock, no process, no ledger or staging read | **Built, not deployed** (2026-11-04). [Decisions](DECISIONS.md#s7a-as-built-run-evidence-in-the-record-and-get-apiruns-2026-11-04) |
 | S7b | The Activity screen, read-only: nav item first in System, history (30 a page, Show more), per-source Details with the proof reasons, Not recorded for old records, loading, empty and error states. Asks on open, Refresh and Show more only; no polling, nothing stored in the browser | **Built, not deployed** (2026-11-04). [Decisions](DECISIONS.md#s7b-as-built-the-activity-screen-read-only-2026-11-04) |
 | S7c | Live view and Cancel: `GET /api/runs/<id>?after=N` (Node only, read-only), a 3 s poll only while Activity and the tab are visible and the run is active (back-off 3, 6, 12, 30 s), source rows and events as they arrive, Cancel with confirm on Activity and on the Jobs progress line ("Cancel requested" is not "Cancelled"), a Details link from Jobs, the list read once when the run ends | **Built, not deployed** (2026-11-04). [Decisions](DECISIONS.md#s7c-as-built-the-live-view-and-cancel-on-activity-2026-11-04) |
+| S8a | The job list never silently loses data to the browser's storage limit: tiers full / lean / minimal / error, a visible notice that names what is kept and what is reloaded, ad text of dropped rows reloaded from the ledger before any screen (`POST /api/jobs/texts`, `jobTexts.js`, `JobTextGate`), error keeps the last saved copy and says the change is not saved. Tailoring a kept or no-longer-listed ad says it cannot be done. | Built (`b498308`) |
+| S8b | A run in which no source gave a usable result (all skipped, failed, partial or unfinished, or held as not run) imports nothing: ledger, view, corpus, lifecycle, `lastImport`, `sourceRuns`, `appliedRuns` and generation are the same bytes. `require_usable` is opt-in (the live path and `import_run.py --import` turn it on). All skipped: exit 0, Activity status stays Skipped, scoring is not run. Attempted and unusable: exit 1, a failed run with the reason. The Jobs screen says the list was not changed. | Built |
 | later | Source order and per-source timeout policy (was 2c) | Not built |
 | deferred | Ledger growth: `job_history.json` grows about 550 MB a year (about 10 KB per entry, about 150 new ads a day), and every import reads and rewrites it. Likely fix: descriptions out of the main file | **Deferred** (recorded 2026-11-03). [Decisions](DECISIONS.md#s5e1-as-built-dropped-ads-kept-in-filtered_adsjson-2026-11-03) |
 
@@ -261,3 +263,19 @@ Known and left open on purpose. Checked against the code on 2026-11-02.
 Discovery across LinkedIn (JobSpy), Infostud, Workable, Greenhouse, Lever and Ashby; job
 history ledger; enrichment facts; work-authorization rules; fit judge; CV library and CV
 analysis with verification; tailoring; outreach contact scraping. See CHANGELOG.md.
+
+## DEFERRED after S8 (recorded 2026-11-04)
+
+Functional gap (must be fixed, not just noted):
+- [ ] **"Keep this ad" stores an ad but does not guarantee every action on it.** Tailoring a kept ad is impossible, because the server reads only the scored file; the button now says so (`NOT_IN_SCORED_LIST`). The fix is to let the tailor read a kept ad from the ledger or send its text, with the fact gate (Phase 4).
+
+Deferred items (known, not scheduled):
+- [ ] Runs with every source skipped used to hold rows of any search key (design 2026-11-02); with `require_usable` they no longer import. A caller that does not pass it (the plain importer) still holds them.
+- [ ] A source that is `ok` with zero reads counts as usable, so a run of such sources still imports and can age ads.
+- [ ] A sole `partial` source (some boards failed, others worked) counts as not usable: its real ads are not imported until another source finishes. Revisit if single-board setups are common.
+- [ ] Text search covers only the rows that have text in the browser; ads whose text could not be reloaded are not found by it (the notice names how many).
+- [ ] No bulk restore of kept-ad text from the ledger beyond the start-up reload of the rows stored without it.
+- [ ] The 5,242,880-character localStorage limit is an assumption, not measured per browser.
+- [ ] Hand-entered jobs have no flag saying whether the server has them.
+- [ ] Direct `setItem` writers (the demo loader) bypass the storage budget in `saveJobs`.
+- [ ] A throttled source (`jobspy` read 4) can count as proven; about 1,934 `older_key` rows never go away; `scoringBehind` is false after a cancel; the hand-edited `appliedRuns` xfail; no `init` in compose; pre-S6 backfill double-count; `lastImport.meta` is stale after a partial import; a truncated ledger with a matching generation.

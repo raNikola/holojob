@@ -1148,3 +1148,24 @@ Always kept in every shape: notes, statuses, outreach, tracking, tailored assets
   have no text ("search, outreach and AI tools cannot read those ads"). Tailoring a kept or no-longer-listed ad is refused with a visible message:
   the server reads only the scored file (functional gap, see DEFERRED).
 - The error shape never clears by reading the older copy, and nothing in the browser says "saved" for it.
+
+## S8b: a run with no usable source imports nothing (2026-11-04)
+
+Evidence: on the real-data copy, a run whose sources were all skipped changed 1,982 of 1,990 ledger entries (each got `heldRunId`), grew the
+list from 56 to 1,990 rows, cut the corpus from 55 to 8 and moved the generation. That was the 2026-11-02 design and it is replaced.
+
+- **Rule:** with `require_usable`, a run that is not cancelled, asked at least one source to run and has no usable source (usable: state
+  `complete` and not held as not run) is a no-op: `importer.plan_import` returns the ledger as it went in with `report.nothingSaved =
+  no_usable_source`; `import_staged_run` writes nothing, not even a generation. After it the proof harness shows the same bytes for the
+  ledger, the view and `filtered_ads.json`, and 56 rows / corpus 55 / generation 3 for skipped, failed and partial runs alike.
+- **Opt-in:** the plain importer behaves as before. The live run (`run_discovery.py`) and `import_run.py --import` pass `require_usable=True`
+  (`tests/python/test_no_usable_source.py` checks that these are the only two callers). Cancelled runs keep the S6 partial semantics.
+- **Marker:** `imported.json` gets `nothing: "no_usable_source"`. Such a run adds nothing to `appliedRuns` and its dropped ads are not counted
+  (`filtered_ads.unrecorded` / `backfill` skip it), and `lifecycle_report` does not read it as evidence.
+- **Exit code:** attempted and unusable (a failed or partial source) exits 1: the record is `failed`, with the error "No source gave a usable
+  result, so nothing was imported and the job list was not changed." (fixed text in the `run-history.js` allow-list). All skipped exits 0:
+  skipped is not failed, so the record stays `skipped` (warning, same text), and the Re-scrape orchestrator skips scoring because the list did not change
+  (`step_skipped`, reason `nothing_imported`). Exit 1 would have turned a skipped run into a failed one in the record, in Activity and in the Re-scrape message.
+- **Screens:** Activity shows the sentence and the ledger effect; the Jobs screen says "Re-scrape found nothing usable: no source gave a usable result, so the list was not changed. Details in Activity."
+- **Tests edited (11), each decided separately:** see the S8b report. Tests of the new rule were updated to exit codes and unchanged bytes;
+  tests of something else kept their scenario and got a usable (whole) source.

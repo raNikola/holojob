@@ -52,6 +52,16 @@ describe('what a run says in words', () => {
     expect(statusLabel('whatever')).toBe('Unknown')
   })
 
+  it('a run that imported nothing because no source was usable says so, and a skipped one stays skipped', () => {
+    const nothing = { kind: 'nothing', nothingSaved: 'no_usable_source', complete: false, saved: 0, new: 0, refreshed: 0, sources: [] }
+    const said = 'No source gave a usable result, so nothing was imported and the job list was not changed.'
+    expect(statusSentence(run({ status: 'failed', import: nothing }))).toBe(said)
+    expect(ledgerText(run({ status: 'failed', import: nothing }))).toBe(said)
+    expect(statusSentence(run({ status: 'skipped', import: nothing }))).toBe('Every source was skipped, so nothing was searched.')
+    expect(ledgerText(run({ status: 'skipped', import: nothing }))).toBe(said)
+    expect(statusSentence(run({ status: 'failed' }))).toBe('This run failed. The issues below say where.')
+  })
+
   it('cancelled, interrupted and skipped each have a sentence', () => {
     expect(statusSentence(run({ status: 'cancelled', cancel: { requestedAt: null, outcome: 'collected_ads_saved', saved: 12 } }))).toBe('The last run was cancelled. 12 collected ads were saved. Nothing else changed. Scoring was skipped.')
     expect(statusSentence(run({ status: 'cancelled', cancel: { requestedAt: null, outcome: 'stopped_nothing_imported' } }))).toBe('The last run was cancelled. No ads were saved. Nothing else changed. Scoring was skipped.')
