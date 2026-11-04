@@ -38,6 +38,12 @@ const SOURCE_STATUSES = ['ok', 'partial', 'failed', 'skipped']
 const STEP_NAMES = ['discovery', 'scoring']
 const CANCEL_OUTCOMES = ['collected_ads_saved', 'stopped_nothing_imported', 'imported_before_cancel', 'finished_before_cancel']
 const IMPORT_KINDS = ['complete', 'partial', 'nothing', 'refused']
+const MAX_EVENTS = 200
+const MAX_EVENT_LOG_BYTES = 1024 * 1024
+const EVENT_TYPES = [
+  'run_start', 'run_end', 'step_start', 'step_end', 'step_skipped', 'source_start', 'source_end', 'commit_start', 'commit_end', 'commit_incomplete',
+  'error', 'interrupted', 'cancel_requested', 'cancel_signal', 'cancel_kill', 'scrape_stopped', 'cancelled',
+]
 
 /** The codes the screen has a text for (src/data/proofReasons.json, the file the Python side is tested against). */
 const reasonTable = JSON.parse(fs.readFileSync(path.join(ROOT, 'src/data/proofReasons.json'), 'utf-8'))
@@ -352,4 +358,89 @@ export function listRuns(params = new URLSearchParams(), options = {}) {
   }
   const active = query.before ? null : runs.find((run) => run.status === 'running')
   return { status: 200, body: { ok: true, runs, next, skipped, retentionDays: RETENTION_DAYS, activeRunId: active?.runId ?? null } }
+}
+
+
+// --- one run, live (S7c) ---------------------------------------------------------------------------------------------------------
+
+/**
+ * One event as the screen may see it, from an allow-list. A message is shown whole only if it is the app's own fixed text (`message`);
+ * an error or a skip reason is summarised like the same fields of a source. The event log holds more (file lists, run ids); none of it is
+ * returned.
+ */
+export function projectEvent(event) {
+  if (!event || typeof event !== 'object') return null
+  const status = pick(event.status, [...RUN_STATUSES, 'running'], null)
+  return {
+    type: pick(event.type, EVENT_TYPES, 'unknown'),
+    at: time(event.at),
+    step: pick(event.step, STEP_NAMES, null),
+    source: name(event.source),
+    status,
+    read: count(event.read),
+    kept: count(event.kept),
+    saved: count(event.saved),
+    sourcesDone: count(event.sourcesDone),
+    exitCode: Number.isInteger(event.exitCode) && Math.abs(event.exitCode) < 256 ? event.exitCode : null,
+    error: errorSummary(event.error),
+    skipReason: event.skipReason === null || event.skipReason === undefined ? null : message(event.skipReason),
+    message: typeof event.message === 'string' ? message(event.message) : null,
+  }
+}
+
+/** The complete lines of an event log from line `after` on, at most MAX_EVENTS. A torn last line is not read yet; a bad line is skipped but counted. */
+export function readEvents(file, after = 0) {
+  let raw
+  try {
+    if (fs.statSync(file).size > MAX_EVENT_LOG_BYTES) return { events: [], next: after }
+    raw = fs.readFileSync(file, 'utf-8')
+  } catch {
+    return { events: [], next: 0 }
+  }
+  const lines = raw.split('\n')
+  lines.pop() // what follows the last newline: nothing, or a torn line
+  const slice = lines.slice(after, after + MAX_EVENTS)
+  const events = []
+  for (const line of slice) {
+    try {
+      const shown = projectEvent(JSON.parse(line))
+      if (shown) events.push(shown)
+    } catch {
+      // a line torn by a killed writer still counts towards the cursor
+    }
+  }
+  return { events, next: after + slice.length }
+}
+
+/**
+ * GET /api/runs/<runId>?after=N: one run (the same allow-list as the list) and its events from the cursor. Node only: no lock, no process,
+ * no recovery, no write. A running record nobody holds the lock for is returned as interrupted with `inferred: true`, and nothing is marked.
+ */
+export function getRun(runId, params = new URLSearchParams(), options = {}) {
+  const { dir = runsDir(), lock = lockIsHeld } = options
+  if (typeof runId !== 'string' || !RUN_ID.test(runId)) return { status: 422, body: { ok: false, error: 'invalid', field: 'runId' } }
+  const rawAfter = params.get('after')
+  if (rawAfter !== null && !/^\d{1,9}$/.test(rawAfter)) return { status: 422, body: { ok: false, error: 'invalid', field: 'after' } }
+  const after = rawAfter === null ? 0 : Number(rawAfter)
+  let names
+  try {
+    names = fs.readdirSync(dir)
+  } catch {
+    names = []
+  }
+  const file = names.filter((n) => RECORD_NAME.test(n) && n.endsWith(`-${runId}.json`)).sort().pop()
+  if (!file) return { status: 404, body: { ok: false, error: 'unknown_run', message: 'There is no such run.' } }
+  let record
+  try {
+    const full = path.join(dir, file)
+    if (fs.statSync(full).size > MAX_RECORD_BYTES) throw new Error('too large')
+    record = JSON.parse(fs.readFileSync(full, 'utf-8'))
+  } catch {
+    return { status: 404, body: { ok: false, error: 'unreadable_run', message: 'This run\'s record cannot be read.' } }
+  }
+  const alive = record?.status === 'running' ? lock() !== false : true
+  const run = project(record, { alive, cancelRequested: names.includes(file.replace(/\.json$/, '.cancel')) })
+  if (!run || run.runId !== runId) return { status: 404, body: { ok: false, error: 'unreadable_run', message: 'This run\'s record cannot be read.' } }
+  const { events, next } = readEvents(path.join(dir, file.replace(/\.json$/, '.events.jsonl')), after)
+  return { status: 200, body: { ok: true, run, events, next, active: run.status === 'running' } }
 }

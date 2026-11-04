@@ -144,7 +144,7 @@ export default function RunDetails({ run }) {
                 </li>
               ))}
             </ul>
-            {run.issuesCount > run.issues.length && <p className={`text-xs ${muted}`}>Showing {run.issues.length} of {run.issuesCount}.</p>}
+            {run.issuesCount > run.issues.length && <p className={`text-xs ${muted}`}>The first {run.issues.length} of {run.issuesCount} issues are shown.</p>}
           </>
         )}
       </div>

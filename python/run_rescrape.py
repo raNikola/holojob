@@ -175,7 +175,7 @@ def run_step(record: dict, name: str, cmd: list[str], lock: pipeline_lock.Lock) 
     # Discovery wrote to the record meanwhile; only one process writes it at a time, and now it is this one again.
     fresh = run_log.find_record(record["runId"]) or record
     step = next(s for s in reversed(fresh.get("steps") or [step]) if s["name"] == name)
-    # Stopped by a cancel is its own outcome: the code is 76 (discovery imported what it had, held) or a signal (-15, -9).
+    # Stopped by a cancel is its own outcome: the code is 76 (discovery saved the ads it had collected and changed nothing else) or a signal (-15, -9).
     stopped = signalled and (code == run_log.EXIT_CANCELLED or code < 0)
     step.update(status="ok" if code == 0 else "cancelled" if stopped else "failed", finishedAt=_now(), exitCode=code)
     if killed and stopped:

@@ -37,3 +37,41 @@ export function fakeFetch(...queue) {
   fn.calls = calls
   return fn
 }
+
+// --- live view (S7c) --------------------------------------------------------------------------------------------------------------
+
+import { projectEvent } from '../../../scripts/run-history.js'
+
+/** A running Re-scrape record. */
+export const running = (n = 9, extra = {}) => record(n, {
+  status: 'running', finishedAt: null, orchestrator: 'rescrape', sources: [], steps: [{ name: 'discovery', status: 'running', exitCode: null }], ...extra,
+})
+
+/** What GET /api/runs/<id> answers: built with the real projections. */
+export function liveBody(rec, { events = [], next = events.length, alive = true, cancelRequested = false } = {}) {
+  const run = project(rec, { alive, cancelRequested })
+  return { ok: true, run, events: events.map(projectEvent), next, active: run.status === 'running' }
+}
+export const live = (rec, options) => ({ status: 200, body: liveBody(rec, options) })
+
+export const ev = (type, extra = {}) => ({ type, at: '2026-11-01T09:00:00+00:00', ...extra })
+
+/**
+ * A fetch that routes like the server: the list, one run, and the cancel route. Each responder is a function of the call, so a test can change what
+ * the server says between polls. Every call is recorded with its method and body.
+ */
+export function fakeServer({ list, live: liveResponder, cancel } = {}) {
+  const calls = []
+  const fn = async (url, init = {}) => {
+    calls.push({ url, method: init.method ?? 'GET', body: init.body, headers: init.headers })
+    let reply
+    if (url.startsWith('/api/rescrape/cancel')) reply = await (cancel ? cancel(JSON.parse(init.body), calls) : { status: 202, body: { ok: true, result: 'cancel_requested' } })
+    else if (/^\/api\/runs\/[^?]+/.test(url)) reply = await (liveResponder ? liveResponder(url, calls) : { status: 404, body: { ok: false } })
+    else reply = await (list ? list(url, calls) : api([]))
+    if (reply instanceof Error) throw reply
+    return { ok: reply.status >= 200 && reply.status < 300, status: reply.status, json: async () => reply.body }
+  }
+  fn.calls = calls
+  fn.count = (pattern) => calls.filter((call) => pattern.test(`${call.method} ${call.url}`)).length
+  return fn
+}

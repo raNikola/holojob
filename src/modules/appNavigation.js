@@ -24,6 +24,7 @@ export const SETTINGS_CATEGORY_STORAGE_KEY = 'job-dashboard-settings-category'
 export const OPEN_SETTINGS_EVENT = 'holojob:open-settings'
 export const OPEN_QUESTIONNAIRE_EVENT = 'holojob:open-questionnaire'
 export const OPEN_ONBOARDING_EVENT = 'holojob:open-onboarding'
+export const OPEN_ACTIVITY_EVENT = 'holojob:open-activity'
 
 const SHELL_VIEWS = new Set([
   VIEWS.DASHBOARD,
@@ -151,6 +152,11 @@ export function openSettings(sectionId) {
     pendingSettingsSection = section.id
   }
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { sectionId } }))
+}
+
+/** Opens the Activity screen (the Jobs screen's "Details" link); App listens. */
+export function openActivity() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(OPEN_ACTIVITY_EVENT))
 }
 
 /** Opens the profile editor on the questionnaire step; App listens. */

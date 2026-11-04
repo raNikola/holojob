@@ -44,7 +44,7 @@ import { handleApplicationsRequest } from './application-store.js'
 import { handleJobHistoryRequest } from './job-history-read.js'
 import { handleJobsAllRequest } from './job-all-read.js'
 import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
-import { listRuns } from './run-history.js'
+import { getRun, listRuns } from './run-history.js'
 import { RUN_ACTIVE, cancelRescrape, incompleteCommit, isRunBusy, rescrapeStatus, runHttpStatus, startRescrape, withRunLock } from './run-rescrape.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -281,6 +281,18 @@ export async function handleApiRequest(req, res) {
       sendJson(res, status, answer)
     } catch {
       sendJson(res, 500, { error: 'The run history could not be read.' })
+    }
+    return true
+  }
+
+  // One run, live (S7c): the record and its events from a cursor. Node only: no lock, no process, no recovery, no write.
+  const oneRun = /^\/api\/runs\/([^/]+)$/.exec(url)
+  if (oneRun && req.method === 'GET') {
+    try {
+      const { status, body: answer } = getRun(oneRun[1], new URL(req.url, 'http://localhost').searchParams)
+      sendJson(res, status, answer)
+    } catch {
+      sendJson(res, 500, { error: 'The run could not be read.' })
     }
     return true
   }

@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
 import Alert from '../ui/Alert'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import Card from '../ui/Card'
+import LiveRunPanel from './LiveRunPanel'
 import RunDetails from './RunDetails'
 import { useRunHistory } from '../../modules/activity/useRunHistory.js'
 import {
@@ -65,6 +66,13 @@ export default function ActivityScreen({ fetchFn }) {
     return next
   })
   const busy = history.status === 'loading'
+  const [notice, setNotice] = useState(null)
+  const going = history.runs.find((run) => run.status === 'running') ?? null
+
+  // The run this screen was watching has ended: the list is read once more. Its card then carries the outcome in words (the S6 texts),
+  // so the same sentence is not repeated in a notice.
+  const refreshHistory = history.refresh
+  const runEnded = useCallback(() => { refreshHistory() }, [refreshHistory])
 
   return (
     <div className="space-y-4">
@@ -88,6 +96,15 @@ export default function ActivityScreen({ fetchFn }) {
           <p className={`mt-2 ${muted}`}>{PROOF_HELP}</p>
         </details>
       </Card>
+
+      {notice && (
+        <Alert variant={notice.tone}>
+          <p>{notice.text}</p>
+          <button type="button" className="mt-2 text-sm underline" onClick={() => setNotice(null)}>Dismiss</button>
+        </Alert>
+      )}
+
+      {going && <LiveRunPanel key={going.runId} run={going} fetchFn={fetchFn} onFinished={runEnded} onNotice={(answer) => setNotice({ text: answer.message, tone: answer.kind === 'refused' ? 'error' : 'info' })} />}
 
       {history.status === 'error' && (
         <Alert variant="error" title="The run history could not be loaded">
