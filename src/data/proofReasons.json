@@ -1,0 +1,122 @@
+{
+  "ads_not_whole": {
+    "group": "search",
+    "text": "Not proven: some ads were not whole and were left out"
+  },
+  "board_anomalies": {
+    "group": "board",
+    "text": "Not proven: the answer held something unexpected (see the run's warnings)"
+  },
+  "board_complete": {
+    "group": "board",
+    "text": "Proven: the board was read in full"
+  },
+  "board_empty": {
+    "group": "board",
+    "text": "Not proven: the board answered with no ads"
+  },
+  "board_not_complete": {
+    "group": "board",
+    "text": "Not proven: the board was not read in full"
+  },
+  "board_unreadable": {
+    "group": "board",
+    "text": "Not proven: the board could not be read"
+  },
+  "boards_not_proven": {
+    "group": "board",
+    "text": "Not proven: at least one board was not read in full (see the boards)"
+  },
+  "discards_damaged": {
+    "group": "search",
+    "text": "Not proven: the record of dropped ads is missing or damaged"
+  },
+  "discards_mismatch": {
+    "group": "search",
+    "text": "Not proven: the record of dropped ads does not match what the source reported"
+  },
+  "end_check_failed": {
+    "group": "board",
+    "text": "Not proven: the end-of-list request failed"
+  },
+  "end_check_not_a_list": {
+    "group": "board",
+    "text": "Not proven: the end-of-list request did not answer with a list"
+  },
+  "end_not_checked": {
+    "group": "board",
+    "text": "Not proven: the end of the list was not checked"
+  },
+  "files_dont_add_up": {
+    "group": "board",
+    "text": "Not proven: this run's files do not account for every ad of the board"
+  },
+  "files_torn": {
+    "group": "search",
+    "text": "Not proven: the source's staging file was cut short"
+  },
+  "no_board_evidence": {
+    "group": "board",
+    "text": "Not proven: this source gave no per-board proof"
+  },
+  "no_proof_available": {
+    "group": "board",
+    "text": "Not proven: this kind of board offers no completeness proof, so its ads are never closed or marked Stale"
+  },
+  "no_search_key": {
+    "group": "search",
+    "text": "Not proven: the run has no search key"
+  },
+  "no_total": {
+    "group": "board",
+    "text": "Not proven: the answer did not report a total to check against"
+  },
+  "not_finished": {
+    "group": "search",
+    "text": "Not proven: the source did not run to its end (it was stopped or cancelled)"
+  },
+  "nothing_read": {
+    "group": "search",
+    "text": "Not proven: the source answered but returned no ads"
+  },
+  "parts_failed": {
+    "group": "search",
+    "text": "Not proven: some parts of the source failed"
+  },
+  "postings_past_end": {
+    "group": "board",
+    "text": "Not proven: the board listed postings past the ones read"
+  },
+  "proven": {
+    "group": "search",
+    "text": "Proven: the source finished, lost nothing, its files add up, and it returned ads"
+  },
+  "run_cancelled": {
+    "group": "search",
+    "text": "Not proven: the run was cancelled, and a cancelled run proves nothing"
+  },
+  "source_failed": {
+    "group": "search",
+    "text": "Not proven: the source failed"
+  },
+  "source_in_doubt": {
+    "group": "board",
+    "text": "Not proven: the source did not finish cleanly"
+  },
+  "source_partial": {
+    "group": "search",
+    "text": "Not proven: the source read only some of its parts"
+  },
+  "source_skipped": {
+    "group": "search",
+    "text": "Not proven: the source did not search in this run"
+  },
+  "staged_differs": {
+    "group": "search",
+    "text": "Not proven: what was saved to staging differs from what the source returned"
+  },
+  "total_differs": {
+    "group": "board",
+    "text": "Not proven: the total the board reports is not the number of postings read"
+  }
+}

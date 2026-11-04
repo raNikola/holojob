@@ -26,6 +26,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import filtered_ads
+import proof_reasons as proof
 import staging
 from dedupe_jobs import _collapse, _crosspost_key, _exact_key
 
@@ -173,24 +174,98 @@ def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bo
             read.get(board) == row.get("read") == len(kept.get(board, [])) + len(counted)
             and all(r.get("jobId") for r in counted)
         )
+        why = []
+        if row.get("complete") is not True:
+            why.append(proof.board_reason_code(row.get("reason")))
+        if row.get("anomalies"):
+            why.append(proof.BOARD_ANOMALIES)
+        if board in failed:
+            why.append(proof.BOARD_UNREADABLE)
+        if board in empty:
+            why.append(proof.BOARD_EMPTY)
+        if not accounted:
+            why.append(proof.FILES_DONT_ADD_UP)
+        if in_doubt:
+            why.append(proof.SOURCE_IN_DOUBT)
+        if damaged:
+            why.append(proof.DISCARDS_DAMAGED)
         found[board] = {
-            "complete": (
-                row.get("complete") is True and not row.get("anomalies") and board not in failed and board not in empty
-                and accounted and not in_doubt and not damaged
-            ),
+            "complete": not why,  # each condition above is one clause of the rule as it always was; `why` only names the ones that failed
+            "why": proof.once(why) or [proof.BOARD_COMPLETE],
+            "detail": row.get("reason") if isinstance(row.get("reason"), str) else None,
             "listed": {job.get("jobId") for job in kept.get(board, []) if isinstance(job, dict)} | {r["jobId"] for r in records if r.get("jobId")},
         }
     return found
 
 
-def _search_run_proven(run: staging.RunStage, stage, footer, state: str, anomalies: list) -> bool:
-    """A search-based source's run that counts towards Stale (S5f), by the rules a board is proven by: finished with status ok, no ad
-    lost, files that add up, and something actually read. A source can answer ok with nothing when it is throttled; that proves nothing."""
-    if state != "complete" or anomalies or not footer or stage.torn or footer.get("discardMismatch") or footer.get("boardsFailed"):
-        return False
+def _search_proof_reasons(run: staging.RunStage, stage, footer, state: str, anomaly_codes: list[str]) -> list[str]:
+    """Why a search-based source's run does NOT count towards Stale (S5f); empty means it counts. Every condition of the rule, named.
+
+    The rule: finished with status ok, no ad lost, files that add up, and something actually read. A source can answer ok with nothing
+    when it is throttled; that proves nothing."""
+    why: list[str] = []
+    if state == "unfinished" or not footer:
+        why.append(proof.NOT_FINISHED)
+    elif state == "failed":
+        why.append(proof.SOURCE_FAILED)
+    elif state == "partial":
+        why.append(proof.SOURCE_PARTIAL)
+    elif state == "skipped":
+        why.append(proof.SOURCE_SKIPPED)
+    why += anomaly_codes
+    if stage is not None and stage.torn:
+        why.append(proof.FILES_TORN)
+    if footer and footer.get("discardMismatch"):
+        why.append(proof.DISCARDS_MISMATCH)
+    if footer and footer.get("boardsFailed"):
+        why.append(proof.PARTS_FAILED)
     if run.discards is None or run.discards.torn or run.discards.unreadable_lines or run.discards.rejected:
-        return False
-    return (footer.get("read") or 0) > 0
+        why.append(proof.DISCARDS_DAMAGED)
+    if footer and not (footer.get("read") or 0) > 0:
+        why.append(proof.NOTHING_READ)
+    return proof.once(why)
+
+
+def _search_run_proven(run: staging.RunStage, stage, footer, state: str, anomalies: list) -> bool:
+    """A search-based source's run that counts towards Stale (S5f): `_search_proof_reasons` has nothing to say against it."""
+    return not _search_proof_reasons(run, stage, footer, state, [proof.ADS_NOT_WHOLE] if anomalies else [])
+
+
+def _filter_reasons(run: staging.RunStage, name: str) -> dict[str, int]:
+    """How many ads this source's filters dropped, by reason (the part before a colon: `title_excluded:x` counts as `title_excluded`)."""
+    counts: dict[str, int] = {}
+    for reason, number in (run.discards.reasons(name) if run.discards else {}).items():
+        key = reason.split(":", 1)[0]
+        counts[key] = counts.get(key, 0) + number
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    top = dict(ordered[:MAX_FILTER_REASONS])
+    rest = sum(number for _, number in ordered[MAX_FILTER_REASONS:])
+    return {**top, **({"other": rest} if rest else {})}
+
+
+def _source_proof(name: str, state: str, anomaly_codes: list[str], evidence_for_source: dict | None, search_reasons: list[str] | None, key: str) -> dict:
+    """The proof of one source as the run record keeps it: {"proven": bool, "why": [codes], "boards": [...]}. Names the decision, makes none."""
+    if search_reasons is not None:
+        why = list(search_reasons) + ([proof.NO_SEARCH_KEY] if not key else [])  # with no key `_record_stale_evidence` records nothing
+        return {"proven": not why, "why": why or [proof.PROVEN], "boards": []}
+    why = []
+    if state == "unfinished":
+        why.append(proof.NOT_FINISHED)
+    elif state in ("failed", "partial", "skipped"):
+        why.append({"failed": proof.SOURCE_FAILED, "partial": proof.SOURCE_PARTIAL, "skipped": proof.SOURCE_SKIPPED}[state])
+    why += anomaly_codes
+    boards = evidence_for_source or {}
+    if state == "complete" and not boards:
+        why.append(proof.NO_BOARD_EVIDENCE)
+    if boards and not all(one["complete"] for one in boards.values()):
+        why.append(proof.BOARDS_NOT_PROVEN)
+    rows = [{"board": str(board)[:60], "proven": one["complete"], "why": list(one["why"]), "detail": one.get("detail")}
+            for board, one in sorted(boards.items(), key=lambda item: str(item[0]))[:MAX_BOARDS_KEPT]]
+    return {"proven": not why and bool(boards), "why": proof.once(why) or [proof.BOARD_COMPLETE], "boards": rows}
+
+
+MAX_FILTER_REASONS = 12
+MAX_BOARDS_KEPT = 60
 
 
 def _record_stale_evidence(ledger: dict, run: staging.RunStage, moment: str, key: str, proven_searches: list, evidence: dict) -> list[str]:
@@ -228,6 +303,12 @@ def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, m
     """
     ledger = result.ledger
     report.update(cancelled=True, complete=False, provenRuns=[], saved=0, rejected=report.get("rejected", 0))
+    for one in (report.get("proof") or {}).values():  # a cancelled run proves nothing, whatever its footers say
+        one["proven"] = False
+        one["why"] = proof.once([code for code in one["why"] if code not in (proof.PROVEN, proof.BOARD_COMPLETE)] + [proof.RUN_CANCELLED])
+        for board in one["boards"]:
+            board["proven"] = False
+            board["why"] = proof.once([code for code in board["why"] if code != proof.BOARD_COMPLETE] + [proof.RUN_CANCELLED])
     info = ledger.get("lastImport")
     key = manifest.get("searchKey") or ""
     reason = None
@@ -253,6 +334,33 @@ def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, m
     result.view = view_guard.derive_view(ledger)
     report.update(saved=len(deduped), ledgerChanges={k: stats[k] for k in ("new", "known", "reopened", "changed", "carriedFacts")})
     return result
+
+
+def evidence_block(report: dict, stats: dict) -> dict:
+    """The `import` block of a new run record (S7a): what the import saved, and what it knew about each source. Report only: it reads the
+    plan's answers and makes none. Counts only; no ad, title, link or description is in it.
+
+    kind: `complete` (an ordinary import), `partial` (a cancelled run, S6), `nothing` (a cancelled run that saved nothing).
+    saved is every ad written to the list (collected, whole, not a duplicate), refreshed ones included; new is the part the ledger had
+    never seen; refreshed is the rest.
+    """
+    kind = "nothing" if report.get("nothingSaved") else "partial" if report.get("cancelled") else "complete"
+    saved = int(report.get("saved") or 0)
+    new = min(saved, int(stats.get("new") or 0))
+    block = {
+        "kind": kind, "complete": bool(report.get("complete")), "saved": saved, "new": new, "refreshed": saved - new,
+        "duplicatesRemoved": int(report.get("duplicatesRemoved") or 0), "crosspostsMerged": int(report.get("crosspostsMerged") or 0),
+        "rejected": int(report.get("rejected") or 0),
+        "sources": [
+            {"name": name, "proof": one, "filterReasons": (report.get("filterReasons") or {}).get(name, {})}
+            for name, one in (report.get("proof") or {}).items()
+        ],
+    }
+    if kind == "complete":
+        block["ledger"] = {key: int(stats.get(key) or 0) for key in ("closed", "absent", "reopened", "changed", "known")}
+    if report.get("nothingSaved"):
+        block["nothingSaved"] = str(report["nothingSaved"])
+    return block
 
 
 def plan_import(
@@ -342,18 +450,23 @@ def plan_import(
         rejected_total += len(rejected)
         lost = (stage.rejected_ads if stage else 0) + (footer.get("invalid", 0) if footer else 0) + len(rejected)
         anomalies = []
+        anomaly_codes = []
         if footer and footer.get("mismatch"):
             anomalies.append("staged ads differ from what the provider returned")
+            anomaly_codes.append(proof.STAGED_DIFFERS)
         if lost:
             anomalies.append(f"{lost} ads not whole")
+            anomaly_codes.append(proof.ADS_NOT_WHOLE)
         # A source that did not run to its end, or whose staged ads are not all there, is not evidence that any other ad is gone.
         if state in ("unfinished", "failed", "skipped") or anomalies:
             not_run.add(name)
         if name in job_history.CLOSURE_PROVIDERS:
             in_doubt = name in not_run or bool(stage and stage.torn) or bool(footer and footer.get("discardMismatch"))
             evidence[name] = board_evidence(run, name, stage, footer, in_doubt)
-        elif _search_run_proven(run, stage, footer, state, anomalies):
-            proven_searches.append(name)
+        else:
+            search_reasons = _search_proof_reasons(run, stage, footer, state, anomaly_codes)
+            if not search_reasons:
+                proven_searches.append(name)
         if footer:
             if footer.get("boardsFailed"):
                 failed_boards[name] = set(footer["boardsFailed"])
@@ -363,6 +476,11 @@ def plan_import(
                 empty_boards[name] = set(footer["boardsEmpty"])
         provider_counts[name] = len(valid)
         all_jobs.extend(valid)
+        report.setdefault("proof", {})[name] = _source_proof(
+            name, state, anomaly_codes, evidence.get(name), None if name in job_history.CLOSURE_PROVIDERS else search_reasons,
+            manifest.get("searchKey") or "",
+        )
+        report.setdefault("filterReasons", {})[name] = _filter_reasons(run, name)
         report["sources"].append({
             "name": name, "state": state, "staged": len(stage.jobs) if stage and stage.usable else 0,
             "imported": len(valid), "rejected": len(rejected), "heldAsNotRun": name in not_run, "anomalies": anomalies,
@@ -407,6 +525,7 @@ def plan_import(
 
     report.update(
         rejected=rejected_total,
+        saved=len(deduped),
         thinDescriptionReplaced=stats.get("keptFullerDescription", 0),
         heldFailedBoard=stats.get("keptFailedBoard", 0),
         heldEmptyBoard=stats.get("keptEmptyBoard", 0),

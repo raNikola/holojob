@@ -44,6 +44,7 @@ import { handleApplicationsRequest } from './application-store.js'
 import { handleJobHistoryRequest } from './job-history-read.js'
 import { handleJobsAllRequest } from './job-all-read.js'
 import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
+import { listRuns } from './run-history.js'
 import { RUN_ACTIVE, cancelRescrape, incompleteCommit, isRunBusy, rescrapeStatus, runHttpStatus, startRescrape, withRunLock } from './run-rescrape.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -269,6 +270,17 @@ export async function handleApiRequest(req, res) {
       sendJson(res, status, answer)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // Run history (S7a): read-only, slim, bounded. No lock, no process, no recovery, no ledger or staging.
+  if (url === '/api/runs' && req.method === 'GET') {
+    try {
+      const { status, body: answer } = listRuns(new URL(req.url, 'http://localhost').searchParams)
+      sendJson(res, status, answer)
+    } catch {
+      sendJson(res, 500, { error: 'The run history could not be read.' })
     }
     return true
   }

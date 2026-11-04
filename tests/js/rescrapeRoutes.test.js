@@ -1,6 +1,7 @@
 // The routes around a run: the new ones answer as they should, the old ones say 409 while a run is active.
 import fs from 'node:fs'
 import path from 'node:path'
+import os from 'node:os'
 import { Readable, Writable } from 'node:stream'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -75,6 +76,43 @@ describe('the new routes', () => {
     run.status.mockResolvedValue({ status: 200, body: { ok: true, active: false, events: [], next: 0 } })
     expect((await call('GET', '/api/rescrape/status?after=7')).status).toBe(200)
     expect(run.status.mock.calls[0][0]).toBe('7')
+  })
+})
+
+describe('GET /api/runs', () => {
+  let dir
+  let savedDir
+  beforeEach(() => {
+    savedDir = process.env.CAREER_OS_ANALYTICS_DIR
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'holojob-runs-route-'))
+    fs.mkdirSync(path.join(dir, 'runs'))
+    process.env.CAREER_OS_ANALYTICS_DIR = dir
+    fs.writeFileSync(path.join(dir, 'runs', '20261103T100000Z-abc123.json'), JSON.stringify({ runId: 'abc123', trigger: 'manual', status: 'ok', startedAt: '2026-11-03T10:00:00+00:00', finishedAt: '2026-11-03T10:10:00+00:00', sources: [], issues: [] }))
+  })
+  afterEach(() => {
+    if (savedDir === undefined) delete process.env.CAREER_OS_ANALYTICS_DIR
+    else process.env.CAREER_OS_ANALYTICS_DIR = savedDir
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('answers the list, and starts nothing, takes no lock, asks for no recovery', async () => {
+    const { status, data } = await call('GET', '/api/runs')
+    expect(status).toBe(200)
+    expect(data.runs.map((r) => r.runId)).toEqual(['abc123'])
+    expect(data.retentionDays).toBe(90)
+    for (const fn of ['start', 'status', 'cancel', 'busy', 'lock', 'discovery', 'pipeline', 'scoring', 'ensureView']) expect(run[fn], fn).not.toHaveBeenCalled()
+  })
+
+  it('reads the limit and the cursor from the query, and answers 422 for a bad one', async () => {
+    expect((await call('GET', '/api/runs?limit=1&before=20261103T110000Z-zzz.json')).data.runs).toHaveLength(1)
+    expect((await call('GET', '/api/runs?limit=0')).status).toBe(422)
+    expect((await call('GET', '/api/runs?before=../../x')).status).toBe(422)
+  })
+
+  it('is GET only: a POST does not list, start or cancel anything', async () => {
+    const { data } = await call('POST', '/api/runs', {})
+    expect(data?.runs).toBeUndefined()
+    for (const fn of ['start', 'cancel']) expect(run[fn]).not.toHaveBeenCalled()
   })
 })
 
