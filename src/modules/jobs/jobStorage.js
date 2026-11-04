@@ -83,7 +83,7 @@ export function slimJob(job) {
 
 // --- how the list is stored (S8a) ----------------------------------------------------------------------------------------------
 //
-// localStorage holds about 5M characters for the whole site. The list is stored in the first of these shapes that fits:
+// The browser storage holds about 5M characters for the whole site. The list is stored in the first of these shapes that fits:
 //   full     every row as it is
 //   lean     no `llmFacts` or `engineShadow` (the file and the ledger have them), and no `description` on rows the scored file carries.
 //            A kept ad, a row no longer in the file and a hand-entered job keep their text: the file has no copy of those.
