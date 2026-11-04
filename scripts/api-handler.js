@@ -41,7 +41,7 @@ import { maskErrorField } from './secret-mask.js'
 import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
 import { handleApplicationsRequest } from './application-store.js'
-import { handleJobHistoryRequest } from './job-history-read.js'
+import { handleJobHistoryRequest, handleJobTextsRequest } from './job-history-read.js'
 import { handleJobsAllRequest } from './job-all-read.js'
 import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
 import { getRun, listRuns } from './run-history.js'
@@ -630,6 +630,10 @@ export async function handleApiRequest(req, res) {
   }
 
   if (await handleJobHistoryRequest(req, res, url, { root: ROOT })) {
+    return true
+  }
+
+  if (await handleJobTextsRequest(req, res, url, { root: ROOT, readBody: readJsonBody })) {
     return true
   }
 
