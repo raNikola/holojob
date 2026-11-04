@@ -1283,3 +1283,25 @@ Owner decisions. Approved preset: `b1a1cZcRs` (Blue / Mist / Geist / Base UI / L
 **Testing responsibilities, replacing the earlier wording of this policy.** Claude Code owns unit, integration, functional regression, lint, build, token consistency checks and programmatic contrast verification. The PO owns visual appearance, aesthetics, UX review, responsive visual acceptance and final design approval. No Playwright, visual regression tooling, screenshot baselines or new browser tests. A browser only when functionally necessary and explicitly authorized; the earlier allowance of one smoke test per slice no longer applies without that authorization.
 
 **Unchanged:** the minimal Wave 0 backup still comes before implementation. O2's "foundations may be prepared first" is read as foundations before screen migration, not as lifting that gate. The PO can correct this reading.
+
+## Design System final planning decisions, Epic postponed (2026-11-04)
+
+Owner decisions. Documentation only. **The redesign is POSTPONED: the Epic "UI Redesign & Design System" and all its work are To Do until the PO explicitly authorizes implementation. All colours are PROVISIONAL.** Roadmap: [the Epic](ROADMAP.md#epic-ui-redesign--design-system---deferred--to-do). Backlog: [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md).
+
+**O1, semantic tokens: the proposed structure, aliases and values are approved FOR PLANNING PURPOSES ONLY.** No current value is permanently approved. All semantic extension values and contrast corrections remain provisional; before implementation, the complete palette is reviewed again, finalized and approved by the PO.
+
+- `--input` follows the original C2 proposal, with no separate input-border token.
+- C1, C3 and U1 to U3 stay planning recommendations.
+- `--fit-insufficient` uses neutral styling, not the information colour. This replaces the earlier proposal. Since Weak and Reject are neutral too, its label and the absence of a score band tell it apart from a low score.
+- `--app-state-offer-accepted` may use the success colour.
+- Warning text on muted surfaces gets a better margin: `--warning` in light mode moves from amber 700 to amber 800, a value already in the scale, and warning text on muted rises from 4.54 to 6.41. Measured by `design-system/preset/contrast_check.py`. Provisional like the rest.
+
+**O2 to O10: preserved as approved** in [the previous section](#design-system-final-po-decisions-2026-11-04). No new evidence shows a material conflict, so none is reopened.
+
+**Implementation prerequisites (future gates, not authorization to execute now):** (1) complete and verify the minimal Wave 0 backup; (2) finalize and approve the colour palette; (3) recalculate contrast ratios against the final colours; (4) verify the semantic-token mappings; (5) recheck framework and dependency compatibility; (6) obtain separate PO implementation approval. Prerequisite 1 settles the earlier open reading of O2: the backup comes before foundations.
+
+**Backlog structure:** one Epic with nine Tasks, replacing the earlier tasks A to J. Screens the nine Tasks do not name are placed by a planning choice the PO can move: Dashboard in Task 2; Intelligence in Task 6; Career Strategy, AI Copilot, Outreach and Quality Audit in Task 7; Activity in Task 8.
+
+**Testing responsibilities, kept as recorded.** When implementation begins, Claude Code owns unit, integration, functional regression, lint, build, token consistency checks and programmatic contrast verification. The PO owns visual review, UX validation, responsive appearance and final design approval. No Playwright, screenshot baselines, visual regression tooling or Chrome tests; browser testing needs separate explicit authorization.
+
+**Not done and not authorized:** application code changes, dependency installation, foundations, component migration, GitHub issues, push, merge or deployment.

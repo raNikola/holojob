@@ -26,7 +26,7 @@ Reference only. Not wired into the app; nothing imports these files. Superseded 
 | `shadcn-tailwind.4.23.0.css` | `dist/tailwind.css` of the `shadcn` package, imported by `index.generated.css` |
 | `locked-versions.json` | Direct dependencies as locked in the scaffold |
 | `MANIFEST.sha256` | Checksums of the files above. Check: `sha256sum -c MANIFEST.sha256`, from this folder |
-| `contrast_check.py` | Measures contrast from `index.generated.css` and the pending proposals. Standard library only. Not part of the manifest, since it is not from the CLI |
+| `contrast_check.py` | Measures contrast from `index.generated.css` and the provisional proposals. Prerequisite G3 reruns it against the final palette. Standard library only. Not part of the manifest, since it is not from the CLI |
 | `contrast-report.md` | Its output (`--write`) |
 
 ## Reconstructing it without the website

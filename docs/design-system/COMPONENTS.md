@@ -15,7 +15,7 @@ The registry names below are confirmed: all of them were added to a scratch proj
 Notes:
 
 - **Sizes (decided, O3):** minimum 44 x 44 px interactive target on mobile; compact desktop controls allowed where appropriate. Today's `Button` has `min-h-[44px]` everywhere and the preset's default is `h-7`, so `ds/button` needs the edit below.
-- The `link` variant of `button` and `badge` uses `text-primary`, measured at 2.23:1 on the dark background. It moves to `--primary-strong` ([correction U1](TOKENS.md#proposed-corrections), pending).
+- The `link` variant of `button` and `badge` uses `text-primary`, measured at 2.23:1 on the dark background. It moves to `--primary-strong` ([correction U1](TOKENS.md#proposed-corrections), provisional).
 - **Teal text (decided, O10):** each `text-teal-*` is judged by what it does, never replaced blindly. Links: accessible styling, underlined where appropriate. Status messages: their semantic token. Decorative text and icons: neutral. Primary Blue: actions and fills where contrast is sufficient.
 
 ## Inputs and forms
@@ -128,8 +128,8 @@ Registry source is otherwise kept as supplied.
 | `ds/sidebar` | **Remove the `document.cookie` write** (`sidebar_state`). Drive open state through `open` / `onOpenChange` from `modules/sidebarState.js` | Verified in source: it writes the cookie on every toggle. `tests/js/browserStorageAllowlist.test.js` scans for `document.cookie` and the storage policy forbids new keys |
 | `ds/sidebar` | **Remove the Ctrl/Cmd+B shortcut (decided, O9)** | Not introduced during migration; existing navigation behaviour and the browser storage policy are preserved (`SIDEBAR_KEYBOARD_SHORTCUT = "b"`) |
 | `ds/button`, `ds/input`, `ds/textarea`, `ds/native-select`, other controls | Add the 44 x 44 px minimum on mobile, compact on desktop (O3) | The registry default is `h-7` |
-| `ds/button`, `ds/badge`, `ds/dropdown-menu` | Corrections U2 and U3 | [Contrast](TOKENS.md#proposed-corrections), pending |
-| `ds/button`, `ds/badge`, `ds/field`, `ds/empty`, `ds/progress`, `ds/switch`, `ds/checkbox`, `ds/radio-group` | Correction U1, `--primary-strong` | [Contrast](TOKENS.md#proposed-corrections), pending |
+| `ds/button`, `ds/badge`, `ds/dropdown-menu` | Corrections U2 and U3 | [Contrast](TOKENS.md#proposed-corrections), provisional |
+| `ds/button`, `ds/badge`, `ds/field`, `ds/empty`, `ds/progress`, `ds/switch`, `ds/checkbox`, `ds/radio-group` | Correction U1, `--primary-strong` | [Contrast](TOKENS.md#proposed-corrections), provisional |
 | `ds/badge`, `ds/alert` | Add the extension variants | Status colours are not in the preset |
 | `ds/scroll-area` | Remove the unused `React` import, if lint flags it | Seen in the scaffold's `tsc` (TS6133). The repo's ESLint has `no-unused-vars` as an error. Whether the JS conversion keeps the import is checked when it is added |
 
@@ -139,9 +139,9 @@ Not used because of the same issue: `theme-provider` (writes `localStorage` key 
 
 Each added in the slice that first uses it.
 
-**Task A:** `button`, then `badge`, `card`, `alert`, `input`, `textarea`, `label`, `field`, `native-select`, `tabs`, `tooltip`, `popover`, `checkbox`, `separator`, `input-group`.
+**T1:** `button`, then `badge`, `card`, `alert`, `input`, `textarea`, `label`, `field`, `native-select`, `tabs`, `tooltip`, `popover`, `checkbox`, `separator`, `input-group`.
 
-**Task B:** `sidebar` (with `sheet`, `skeleton`, `tooltip`, `use-mobile`).
+**T2:** `sidebar` (with `sheet`, `skeleton`, `tooltip`, `use-mobile`).
 
 **Later:** `table`, `dialog`, `sheet`, `alert-dialog`, `dropdown-menu`, `radio-group`, `switch`, `spinner`, `skeleton`, `empty`, `progress`, `scroll-area`, `combobox`, `collapsible`, `toggle`, `toggle-group`.
 
