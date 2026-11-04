@@ -96,6 +96,7 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 
 | Wave | Priority | Content |
 |---|---|---|
+| Before 0 | Planning complete; implementation deferred | **UI redesign and Design System planning** (shadcn/ui preset `b1a1cZcRs`, which superseded `b7CScIWmG` on 2026-11-04, plus a semantic extension). Documents only, in [design-system/](design-system/README.md); nothing is built. Implementation is postponed and needs separate PO approval: see [the Epic](#epic-ui-redesign--design-system---deferred--to-do). |
 | 0 | P0, minimal | Verified backup plus restore check covering server data and browser state (Keep, statuses, applications), with integrity hashes and a tested restore; include `data/analytics` if it cannot be reconstructed. Rotate the OpenAI key and `li_at` (the owner does this). Align the rules in ROADMAP.md and DECISIONS.md. |
 | 1 | P0 | **(k) + (q) discovery safety**, one rule (below): a throttled source never proves an ad disappeared; "ok with 0 read" is not automatically proof of closure; a confirmed-empty source is told apart from an incomplete or failed read; successful sources import independently (a partial source must not block the import); failed sources never affect closing. |
 | 2 | P0 | **(a1) scoring correctness:** junk baseline of at most about 5 plus a distinct Insufficient Data state, hard/soft requirement handling, low-confidence reasons. **(e)** manual Re-score and tailoring for kept ads. **(g)** exclude closed ads from the IDF corpus (approved; measured effect at most 1 point). **(i)** `scoringBehind` after a cancel. |
@@ -119,6 +120,31 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 1. Whether the four items under [Fix scoring](#fix-scoring-skill-extraction-scope-requirement-weighting-domain-transferability---todo) split as proposed: hard/soft requirements and low-confidence reasons to a1 (Wave 2); whole-history skills and domain transferability to a2 (Wave 3).
 2. The `older_key` retention window (Wave 4, h).
 3. The Infostud coverage check (Wave 4, c).
+
+## Epic: UI Redesign & Design System - deferred / To Do
+
+**Status: POSTPONED. The Epic and all its work are To Do.** Nothing is built or authorized. All colours are provisional. This Epic does not reorder scoring, matching, discovery or application tracking; the wave order above stands. Backlog with Sub-tasks, dependencies and acceptance criteria: [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md). Decisions: [DECISIONS.md](DECISIONS.md#design-system-final-planning-decisions-epic-postponed-2026-11-04).
+
+| Task | Status | Aligned with |
+|---|---|---|
+| 1. Design System Integration & Foundations | To Do | |
+| 2. Application Layout & Navigation | To Do | |
+| 3. Jobs Listing & Filtering | To Do | Wave 3 role filter |
+| 4. Job Details & Scoring UI | To Do | Wave 2 UI |
+| 5. Application Tracker | To Do | Wave 5 |
+| 6. Profile & Resume Management | To Do | Wave 6 profile import |
+| 7. Tailoring & Application Preparation | To Do | Wave 6 Phase 4 protections |
+| 8. Settings & Sources | To Do | Wave 7 |
+| 9. Responsive, Accessibility & Visual Consistency | To Do | |
+
+**Implementation prerequisites (future gates, not authorization to execute):**
+
+1. Complete and verify the minimal Wave 0 backup.
+2. Finalize and approve the colour palette.
+3. Recalculate contrast ratios against the final colours.
+4. Verify the semantic-token mappings.
+5. Recheck framework and dependency compatibility.
+6. Obtain separate PO implementation approval.
 
 ## Activity screen - planned
 

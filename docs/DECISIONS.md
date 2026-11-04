@@ -1199,3 +1199,109 @@ Owner-approved, GPT-reviewed. Documentation only: no code, test or data changed.
 **Backlog added:** rotate the OpenAI key and `li_at`; resume findings (11 of 17 docs, stale unverified-degree findings).
 
 **Open decisions:** (1) whether the four "Fix scoring" items in ROADMAP.md belong to a1/a2 as split above (hard/soft and low-confidence reasons to a1; whole-history skills and domain transferability to a2); (2) the `older_key` retention window; (3) the Infostud coverage check.
+
+## Design System and UI redesign planning (2026-11-04)
+
+Planning only. No application code, dependency, test or data changed, and the redesign has not started. Documents: [design-system/](design-system/README.md). Roadmap: one row before Wave 0, marked planning only; the other waves are not reordered.
+
+**Owner decisions:**
+
+1. **Name:** keep the current app name until the owner decides otherwise. "HolyJobs" is only the epic's title; the repo says Holojob and `index.html` says Holojob.
+2. **Preset:** apply the complete preset `b7CScIWmG`, colours and fonts.
+3. **Body font:** from the real CLI output, never guessed. Result: **Lora**, through `html { @apply font-serif }`, so the whole interface is serif.
+4. **Primitives:** Base UI accepted (the preset's choice, not Radix).
+5. **Sequence:** planning comes before Wave 0; implementation comes after the minimal Wave 0 backup.
+6. **Branching:** no long-lived redesign branch. After the docs are reviewed and approved, implementation goes through small independent branches and PRs, so it does not collide with the scoring and matching roadmap.
+7. **Design System = the preset plus a central semantic extension:** tokens for fit score, job status, priority, success, warning and error, defined once in the token layer and documented in `TOKENS.md` as "extension, not defined by the preset", with proposed values marked for PO approval. No arbitrary colours inside components.
+8. **Testing and browser policy (permanent).** Text in [design-system/README.md](design-system/README.md#testing-and-browser-policy-permanent). Claude Code owns unit, integration, functional regression, build, lint and existing tests. The owner owns visual look and aesthetics, responsive look and UX acceptance, and final design approval. Default: no browser tests. A browser only when a function cannot be reliably verified without it. No crawling, mass screenshots, visual regression, pixel comparison or screenshot baseline. At most one targeted browser smoke test per slice, with a justified need; more only with the owner's approval. Claude states what it could not verify without a browser; visually unverified UI is never presented as visually approved.
+
+**Removed from the plan at the owner's request:** the Playwright dependency, the demo-mode screenshot baseline, all visual regression tooling, browser-based visual tests, any duty for Claude to confirm aesthetics or layout, and the long-lived branch with its rebase rhythm.
+
+**Constraints kept:** no behaviour change, no backend or API change, no new routing framework, no overwriting of existing UI components, no colours or fonts outside the Design System, no secrets or env files in Git. Proposed CLAUDE.md lines are in the README; CLAUDE.md itself is not edited.
+
+**Verified while planning (`shadcn@4.23.0`, in an isolated container with only an empty scratch folder mounted):**
+
+- Preset: `base-mira`, Base UI, `mist`, lucide, Lora, radius `0.625rem`. Snapshot in [design-system/preset/](design-system/preset/README.md).
+- `template=react-router` does not matter: tokens are identical to the `vite` scaffold. The app keeps having no router.
+- `tsx: false` and `aliases.ui` set to `@/components/ds` give `.jsx` files in `ds/`, so the existing `src/components/ui/` is not touched.
+- `ds/sidebar` as supplied writes a `sidebar_state` cookie and binds a keyboard shortcut, and `theme-provider` writes a `localStorage` key; both conflict with the browser storage policy. `theme-provider`, `next-themes` and `sonner` are left out, and the cookie write is removed from `ds/sidebar`.
+- `--color-accent`, `--color-accent-hover` and `--color-border` have no consumers, so the preset's same-named tokens do not collide in practice.
+- Preset controls default to `h-7`; the current `Button` has `min-h-[44px]`.
+- Computed contrast of `muted-foreground` on `muted` in light mode is 4.15:1, below AA. It is a preset value and is left unchanged.
+
+**Implementation choices (standard, not owner decisions):** `src/components/ds/` for registry files; exact version pins; `shadcn` and `tw-animate-css` as dev dependencies; `native-select` before `select`; the repo's dark variant kept until the `dark:` colour uses are gone; `window.confirm` kept in MVP; a ratchet test for palette classes.
+
+**Open PO decisions** (details in [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md#open-po-decisions)):
+
+- O1: approval of the extension token values and aliases.
+- O2: sequencing of slices against Waves 2 to 5.
+- O3: control size, preset `h-7` or today's 44 px minimum.
+- O4: serif everywhere, confirmed once seen.
+- O5: whether a mixed look may be deployed between slices.
+- O6: whether Wave 7's Settings and UX work merges into Task H.
+- O7: colours with no meaning today (`violet`, `indigo`, `green` stat cards) go to neutral.
+- O8: `muted-foreground` on `muted` at 4.15:1.
+- O9: the registry's sidebar keyboard shortcut.
+
+**Not approved:** any application code change, installing dependencies into the frontend, or starting the redesign.
+
+## Design System preset changed to b1a1cZcRs (2026-11-04)
+
+Owner decision. Still planning only: no application code, dependency, test or data changed. This entry supersedes the preset named in [the planning section](#design-system-and-ui-redesign-planning-2026-11-04); the other decisions there stand.
+
+**What changes in the decisions above:** decision 2 now means the complete preset `b1a1cZcRs`. Decision 3 now gives **Geist**, a sans-serif, so "the whole interface is serif" no longer applies. The snapshot in [design-system/preset/](design-system/preset/README.md) is replaced, and now also holds the component source so the preset can be rebuilt from Git without the website.
+
+**Verified from generated output (`shadcn@4.23.0`, isolated container, only an empty scratch folder mounted, never against the application):**
+
+- **Same:** style `base-mira`, Base UI, base colour `mist`, lucide, radius `0.625rem`, `menuColor: default`, `menuAccent: subtle`; neutral, surface, border, ring and destructive tokens; all 38 component files, byte-identical; every dependency except the font.
+- **Changed:** `--primary`, `--primary-foreground`, `--chart-1` to `--chart-5`, `--sidebar-primary`, `--sidebar-primary-foreground` (cyan-based or neutral, now Tailwind `blue` values); `@fontsource-variable/lora` to `@fontsource-variable/geist`; `--font-heading` and the `html` rule from serif to sans.
+- **Re-checked, unchanged:** `ds/sidebar` still writes the `sidebar_state` cookie and binds the shortcut; `theme-provider` still writes `localStorage` key `theme`; controls are still `h-7`; `muted-foreground` on `muted` is still 4.15:1; `tsx: false` still gives `.jsx` in `ds/`.
+- **New:** `--font-sans` collides by name with the repo's DM Sans, and `body` reads it, so it moves only in the global cutover. Dark `--primary` as text fell from 2.72:1 to 2.23:1. `shadcn apply` over an existing preset leaves the old font import and dependency behind.
+- **Closed assumptions:** Geist has Serbian Latin and Cyrillic glyphs and a working `tnum`, read from the font files.
+
+**Open decisions re-evaluated** ([details](design-system/REDESIGN_BACKLOG.md#open-po-decisions)): O4 closed, as serif is gone. O1 changed and still open: values are the same, and `--info` now sits near the blue primary. O10 is new: what replaces `text-teal-*` given dark `--primary` as text. O2, O3, O5, O6, O7, O8 and O9 are unchanged.
+
+**Constraints kept:** React and Vite, no React Router, `src/components/ds/` isolated until migration, no change to business logic, APIs, routing or state, no new browser storage keys, current sidebar and Settings draft behaviour preserved, semantic colours centralized as extension tokens, no invented token values without approval, small independent branches and PRs later.
+
+**Not verified:** nothing was looked at in a browser, so nothing is visually approved. The preset's CSS was built only in the scratch project (Vite 8.3.5, Tailwind 4.3.4), not with the repo's versions. Base UI under the repo's jsdom is still untried.
+
+## Design System final PO decisions (2026-11-04)
+
+Owner decisions. Approved preset: `b1a1cZcRs` (Blue / Mist / Geist / Base UI / Lucide). Documentation only. **Not authorized:** application code changes, Design System installation, UI migration, dependency changes, deployment, push or merge. Implementation does not start until a separate approval is given.
+
+- **O1, semantic extension tokens: approved in principle, NOT closed.** Centralized semantic tokens for success, warning, danger, information, fit scores and application states. No arbitrary colours in components. Concrete values and aliases are pending, presented with measured ratios in [TOKENS.md](design-system/TOKENS.md#part-2-extension-not-defined-by-the-preset). The earlier `--error` name is now `--danger`, to match this wording.
+- **O2, sequencing: approved.** Foundations may be prepared first. Jobs and Scoring UI migration aligns with the scoring roadmap. Application Tracker redesign aligns with the tracker changes. Small independent slices and PRs; avoid conflicts with parallel work.
+- **O3, control sizes: approved.** Minimum 44 x 44 px interactive target on mobile; compact desktop controls allowed where appropriate.
+- **O4, typography: approved.** Geist for headings, body, tables, forms and numerical data. Not activated globally in the initial foundations slice. The global font migration is a separate controlled step, with functional regression verification and PO visual approval.
+- **O5, mixed UI: approved.** Temporary coexistence of the old custom UI and the new shadcn UI during development is allowed. The final release must be visually consistent.
+- **O6, Settings: approved.** Coordinated with the existing Settings roadmap (Wave 7) to avoid duplicate work.
+- **O7, stat cards: approved.** Neutral cards and surfaces by default. Semantic colours only where they carry meaning (fit, status, priority, errors).
+- **O8, accessibility and contrast: approved with clarification.** The PO's original Cyan preset was not the source of the reported dark-mode contrast regressions; the Blue/Geist configuration was recommended in the design discussion and then selected. The new preset introduced or exposed contrast problems in specific combinations, and the original is not characterized as defective without evidence. Requirements: preserve Blue/Mist/Geist; identify the exact failing light and dark combinations; propose the smallest token or usage corrections; meet WCAG AA (4.5:1 normal text, 3:1 applicable non-text UI); do not redesign the palette or replace the preset; document original and proposed values with measured ratios; keep corrections centralized. Results: [TOKENS.md](design-system/TOKENS.md#part-3-contrast-o8), measured by `design-system/preset/contrast_check.py` from the committed snapshot. The proposed values await PO verification with O1.
+- **O9, sidebar keyboard shortcut: approved.** Not introduced during migration. Existing navigation behaviour and the browser storage policy are preserved.
+- **O10, teal text: approved.** Decorative `text-teal-*` becomes semantic or neutral text. Accessible link styling, with underlines where appropriate. Primary Blue for actions and fills where contrast is sufficient. Not every teal class is replaced blindly; existing semantic meaning and contrast are preserved.
+
+**Testing responsibilities, replacing the earlier wording of this policy.** Claude Code owns unit, integration, functional regression, lint, build, token consistency checks and programmatic contrast verification. The PO owns visual appearance, aesthetics, UX review, responsive visual acceptance and final design approval. No Playwright, visual regression tooling, screenshot baselines or new browser tests. A browser only when functionally necessary and explicitly authorized; the earlier allowance of one smoke test per slice no longer applies without that authorization.
+
+**Unchanged:** the minimal Wave 0 backup still comes before implementation. O2's "foundations may be prepared first" is read as foundations before screen migration, not as lifting that gate. The PO can correct this reading.
+
+## Design System final planning decisions, Epic postponed (2026-11-04)
+
+Owner decisions. Documentation only. **The redesign is POSTPONED: the Epic "UI Redesign & Design System" and all its work are To Do until the PO explicitly authorizes implementation. All colours are PROVISIONAL.** Roadmap: [the Epic](ROADMAP.md#epic-ui-redesign--design-system---deferred--to-do). Backlog: [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md).
+
+**O1, semantic tokens: the proposed structure, aliases and values are approved FOR PLANNING PURPOSES ONLY.** No current value is permanently approved. All semantic extension values and contrast corrections remain provisional; before implementation, the complete palette is reviewed again, finalized and approved by the PO.
+
+- `--input` follows the original C2 proposal, with no separate input-border token.
+- C1, C3 and U1 to U3 stay planning recommendations.
+- `--fit-insufficient` uses neutral styling, not the information colour. This replaces the earlier proposal. Since Weak and Reject are neutral too, its label and the absence of a score band tell it apart from a low score.
+- `--app-state-offer-accepted` may use the success colour.
+- Warning text on muted surfaces gets a better margin: `--warning` in light mode moves from amber 700 to amber 800, a value already in the scale, and warning text on muted rises from 4.54 to 6.41. Measured by `design-system/preset/contrast_check.py`. Provisional like the rest.
+
+**O2 to O10: preserved as approved** in [the previous section](#design-system-final-po-decisions-2026-11-04). No new evidence shows a material conflict, so none is reopened.
+
+**Implementation prerequisites (future gates, not authorization to execute now):** (1) complete and verify the minimal Wave 0 backup; (2) finalize and approve the colour palette; (3) recalculate contrast ratios against the final colours; (4) verify the semantic-token mappings; (5) recheck framework and dependency compatibility; (6) obtain separate PO implementation approval. Prerequisite 1 settles the earlier open reading of O2: the backup comes before foundations.
+
+**Backlog structure:** one Epic with nine Tasks, replacing the earlier tasks A to J. Screens the nine Tasks do not name are placed by a planning choice the PO can move: Dashboard in Task 2; Intelligence in Task 6; Career Strategy, AI Copilot, Outreach and Quality Audit in Task 7; Activity in Task 8.
+
+**Testing responsibilities, kept as recorded.** When implementation begins, Claude Code owns unit, integration, functional regression, lint, build, token consistency checks and programmatic contrast verification. The PO owns visual review, UX validation, responsive appearance and final design approval. No Playwright, screenshot baselines, visual regression tooling or Chrome tests; browser testing needs separate explicit authorization.
+
+**Not done and not authorized:** application code changes, dependency installation, foundations, component migration, GitHub issues, push, merge or deployment.
