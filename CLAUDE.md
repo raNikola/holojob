@@ -80,6 +80,16 @@ Pre-push hook: `sh scripts/install-git-hooks.sh` (once; sets `core.hooksPath`) e
 `node_modules` and `.venv`. It skips branch deletions and tag-only pushes. It first refuses every remote except `origin` at its pinned URL, deletions and tags included (`core.hooksPath` turns off `.git/hooks/pre-push`, which is no longer used).
 `git push --no-verify` bypasses all of it, the remote refusal included (only upstream's `no-push` push URL still holds then).
 
+## Testing and commit policy
+
+Owner decision, 2026-11-04 (details: `docs/DECISIONS.md`, "Testing and commit policy"). An explicit testing requirement in a task overrides this.
+
+- **While developing:** run only the targeted tests that cover the code you changed, plus the relevant lint. Run mutation tests only for changed logic, and only when needed.
+- **Before each commit:** those targeted tests and the relevant lint must pass. Do not run the full suite just to make a commit.
+- **Before a push or merge, once, when the feature is complete:** full Python pytest, full Vitest, JS lint, production build, mutation checks, the required integration tests, and the `data/` fingerprint check. The pre-push hook runs the lint, JS tests, pytest and build part; the rest is done by hand.
+- **If the full gate fails:** fix, and rerun the checks that failed. Run the whole gate again only when later changes could affect an area already verified.
+- **Never** bypass a failing test, or change production data to make a test pass. **Never** push, merge or deploy without the owner's explicit approval.
+
 ## Privacy rules and exceptions
 
 Personal data stays on the server. Three steps send candidate data to the configured
