@@ -806,6 +806,43 @@ Texts: progress line and Re-scrape message, "The last run was cancelled. N colle
 
 **S5f follow-ups, same day:** `isStale` surviving the real `run_scoring.main()` is a permanent test, and a Stale ad seen again is tested through real imports and on a held row.
 
+## S7a as built: run evidence in the record, and `GET /api/runs` (2026-11-04)
+
+**Scope:** the data and the read API for the Activity screen. No screen, no polling and no Cancel button (S7b, S7c). No change to scoring, the IDF corpus, lifecycle rules or the cancel semantics; no existing importer test was edited, and one (`test_run_log.py`, the exact record shape) was extended for the new fields.
+
+**Owner decisions (2026-11-04):** "collected" means ads that passed the owner's rules and were written to staging. The `import` block and per-source times go into **new** run records only; older records stay as they are and the screen shows them as "Not recorded". The reason codes are one shared file used by Python (emit) and JS (show).
+
+**The words** (one meaning each, never merged): **Returned** = `read`, what a source gave and the code could read. **Filtered out** = returned minus collected, dropped by the owner's rules, with reason counts. **Collected** = `kept`, passed the rules and written to staging (the S6 word). **Saved** = written to the list: collected, whole, not a duplicate; a cancelled run's saved **includes refreshed ads it already knew**. **New** = saved ads the ledger had never seen. **Refreshed** = saved minus new. Per-source `new` is counted after dedupe under the winning copy's source, so source columns do not add up to the run's `new`.
+
+**The record gains (additive, version stays 1):**
+- `sources[].startedAt`, `finishedAt`.
+- `import`: `{kind: complete | partial | nothing | refused, complete, saved, new, refreshed, duplicatesRemoved, crosspostsMerged, rejected, ledger {closed, absent, reopened, changed, known} (complete only), nothingSaved?, sources: [{name, proof, filterReasons}]}`. Counts and codes only; no ad, title, link or description. 2 to 4 KB a run.
+- `proof`: `{proven, why: [codes], boards: [{board, proven, why, detail}]}`. A search source is Proven only if `why == ["proven"]`; a board source only if it has boards and every one is complete.
+
+**The importer only reports.** `_search_proof_reasons` is the S5f rule with every clause named instead of OR-ed; `_search_run_proven` is now `not reasons`, and `test_the_rule_is_what_it_always_was` compares it with a copy of the old function over a grid of footers and damage. `board_evidence` computes `complete = not why` from the same clauses it had; the importer's other tests pass unchanged. The report gained `proof`, `filterReasons` and `saved`, in keys of their own, so no existing report entry changed.
+
+**Reason codes** (`python/job_discovery/proof_reasons.py`, texts in `src/data/proofReasons.json`; a pytest and a vitest fail when the two differ). Search sources: `proven`, `not_finished`, `source_failed`, `source_partial`, `source_skipped`, `nothing_read`, `ads_not_whole`, `staged_differs`, `files_torn`, `discards_mismatch`, `discards_damaged`, `parts_failed`, `no_search_key`, `run_cancelled`. Boards: `board_complete`, `board_unreadable`, `board_empty`, `no_total`, `total_differs`, `end_not_checked`, `end_check_failed`, `end_check_not_a_list`, `postings_past_end`, `no_proof_available` (Ashby, always), `board_anomalies`, `files_dont_add_up`, `source_in_doubt`, `board_not_complete` (a provider text this table does not know; a test fails if a provider text maps to it), `no_board_evidence`, `boards_not_proven`. "Proven" means the run may count towards Stale and, for a board, may support closing; it does not mean the run was good.
+
+**Three states, never mixed:** `proven`, `not_proven` (with codes), and `not_recorded` (an old record, no `import` block, or a source the block has no row for). Not recorded is never shown as not proven.
+
+**`GET /api/runs?limit=30&before=<recordName>`** (`scripts/run-history.js`): newest first; `limit` default 30, above 100 is 100, below 1 or not a number is 422; `before` must be a record file name (422 otherwise) and pages by name, so only that page's files are read. Envelope `{ok, runs, next, skipped, retentionDays: 90, activeRunId}`. It reads the names in `data/analytics/runs/` and up to `limit` record files (over 256 KB: skipped). It takes no lock, starts no process, repairs and writes nothing, and reads no ledger, staging, event log or ad. For a record that says running it reads the lock file's inode and `/proc/locks` (no lock is taken): nobody holding it shows the record as `interrupted` with `inferred: true`, unknown counts as alive, and nothing is marked on disk (`reconcile` stays the only thing that does). `cancelRequested` comes from the file name `<record>.cancel` in the same listing. `canCancel` is true only for a running Re-scrape.
+
+**The allow-list:** `project()` builds every run, source, issue, step, proof and import field one by one, with type, enum, regex and size checks; the raw record is never returned, and a field a later slice adds does not appear until it is added there. Free text is the hard part: a record's messages end in text from outside the app (an exception, a step's output, a provider's error), and no pattern can promise an ad title is not in it. So **a message is shown whole only if it is one of the app's own fixed texts**; a known beginning keeps the app's words and summarises the rest; any other text becomes "details withheld" plus only exception class names, an HTTP status and snake_case codes. A step's failure keeps "discovery failed with exit code N" and drops the output tail. A source `error` is summarised part by part with the board names kept. Everything also passes `maskSecrets`, and links, e-mail addresses and phone-like numbers are replaced. `issues` are capped at 10 per run (the full count is `issuesCount`). The cost is that a provider's own error wording is not visible on the screen; the reason codes and the exception name are. A canary test seeds ad text, title, company, link, contact, a fake key and unlisted fields at every level and checks none arrives.
+
+**Cost of one request, measured 2026-11-04 in a throwaway node container on this host, warm file cache, `listRuns` plus `JSON.stringify` (no HTTP):**
+
+| Folder | Runs returned | Response | CPU per request |
+|---|---|---|---|
+| The real history, 7 records, `limit=30` | 7 | 19.5 KB | 0.56 ms |
+| Synthetic, 100 records of 7 sources each (3.0 KB on disk), `limit=30` | 30 | 96.7 KB | 2.4 ms |
+| Same, `limit=100` | 100 | 322 KB | 7.1 ms |
+
+So a run with seven sources is about 3.2 KB in the response, more than the 1 to 1.5 KB the plan assumed; the default page is about 100 KB at worst. The screen (S7b) can ask for fewer, or the sources can move to a per-run request, if that matters. Cold-cache disk time is not included. There is no polling in S7a.
+
+**Not covered:** records written before this slice have no `import` block, so their counts of saved, new and refreshed and all proof stay null / Not recorded. The cancelled run's in-flight source has no `sources[]` row (it never reported), so it is shown as `unfinished` from the import block. A real deployed server was not called; the numbers above are the same code on the real records.
+
+**Tests:** `tests/python/test_proof_reasons.py` (52), `tests/js/runHistory.test.js` (34), route tests in `tests/js/rescrapeRoutes.test.js`. Mutation-checked: each of nothing_read, files_dont_add_up, run_cancelled and no_search_key dropped; a board always complete, every search source proven, an empty read still proving; the list reading outside the runs folder, an unbounded or no default limit; the raw staging field, messages, source errors, board details and unknown codes leaking; Not recorded shown as Not proven; a running record never inferred dead.
+
 ## offList rows keep the owner's data (2026-11-03)
 
 **Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,

@@ -20,6 +20,7 @@ Record, version 1. A later slice adds fields; a reader ignores what it does not 
                    "boardsFailed", "skipReason"}],
       "issues": [{"level": "error" | "warning", "source": "<name>" | null, "message"}],
       "staging": {"ok": true | false, "problems": ["..."]}      (S3; absent in older records = unknown)
+      "import": {...}                                            (S7a; absent in older records = not recorded; see importer.evidence_block)
     }
 
 read: ads parsed before the search, role and location filters. kept: past them, before dedupe. new: ads no earlier run
@@ -92,6 +93,10 @@ def _clean(message) -> str:
     """Exception text can carry a whole request URL: no credential gets in, and one long message cannot bloat a record."""
     text = _CREDENTIAL.sub(lambda m: f"{m[1]}=[masked]", str(message))
     return _KEY_SHAPED.sub("[masked]", text)[:MAX_MESSAGE_CHARS]
+
+
+def now_iso() -> str:
+    return _now().isoformat()
 
 
 def new_record(run_id: str, trigger: str) -> dict:

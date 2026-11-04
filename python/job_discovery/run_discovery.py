@@ -282,10 +282,12 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
             logger.info("Running provider: %s", name)
             provider = get_provider(name)
             run_log.event(record, "source_start", source=name)
+            source_started = run_log.now_iso()
             jobs, outcome = fetch_source(
                 provider, name, search_terms, locations, remote_filters, country, stage=stage_run.open_source(name)
             )
             run_log.add_source(record, name, outcome)
+            record["sources"][-1].update(startedAt=source_started, finishedAt=run_log.now_iso())
             run_log.save(record)
             run_log.event(record, "source_end", source=name, status=outcome.status, read=outcome.read, kept=outcome.kept,
                           error=outcome.error, skipReason=outcome.skip_reason)
@@ -334,10 +336,12 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
     except (view_guard.ViewRecoveryError, OSError) as exc:
         return stop(record, f"The import stopped while writing: {exc}. The next reader rebuilds the job list from the ledger.")
     if not outcome.ok:
+        record["import"] = {"kind": "refused", "saved": 0, "new": 0, "refreshed": 0, "sources": []}
         return stop(record, "Import refused: " + "; ".join(outcome.refused))
     run_log.clear_commit_marker(record)  # a marker left by the old commit protocol: this commit finished, so the files agree again
     run_log.event(record, "commit_end", files=["job_history", "discovered_jobs"])
     result = outcome.result
+    record["import"] = importer.evidence_block(result.report, result.stats)
     if cancelled:
         # S6: only the ads collected were saved (importer._plan_partial). The list, the lifecycle and the proven runs were not touched.
         run_log.set_new_counts(record, Counter(result.new_by_provider))
