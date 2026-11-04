@@ -161,6 +161,82 @@ def _board_listed(entry: dict, by_provider: dict[str, set[str] | None]) -> bool:
     return boards is None or not board or board in boards
 
 
+def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datetime, key: str, role_key, run_id: str | None,
+             previous_facts: dict, seen_before: dict, stats: dict) -> tuple[dict, dict]:
+    """The half of a run that sees an ad: add it to the ledger or refresh its entry. Returns (the job as stored, its record for the view).
+
+    Shared by `apply_run` (a whole run) and `apply_partial` (a cancelled one), so the two can never disagree about what seeing an ad does.
+    """
+    job_id = job["jobId"]
+    entry = entries.get(job_id)
+    stored_description = ((entry or {}).get("job") or {}).get("description") or ""
+    if (
+        len((job.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS
+        and len(stored_description.strip()) >= THIN_DESCRIPTION_CHARS
+    ):
+        job = {**job, "description": stored_description}
+        stats["keptFullerDescription"] += 1
+    fingerprint = job_fingerprint(job)
+
+    if entry is None:
+        entry = entries[job_id] = {
+            "firstSeen": seen_before.get(job_id, now), "lastSeen": now,
+            "closedAt": None, "llmFacts": None,
+        }
+        if job_id in seen_before:
+            entry["seeded"] = True
+        stats["new"] += 1
+        candidate = previous_facts.get(job_id)
+    else:
+        stats["known"] += 1
+        entry["lastSeen"] = now
+        if entry.get("closedAt"):
+            entry["closedAt"] = None
+            stats["reopened"] += 1
+        for field in ("absentRuns", "absentSince", "lastAbsentRunId"):
+            entry.pop(field, None)
+        candidate = entry.get("llmFacts") or previous_facts.get(job_id)
+
+    if candidate and candidate.get("_fingerprint") == fingerprint:
+        entry["llmFacts"] = candidate
+        stats["carriedFacts"] += 1
+    else:
+        if entry.get("llmFacts"):
+            stats["changed"] += 1  # the ad changed, so its old facts no longer apply
+        entry["llmFacts"] = None
+
+    entry.update(provider=job.get("provider"), roleKey=role_key(job), seenUnder=key, job=_snapshot(job))
+    if run_id is not None:
+        entry.update(lastRunId=run_id, lastRunPos=position)
+    record = _annotate(job, entry, now=moment, closed=False)
+    if entry["llmFacts"]:
+        record["llmFacts"] = entry["llmFacts"]
+    return job, record
+
+
+def apply_partial(ledger: dict, jobs: list[dict], *, now: str, key: str, role_key, list_run_id: str) -> dict:
+    """Save the ads a CANCELLED run collected, and nothing else (S6). Returns the counts.
+
+    The ledger describes the last complete run's list, so this run may only add to it. Each collected ad is added or refreshed
+    exactly as a whole run would (`found_ad`) and joins the last complete run's list: `lastRunId` is that run's id, in the place it
+    already had, or after the last one for an ad new to the list. Every other entry is not looked at: none becomes held, absent,
+    closed or stale, no miss is counted, and `lastImport`, `sourceRuns`, `lastListedAt` and the stamps of other entries stay as they are.
+    """
+    entries = ledger["jobs"]
+    stats = {"new": 0, "known": 0, "reopened": 0, "changed": 0, "carriedFacts": 0, "keptFullerDescription": 0}
+    moment = _parse(now) or datetime.now(timezone.utc)
+    next_position = 1 + max((e.get("lastRunPos", 0) for e in entries.values() if e.get("lastRunId") == list_run_id), default=-1)
+    for job in jobs:
+        entry = entries.get(job["jobId"])
+        if entry is not None and entry.get("lastRunId") == list_run_id:
+            position = entry.get("lastRunPos", 0)
+        else:
+            position, next_position = next_position, next_position + 1
+        found_ad(entries, job, position, now=now, moment=moment, key=key, role_key=role_key, run_id=list_run_id,
+                 previous_facts={}, seen_before={}, stats=stats)
+    return stats
+
+
 def apply_run(
     ledger: dict,
     jobs: list[dict],
@@ -242,54 +318,12 @@ def apply_run(
     out = []
 
     for position, job in enumerate(jobs):
-        job_id = job["jobId"]
-        found_ids.add(job_id)
-        entry = entries.get(job_id)
-        stored_description = ((entry or {}).get("job") or {}).get("description") or ""
-        if (
-            len((job.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS
-            and len(stored_description.strip()) >= THIN_DESCRIPTION_CHARS
-        ):
-            job = {**job, "description": stored_description}
-            stats["keptFullerDescription"] += 1
-        found_roles.add(role_key(job))
-        fingerprint = job_fingerprint(job)
-
-        if entry is None:
-            entry = entries[job_id] = {
-                "firstSeen": seen_before.get(job_id, now), "lastSeen": now,
-                "closedAt": None, "llmFacts": None,
-            }
-            if job_id in seen_before:
-                entry["seeded"] = True
-            stats["new"] += 1
-            candidate = previous_facts.get(job_id)
-        else:
-            stats["known"] += 1
-            entry["lastSeen"] = now
-            if entry.get("closedAt"):
-                entry["closedAt"] = None
-                stats["reopened"] += 1
-            for field in ("absentRuns", "absentSince", "lastAbsentRunId"):
-                entry.pop(field, None)
-            candidate = entry.get("llmFacts") or previous_facts.get(job_id)
-
-        if candidate and candidate.get("_fingerprint") == fingerprint:
-            entry["llmFacts"] = candidate
-            stats["carriedFacts"] += 1
-        else:
-            if entry.get("llmFacts"):
-                stats["changed"] += 1  # the ad changed, so its old facts no longer apply
-            entry["llmFacts"] = None
-
-        entry.update(
-            provider=job.get("provider"), roleKey=role_key(job), seenUnder=key, job=_snapshot(job)
+        found_ids.add(job["jobId"])
+        job, record = found_ad(
+            entries, job, position, now=now, moment=moment, key=key, role_key=role_key, run_id=run_id,
+            previous_facts=previous_facts, seen_before=seen_before, stats=stats,
         )
-        if run_id is not None:
-            entry.update(lastRunId=run_id, lastRunPos=position)
-        record = _annotate(job, entry, now=moment, closed=False)
-        if entry["llmFacts"]:
-            record["llmFacts"] = entry["llmFacts"]
+        found_roles.add(role_key(job))
         out.append(record)
 
     for job_id, entry in entries.items():

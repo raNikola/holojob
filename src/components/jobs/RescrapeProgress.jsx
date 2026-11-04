@@ -1,4 +1,4 @@
-import { eventText, latestEventText } from '../../modules/jobs/rescrapeRun.js'
+import { cancelledText, eventText, latestEventText } from '../../modules/jobs/rescrapeRun.js'
 
 function eventTime(event) {
   const date = new Date(event.at)
@@ -14,13 +14,7 @@ export default function RescrapeProgress({ view }) {
       {view.run.status === 'interrupted' && (
         <p className="text-amber-700 dark:text-amber-400">The last run was interrupted before it finished. It is not resumed: start it again when you want fresh jobs.</p>
       )}
-      {view.run.status === 'cancelled' && (
-        <p className="text-amber-700 dark:text-amber-400">
-          {view.run.cancel?.outcome === 'stopped_nothing_imported'
-            ? 'The last run was cancelled and had to be stopped hard: nothing was imported and no job changed. Scoring was skipped.'
-            : 'The last run was cancelled. The ads collected so far were imported and held: nothing was closed or marked absent, and the run does not count as a finished check. Scoring was skipped.'}
-        </p>
-      )}
+      {view.run.status === 'cancelled' && <p className="text-amber-700 dark:text-amber-400">{cancelledText(view.run.cancel)}</p>}
       {view.run.cancel?.outcome === 'imported_before_cancel' && (
         <p className="text-amber-700 dark:text-amber-400">The cancel came after the jobs were saved, so the scrape counts. Scoring was skipped.</p>
       )}

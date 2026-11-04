@@ -85,10 +85,17 @@ def _shown(record: dict) -> dict:
     return {name: record.get(name) for name in _SHOWN}
 
 
-def apply_run(store: dict, run_id: str, moment: str, search_key: str, records: list[dict]) -> dict:
-    """Count one run's discard lines into `store`. Pure apart from `store`; a run already counted changes nothing."""
+PARTIAL_KEPT = 200
+
+
+def apply_run(store: dict, run_id: str, moment: str, search_key: str, records: list[dict], *, partial: bool = False) -> dict:
+    """Count one run's discard lines into `store`. Pure apart from `store`; a run already counted changes nothing.
+
+    `partial` (a cancelled run, S6): the same counting, remembered under `partialRuns` instead of `appliedRuns`, so the run is never
+    presented as one of the complete runs `appliedRuns` lists, and counting it twice is still impossible."""
     stats = {"alreadyApplied": False, "lines": len(records), "noId": 0, "ads": 0, "new": 0, "moved": 0, "older": 0}
-    if run_id in store["appliedRuns"]:
+    memory = store.setdefault("partialRuns", []) if partial else store["appliedRuns"]
+    if run_id in memory:
         stats["alreadyApplied"] = True
         return stats
     at = _when(moment)
@@ -119,7 +126,9 @@ def apply_run(store: dict, run_id: str, moment: str, search_key: str, records: l
         else:
             stats["older"] += 1
     stats["ads"] = len(seen)
-    store["appliedRuns"].append(run_id)
+    memory.append(run_id)
+    if partial:
+        del memory[:-PARTIAL_KEPT]
     return stats
 
 
@@ -143,10 +152,10 @@ def _discards_of(run: staging.RunStage) -> list[dict]:
     return run.discards.records if run.discards else []
 
 
-def record_run(root: Path, run: staging.RunStage, moment: str, ledger_ids) -> dict:
+def record_run(root: Path, run: staging.RunStage, moment: str, ledger_ids, *, partial: bool = False) -> dict:
     """The import's write: this run's dropped ads, and the ledger marks as they now are. Raises when it could not be written."""
     store = load(root)
-    stats = apply_run(store, run.run_id, moment, (run.manifest or {}).get("searchKey") or "", _discards_of(run))
+    stats = apply_run(store, run.run_id, moment, (run.manifest or {}).get("searchKey") or "", _discards_of(run), partial=partial)
     mark_ledger(store, ledger_ids)
     stats["written"] = save(root, store)
     return stats
@@ -162,9 +171,22 @@ def unrecorded(root: Path) -> set[str]:
     except FilteredAdsError:
         applied = set()
     base = staging.staging_dir(Path(root))
-    # A cancelled run (S6) is never counted, so it is never waiting either: its dropped ads are deliberately left out.
-    return {run_id for run_id in staging.list_runs(root) if run_id not in applied and (base / run_id / staging.DISCARDS).is_file()
-            and not (base / run_id / staging.CANCELLED).exists()}
+    try:
+        partial = set(load(root).get("partialRuns") or [])
+    except FilteredAdsError:
+        partial = set()
+    waiting = set()
+    for run_id in staging.list_runs(root):
+        if not (base / run_id / staging.DISCARDS).is_file():
+            continue
+        if (base / run_id / staging.CANCELLED).exists():
+            # A cancelled run is saved once, under `partialRuns`, and only when it saved ads. One that saved none (or was never imported) is not waiting.
+            saved = (staging.imported_info(root, run_id) or {}).get("saved") or 0
+            if saved and run_id not in partial:
+                waiting.add(run_id)
+        elif run_id not in applied:
+            waiting.add(run_id)
+    return waiting
 
 
 def _ledger_ids(root: Path) -> set[str]:
@@ -197,8 +219,9 @@ def backfill(root: Path, time_of, *, dry_run: bool = False) -> dict:
             continue
         line = {"runId": run_id, "imported": staging.is_imported(root, run_id)}
         report["runs"].append(line)
-        if run.cancelled is not None:
-            line["state"] = "cancelled run: not counted"
+        cancelled = run.cancelled is not None
+        if cancelled and not (staging.imported_info(root, run_id) or {}).get("saved"):
+            line["state"] = "cancelled run that saved nothing: not counted"
             report["cancelled"] = report.get("cancelled", 0) + 1
             continue
         if not (base / run_id / staging.DISCARDS).is_file():
@@ -211,7 +234,7 @@ def backfill(root: Path, time_of, *, dry_run: bool = False) -> dict:
             line["state"] = "no usable time"
             continue
         discards = run.discards
-        stats = apply_run(store, run_id, moment, (run.manifest or {}).get("searchKey") or "", _discards_of(run))
+        stats = apply_run(store, run_id, moment, (run.manifest or {}).get("searchKey") or "", _discards_of(run), partial=cancelled)
         line.update(stats, state="already counted" if stats["alreadyApplied"] else "counted", at=moment,
                     torn=bool(discards and discards.torn), unreadable=discards.unreadable_lines if discards else 0,
                     rejected=discards.rejected if discards else 0)

@@ -50,7 +50,7 @@ export function eventText(event) {
     case 'cancel_signal': return `Stopping ${step}`
     case 'cancel_kill': return `${step} did not stop in time and was ended`
     case 'scrape_stopped': return 'Scraping stopped'
-    case 'cancelled': return event.imported ? `Cancelled: ${event.imported} collected ads imported, held` : 'Cancelled: nothing was imported'
+    case 'cancelled': return event.saved ? `Cancelled: ${event.saved} collected ads saved` : 'Cancelled: nothing was saved'
     case 'source_start': return `Reading ${event.source}`
     case 'source_end':
       if (event.error) return `${event.source}: ${event.status}, ${event.error}`
@@ -65,4 +65,11 @@ export function eventText(event) {
 export function latestEventText(view) {
   const last = view.events[view.events.length - 1]
   return last ? eventText(last) : ''
+}
+
+/** What a cancelled run did, in the words the progress line and the Re-scrape message share. `cancel` is the run record's field. */
+export function cancelledText(cancel) {
+  const saved = cancel?.saved ?? 0
+  const what = saved > 0 ? `${saved} collected ${saved === 1 ? 'ad was' : 'ads were'} saved.` : 'No ads were saved.'
+  return `The last run was cancelled. ${what} Nothing else changed. Scoring was skipped.`
 }

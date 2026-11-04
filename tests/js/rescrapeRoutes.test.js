@@ -27,7 +27,7 @@ const { handleApiRoutes } = await import('../../scripts/api-handler.js')
 const { ViewUnrecoverable } = await import('../../scripts/view-guard.js')
 const { default: RescrapeProgress } = await import('../../src/components/jobs/RescrapeProgress.jsx')
 const { RUN_ACTIVE, runHttpStatus } = await import('../../scripts/run-rescrape.js')
-const { applyStatus, emptyRunView, eventText, latestEventText } = await import('../../src/modules/jobs/rescrapeRun.js')
+const { applyStatus, cancelledText, emptyRunView, eventText, latestEventText } = await import('../../src/modules/jobs/rescrapeRun.js')
 const { runManualJobs } = await import('../../scripts/run-manual-job.js')
 const { scoreOnServer, scoreStoredJob } = await import('../../src/modules/jobs/manualScoring.js')
 
@@ -261,8 +261,8 @@ describe('a cancelled run in words', () => {
     expect(eventText({ type: 'cancel_requested' })).toBe('Cancel requested')
     expect(eventText({ type: 'step_end', step: 'discovery', status: 'cancelled' })).toBe('Discovery cancelled')
     expect(eventText({ type: 'step_skipped', step: 'scoring' })).toBe('Scoring skipped')
-    expect(eventText({ type: 'cancelled', imported: 12 })).toBe('Cancelled: 12 collected ads imported, held')
-    expect(eventText({ type: 'cancelled', imported: 0 })).toBe('Cancelled: nothing was imported')
+    expect(eventText({ type: 'cancelled', saved: 12 })).toBe('Cancelled: 12 collected ads saved')
+    expect(eventText({ type: 'cancelled', saved: 0 })).toBe('Cancelled: nothing was saved')
     expect(eventText({ type: 'cancel_kill', step: 'discovery' })).toMatch(/ended/)
   })
 
@@ -289,12 +289,16 @@ describe('the progress line', () => {
     expect(out).toContain('2 events')
   })
 
-  it('says what a cancelled run did and did not do, in the three outcomes', () => {
-    const cancelled = (outcome, status = 'cancelled') => html(view({ active: false, run: { runId: 'r1', status, cancel: { outcome } } }))
-    expect(cancelled('collected_ads_imported')).toMatch(/cancelled.*imported and held.*nothing was closed.*Scoring was skipped/s)
-    expect(cancelled('stopped_nothing_imported')).toMatch(/stopped hard: nothing was imported and no job changed/)
-    expect(cancelled('imported_before_cancel', 'ok')).toMatch(/after the jobs were saved, so the scrape counts/)
-    expect(cancelled('imported_before_cancel', 'ok')).not.toMatch(/was cancelled/)
+  it('says what a cancelled run did and did not do, and never mentions held rows', () => {
+    const cancelled = (cancel, status = 'cancelled') => html(view({ active: false, run: { runId: 'r1', status, cancel } }))
+    expect(cancelled({ outcome: 'collected_ads_saved', saved: 12 })).toContain('The last run was cancelled. 12 collected ads were saved. Nothing else changed. Scoring was skipped.')
+    expect(cancelled({ outcome: 'collected_ads_saved', saved: 1 })).toContain('1 collected ad was saved.')
+    expect(cancelled({ outcome: 'collected_ads_saved', saved: 0 })).toContain('The last run was cancelled. No ads were saved. Nothing else changed. Scoring was skipped.')
+    expect(cancelled({ outcome: 'stopped_nothing_imported' })).toContain('No ads were saved. Nothing else changed.')
+    expect(cancelled({ outcome: 'imported_before_cancel' }, 'ok')).toMatch(/after the jobs were saved, so the scrape counts/)
+    expect(cancelled({ outcome: 'imported_before_cancel' }, 'ok')).not.toMatch(/was cancelled/)
+    for (const out of [cancelled({ outcome: 'collected_ads_saved', saved: 5 }), cancelled({ outcome: 'stopped_nothing_imported' })]) expect(out).not.toMatch(/held|imported/i)
+    expect(cancelledText(undefined)).toBe('The last run was cancelled. No ads were saved. Nothing else changed. Scoring was skipped.')
   })
 
   it('shows that a cancel was asked for while the run is still stopping', () => {

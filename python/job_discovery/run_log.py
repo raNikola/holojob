@@ -32,12 +32,12 @@ running: not finished, or dead and not noticed yet; the lock tells which. interr
 nobody saw it end and finishedAt stays null. It is reported, never resumed. A Re-scrape (python/run_rescrape.py) adds
 "steps": [{"name", "status", "startedAt", "finishedAt", "exitCode"}]; an interrupted record may add "incompleteCommit".
 
-cancelled (S6): the owner cancelled a Re-scrape before its import commit point. The scrape stopped, the ads it had written were
-imported HELD (every source treated as not run: nothing closed or marked absent, no proven run recorded, `filtered_ads.json` not
-counted), scoring was skipped. A cancelled record adds `"cancel": {"requestedAt", "outcome"}`, outcome `collected_ads_imported`
-or `stopped_nothing_imported` (the process had to be killed). A cancel that arrives once the commit is claimed does not cancel
-anything: the import finishes as any import, scoring is skipped, the status is the run's own and `cancel.outcome` is
-`imported_before_cancel`. A step's status may be "cancelled" too; it is never a failure.
+cancelled (S6): the owner cancelled a Re-scrape before its import commit point. The scrape stopped and scoring was skipped. The ads it
+had validly collected were SAVED and nothing else changed: no ad became held, absent, closed or Stale, the list was not rebuilt, no
+proven run was recorded, `appliedRuns` was not touched. A cancelled record adds `"cancel": {"requestedAt", "outcome", "saved"}`, outcome
+`collected_ads_saved` (`saved` may be 0) or `stopped_nothing_imported` (the process had to be killed, or the cancel came before anything
+was collected). A cancel that arrives once the commit is claimed does not cancel anything: the import finishes as any import, scoring is
+skipped, the status is the run's own and `cancel.outcome` is `imported_before_cancel`. A step's status may be "cancelled" too; never a failure.
 
 A request is a file beside the record, `<same name>.cancel`; the commit/kill arbitration is `<same name>.decision`. Both are keyed by the
 run id, so a request for one run can never touch the next, and `prune` removes them with the record.
@@ -67,7 +67,7 @@ logger = logging.getLogger(__name__)
 VERSION = 1
 RETENTION_DAYS = 90
 TRIGGERS = ("manual", "pipeline", "scheduled")
-EXIT_CANCELLED = 76  # a discovery step that stopped because it was cancelled (and imported, held, what it had written)
+EXIT_CANCELLED = 76  # a discovery step that stopped because it was cancelled (and saved what it had validly collected)
 SOURCE_STATUSES = ("ok", "partial", "failed", "skipped")
 RUN_STATUSES = ("ok", "partial", "failed", "skipped", "running", "interrupted", "cancelled")
 MAX_MESSAGE_CHARS = 500

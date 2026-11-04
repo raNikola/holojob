@@ -213,6 +213,48 @@ def _record_stale_evidence(ledger: dict, run: staging.RunStage, moment: str, key
     return counted
 
 
+PARTIAL_RUNS_KEPT = 200
+
+
+def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, manifest: dict, deduped: list[dict], moment: str) -> "ImportResult":
+    """What importing a CANCELLED run does (S6): save the ads it validly collected, change nothing else.
+
+    A cancelled run saw only part of the world, so it must not rebuild the list. `plan_import` assumes a complete run in these places,
+    none of which run here: the second half of `apply_run` (every entry not found is kept, marked absent, missed or closed), the
+    rewrite of `lastImport` (the view is derived from it, so it would make this run's partial list *the* list), the proven runs for the
+    Stale rule and `lastListedAt`, and `filtered_ads.appliedRuns`. Here the ledger gets only `job_history.apply_partial`: each collected
+    ad is added or refreshed and joins the last complete run's list. Nothing is saved when nothing was collected, when no complete run
+    exists to add to, or when the run searched something other than that list did.
+    """
+    ledger = result.ledger
+    report.update(cancelled=True, complete=False, provenRuns=[], saved=0, rejected=report.get("rejected", 0))
+    info = ledger.get("lastImport")
+    key = manifest.get("searchKey") or ""
+    reason = None
+    if not deduped:
+        reason = "no_valid_ads"
+    elif not isinstance(info, dict) or not info.get("runId"):
+        reason = "no_complete_run"
+    else:
+        current = {e.get("seenUnder") for e in ledger["jobs"].values() if e.get("lastRunId") == info["runId"]}
+        if len(current) == 1 and key not in current:
+            reason = "other_search"
+    if reason:
+        report["nothingSaved"] = reason
+        return result
+    for job in deduped:
+        if job["jobId"] not in ledger["jobs"]:
+            result.new_by_provider[job.get("provider")] = result.new_by_provider.get(job.get("provider"), 0) + 1
+    stats = job_history.apply_partial(ledger, deduped, now=moment, key=key, role_key=_crosspost_key, list_run_id=info["runId"])
+    ledger["partialRuns"] = ((ledger.get("partialRuns") or []) + [run.run_id])[-PARTIAL_RUNS_KEPT:]
+    ledger["generation"] = (ledger.get("generation") or 0) + 1
+    ledger["updatedAt"] = moment
+    result.stats = stats
+    result.view = view_guard.derive_view(ledger)
+    report.update(saved=len(deduped), ledgerChanges={k: stats[k] for k in ("new", "known", "reopened", "changed", "carriedFacts")})
+    return result
+
+
 def plan_import(
     run: staging.RunStage, ledger: dict, previous=None, *, now: str | None = None, force: bool = False,
     allow_older: bool = False,
@@ -242,6 +284,9 @@ def plan_import(
         return result
     report["stagingStatus"] = "ok" if run.status else "unfinished"  # no status.json: the run never reached its end
     last = ledger.get("lastImport") if isinstance(ledger, dict) else None
+    if run.cancelled is not None and not force and run.run_id in (ledger.get("partialRuns") or []):
+        report.update(alreadyImported=True, complete=None, cancelled=True, saved=0)
+        return result
     if not force and isinstance(last, dict) and last.get("runId") == run.run_id:
         report.update(alreadyImported=True, complete=None)
         result.stats = copy.deepcopy((last.get("meta") or {}).get("history") or {})
@@ -271,7 +316,6 @@ def plan_import(
     proven_searches: list[str] = []
     rejected_total = 0
 
-    held = run.cancelled is not None  # S6: a cancelled run reads nothing to its end, whatever its footers say
     for name in providers:
         stage = run.sources.get(name)
         footer = stage.footer if stage and stage.usable else None
@@ -303,11 +347,9 @@ def plan_import(
         if lost:
             anomalies.append(f"{lost} ads not whole")
         # A source that did not run to its end, or whose staged ads are not all there, is not evidence that any other ad is gone.
-        if state in ("unfinished", "failed", "skipped") or anomalies or held:
+        if state in ("unfinished", "failed", "skipped") or anomalies:
             not_run.add(name)
-        if held:
-            pass  # no board is proven complete and no search run is proven: this run is no evidence about any ad it did not return
-        elif name in job_history.CLOSURE_PROVIDERS:
+        if name in job_history.CLOSURE_PROVIDERS:
             in_doubt = name in not_run or bool(stage and stage.torn) or bool(footer and footer.get("discardMismatch"))
             evidence[name] = board_evidence(run, name, stage, footer, in_doubt)
         elif _search_run_proven(run, stage, footer, state, anomalies):
@@ -335,6 +377,9 @@ def plan_import(
     report["duplicatesRemoved"] = len(all_jobs) - len(after_exact)
     report["crosspostsMerged"] = len(after_exact) - len(deduped)
 
+    if run.cancelled is not None:
+        return _plan_partial(result, report, run, manifest, deduped, moment)
+
     previous_facts, seen_before = _previous(previous)
     for job in deduped:
         if job["jobId"] not in result.ledger["jobs"]:
@@ -345,8 +390,7 @@ def plan_import(
         empty_boards=empty_boards, sources_not_run=not_run, run_id=run.run_id, prune=False, board_evidence=evidence,
     )
     result.stats = stats
-    # A cancelled run records nothing: no proven run for the Stale rule and no `lastListedAt` (both are claims about a finished read).
-    report["provenRuns"] = [] if held else _record_stale_evidence(result.ledger, run, moment, manifest.get("searchKey") or "", proven_searches, evidence)
+    report["provenRuns"] = _record_stale_evidence(result.ledger, run, moment, manifest.get("searchKey") or "", proven_searches, evidence)
     meta = {
         "searchTerms": manifest.get("terms") or [], "locations": manifest.get("locations") or [],
         "remoteFilters": manifest.get("remoteFilters") or [], "country": manifest.get("country") or "",
@@ -356,8 +400,6 @@ def plan_import(
     generation = (result.ledger.get("generation") or 0) + 1
     result.ledger["generation"] = generation
     result.ledger["lastImport"] = {"runId": run.run_id, "at": moment, "startedAt": manifest.get("startedAt"), "meta": meta, "marksNotFound": True}
-    if held:
-        result.ledger["lastImport"]["cancelled"] = True
     result.ledger["updatedAt"] = moment
     result.view = view_guard.view_payload(to_write, meta, moment, generation)
     if len(to_write) > ROW_WARNING:
@@ -376,9 +418,8 @@ def plan_import(
         incompleteSources=[s["name"] for s in report["sources"] if s["state"] != "complete" or s["anomalies"]],
         ledgerChanges={k: stats[k] for k in ("new", "known", "reopened", "changed", "absent", "closed", "carriedFacts")},
         reasons=dict(sorted(reasons.items())),
-        complete=not held and not rejected_total and not any(s["state"] != "complete" or s["anomalies"] for s in report["sources"])
+        complete=not rejected_total and not any(s["state"] != "complete" or s["anomalies"] for s in report["sources"])
         and report["stagingStatus"] == "ok",
-        cancelled=held,
     )
     return result
 
@@ -628,6 +669,7 @@ class ImportOutcome:
     refused: list[str] = field(default_factory=list)
     result: ImportResult | None = None
     committed: bool = False  # the ledger and the view were written
+    saved: int = 0  # a cancelled run: how many collected ads were saved
     generation: int | None = None
     pruned: list[str] = field(default_factory=list)
     usage: dict = field(default_factory=dict)
@@ -661,18 +703,25 @@ def import_staged_run(root: Path, run_id: str, *, allow_older: bool = False) -> 
     if not result.ok:
         out.refused += result.refused
         return out
-    if not result.report.get("alreadyImported"):
+    nothing = bool(run.cancelled is not None and result.report.get("nothingSaved"))
+    out.saved = int(result.report.get("saved") or 0)
+    if nothing:
+        pass  # a cancelled run that collected nothing usable: no write at all, not even a generation
+    elif not result.report.get("alreadyImported"):
         view_guard.commit(result.ledger, jobs_file, ledger_file)
         out.committed = True
     else:
         view_guard.ensure(jobs_file, ledger_file)
     out.generation = result.ledger.get("generation")
     try:
-        if not run.cancelled:  # S6: a cancelled run's dropped ads are never counted, so `appliedRuns` never holds its id
+        if run.cancelled is None:
             filtered_ads.record_run(root, run, import_time(run), result.ledger["jobs"])
+        elif out.saved or result.report.get("alreadyImported"):
+            # A cancelled run's dropped ads are saved once, under `partialRuns`; `appliedRuns` never holds its id.
+            filtered_ads.record_run(root, run, import_time(run), result.ledger["jobs"], partial=True)
     except Exception as exc:  # noqa: BLE001 - the ledger is written and stays written; only the pruning of this run waits
         out.warnings.append(f"The dropped ads of run {run_id} were not recorded ({type(exc).__name__}).")
-    staging.mark_imported(root, run_id, {"generation": out.generation, "committed": out.committed, **({"cancelled": True} if run.cancelled else {})})
+    staging.mark_imported(root, run_id, {"generation": out.generation, "committed": out.committed, **({"cancelled": True, "saved": out.saved} if run.cancelled is not None else {})})
     waiting = filtered_ads.unrecorded(root)
     held = sorted(r for r in waiting if staging.is_imported(root, r))
     if held:
