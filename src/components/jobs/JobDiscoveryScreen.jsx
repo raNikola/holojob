@@ -194,6 +194,10 @@ export default function JobDiscoveryScreen() {
 
   const handleRescrapeFinished = useCallback(async (run) => {
     if (routeEnabled) refetchAllAds() // the ledger may have moved even if the scored file below cannot be read
+    if (run?.status === 'cancelled') {
+      setRerunMsg('Re-scrape was cancelled. Scoring was skipped; Re-score scores what was collected.')
+      return
+    }
     if (!run || run.status === 'failed' || run.status === 'interrupted') {
       setRerunMsg(run?.status === 'interrupted' ? 'Re-scrape was interrupted.' : 'Re-scrape failed. Details below.')
       return

@@ -162,7 +162,9 @@ def unrecorded(root: Path) -> set[str]:
     except FilteredAdsError:
         applied = set()
     base = staging.staging_dir(Path(root))
-    return {run_id for run_id in staging.list_runs(root) if run_id not in applied and (base / run_id / staging.DISCARDS).is_file()}
+    # A cancelled run (S6) is never counted, so it is never waiting either: its dropped ads are deliberately left out.
+    return {run_id for run_id in staging.list_runs(root) if run_id not in applied and (base / run_id / staging.DISCARDS).is_file()
+            and not (base / run_id / staging.CANCELLED).exists()}
 
 
 def _ledger_ids(root: Path) -> set[str]:
@@ -195,6 +197,10 @@ def backfill(root: Path, time_of, *, dry_run: bool = False) -> dict:
             continue
         line = {"runId": run_id, "imported": staging.is_imported(root, run_id)}
         report["runs"].append(line)
+        if run.cancelled is not None:
+            line["state"] = "cancelled run: not counted"
+            report["cancelled"] = report.get("cancelled", 0) + 1
+            continue
         if not (base / run_id / staging.DISCARDS).is_file():
             report["noDiscards"] += 1
             line["state"] = "no discards file"

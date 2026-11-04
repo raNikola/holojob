@@ -66,3 +66,4 @@ delivery, ...). Today's scorer caps a job at 50 when its track is not one the ca
 ranking, label or priority until the owner has compared them on real runs.
 
 - **Stale:** an ad with no sighting for 30 days and at least 3 proven runs of its source and search since. A flag only: nothing is deleted. It leaves Active unless the owner has worked on it, and stays in All. See `docs/DECISIONS.md` (S5f).
+- **Held import (cancelled run):** the import of a run the owner cancelled before its commit point. The ads it had written are added and the ads it returned are seen, but every source counts as not run: nothing is closed or marked absent, no proven run is recorded for Stale, and its dropped ads are not counted. See `docs/DECISIONS.md` (S6).

@@ -20,7 +20,7 @@ files as they were when the run began. Both are replaced by rename, never rewrit
 and an import can be replayed on exactly what the run started from.
 
 `status.json` in a run's folder says whether staging itself worked. `imported.json` says the run was imported (written only by a
-real import). Staging is removed by status (`prune`): only runs that were imported, and only beyond the newest KEEP_IMPORTED of
+real import). `cancelled.json` (S6) says the owner cancelled it: it is imported held, and no later path counts it as a proven run. Staging is removed by status (`prune`): only runs that were imported, and only beyond the newest KEEP_IMPORTED of
 them. A run that waits for an import or for recovery, and a run whose staging failed (evidence, never importable), stay.
 `usage()` says how much room staging takes.
 """
@@ -55,6 +55,7 @@ LEDGER_BEFORE_SUFFIX = ".ledger-before.json"
 DISCOVERED_BEFORE_SUFFIX = ".discovered-before.json"
 STATUS = "status.json"
 IMPORTED = "imported.json"
+CANCELLED = "cancelled.json"
 KEEP_IMPORTED = 3
 RUN_ID = re.compile(r"^[0-9A-Za-z]{1,32}$")
 SOURCE_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
@@ -486,6 +487,22 @@ def mark_imported(root: Path, run_id: str, info: dict | None = None) -> Path:
     return path
 
 
+def mark_cancelled(root: Path, run_id: str, info: dict | None = None) -> Path:
+    """The owner cancelled this run (S6): staging/<runId>/cancelled.json, 600, atomic. The importer reads it and imports the run HELD:
+    no source counts as read to its end, so nothing is closed, marked absent or recorded as a proven run, and the run's dropped ads
+    are not counted. It is written before the import starts and never removed."""
+    folder = staging_dir(Path(root)) / run_id
+    if not RUN_ID.match(str(run_id)) or not folder.is_dir():
+        raise ValueError("no staging folder for this run")
+    path = folder / CANCELLED
+    _atomic.write_text_atomic(path, json.dumps({"runId": run_id, "cancelledAt": _now(), **(info or {})}, indent=2), _atomic.PRIVATE_FILE_MODE)
+    return path
+
+
+def is_cancelled(root: Path, run_id: str) -> bool:
+    return (staging_dir(Path(root)) / run_id / CANCELLED).is_file()
+
+
 def is_imported(root: Path, run_id: str) -> bool:
     return (staging_dir(Path(root)) / run_id / IMPORTED).is_file()
 
@@ -696,6 +713,7 @@ class RunStage:
     sources: dict[str, SourceStage]
     discards: DiscardStage | None = None
     status: dict | None = None  # status.json: did staging itself work (absent: the run never reached its end)
+    cancelled: dict | None = None  # cancelled.json (S6): present means the run is imported held; a file that cannot be read still counts
 
     @property
     def discovered_before(self) -> Path | None:
@@ -731,9 +749,17 @@ def read_run(root: Path, run_id: str) -> RunStage | None:
         status = status if isinstance(status, dict) else None
     except (OSError, ValueError):
         status = None
+    cancelled = None
+    if (folder / CANCELLED).exists():
+        try:
+            cancelled = json.loads((folder / CANCELLED).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            cancelled = None
+        if not isinstance(cancelled, dict):
+            cancelled = {"unreadable": True}
     return RunStage(
         run_id=run_id, dir=folder, manifest=manifest, sources=sources, discards=read_discards(folder / DISCARDS),
-        status=status,
+        status=status, cancelled=cancelled,
     )
 
 

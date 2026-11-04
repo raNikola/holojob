@@ -271,6 +271,7 @@ def plan_import(
     proven_searches: list[str] = []
     rejected_total = 0
 
+    held = run.cancelled is not None  # S6: a cancelled run reads nothing to its end, whatever its footers say
     for name in providers:
         stage = run.sources.get(name)
         footer = stage.footer if stage and stage.usable else None
@@ -302,9 +303,11 @@ def plan_import(
         if lost:
             anomalies.append(f"{lost} ads not whole")
         # A source that did not run to its end, or whose staged ads are not all there, is not evidence that any other ad is gone.
-        if state in ("unfinished", "failed", "skipped") or anomalies:
+        if state in ("unfinished", "failed", "skipped") or anomalies or held:
             not_run.add(name)
-        if name in job_history.CLOSURE_PROVIDERS:
+        if held:
+            pass  # no board is proven complete and no search run is proven: this run is no evidence about any ad it did not return
+        elif name in job_history.CLOSURE_PROVIDERS:
             in_doubt = name in not_run or bool(stage and stage.torn) or bool(footer and footer.get("discardMismatch"))
             evidence[name] = board_evidence(run, name, stage, footer, in_doubt)
         elif _search_run_proven(run, stage, footer, state, anomalies):
@@ -342,7 +345,8 @@ def plan_import(
         empty_boards=empty_boards, sources_not_run=not_run, run_id=run.run_id, prune=False, board_evidence=evidence,
     )
     result.stats = stats
-    report["provenRuns"] = _record_stale_evidence(result.ledger, run, moment, manifest.get("searchKey") or "", proven_searches, evidence)
+    # A cancelled run records nothing: no proven run for the Stale rule and no `lastListedAt` (both are claims about a finished read).
+    report["provenRuns"] = [] if held else _record_stale_evidence(result.ledger, run, moment, manifest.get("searchKey") or "", proven_searches, evidence)
     meta = {
         "searchTerms": manifest.get("terms") or [], "locations": manifest.get("locations") or [],
         "remoteFilters": manifest.get("remoteFilters") or [], "country": manifest.get("country") or "",
@@ -352,6 +356,8 @@ def plan_import(
     generation = (result.ledger.get("generation") or 0) + 1
     result.ledger["generation"] = generation
     result.ledger["lastImport"] = {"runId": run.run_id, "at": moment, "startedAt": manifest.get("startedAt"), "meta": meta, "marksNotFound": True}
+    if held:
+        result.ledger["lastImport"]["cancelled"] = True
     result.ledger["updatedAt"] = moment
     result.view = view_guard.view_payload(to_write, meta, moment, generation)
     if len(to_write) > ROW_WARNING:
@@ -370,8 +376,9 @@ def plan_import(
         incompleteSources=[s["name"] for s in report["sources"] if s["state"] != "complete" or s["anomalies"]],
         ledgerChanges={k: stats[k] for k in ("new", "known", "reopened", "changed", "absent", "closed", "carriedFacts")},
         reasons=dict(sorted(reasons.items())),
-        complete=not rejected_total and not any(s["state"] != "complete" or s["anomalies"] for s in report["sources"])
+        complete=not held and not rejected_total and not any(s["state"] != "complete" or s["anomalies"] for s in report["sources"])
         and report["stagingStatus"] == "ok",
+        cancelled=held,
     )
     return result
 
@@ -661,10 +668,11 @@ def import_staged_run(root: Path, run_id: str, *, allow_older: bool = False) -> 
         view_guard.ensure(jobs_file, ledger_file)
     out.generation = result.ledger.get("generation")
     try:
-        filtered_ads.record_run(root, run, import_time(run), result.ledger["jobs"])
+        if not run.cancelled:  # S6: a cancelled run's dropped ads are never counted, so `appliedRuns` never holds its id
+            filtered_ads.record_run(root, run, import_time(run), result.ledger["jobs"])
     except Exception as exc:  # noqa: BLE001 - the ledger is written and stays written; only the pruning of this run waits
         out.warnings.append(f"The dropped ads of run {run_id} were not recorded ({type(exc).__name__}).")
-    staging.mark_imported(root, run_id, {"generation": out.generation, "committed": out.committed})
+    staging.mark_imported(root, run_id, {"generation": out.generation, "committed": out.committed, **({"cancelled": True} if run.cancelled else {})})
     waiting = filtered_ads.unrecorded(root)
     held = sorted(r for r in waiting if staging.is_imported(root, r))
     if held:

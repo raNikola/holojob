@@ -47,10 +47,10 @@ function runsDir() {
   return path.join(process.env.CAREER_OS_ANALYTICS_DIR || path.join(ROOT, 'data/analytics'), 'runs')
 }
 
-function cli(command, { python = VENV_PYTHON, script = SCRIPT, spawnFn = spawn } = {}) {
+function cli(command, { python = VENV_PYTHON, script = SCRIPT, spawnFn = spawn, extra = [] } = {}) {
   return new Promise((resolve, reject) => {
     const out = []
-    const child = spawnFn(python, [script, command], { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
+    const child = spawnFn(python, [script, command, ...extra], { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
     child.stdout.on('data', (d) => out.push(d))
     child.on('error', reject)
     child.on('close', (code) => resolve({ code, stdout: Buffer.concat(out).toString('utf-8') }))
@@ -181,6 +181,40 @@ export async function startRescrape(body = {}, options = {}) {
   }
 }
 
+const RUN_ID = /^[0-9A-Za-z]{1,32}$/
+const CANCEL_ANSWERS = {
+  cancel_requested: [202, 'Cancel requested. The run stops at its next safe point; what it collected is imported, held, and scoring is skipped.'],
+  cancel_already_requested: [200, 'A cancel was already requested for this run.'],
+  already_cancelled: [200, 'This run was already cancelled. Nothing changed.'],
+  already_finished: [200, 'This run has already finished. Nothing changed.'],
+  not_running: [200, 'This run is no longer running (it stopped without finishing). Nothing changed.'],
+  not_cancellable: [409, 'Only a Re-scrape can be cancelled. Nothing changed.'],
+  unknown_run: [404, 'There is no such run.'],
+  invalid_run_id: [422, 'The run id is not valid.'],
+}
+
+/**
+ * POST /api/rescrape/cancel {runId}. Asks the run to stop; it never signals a process (Python's orchestrator does, on seeing the
+ * request). Takes no lock and writes one small file beside the run's record, so it can neither block nor corrupt the next run.
+ * Every answer other than a new request changes nothing and says why.
+ */
+export async function cancelRescrape(body = {}, options = {}) {
+  const runId = body?.runId
+  if (typeof runId !== 'string' || !RUN_ID.test(runId)) return { status: 422, body: { ok: false, error: 'invalid', field: 'runId', message: CANCEL_ANSWERS.invalid_run_id[1] } }
+  let answer
+  try {
+    const { code, stdout } = await cli('cancel', { ...options, extra: ['--run-id', runId] })
+    if (code !== 0) throw new Error(`cancel exited ${code}`)
+    answer = JSON.parse(stdout.trim().split('\n').pop())
+  } catch {
+    return { status: 503, body: { ok: false, error: 'no_python', message: 'The job tools are not set up on the server, so nothing was cancelled.' } }
+  }
+  const known = CANCEL_ANSWERS[answer.result]
+  if (!known) return { status: 500, body: { ok: false, error: 'failed', message: 'The cancel request was not understood.' } }
+  const [status, message] = known
+  return { status, body: { ok: status < 400, result: answer.result, runId, runStatus: answer.status ?? null, message } }
+}
+
 /** The complete lines of an event log from line `after` on. A last line with no newline is not read yet; an unparsable line is skipped. */
 export function readEventsFile(file, after = 0) {
   let text
@@ -278,6 +312,7 @@ export async function rescrapeStatus(after, options = {}) {
     }
   }
   const { events, next } = readEventsFile(path.join(runsDir(), name.replace(/\.json$/, '.events.jsonl')), cursor)
-  const answer = { ok: true, active, run, events, next, incompleteCommit: active ? null : incompleteCommit(), scoringBehind: active ? false : await scoringIsBehind(options) }
+  const cancelRequested = fs.existsSync(path.join(runsDir(), name.replace(/\.json$/, '.cancel')))
+  const answer = { ok: true, active, run, events, next, cancelRequested, incompleteCommit: active ? null : incompleteCommit(), scoringBehind: active ? false : await scoringIsBehind(options) }
   return { status: 200, body: maskStrings(answer) }
 }

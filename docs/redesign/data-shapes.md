@@ -971,6 +971,7 @@ Fields added later, in the browser job store and not in this file until saved:
 
 - **Path:** `data/analytics/runs/<startedAt>-<runId>.json`, one file per run, kept 90 days. Status also `running` and `interrupted`; a Re-scrape adds `steps`, an interrupted record may add `incompleteCommit` (DECISIONS.md, Activity slice 2a).
 - **Event log:** `data/analytics/runs/<startedAt>-<runId>.events.jsonl`, append-only, one JSON object per line (`type`, `at`, then fields of that type), pruned with its record.
+- **Cancel (S6):** status also `cancelled`; a Re-scrape record has `orchestrator: "rescrape"`, and a cancelled or cancel-touched one adds `cancel: {requestedAt, outcome}` (`collected_ads_imported`, `stopped_nothing_imported`, `imported_before_cancel`, `finished_before_cancel`). `<startedAt>-<runId>.cancel` is the request and `.decision` the commit/kill claim (`commit` or `kill`), both pruned with the record. A held import sets `ledger.lastImport.cancelled: true`; its staging folder holds `cancelled.json`. DECISIONS.md, S6.
 - **Commit marker:** `data/analytics/runs/.commit-in-progress.json` (`runId`, `startedAt`, `files`, `written`), on disk only during discovery's writes. There with the lock free: an incomplete commit.
 - **Purpose:** What each discovery run did per source, for the Activity screen.
 - **Written by:** `run_discovery.py` through `run_log.py`. Field meanings: [DECISIONS.md](../DECISIONS.md#activity-slice-1-as-built-2026-11-02).
