@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const run = vi.hoisted(() => ({
   discovery: vi.fn(), pipeline: vi.fn(), scoring: vi.fn(), judged: vi.fn(), manual: vi.fn(), importUrl: vi.fn(),
-  start: vi.fn(), status: vi.fn(), busy: vi.fn(), lock: vi.fn(), restore: vi.fn(), exportZip: vi.fn(), ensureView: vi.fn(),
+  start: vi.fn(), status: vi.fn(), cancel: vi.fn(), busy: vi.fn(), lock: vi.fn(), restore: vi.fn(), exportZip: vi.fn(), ensureView: vi.fn(),
 }))
 
 vi.mock('../../scripts/run-discovery.js', () => ({ buildDiscoveryCommand: () => '', getDiscoveryStatus: () => ({}), runDiscovery: run.discovery }))
@@ -17,7 +17,7 @@ vi.mock('../../scripts/run-scoring.js', () => ({ buildScoringCommand: () => '', 
 vi.mock('../../scripts/run-job-import.js', () => ({ runJobImport: run.importUrl }))
 vi.mock('../../scripts/run-rescrape.js', async (original) => ({
   ...(await original()),
-  startRescrape: run.start, rescrapeStatus: run.status, isRunBusy: run.busy, withRunLock: run.lock,
+  startRescrape: run.start, rescrapeStatus: run.status, cancelRescrape: run.cancel, isRunBusy: run.busy, withRunLock: run.lock,
 }))
 vi.mock('../../scripts/view-guard.js', async (original) => ({ ...(await original()), ensureViewCurrent: run.ensureView }))
 vi.mock('../../src/utils/apiAvailability.js', async (original) => ({ ...(await original()), ensureApiAvailable: async () => true }))
@@ -75,6 +75,34 @@ describe('the new routes', () => {
     run.status.mockResolvedValue({ status: 200, body: { ok: true, active: false, events: [], next: 0 } })
     expect((await call('GET', '/api/rescrape/status?after=7')).status).toBe(200)
     expect(run.status.mock.calls[0][0]).toBe('7')
+  })
+})
+
+describe('POST /api/rescrape/cancel', () => {
+  it('passes the body to the cancel and the answer through, whatever a run is doing', async () => {
+    run.cancel.mockResolvedValue({ status: 202, body: { ok: true, result: 'cancel_requested', runId: 'abc' } })
+    const { status, data } = await call('POST', '/api/rescrape/cancel', { runId: 'abc' })
+    expect(status).toBe(202)
+    expect(data.result).toBe('cancel_requested')
+    expect(run.cancel.mock.calls[0][0]).toEqual({ runId: 'abc' })
+  })
+
+  it('does not look at the lock or start anything: a cancel is not a run', async () => {
+    run.cancel.mockResolvedValue({ status: 200, body: { ok: true, result: 'already_finished' } })
+    await call('POST', '/api/rescrape/cancel', { runId: 'abc' })
+    expect(run.busy).not.toHaveBeenCalled()
+    for (const fn of ['start', 'discovery', 'pipeline', 'scoring', 'lock']) expect(run[fn]).not.toHaveBeenCalled()
+  })
+
+  it('needs a JSON body like every other write', async () => {
+    expect((await call('POST', '/api/rescrape/cancel', Buffer.from('runId=abc'), 'text/plain')).status).toBe(415)
+    expect(run.cancel).not.toHaveBeenCalled()
+  })
+
+  it('is POST only', async () => {
+    run.cancel.mockResolvedValue({ status: 200, body: {} })
+    expect((await call('GET', '/api/rescrape/cancel')).status).not.toBe(202)
+    expect(run.cancel).not.toHaveBeenCalled()
   })
 })
 
@@ -228,6 +256,23 @@ describe('the run view', () => {
   })
 })
 
+describe('a cancelled run in words', () => {
+  it('names the cancel events, and a cancelled step is not a failed one', () => {
+    expect(eventText({ type: 'cancel_requested' })).toBe('Cancel requested')
+    expect(eventText({ type: 'step_end', step: 'discovery', status: 'cancelled' })).toBe('Discovery cancelled')
+    expect(eventText({ type: 'step_skipped', step: 'scoring' })).toBe('Scoring skipped')
+    expect(eventText({ type: 'cancelled', imported: 12 })).toBe('Cancelled: 12 collected ads imported, held')
+    expect(eventText({ type: 'cancelled', imported: 0 })).toBe('Cancelled: nothing was imported')
+    expect(eventText({ type: 'cancel_kill', step: 'discovery' })).toMatch(/ended/)
+  })
+
+  it('carries the request flag from the status answer', () => {
+    const view = applyStatus(emptyRunView(), { run: { runId: 'r1', status: 'running' }, active: true, cancelRequested: true, events: [], next: 0 })
+    expect(view.cancelRequested).toBe(true)
+    expect(applyStatus(view, { run: { runId: 'r1', status: 'cancelled' }, active: false, events: [], next: 0 }).cancelRequested).toBe(false)
+  })
+})
+
 describe('the progress line', () => {
   const view = (over) => ({ ...emptyRunView(), run: { runId: 'r1', status: 'running' }, active: true, ...over })
   const html = (v) => renderToStaticMarkup(createElement(RescrapeProgress, { view: v }))
@@ -242,6 +287,19 @@ describe('the progress line', () => {
     expect(out).toContain('Reading greenhouse')
     expect(out).toContain('Run started')
     expect(out).toContain('2 events')
+  })
+
+  it('says what a cancelled run did and did not do, in the three outcomes', () => {
+    const cancelled = (outcome, status = 'cancelled') => html(view({ active: false, run: { runId: 'r1', status, cancel: { outcome } } }))
+    expect(cancelled('collected_ads_imported')).toMatch(/cancelled.*imported and held.*nothing was closed.*Scoring was skipped/s)
+    expect(cancelled('stopped_nothing_imported')).toMatch(/stopped hard: nothing was imported and no job changed/)
+    expect(cancelled('imported_before_cancel', 'ok')).toMatch(/after the jobs were saved, so the scrape counts/)
+    expect(cancelled('imported_before_cancel', 'ok')).not.toMatch(/was cancelled/)
+  })
+
+  it('shows that a cancel was asked for while the run is still stopping', () => {
+    expect(html(view({ cancelRequested: true }))).toMatch(/Cancel requested/)
+    expect(html(view({ cancelRequested: false }))).not.toMatch(/Cancel requested/)
   })
 
   it('says clearly when a run was interrupted, and that nothing resumes it', () => {

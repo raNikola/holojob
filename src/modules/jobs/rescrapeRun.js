@@ -21,7 +21,7 @@ export async function fetchRescrapeStatus(after = 0, { fetchFn = globalThis.fetc
 }
 
 export function emptyRunView() {
-  return { run: null, active: false, events: [], next: 0, incompleteCommit: null, scoringBehind: false, reread: false }
+  return { run: null, active: false, cancelRequested: false, events: [], next: 0, incompleteCommit: null, scoringBehind: false, reread: false }
 }
 
 /**
@@ -29,7 +29,7 @@ export function emptyRunView() {
  * run starts over with `reread` set, and the caller asks again from line 0.
  */
 export function applyStatus(view, status) {
-  const shared = { run: status.run ?? null, active: Boolean(status.active), incompleteCommit: status.incompleteCommit ?? null, scoringBehind: Boolean(status.scoringBehind) }
+  const shared = { run: status.run ?? null, active: Boolean(status.active), cancelRequested: Boolean(status.cancelRequested), incompleteCommit: status.incompleteCommit ?? null, scoringBehind: Boolean(status.scoringBehind) }
   const switched = view.run && status.run && view.run.runId !== status.run.runId && view.next > 0
   if (switched) return { ...shared, events: [], next: 0, reread: true }
   return { ...shared, events: [...view.events, ...(status.events ?? [])], next: status.next ?? view.next, reread: false }
@@ -44,7 +44,13 @@ export function eventText(event) {
     case 'run_start': return 'Run started'
     case 'run_end': return `Run finished: ${event.status}`
     case 'step_start': return `${step} started`
-    case 'step_end': return event.status === 'ok' ? `${step} finished` : `${step} failed`
+    case 'step_end': return event.status === 'ok' ? `${step} finished` : event.status === 'cancelled' ? `${step} cancelled` : `${step} failed`
+    case 'step_skipped': return `${step} skipped`
+    case 'cancel_requested': return 'Cancel requested'
+    case 'cancel_signal': return `Stopping ${step}`
+    case 'cancel_kill': return `${step} did not stop in time and was ended`
+    case 'scrape_stopped': return 'Scraping stopped'
+    case 'cancelled': return event.imported ? `Cancelled: ${event.imported} collected ads imported, held` : 'Cancelled: nothing was imported'
     case 'source_start': return `Reading ${event.source}`
     case 'source_end':
       if (event.error) return `${event.source}: ${event.status}, ${event.error}`

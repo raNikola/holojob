@@ -15,7 +15,7 @@ Record, version 1. A later slice adds fields; a reader ignores what it does not 
       "runId": "<discovered_jobs.json meta.sourceRunId>",
       "trigger": "manual" | "pipeline" | "scheduled",
       "startedAt": "<ISO>", "finishedAt": "<ISO>" | null,
-      "status": "running" | "ok" | "partial" | "failed" | "skipped" | "interrupted",
+      "status": "running" | "ok" | "partial" | "failed" | "skipped" | "interrupted" | "cancelled",
       "sources": [{"name", "status": "ok" | "partial" | "failed" | "skipped", "read", "kept", "new", "error",
                    "boardsFailed", "skipReason"}],
       "issues": [{"level": "error" | "warning", "source": "<name>" | null, "message"}],
@@ -31,6 +31,16 @@ expired.
 running: not finished, or dead and not noticed yet; the lock tells which. interrupted: found running with the lock free, so
 nobody saw it end and finishedAt stays null. It is reported, never resumed. A Re-scrape (python/run_rescrape.py) adds
 "steps": [{"name", "status", "startedAt", "finishedAt", "exitCode"}]; an interrupted record may add "incompleteCommit".
+
+cancelled (S6): the owner cancelled a Re-scrape before its import commit point. The scrape stopped, the ads it had written were
+imported HELD (every source treated as not run: nothing closed or marked absent, no proven run recorded, `filtered_ads.json` not
+counted), scoring was skipped. A cancelled record adds `"cancel": {"requestedAt", "outcome"}`, outcome `collected_ads_imported`
+or `stopped_nothing_imported` (the process had to be killed). A cancel that arrives once the commit is claimed does not cancel
+anything: the import finishes as any import, scoring is skipped, the status is the run's own and `cancel.outcome` is
+`imported_before_cancel`. A step's status may be "cancelled" too; it is never a failure.
+
+A request is a file beside the record, `<same name>.cancel`; the commit/kill arbitration is `<same name>.decision`. Both are keyed by the
+run id, so a request for one run can never touch the next, and `prune` removes them with the record.
 """
 
 from __future__ import annotations
@@ -57,13 +67,14 @@ logger = logging.getLogger(__name__)
 VERSION = 1
 RETENTION_DAYS = 90
 TRIGGERS = ("manual", "pipeline", "scheduled")
+EXIT_CANCELLED = 76  # a discovery step that stopped because it was cancelled (and imported, held, what it had written)
 SOURCE_STATUSES = ("ok", "partial", "failed", "skipped")
-RUN_STATUSES = ("ok", "partial", "failed", "skipped", "running", "interrupted")
+RUN_STATUSES = ("ok", "partial", "failed", "skipped", "running", "interrupted", "cancelled")
 MAX_MESSAGE_CHARS = 500
 
 _STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
 _RECORD_NAME = re.compile(r"^\d{8}T\d{6}Z-[^/]+\.json$")
-_FILE_NAME = re.compile(r"^(\d{8}T\d{6}Z)-[^/]+\.(?:json|events\.jsonl)$")
+_FILE_NAME = re.compile(r"^(\d{8}T\d{6}Z)-[^/]+\.(?:json|events\.jsonl|cancel|decision)$")
 _COMMIT_MARKER = ".commit-in-progress.json"
 _CREDENTIAL = re.compile(r"(?i)\b(api_?key|key|token|li_at|password|secret|authorization)=[^&\s]+")
 _KEY_SHAPED = re.compile(r"\b(sk-|AIza)[A-Za-z0-9_-]{8,}")
@@ -157,7 +168,11 @@ def set_new_counts(record: dict, counts: dict[str, int]) -> None:
         source["new"] = counts.get(source["name"], 0)
 
 
-def finish(record: dict, *, exit_ok: bool) -> dict:
+def finish(record: dict, *, exit_ok: bool, cancelled: bool = False) -> dict:
+    if cancelled:
+        record["status"] = "cancelled"  # its own outcome: not a failure, and never "ok" (the scrape did not run to its end)
+        record["finishedAt"] = _now().isoformat()
+        return record
     all_statuses = [source["status"] for source in record["sources"]]
     statuses = [status for status in all_statuses if status != "skipped"]  # a skipped source says nothing about the run
     if not exit_ok or not all_statuses or (statuses and all(status == "failed" for status in statuses)):
@@ -226,6 +241,68 @@ def _records() -> list[dict]:
 
 def find_record(run_id: str) -> dict | None:
     return next((record for record in _records() if record["runId"] == run_id), None)
+
+
+# --- cancel (S6) ------------------------------------------------------------------------------------------------------
+
+
+def cancel_path(record: dict) -> Path:
+    return record_path(record).with_suffix(".cancel")
+
+
+def decision_path(record: dict) -> Path:
+    return record_path(record).with_suffix(".decision")
+
+
+def _create_new(path: Path, text: str) -> bool:
+    """Create `path` and write `text` in one write; False when it already exists. Exactly one caller wins (O_EXCL)."""
+    _atomic.make_private_dirs(path.parent)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, _atomic.PRIVATE_FILE_MODE)
+    except FileExistsError:
+        return False
+    try:
+        os.write(fd, text.encode("utf-8"))
+    finally:
+        os.close(fd)
+    return True
+
+
+def request_cancel(record: dict) -> bool:
+    """Ask the run to stop. True when this call made the request, False when one was already there. Touches no lock and no data file."""
+    return _create_new(cancel_path(record), json.dumps({"requestedAt": _now().isoformat()}))
+
+
+def withdraw_cancel(record: dict) -> None:
+    cancel_path(record).unlink(missing_ok=True)
+
+
+def cancel_requested(record: dict) -> bool:
+    return cancel_path(record).exists()
+
+
+def cancel_info(record: dict) -> dict:
+    try:
+        info = json.loads(cancel_path(record).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"requestedAt": None}
+    return info if isinstance(info, dict) else {"requestedAt": None}
+
+
+def claim(record: dict, role: str) -> bool:
+    """The one decision between the import and a hard kill. The discovery process claims "commit" before it imports; the orchestrator
+    claims "kill" before it SIGKILLs a step that ignored SIGTERM. O_EXCL lets exactly one of them have it: a run that has claimed
+    "commit" is never killed, and one that has been claimed for "kill" never starts to commit."""
+    if role not in ("commit", "kill"):
+        raise ValueError(role)
+    return _create_new(decision_path(record), role)
+
+
+def decision(record: dict) -> str | None:
+    try:
+        return decision_path(record).read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
 
 
 def _clean_fields(fields: dict) -> dict:

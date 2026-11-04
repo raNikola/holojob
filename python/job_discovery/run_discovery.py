@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import json
 import logging
+import signal
 import sys
 import uuid
 from collections import Counter
@@ -48,6 +49,34 @@ _lock_spec.loader.exec_module(pipeline_lock)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+
+class RunCancelled(BaseException):
+    """Raised by SIGTERM, only while the scrape loop runs. A BaseException, so no provider's `except Exception` can swallow it."""
+
+
+class CancelState:
+    """What a cancel may do to this process (S6). SIGTERM raises RunCancelled only while `interruptible`, which is the source loop and
+    nothing else: staging is append-only there and the ledger is not touched. Everywhere else, and always from the moment the commit is
+    claimed, the signal only sets `pending`, and the code looks at it at the points it chose. So a cancel can never land inside the
+    import's writes: it either arrives before the claim (the run imports held) or after (the import finishes)."""
+
+    def __init__(self) -> None:
+        self.interruptible = False
+        self.pending = False
+
+    def handle(self, _signum, _frame) -> None:
+        self.pending = True
+        if self.interruptible:
+            self.interruptible = False
+            raise RunCancelled()
+
+    def install(self) -> "CancelState":
+        signal.signal(signal.SIGTERM, self.handle)
+        return self
+
+    def wants_stop(self, record: dict) -> bool:
+        return self.pending or run_log.cancel_requested(record)
 
 
 def parse_args() -> argparse.Namespace:
@@ -131,8 +160,9 @@ def run_locked(args: argparse.Namespace) -> int:
         run_log.event(record, "run_start", trigger=args.trigger)
     run_log.report_incomplete_commit(record)
     code = 1
+    cancel = CancelState().install() if managed else None  # only the Re-scrape orchestrator cancels; a direct run keeps SIGTERM's default
     try:
-        code = discover(args, record)
+        code = discover(args, record, cancel)
         return code
     except Exception as exc:
         run_log.add_issue(record, "error", f"Discovery stopped: {exc}")
@@ -153,6 +183,13 @@ def stop(record: dict, message: str) -> int:
     run_log.add_issue(record, "error", message)
     run_log.event(record, "error", message=message)
     return 1
+
+
+def cancelled_without_staging(record: dict) -> int:
+    """Cancelled before the scrape began: nothing was collected, nothing is imported, no file other than the record changes."""
+    record["cancel"] = {"requestedAt": run_log.cancel_info(record).get("requestedAt"), "outcome": "stopped_nothing_imported"}
+    run_log.event(record, "cancelled", imported=0, sourcesDone=0)
+    return run_log.EXIT_CANCELLED
 
 
 def fetch_source(
@@ -186,7 +223,7 @@ def fetch_source(
     return result
 
 
-def discover(args: argparse.Namespace, record: dict) -> int:
+def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None = None) -> int:
     source_run_id = record["runId"]
 
     intelligence = load_intelligence(args.intelligence)
@@ -218,6 +255,9 @@ def discover(args: argparse.Namespace, record: dict) -> int:
     except view_guard.ViewRecoveryError as exc:
         return stop(record, f"The job list is out of date and could not be rebuilt: {exc}")
 
+    if cancel and cancel.wants_stop(record):
+        return cancelled_without_staging(record)
+
     # What the scrape collects is written to data/jobs/staging/<runId>/ as it comes; the importer reads it from there. The
     # ledger and the discovered file as they are now are kept beside it, because the import replaces both.
     search_key = job_history.search_key(search_terms, locations, country, remote_filters)
@@ -231,20 +271,35 @@ def discover(args: argparse.Namespace, record: dict) -> int:
     all_jobs: list[dict] = []
     provider_counts: dict[str, int] = {}
 
-    for name in provider_names:
-        logger.info("Running provider: %s", name)
-        provider = get_provider(name)
-        run_log.event(record, "source_start", source=name)
-        jobs, outcome = fetch_source(
-            provider, name, search_terms, locations, remote_filters, country, stage=stage_run.open_source(name)
-        )
-        run_log.add_source(record, name, outcome)
-        run_log.save(record)
-        run_log.event(record, "source_end", source=name, status=outcome.status, read=outcome.read, kept=outcome.kept,
-                      error=outcome.error, skipReason=outcome.skip_reason)
-        provider_counts[name] = len(jobs)
-        all_jobs.extend(jobs)
-        logger.info("Provider %s returned %d jobs", name, len(jobs))
+    cancelled = False
+    if cancel:
+        cancel.interruptible = True
+    try:
+        for name in provider_names:
+            if cancel and cancel.wants_stop(record):
+                cancelled = True
+                break
+            logger.info("Running provider: %s", name)
+            provider = get_provider(name)
+            run_log.event(record, "source_start", source=name)
+            jobs, outcome = fetch_source(
+                provider, name, search_terms, locations, remote_filters, country, stage=stage_run.open_source(name)
+            )
+            run_log.add_source(record, name, outcome)
+            run_log.save(record)
+            run_log.event(record, "source_end", source=name, status=outcome.status, read=outcome.read, kept=outcome.kept,
+                          error=outcome.error, skipReason=outcome.skip_reason)
+            provider_counts[name] = len(jobs)
+            all_jobs.extend(jobs)
+            logger.info("Provider %s returned %d jobs", name, len(jobs))
+        if cancel:
+            cancel.interruptible = False  # inside the try: a signal before this line is still caught below
+    except RunCancelled:
+        cancelled = True  # the source in flight has no footer: the importer treats it as unfinished
+    if cancel:
+        cancel.interruptible = False
+    if cancelled:
+        run_log.event(record, "scrape_stopped", reason="cancelled", sourcesDone=len(record["sources"]))
 
     for warning in stage_run.warnings:
         run_log.add_issue(record, "warning", warning)
@@ -256,6 +311,19 @@ def discover(args: argparse.Namespace, record: dict) -> int:
         # What was collected is not safely on disk, so it is not imported as if it were a complete scrape. Nothing is
         # committed: the ledger and the view stay exactly as they were, and the run says so.
         return stop(record, "Nothing was imported: staging failed (" + "; ".join(staging_problems[:3]) + "). The ledger and the job list are unchanged.")
+
+    if cancel:
+        # The commit point. From here a signal only sets a flag. Exactly one of this claim and the orchestrator's "kill" claim succeeds:
+        # a run that holds "commit" is never killed, and one that lost it never starts to write.
+        if not run_log.claim(record, "commit"):
+            run_log.event(record, "error", message="The orchestrator stopped this step before its import; nothing was imported.")
+            return run_log.EXIT_CANCELLED
+        cancelled = cancelled or cancel.wants_stop(record)  # a request that arrived while the claim was made still cancels the scrape
+    if cancelled:
+        try:
+            staging.mark_cancelled(ROOT, source_run_id, {"requestedAt": run_log.cancel_info(record).get("requestedAt")})
+        except (OSError, ValueError) as exc:
+            return stop(record, f"The run was cancelled but its staging could not be marked, so nothing was imported: {exc}")
 
     # The switch (S4a): what the scrape wrote to staging is imported by the importer, the ledger is the one source of truth and
     # discovered_jobs.json is derived from it. The commit is: ledger, then view (view_guard.commit). No marker: a stop between
@@ -282,6 +350,13 @@ def discover(args: argparse.Namespace, record: dict) -> int:
         logger.warning("%s", warning)
     if not result.report.get("complete"):
         logger.info("Import: not a complete scrape (%s)", ", ".join(result.report.get("incompleteSources") or ["see the report"]))
+
+    if cancelled:
+        # Held import: every source counted as not run, nothing closed or marked absent, no proven run, dropped ads not counted.
+        record["cancel"] = {"requestedAt": run_log.cancel_info(record).get("requestedAt"), "outcome": "collected_ads_imported"}
+        run_log.event(record, "cancelled", imported=result.view["meta"]["dedupedCount"], sourcesDone=len(record["sources"]))
+        print(f"Cancelled. {result.view['meta']['dedupedCount']} collected ads imported, held; no source counts as read.")
+        return run_log.EXIT_CANCELLED
 
     found_count = result.view["meta"]["dedupedCount"]
     discovered_path = ROOT / "data" / "jobs" / "discovered_jobs.json"

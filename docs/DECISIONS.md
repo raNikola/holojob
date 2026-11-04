@@ -754,6 +754,48 @@ In the real container every request of `scripts/check-view-recovery.js` answered
 
 Nothing can be Stale yet: the ledger has no proven runs and its oldest sighting is under 30 days old. **Stale barely changes Active.** An unworked absent row leaves Active after 14 days anyway, well before it can be Stale at 30. The two what-if Active counts above come from the 14 days. What Stale adds is the label and reason in All, and leaving the action buckets for a held row.
 
+## S6 as built: cancel a running Re-scrape (2026-11-04)
+
+**Owner decision (2026-11-04, asked at the start of S6):** a cancel before the import commit point still imports the ads already written, **held**, as the 2026-11-03 rule says ("Cancel and Interrupted import every validly written ad"). The alternative, importing nothing, was offered and not taken. Held means: every source counts as not run, so no ad is closed or marked absent and no miss is counted; no proven run is recorded for the Stale rule (`ledger.sourceRuns` and `lastListedAt` untouched); the run's dropped ads are not counted (`filtered_ads.json` and its `appliedRuns` untouched). New ads are added and ads it returned are seen, which is true of them.
+
+**Where a run can stop** (read from the code before anything was changed):
+
+| Point | Writes so far | Cancel does |
+|---|---|---|
+| Scrape, inside or between sources | staging only, append-only per source | Stops at once. The source in flight has no footer and is "unfinished" to the importer |
+| After the scrape, before the commit claim | staging only | Same, then the held import |
+| Commit: ledger, view, `filtered_ads.json`, `imported.json`, prune | the live files | **Never interrupted.** Once claimed, it finishes; a signal only sets a flag |
+| Scoring | one atomic write at the end | SIGTERM at any moment leaves the old file or the new one |
+
+**How, in one paragraph.** `POST /api/rescrape/cancel {runId}` runs `run_rescrape.py cancel`, which writes `<record>.cancel` beside the run's record and one `cancel_requested` event. It takes no lock, writes no data file and does not touch the record (so it cannot race the orchestrator's writes). Node never signals a process. The orchestrator polls for the file while a step runs, then sends SIGTERM to the step's own process group (the step now starts in a session of its own) and to every descendant it found through `/proc` parent links, whatever group it left for. Discovery turns SIGTERM into `RunCancelled`, a `BaseException` raised **only inside the source loop**; everywhere else, and from the commit claim on, the signal only sets a flag. It also checks the file between sources, so the stop does not depend on the signal arriving.
+
+**The commit handshake.** Two O_EXCL claims on one file, `<record>.decision`: discovery claims `commit` before it imports, and the orchestrator claims `kill` before it SIGKILLs a step that ignored SIGTERM for `HOLOJOB_CANCEL_GRACE_SECONDS` (default 20). Exactly one succeeds. A run that holds `commit` is never killed: the orchestrator keeps waiting for its import. A run that lost it returns without writing. After claiming, discovery looks at the cancel file once more, so a request that arrives at the claim still cancels. A request for the **same instant** is therefore either a held import or an ordinary one, never a half of each.
+
+**What a user can see.** `GET /api/rescrape/status` gains `cancelRequested`. Run record `status` gains `cancelled`; it adds `cancel: {requestedAt, outcome}`:
+
+| State | status | `cancel.outcome` | Imported? | Scoring |
+|---|---|---|---|---|
+| Cancelled while scraping or before the claim | `cancelled`, step `cancelled` (exit 76) | `collected_ads_imported` | held, as above | skipped |
+| Cancelled and the step had to be killed | `cancelled`, step `cancelled` (exit -9) | `stopped_nothing_imported` | no. Staging is marked cancelled so no later path imports it as a proven run | skipped |
+| Cancelled before the scrape began | `cancelled` | `stopped_nothing_imported` | nothing was collected | skipped |
+| Request arrived after the commit was claimed | the run's own (`ok` / `partial`) | `imported_before_cancel` | yes, as any run, and it counts | skipped, `scoringBehind` shows |
+| Request arrived during scoring | the run's own | `imported_before_cancel` | yes, it counts | stopped |
+| Request on a run that failed anyway | `failed` | none | as it was | as it was |
+
+`cancelled` is never a failure and never `ok`. The only run that is `cancelled` and has a `lastImport` is a held one (`lastImport.cancelled: true`); the only runs in `sourceRuns` and `appliedRuns` are runs that finished their import as ordinary runs. A request after the commit claim is **not** a cancelled run, because the import is final; its record says so in a warning issue. The UI button comes in S7; the progress line and the Re-scrape message already say each state in words.
+
+**Idempotent answers** (HTTP; all but a new request change nothing and write nothing): `cancel_requested` 202; `cancel_already_requested`, `already_cancelled`, `already_finished`, `not_running` (the record says running but nobody holds the lock) 200; `not_cancellable` (a pipeline run or a direct discovery, which have no orchestrator and no `orchestrator` field) 409; `unknown_run` 404; a run id that is not `^[0-9A-Za-z]{1,32}$` 422 before Python is asked. The liveness test reads `/proc/locks` and takes no lock, so asking cannot make a starting run see the lock busy. The request is keyed by run id, so a request for one run can never touch the next; `run_log.prune` removes `.cancel` and `.decision` with their record.
+
+**Staging rule (one):** a cancelled run's staging is **imported held and then pruned like any imported run** (newest 3 kept, with the two hard links), so nothing accumulates. A run that could not be imported (killed, or the import failed) stays like any run awaiting an import and carries `cancelled.json`; `import_run.py --import` of it is held too, and `--backfill-filtered`, `filtered_ads.unrecorded` and the lifecycle report all skip it. It is kept for inspection and costs what any un-imported run costs; it is never counted.
+
+**Changes outside the new code:** `importer.plan_import` reads `cancelled.json` (the only place a held import differs); `filtered_ads.unrecorded` and `backfill` skip a cancelled run; `lifecycle_report.gather` leaves it out; `run_log` gains the request and claim files and the `cancelled` status; the Re-scrape step runs in its own session. `tests/python/test_rescrape.py::test_sigkill_of_the_whole_run...` now kills the step's group too, as a container stop reaches both; the orchestrator-alone case it sits beside is unchanged. No change to scoring, the IDF corpus or any lifecycle rule.
+
+**Not covered, said plainly:** no container is started anywhere in the repo, so there is none to stop. Playwright's own browser (the Wellfound path, not in the default group) was not run: the SIGTERM-then-descendants-then-group sweep is tested against a child in a session of its own that ignores SIGTERM, not against Chromium. A source stuck in an uninterruptible kernel call ends only by the SIGKILL after the grace. The held reason line on a row still reads "Its source or board could not say in the latest run"; it does not yet say the run was cancelled.
+
+**Tests:** `tests/python/test_cancel.py` (what a cancelled run may change, offline), `tests/python/test_cancel_run.py` (the request, the signal, the claim, the kill, the process tree, and a real slow run in a scratch copy of the code: the real orchestrator, discovery and importer with a provider that stays slow, a browser in its own session, a delay inside the commit), `tests/js/rescrape.test.js`, `tests/js/rescrapeRoutes.test.js`. Mutation-checked: dropping the pre-scrape check, the check between sources, or the re-read after the claim; letting the orchestrator kill without the claim; committing without the claim; recording a proven run or an applied run for a cancelled one; the backfill, `unrecorded` and lifecycle report reading it; dropping the descendants sweep or the step's own group each turn a test red. One equivalent mutant: dropping the explicit `held` branch in the evidence loop changes nothing, because `not_run` already puts every board in doubt; both guards stay.
+
+**S5f follow-ups, same day:** `isStale` surviving the real `run_scoring.main()` is now a permanent test (`test_readers_not_found.py`), and a Stale ad seen again is tested through real imports and on a held row: the flag is gone from the view, the not-found mark with it, the class and counts say found, and `firstSeen` is kept.
+
 ## offList rows keep the owner's data (2026-11-03)
 
 **Rule:** discovery finds ads and never deletes what the owner did. Re-running discovery must not remove a status, AI insights,

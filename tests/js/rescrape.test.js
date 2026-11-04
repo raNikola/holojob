@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { reconcileRuns, readEventsFile, rescrapeStatus, startRescrape, withRunLock } from '../../scripts/run-rescrape.js'
+import { cancelRescrape, reconcileRuns, readEventsFile, rescrapeStatus, startRescrape, withRunLock } from '../../scripts/run-rescrape.js'
 
 const REPO = path.resolve(import.meta.dirname, '../..')
 let hasPython = true
@@ -287,6 +287,81 @@ describe.skipIf(!hasPython)('a real run over fake steps', () => {
       expect(live.active).toBe(true)
       expect(live.incompleteCommit).toBe(null)
     }, opts)
+  })
+})
+
+describe('cancelling', () => {
+  /** A stand-in for `run_rescrape.py cancel`: prints `answer`, records the arguments. */
+  function fakeCli(answer, calls = []) {
+    return {
+      spawnFn: (python, args) => {
+        calls.push(args)
+        const child = new EventEmitter()
+        child.stdout = new EventEmitter()
+        setImmediate(() => { child.stdout.emit('data', Buffer.from(`${JSON.stringify(answer)}\n`)); child.emit('close', 0) })
+        return child
+      },
+      python: 'python3',
+      script: 'run_rescrape.py',
+    }
+  }
+
+  it.each([
+    ['cancel_requested', 202, true],
+    ['cancel_already_requested', 200, true],
+    ['already_cancelled', 200, true],
+    ['already_finished', 200, true],
+    ['not_running', 200, true],
+    ['not_cancellable', 409, false],
+    ['unknown_run', 404, false],
+  ])('%s is answered with %i', async (result, status, ok) => {
+    const reply = await cancelRescrape({ runId: 'abc123' }, fakeCli({ result, status: 'ok' }))
+    expect(reply.status).toBe(status)
+    expect(reply.body).toMatchObject({ ok, result, runId: 'abc123' })
+    expect(reply.body.message).toBeTruthy()
+  })
+
+  it('refuses a run id that is not one before it asks Python, so nothing becomes a file name', async () => {
+    const calls = []
+    for (const runId of ['../../etc', 'a b', '', 'x'.repeat(33), 7, null, undefined, { a: 1 }]) {
+      const reply = await cancelRescrape({ runId }, fakeCli({ result: 'cancel_requested' }, calls))
+      expect(reply.status).toBe(422)
+    }
+    expect((await cancelRescrape(undefined, fakeCli({}, calls))).status).toBe(422)
+    expect(calls).toEqual([])
+  })
+
+  it('passes the run id as one argument of its own', async () => {
+    const calls = []
+    await cancelRescrape({ runId: 'abc123' }, fakeCli({ result: 'already_finished' }, calls))
+    expect(calls).toEqual([['run_rescrape.py', 'cancel', '--run-id', 'abc123']])
+  })
+
+  it('503 when Python cannot be run, and 500 for an answer it does not know', async () => {
+    const dead = { spawnFn: () => { const c = new EventEmitter(); c.stdout = new EventEmitter(); setImmediate(() => c.emit('error', new Error('no python'))); return c } }
+    expect((await cancelRescrape({ runId: 'abc' }, dead)).status).toBe(503)
+    expect((await cancelRescrape({ runId: 'abc' }, fakeCli({ result: 'something_new' }))).status).toBe(500)
+  })
+
+  it.skipIf(!hasPython)('the real command: an unknown run is a 404 and writes nothing', async () => {
+    const reply = await cancelRescrape({ runId: 'nosuchrun' }, { python: 'python3', script: path.join(REPO, 'python/run_rescrape.py') })
+    expect(reply.status).toBe(404)
+    expect(fs.existsSync(runsDir())).toBe(false)
+  })
+
+  it.skipIf(!hasPython)('the real command: a finished run is answered and changes nothing', async () => {
+    plant('doneone', 'ok')
+    const before = fs.readdirSync(runsDir()).sort()
+    const reply = await cancelRescrape({ runId: 'doneone' }, { python: 'python3', script: path.join(REPO, 'python/run_rescrape.py') })
+    expect(reply.body).toMatchObject({ ok: true, result: 'already_finished', runStatus: 'ok' })
+    expect(fs.readdirSync(runsDir()).sort()).toEqual(before)
+  })
+
+  it.skipIf(!hasPython)('status says a request is there', async () => {
+    plant('runone', 'running')
+    expect((await rescrapeStatus(0, { reconcile: async () => ({ busy: true }) })).body.cancelRequested).toBe(false)
+    fs.writeFileSync(path.join(runsDir(), '20261103T100000Z-runone.cancel'), '{}')
+    expect((await rescrapeStatus(0, { reconcile: async () => ({ busy: true }) })).body.cancelRequested).toBe(true)
   })
 })
 

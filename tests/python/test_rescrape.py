@@ -639,6 +639,7 @@ def test_sigkill_of_the_whole_run_frees_the_lock_and_the_record_becomes_interrup
     assert wait_for((fake.marks / "discovery-started").exists)
     assert not lock_is_free()
     os.killpg(proc.pid, signal.SIGKILL)
+    os.killpg(int((fake.marks / "discovery-started").read_text()), signal.SIGKILL)  # the step has its own group since S6, as a container stop reaches both
     proc.wait(10)
     assert wait_for(lock_is_free), "the kernel drops the lock with its last holder"
     assert on_disk(RUN_ID)["status"] == "running", "nobody has looked yet"

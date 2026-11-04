@@ -237,7 +237,7 @@ def test_a_run_that_crashed_is_failed_even_if_every_source_skipped():
 
 
 def test_the_allowed_run_statuses():
-    assert run_log.RUN_STATUSES == ("ok", "partial", "failed", "skipped", "running", "interrupted")
+    assert run_log.RUN_STATUSES == ("ok", "partial", "failed", "skipped", "running", "interrupted", "cancelled")
 
 
 def whole_ad(job_id, provider, source, title, company, description, url):

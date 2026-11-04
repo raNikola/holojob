@@ -44,7 +44,7 @@ import { handleApplicationsRequest } from './application-store.js'
 import { handleJobHistoryRequest } from './job-history-read.js'
 import { handleJobsAllRequest } from './job-all-read.js'
 import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
-import { RUN_ACTIVE, incompleteCommit, isRunBusy, rescrapeStatus, runHttpStatus, startRescrape, withRunLock } from './run-rescrape.js'
+import { RUN_ACTIVE, cancelRescrape, incompleteCommit, isRunBusy, rescrapeStatus, runHttpStatus, startRescrape, withRunLock } from './run-rescrape.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -266,6 +266,18 @@ export async function handleApiRequest(req, res) {
     try {
       const body = await readJsonBody(req, res)
       const { status, body: answer } = await startRescrape(body)
+      sendJson(res, status, answer)
+    } catch (e) {
+      sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // Cancel a running Re-scrape: writes a request file, never signals (S6). Idempotent; an unknown, finished or cancelled run changes nothing.
+  if (url === '/api/rescrape/cancel' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req, res)
+      const { status, body: answer } = await cancelRescrape(body)
       sendJson(res, status, answer)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
