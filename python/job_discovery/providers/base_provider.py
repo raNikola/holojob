@@ -41,13 +41,34 @@ class ProviderOutcome:
     boards_empty: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     skip_reason: str | None = None
+    total_reported: int | None = None  # the total the source itself reports for its search (Infostud), for the staging footer
+    # Per board of a snapshot source (S5b): {"board", "read", "postings", "complete", "reason", ...}. Staged in the footer; nothing reads it yet.
+    boards_read: list[dict] = field(default_factory=list)
+
+
+def board_read(board: str, *, read: int, postings: int, complete: bool, reason: str | None, **facts) -> dict:
+    """One board's line in `boards_read`. `postings` is what the answer held, `read` the ones with a title. `reason` says why it is not complete."""
+    return {"board": board, "read": read, "postings": postings, "complete": bool(complete), "reason": None if complete else reason, **facts}
+
+
+def _settled_boards(boards_read: list[dict], failures: dict[str, str], empty: list[str]) -> list[dict]:
+    """The one place that says a failed or empty board is not complete, whatever its provider's proof said. Every such board gets a line."""
+    settled = {row["board"]: dict(row) for row in boards_read}
+    for board in failures:
+        settled[board] = board_read(board, read=0, postings=0, complete=False, reason="the board could not be read")
+    for board in empty:
+        settled[board] = {**settled.get(board, board_read(board, read=0, postings=0, complete=False, reason=None)),
+                          "complete": False, "reason": "the board answered with no ads"}
+    return list(settled.values())
 
 
 def parts_outcome(
-    *, read: int, kept: int, total: int, failures: dict[str, str], empty: list[str] | None = None, named: bool = True
+    *, read: int, kept: int, total: int, failures: dict[str, str], empty: list[str] | None = None, named: bool = True,
+    boards_read: list[dict] | None = None,
 ) -> ProviderOutcome:
     """The outcome of a fetch made of several parts (boards, feeds, searches). `failures` maps a part to its error;
-    `named` says the parts are boards or feeds, which the record lists by name."""
+    `named` says the parts are boards or feeds, which the record lists by name. `boards_read` is what a snapshot source can
+    say about each board's read (S5b); a source that does not pass it has none."""
     status = "ok"
     if failures:
         status = "failed" if len(failures) >= total else "partial"
@@ -59,6 +80,7 @@ def parts_outcome(
         boards_failed=list(failures) if named else [],
         boards_empty=list(empty or []),
         warnings=[f"board {board} answered with 0 ads; its open ads were kept" for board in empty or []],
+        boards_read=_settled_boards(boards_read, failures, list(empty or [])) if boards_read is not None else [],
     )
 
 
@@ -66,6 +88,29 @@ class JobProvider(ABC):
     provider_name = "base"
     # Set by every fetch_jobs; a provider that forgets fails its run-log row instead of reporting a guess.
     last_outcome: ProviderOutcome | None = None
+    # Set by run_discovery before each fetch: the staging file of this source (staging.SourceWriter), or None.
+    stage_writer = None
+
+    def stage(
+        self,
+        jobs: list[dict],
+        *,
+        part: str | None = None,
+        read: int | None = None,
+        external_ids: dict | None = None,
+        dropped: list[dict] | None = None,
+    ) -> None:
+        """Append ads to this source's staging file as they are collected. Does nothing when there is none.
+
+        What a provider stages must be what it returns, in the same order: the runner checks the count. A provider that
+        does not call this gets its whole list staged when its fetch returns.
+
+        `external_ids` maps a staged ad's jobId to the id the source itself gives it; it lives beside the canonical job, in
+        the staging line only. `dropped` is the ads this part dropped, each from `dropped_ad(job, reason, external_id)`: they
+        go to discards.jsonl, so read == kept + dropped can be checked.
+        """
+        if self.stage_writer is not None:
+            self.stage_writer.append(jobs, part=part, read=read, external_ids=external_ids, dropped=dropped)
 
     @abstractmethod
     def fetch_jobs(
@@ -194,6 +239,55 @@ def matches_country(job: dict, country: str) -> bool:
     if job.get("isRemote"):
         return True
     return not job_loc
+
+
+def terms_drop_reason(job: dict, search_terms: list[str]) -> str | None:
+    return None if matches_search_terms(job, search_terms) else "search_terms_not_matched"
+
+
+def location_drop_reason(job: dict, locations: list[str], remote_filters: list[str]) -> str | None:
+    return None if matches_location_filters(job, locations, remote_filters) else "location_not_matched"
+
+
+def country_drop_reason(job: dict, country: str) -> str | None:
+    return None if matches_country(job, country) else "country_not_matched"
+
+
+def place_drop_reason(job: dict, locations: list[str], remote_filters: list[str], country: str) -> str | None:
+    """The place check of Infostud, Workable and Joberty: the location filter AND the country, both strict."""
+    return location_drop_reason(job, locations, remote_filters) or country_drop_reason(job, country)
+
+
+def filter_drop_reason(
+    job: dict, search_terms: list[str], locations: list[str], remote_filters: list[str], country: str = "Serbia"
+) -> str | None:
+    """Why `filter_jobs` drops this ad, or None when it keeps it: the same three checks in the same order, and a country
+    miss is forgiven when the job is in a place the search names (`in_searched_place`)."""
+    return (
+        terms_drop_reason(job, search_terms)
+        or location_drop_reason(job, locations, remote_filters)
+        or (None if matches_country(job, country) or in_searched_place(job, locations) else "country_not_matched")
+    )
+
+
+def split_by_filter(
+    jobs: list[dict], search_terms: list[str], locations: list[str], remote_filters: list[str], country: str = "Serbia"
+) -> tuple[list[dict], list[tuple[dict, str]]]:
+    """(kept, [(dropped job, reason)]): `filter_jobs` with the reasons. `kept` is what `filter_jobs` returns."""
+    kept, dropped = [], []
+    for job in jobs:
+        reason = filter_drop_reason(job, search_terms, locations, remote_filters, country)
+        if reason is None:
+            kept.append(job)
+        else:
+            dropped.append((job, reason))
+    return kept, dropped
+
+
+def dropped_ad(job, reason: str, external_id=None, *, counted: bool = True) -> dict:
+    """One ad a provider drops, as `JobProvider.stage(dropped=[...])` takes it. `counted` is False for a row that never
+    entered the provider's `read` count (it had no title, no id, ...)."""
+    return {"job": job, "reason": reason, "externalId": external_id, "counted": counted}
 
 
 def filter_jobs(

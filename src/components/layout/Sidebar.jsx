@@ -1,4 +1,5 @@
 import {
+  Activity,
   Brain,
   Briefcase,
   ClipboardList,
@@ -21,6 +22,7 @@ import { resolveNavGroups } from '../../modules/navGroups'
 import { loadSidebarCollapsed, saveSidebarCollapsed } from '../../modules/sidebarState'
 
 const ICONS = {
+  Activity,
   LayoutDashboard,
   User,
   Brain,

@@ -22,7 +22,6 @@ scores without the ad facts and labels the result reduced quality.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import json
 import os
 import re
@@ -37,6 +36,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PY = ROOT / "python"
 sys.path.insert(0, str(PY / "job_scoring"))
 from atomic_write import write_text_atomic  # noqa: E402
+import row_state  # noqa: E402
+import pipeline_lock  # noqa: E402
+import view_guard  # noqa: E402
 from work_authorization import outside_allowed_before_enrichment  # noqa: E402
 DATA = ROOT / "data"
 INTELLIGENCE = DATA / "intelligence" / "candidate-intelligence.json"
@@ -45,7 +47,10 @@ SCORED = DATA / "jobs" / "scored_jobs.json"
 LAST_RUN = DATA / "jobs" / "pipeline_last_run.json"
 LOCK = DATA / "jobs" / ".pipeline.lock"
 
-EXIT_FAILED, EXIT_SETUP, EXIT_LOCKED = 1, 2, 75
+EXIT_FAILED, EXIT_SETUP, EXIT_LOCKED = 1, 2, pipeline_lock.EXIT_LOCKED
+
+# The lock of this run, handed to each step: a step takes the pipeline lock itself when run alone.
+_held_lock = None
 
 # Scoring on jobs the model never read would skip the role-track and visa caps,
 # so too few enriched jobs stops the run instead of producing a flattering list.
@@ -58,6 +63,15 @@ class StepFailed(Exception):
     def __init__(self, step: str, reason: str, code: int = EXIT_FAILED):
         super().__init__(reason)
         self.step, self.reason, self.code = step, reason, code
+
+
+def read_view() -> dict:
+    """discovered_jobs.json, after making sure it matches the ledger it is derived from (view_guard)."""
+    try:
+        view_guard.ensure(DISCOVERED, view_guard.job_history.ledger_path(DISCOVERED))
+    except view_guard.ViewRecoveryError as exc:
+        raise StepFailed("discovery", f"the job list is out of date and could not be rebuilt: {exc}")
+    return read_json(DISCOVERED)
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -83,11 +97,13 @@ def run_step(name: str, cmd: list[str], steps: list[dict]) -> str:
     """Run one script, streaming its output; returns its stdout. Raises StepFailed."""
     print(f"\n=== {name} ===", flush=True)
     started = time.monotonic()
+    handed = {"pass_fds": (_held_lock.fd,)} if _held_lock else {}
     proc = subprocess.Popen(
         [sys.executable, *cmd], cwd=ROOT, text=True, encoding="utf-8",
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         # Every model call in a pipeline step is an automatic AI task (ai_gate.py).
-        env={**os.environ, "HOLOJOB_AI_TRIGGER": "automation"},
+        env={**(_held_lock.child_env() if _held_lock else os.environ), "HOLOJOB_AI_TRIGGER": "automation"},
+        **handed,
     )
     lines = []
     for line in proc.stdout:
@@ -104,7 +120,7 @@ def run_step(name: str, cmd: list[str], steps: list[dict]) -> str:
 def check_discovery(started_at: datetime) -> dict:
     if not DISCOVERED.exists():
         raise StepFailed("discovery", f"{DISCOVERED.name} was not written")
-    payload = read_json(DISCOVERED)
+    payload = read_view()
     meta = payload.get("meta") or {}
     stamp = meta.get("generatedAt")
     if not stamp or datetime.fromisoformat(stamp) < started_at:
@@ -116,8 +132,8 @@ def check_discovery(started_at: datetime) -> dict:
 
 def enriched_share(jobs: list[dict], prefs: dict | None = None) -> float:
     """Share of the jobs that should have facts. Ads enrichment deliberately did
-    not read (outside the candidate's places) are not expected to have them."""
-    open_jobs = [j for j in jobs if not j.get("isClosed")] or jobs
+    not read (outside the candidate's places, or not found by this run) are not expected to have them."""
+    open_jobs = [j for j in jobs if not j.get("isClosed") and not row_state.not_found(j)] or jobs
     if prefs:
         open_jobs = [
             j for j in open_jobs
@@ -128,7 +144,7 @@ def enriched_share(jobs: list[dict], prefs: dict | None = None) -> float:
 
 def check_enrichment(minimum: float, refusal: str | None = None) -> float:
     """The enriched share. Too low stops the run, unless the AI budget gate is why: then scoring goes on, reduced."""
-    jobs = read_json(DISCOVERED).get("jobs") or []
+    jobs = read_view().get("jobs") or []
     prefs = (read_json(INTELLIGENCE).get("jobFitPreferences") or {}) if INTELLIGENCE.exists() else {}
     share = enriched_share(jobs, prefs)
     if share < minimum and refusal:
@@ -147,11 +163,15 @@ def summarize(args, steps: list[dict], enrich_line: str | None, share: float | N
               reduced: str | None = None) -> dict:
     summary: dict = {"steps": steps}
     if DISCOVERED.exists():
-        meta = read_json(DISCOVERED).get("meta") or {}
+        try:
+            meta = read_view().get("meta") or {}
+        except StepFailed:
+            meta = {}
         summary["discovery"] = {
             "providerCounts": meta.get("providerCounts") or {},
             "raw": meta.get("rawCount"), "deduped": meta.get("dedupedCount"),
             "history": meta.get("history") or {},
+            "rows": row_state.counts(read_view().get("jobs") or []) if meta else None,
         }
     if enrich_line is not None:
         m = re.search(r"extracted (\d+), cached (\d+) \((\d+) from the ledger\), failed (\d+)"
@@ -197,6 +217,10 @@ def print_summary(s: dict) -> None:
         print(f"Discovery : {d['raw']} found, {d['deduped']} after dedup ({counts})")
         if h:
             print(f"            new {h.get('new', 0)}, known {h.get('known', 0)}, closed {h.get('closed', 0)}")
+        rows = d.get("rows")
+        if rows:
+            print(f"Job list  : {rows['found']} found by this run, {rows['held']} kept open, {rows['closed']} closed and still shown")
+            print(f"Absent    : {rows['absent']} not listed in the latest fetch; shown, with no AI calls")
     e = s.get("enrichment")
     if e:
         print(f"Enrichment: {e.get('enrichedShare', 0):.0%} of jobs have facts"
@@ -273,11 +297,10 @@ def main(argv=None) -> int:
         # SELinux hosts another container mounting ./data with :Z causes this.
         print(f"Cannot read and write {LOCK.parent}: {exc}. Nothing started.", file=sys.stderr)
         return EXIT_SETUP
-    lock = LOCK.open("w")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        print("Another pipeline run is in progress; nothing started.", file=sys.stderr)
+    global _held_lock
+    _held_lock = pipeline_lock.acquire()
+    if _held_lock is None:
+        print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
         return EXIT_LOCKED
 
     steps: list[dict] = []
@@ -300,7 +323,8 @@ def main(argv=None) -> int:
     finally:
         record["finishedAt"] = datetime.now(timezone.utc).isoformat()
         write_text_atomic(LAST_RUN, json.dumps(record, indent=2))
-        lock.close()
+        _held_lock.release()
+        _held_lock = None
     return code
 
 

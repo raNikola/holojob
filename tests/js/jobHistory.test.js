@@ -15,6 +15,25 @@ describe('history badges', () => {
     expect(badges[0].reason).toBe('No longer listed since 2026-10-25')
   })
 
+  it('an ad closed by the two-check rule says so; one closed before it keeps the old wording', () => {
+    const [badge] = historyBadges({ isClosed: true, closedAt: '2026-11-05T08:00:00+00:00', closedAfterChecks: 2 })
+    expect(badge.label).toBe('Closed')
+    expect(badge.reason).toBe("Not on the company's board in 2 complete checks since 2026-11-05")
+  })
+
+  it('an absent ad gets its own badge with the date, and is still actionable', () => {
+    const job = { isAbsent: true, absentSince: '2026-11-04T08:00:00+00:00', lastSeen: '2026-11-03T08:00:00+00:00' }
+    const [badge] = historyBadges(job)
+    expect(badge.label).toBe('Not in latest search')
+    expect(badge.reason).toContain('2026-11-04')
+    expect(badge.reason).toContain('Last seen 2026-11-03')
+    expect(isActionable(job)).toBe(true)
+  })
+
+  it('closed wins over absent', () => {
+    expect(historyBadges({ isClosed: true, isAbsent: true, closedAt: '2026-11-05' })[0].label).toBe('Closed')
+  })
+
   it('show nothing for a known open job, or a record from before the ledger', () => {
     expect(historyBadges({ isNew: false, isClosed: false })).toEqual([])
     expect(historyBadges({})).toEqual([])

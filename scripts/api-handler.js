@@ -4,6 +4,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import { buildDiscoveryCommand, getDiscoveryStatus, runDiscovery } from './run-discovery.js'
 import { runPipeline } from './run-pipeline.js'
@@ -40,7 +41,11 @@ import { maskErrorField } from './secret-mask.js'
 import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
 import { handleApplicationsRequest } from './application-store.js'
-import { handleJobHistoryRequest } from './job-history-read.js'
+import { handleJobHistoryRequest, handleJobTextsRequest } from './job-history-read.js'
+import { handleJobsAllRequest } from './job-all-read.js'
+import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
+import { getRun, listRuns } from './run-history.js'
+import { RUN_ACTIVE, cancelRescrape, incompleteCommit, isRunBusy, rescrapeStatus, runHttpStatus, startRescrape, withRunLock } from './run-rescrape.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -159,6 +164,15 @@ function sendJson(res, status, data) {
   res.end(JSON.stringify(maskErrorField(data)))
 }
 
+function commitIncompleteAnswer(commit) {
+  const files = commit.unreadable ? '' : ` Written: ${commit.written.join(', ') || 'none'}. Not written: ${commit.pending.join(', ') || 'none'}.`
+  return {
+    ok: false,
+    error: 'commit_incomplete',
+    message: `No backup was made: a save of the job files did not finish, so they may not match each other.${files} Run a Re-scrape to the end, then back up.`,
+  }
+}
+
 function contentTypeFor(filePath) {
   if (filePath.endsWith('.pdf')) return 'application/pdf'
   if (filePath.endsWith('.html')) return 'text/html; charset=utf-8'
@@ -215,6 +229,15 @@ export async function handleApiRequest(req, res) {
   }
 
   if (url === '/api/discovery/status' && req.method === 'GET') {
+    try {
+      await ensureViewCurrent()
+    } catch (e) {
+      if (e instanceof ViewUnrecoverable) {
+        sendJson(res, 503, viewUnrecoverableAnswer(e))
+        return true
+      }
+      throw e
+    }
     sendJson(res, 200, {
       available: true,
       ...getDiscoveryStatus(),
@@ -225,12 +248,72 @@ export async function handleApiRequest(req, res) {
 
   if (url === '/api/discovery/jobs' && req.method === 'GET') {
     try {
+      await ensureViewCurrent() // the job list is a view of the ledger: never serve one that is behind it
       if (!fs.existsSync(JOBS_PATH)) {
         sendJson(res, 404, { error: 'No discovered_jobs.json yet' })
         return true
       }
       const payload = JSON.parse(fs.readFileSync(JOBS_PATH, 'utf-8'))
       sendJson(res, 200, payload)
+    } catch (e) {
+      if (e instanceof ViewUnrecoverable) sendJson(res, 503, viewUnrecoverableAnswer(e))
+      else sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // Re-scrape as one background run (python/run_rescrape.py): the browser starts it and reads its status.
+  if (url === '/api/rescrape' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req, res)
+      const { status, body: answer } = await startRescrape(body)
+      sendJson(res, status, answer)
+    } catch (e) {
+      sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  // Run history (S7a): read-only, slim, bounded. No lock, no process, no recovery, no ledger or staging.
+  if (url === '/api/runs' && req.method === 'GET') {
+    try {
+      const { status, body: answer } = listRuns(new URL(req.url, 'http://localhost').searchParams)
+      sendJson(res, status, answer)
+    } catch {
+      sendJson(res, 500, { error: 'The run history could not be read.' })
+    }
+    return true
+  }
+
+  // One run, live (S7c): the record and its events from a cursor. Node only: no lock, no process, no recovery, no write.
+  const oneRun = /^\/api\/runs\/([^/]+)$/.exec(url)
+  if (oneRun && req.method === 'GET') {
+    try {
+      const { status, body: answer } = getRun(oneRun[1], new URL(req.url, 'http://localhost').searchParams)
+      sendJson(res, status, answer)
+    } catch {
+      sendJson(res, 500, { error: 'The run could not be read.' })
+    }
+    return true
+  }
+
+  // Cancel a running Re-scrape: writes a request file, never signals (S6). Idempotent; an unknown, finished or cancelled run changes nothing.
+  if (url === '/api/rescrape/cancel' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req, res)
+      const { status, body: answer } = await cancelRescrape(body)
+      sendJson(res, status, answer)
+    } catch (e) {
+      sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
+  if (url === '/api/rescrape/status' && req.method === 'GET') {
+    try {
+      const after = new URL(req.url, 'http://localhost').searchParams.get('after')
+      const { status, body: answer } = await rescrapeStatus(after)
+      sendJson(res, status, answer)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }
@@ -240,6 +323,11 @@ export async function handleApiRequest(req, res) {
   if (url === '/api/discovery/run' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req, res)
+      // Before the mirrors: a refused request must not change an active run's input.
+      if (await isRunBusy()) {
+        sendJson(res, 409, RUN_ACTIVE)
+        return true
+      }
       const result = await runDiscovery({
         providers: body.providers || 'serbia',
         country: body.country,
@@ -247,7 +335,7 @@ export async function handleApiRequest(req, res) {
         intelligence: body.intelligence,
         profile: body.profile,
       })
-      sendJson(res, result.ok ? 200 : 500, result)
+      sendJson(res, runHttpStatus(result), result)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }
@@ -259,13 +347,17 @@ export async function handleApiRequest(req, res) {
   if (url === '/api/pipeline/run' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req, res)
+      if (await isRunBusy()) {
+        sendJson(res, 409, RUN_ACTIVE)
+        return true
+      }
       const result = await runPipeline({
         providers: body.providers || 'serbia',
         country: body.country,
         intelligence: body.intelligence,
         profile: body.profile,
       })
-      sendJson(res, result.ok ? 200 : 500, result)
+      sendJson(res, runHttpStatus(result), result)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }
@@ -308,7 +400,7 @@ export async function handleApiRequest(req, res) {
     try {
       const body = await readJsonBody(req, res)
       const result = await runScoring({ minScore: body.minScore })
-      sendJson(res, result.ok ? 200 : 500, result)
+      sendJson(res, runHttpStatus(result), result)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }
@@ -331,7 +423,7 @@ export async function handleApiRequest(req, res) {
         return true
       }
       const result = await runJudgedScoring()
-      sendJson(res, result.ok ? 200 : 500, result)
+      sendJson(res, runHttpStatus(result), result)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }
@@ -427,6 +519,10 @@ export async function handleApiRequest(req, res) {
   if (url === '/api/jobs/import-url' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req, res)
+      if (await isRunBusy()) {
+        sendJson(res, 409, RUN_ACTIVE)
+        return true
+      }
       const result = await runJobImport({
         urls: body.urls || (body.url ? [body.url] : []),
         tailor: Boolean(body.tailor),
@@ -534,6 +630,14 @@ export async function handleApiRequest(req, res) {
   }
 
   if (await handleJobHistoryRequest(req, res, url, { root: ROOT })) {
+    return true
+  }
+
+  if (await handleJobTextsRequest(req, res, url, { root: ROOT, readBody: readJsonBody })) {
+    return true
+  }
+
+  if (await handleJobsAllRequest(req, res, url, { root: ROOT })) {
     return true
   }
 
@@ -655,14 +759,43 @@ export async function handleApiRequest(req, res) {
     try {
       const { createBackupStream } = await import('./backup-handler.js')
       const body = await readJsonBody(req, res, { limit: MAX_LARGE_BODY_BYTES })
-      res.statusCode = 200
-      res.setHeader('Content-Type', 'application/zip')
-      res.setHeader('Content-Disposition', 'attachment; filename="holojob-backup.zip"')
-      createBackupStream(ROOT, {
-        profile: body.profile,
-        intelligence: body.intelligence,
-        jobs: body.jobs,
-      }).pipe(res)
+      // The lock is held until the last byte, so every file in the archive comes from one state: no run writes during it.
+      let held
+      try {
+        held = await withRunLock(async () => {
+          const unfinished = incompleteCommit()
+          if (unfinished) return { refused: commitIncompleteAnswer(unfinished) }
+          // The job files must agree in the archive. The pipeline lock is held, so no commit can happen during the export;
+          // the rebuild takes only the view lock, so it can run under it.
+          try {
+            await ensureViewCurrent()
+          } catch (e) {
+            if (e instanceof ViewUnrecoverable) return { refused: viewUnrecoverableAnswer(e), status: 503 }
+            throw e
+          }
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/zip')
+          res.setHeader('Content-Disposition', 'attachment; filename="holojob-backup.zip"')
+          await pipeline(createBackupStream(ROOT, {
+            profile: body.profile,
+            intelligence: body.intelligence,
+            jobs: body.jobs,
+          }), res)
+          return {}
+        })
+      } catch (e) {
+        if (res.headersSent) {
+          res.destroy() // the download broke off: there is no status left to send
+          return true
+        }
+        if (e.lockUnknown) {
+          sendJson(res, 503, { ok: false, error: 'lock_unknown', message: 'Could not check for a running job run, so no backup was made.' })
+          return true
+        }
+        throw e
+      }
+      if (held.busy) sendJson(res, 409, RUN_ACTIVE)
+      else if (held.value.refused) sendJson(res, held.value.status ?? 409, held.value.refused)
     } catch (e) {
       sendJson(res, 500, { error: e.message })
     }
@@ -677,8 +810,22 @@ export async function handleApiRequest(req, res) {
         sendJson(res, 400, { error: 'Empty backup file' })
         return true
       }
-      const result = await importBackupZip(ROOT, zipBuffer)
-      sendJson(res, 200, result)
+      // A restore overwrites the job files, so it holds the run lock: no run under it, and none starts during it.
+      let held
+      try {
+        held = await withRunLock(() => importBackupZip(ROOT, zipBuffer))
+      } catch (e) {
+        if (e.lockUnknown) {
+          sendJson(res, 503, { ok: false, error: 'lock_unknown', message: 'Could not check for a running job run, so nothing was restored.' })
+          return true
+        }
+        throw e
+      }
+      if (held.busy) {
+        sendJson(res, 409, RUN_ACTIVE)
+        return true
+      }
+      sendJson(res, 200, held.value)
     } catch (e) {
       sendJson(res, 400, { error: e.message })
     }

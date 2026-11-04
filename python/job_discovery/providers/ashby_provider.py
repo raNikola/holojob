@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-from providers.base_provider import JobProvider, build_canonical_job, filter_jobs, parts_outcome
+from providers.base_provider import JobProvider, board_read, build_canonical_job, dropped_ad, filter_jobs, parts_outcome, split_by_filter
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +17,21 @@ CONFIG_PATH = Path(__file__).resolve().parents[3] / "companies" / "ashby.json"
 API_URL = "https://api.ashbyhq.com/posting-api/job-board/{slug}"
 
 
+# Ashby's answer has only `jobs` and `apiVersion`: no total and no paging, so nothing proves a whole board. No right to close (D7).
+NO_PROOF = "no completeness proof available"
+_PAGING = re.compile(r"page|next|cursor|offset|total|more|limit", re.I)
+
+
+def paging_fields(answer: dict) -> list[str]:
+    """Top-level fields of an answer that look like paging. None exist today; one appearing means the list may be cut."""
+    return sorted(name for name in answer if name != "jobs" and _PAGING.search(str(name)))
+
+
 class AshbyProvider(JobProvider):
     provider_name = "ashby"
+
+    def __init__(self) -> None:
+        self._paging_fields: dict[str, list[str]] = {}
 
     def _load_companies(self) -> list[str]:
         if not CONFIG_PATH.exists():
@@ -34,6 +47,7 @@ class AshbyProvider(JobProvider):
         jobs = data.get("jobs") if isinstance(data, dict) else None
         if not isinstance(jobs, list):
             raise ValueError("the answer has no jobs list")
+        self._paging_fields[slug] = paging_fields(data)
         return jobs
 
     def _format_salary(self, compensation: dict | None) -> str:
@@ -95,6 +109,8 @@ class AshbyProvider(JobProvider):
         primary_loc = locations[0] if locations else ""
         failures: dict[str, str] = {}
         empty: list[str] = []
+        boards_read: list[dict] = []
+        warnings: list[str] = []
 
         for slug in companies:
             try:
@@ -105,13 +121,31 @@ class AshbyProvider(JobProvider):
                 continue
             if not postings:
                 empty.append(slug)
+            board_jobs, external, dropped = [], {}, []
             for posting in postings:
                 job = self._normalize_posting(posting, slug, primary_term, primary_loc)
                 if job and job.get("title"):
-                    all_jobs.append(job)
+                    board_jobs.append(job)
+                    external[job["jobId"]] = posting.get("id")
+                else:  # never counted as read: a posting the board has taken down, or one with no title
+                    reason = "not_listed" if posting.get("isListed") is False else "no_title"
+                    row = {"title": posting.get("title"), "company": slug, "location": posting.get("location"),
+                           "jobUrl": posting.get("jobUrl") or posting.get("applyUrl")}
+                    dropped.append(dropped_ad(row, reason, posting.get("id"), counted=False))
+            all_jobs.extend(board_jobs)
+            # The board is staged as soon as it is read (filtered the way the whole list is below), so a stop keeps it.
+            board_kept, board_dropped = split_by_filter(board_jobs, search_terms, locations, remote_filters, country)
+            self.stage(
+                board_kept, part=slug, read=len(board_jobs), external_ids=external,
+                dropped=dropped + [dropped_ad(job, reason, external.get(job["jobId"])) for job, reason in board_dropped],
+            )
+            anomalies = [f"paging field in the answer: {name}" for name in self._paging_fields.get(slug, [])]
+            warnings.extend(f"Ashby board {slug}: {anomaly}" for anomaly in anomalies)
+            boards_read.append(board_read(slug, read=len(board_jobs), postings=len(postings), complete=False, reason=NO_PROOF, anomalies=anomalies))
 
         kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
         self.last_outcome = parts_outcome(
-            read=len(all_jobs), kept=len(kept), total=len(companies), failures=failures, empty=empty
+            read=len(all_jobs), kept=len(kept), total=len(companies), failures=failures, empty=empty, boards_read=boards_read
         )
+        self.last_outcome.warnings.extend(warnings)
         return kept

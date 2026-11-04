@@ -7,9 +7,9 @@ import logging
 import pandas as pd
 
 from jobspy_adapter import fetch_jobs
-from normalize_jobs import normalize_jobs
-from providers.base_provider import JobProvider, parts_outcome
-from providers.role_filter import is_relevant_role
+from normalize_jobs import _safe_str, normalize_jobs
+from providers.base_provider import JobProvider, dropped_ad, parts_outcome
+from providers.role_filter import role_drop_reason
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,23 @@ def _should_use_remote(remote_filters: list[str], location: str) -> bool:
         return True
     filters = [f.lower() for f in remote_filters]
     return "remote" in filters and loc == "remote"
+
+
+def _row_facts(df: pd.DataFrame) -> tuple[list[str | None], list[dict]]:
+    """For the rows `normalize_jobs` keeps (those with a title), in its order: the id LinkedIn or the board gives each.
+    And the rows it silently drops for having no title, as far as they can be told apart."""
+    ids: list[str | None] = []
+    untitled: list[dict] = []
+    for _, row in df.iterrows():
+        external = _safe_str(row.get("id")) or None
+        if _safe_str(row.get("title")):
+            ids.append(external)
+        else:
+            untitled.append({
+                "company": _safe_str(row.get("company")), "location": _safe_str(row.get("location")),
+                "jobUrl": _safe_str(row.get("job_url") or row.get("jobUrl")), "externalId": external,
+            })
+    return ids, untitled
 
 
 class JobSpyProvider(JobProvider):
@@ -35,7 +52,8 @@ class JobSpyProvider(JobProvider):
         remote_filters: list[str],
         country: str,
     ) -> list[dict]:
-        all_normalized: list[dict] = []
+        read_count = 0
+        relevant: list[dict] = []
         frames: list[pd.DataFrame] = []
         failures: dict[str, str] = {}
 
@@ -53,25 +71,44 @@ class JobSpyProvider(JobProvider):
                     failures[f"{term} @ {location}"] = str(exc)
                     continue
 
+                normalized: list[dict] = []
+                external: list[str | None] = []
+                dropped: list[dict] = []
                 if df is not None and not df.empty:
                     frames.append(df)
-                    all_normalized.extend(normalize_jobs(df, term, location))
+                    normalized = normalize_jobs(df, term, location)
+                    external, untitled = _row_facts(df)
+                    if len(external) != len(normalized):
+                        external = [None] * len(normalized)  # never guess which id belongs to which ad
+                    # Rows with no title never counted as read: dropped before the count, so `counted` is False.
+                    dropped += [dropped_ad(row, "no_title", row["externalId"], counted=False) for row in untitled]
+                # LinkedIn ranks its free-text search loosely, so a query for "Product Lead" also returns sales
+                # engineers and SAP consultants. The same title filter the other providers use is applied here,
+                # one search at a time, and the search is staged before the next one starts: this source takes
+                # the better part of half an hour, and a stop keeps every search that had finished.
+                found = []
+                for job, ext in zip(normalized, external or [None] * len(normalized)):
+                    reason = role_drop_reason(job.get("title", ""), "", tuple(search_terms or ()))
+                    if reason is None:
+                        found.append(job)
+                    else:
+                        dropped.append(dropped_ad(job, reason, ext))
+                read_count += len(normalized)
+                relevant.extend(found)
+                self.stage(
+                    found, part=f"{term} @ {location}", read=len(normalized),
+                    external_ids={job["jobId"]: ext for job, ext in zip(normalized, external) if ext},
+                    dropped=dropped,
+                )
 
         self._last_raw_df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
-        # LinkedIn ranks its free-text search loosely, so a query for
-        # "Product Lead" also returns sales engineers and SAP consultants.
-        # The same title filter the other providers use is applied here.
-        relevant = [
-            job for job in all_normalized
-            if is_relevant_role(job.get("title", ""), "", tuple(search_terms or ()))
-        ]
         logger.info(
             "JobSpy: %d ads fetched, %d kept after title filtering",
-            len(all_normalized), len(relevant),
+            read_count, len(relevant),
         )
         self.last_outcome = parts_outcome(
-            read=len(all_normalized),
+            read=read_count,
             kept=len(relevant),
             total=len(search_terms) * len(locations),
             failures=failures,

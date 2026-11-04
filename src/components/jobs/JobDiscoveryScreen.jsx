@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Loader2, MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
 import Button from '../ui/Button'
 import Tabs from '../ui/Tabs'
@@ -15,11 +15,17 @@ import ApplicationDashboard from './ApplicationDashboard'
 import JobFilters from './JobFilters'
 import BulkActionsBar from './BulkActionsBar'
 import JobTable from './JobTable'
+import JobListControls from './JobListControls'
+import { useDemoBootstrapContext } from '../demo/DemoBootstrapGate'
+import { composeJobList, stripDisplayFields } from '../../modules/jobs/allAds'
+import { useAllAds } from '../../modules/jobs/useAllAds'
+import { ALL_SEARCH_NOTE, EXPORT_NOTE, OFF_LIST_NOTE, applyAllControls, classOptions, filterComposed, listNotices, selectableIds } from '../../modules/jobs/jobListView'
 import JobDetailDrawer from './JobDetailDrawer'
 import JobEmptyState from './JobEmptyState'
 import { appliedJobIds } from '../../modules/applications/appliedFilter'
 import { filterJobs, getUniqueProviders, getUniqueSites, listedJobs, onListJobs } from '../../modules/jobs/jobFilters'
 import { computeJobStats } from '../../modules/jobs/jobStats'
+import { selectionFor, toggleAllSelected, toggleSelected } from '../../modules/jobs/jobTableModel'
 import { probePipelineApi, runTailor } from '../../modules/jobs/pipelineRunner'
 import { searchCountry } from '../../utils/searchCountry'
 import { downloadJobsCsv, downloadJobsJson } from '../../modules/jobs/jobExport'
@@ -38,7 +44,10 @@ import {
   updateJobRecord,
   updateJobStatus,
 } from '../../modules/jobs/jobStorage'
-import { runDiscovery, runScoring, loadLatestScoredJobs } from '../../modules/jobs/pipelineRunner'
+import { runScoring, loadLatestScoredJobs } from '../../modules/jobs/pipelineRunner'
+import { useRescrapeRun } from '../../modules/jobs/useRescrapeRun'
+import RescrapeProgress from './RescrapeProgress'
+import { cancelledText } from '../../modules/jobs/rescrapeRun'
 import { withProfileSalaryDefaults } from '../../modules/jobs/jobSalary'
 import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { useProfile } from '../../context/ProfileContext'
@@ -58,7 +67,13 @@ export default function JobDiscoveryScreen() {
   const [pipelineApiAvailable, setPipelineApiAvailable] = useState(false)
   const [health, setHealth] = useState(null)
   const [pipelineState, setPipelineState] = useState(() => loadPipelineState())
-  const [selectedJobIds, setSelectedJobIds] = useState([])
+  const [selection, setSelection] = useState(null)
+  // Active or All, and All's own filters. Plain state, outside `state.filters`, so changing them saves nothing.
+  const [listMode, setListMode] = useState('active')
+  const [listClasses, setListClasses] = useState(() => new Set())
+  const [seenRecentlyOnly, setSeenRecentlyOnly] = useState(false)
+  const [reference, setReference] = useState(() => Date.now())
+  const [addInitial, setAddInitial] = useState(null)
   const [selectedJob, setSelectedJob] = useState(null)
   const [bulkRunning, setBulkRunning] = useState(false)
   const [rerunning, setRerunning] = useState(false)
@@ -107,6 +122,25 @@ export default function JobDiscoveryScreen() {
     onImport: setState,
   })
 
+  const { demoMode } = useDemoBootstrapContext()
+  const routeEnabled = pipelineApiAvailable && !demoMode
+  const allAds = useAllAds({ enabled: routeEnabled })
+  const refetchAllAds = allAds.refetch
+
+  // A new import means a new ledger: Re-scrape, Re-score, auto-refresh and the URL import all set `importedAt`.
+  const lastImportedAt = useRef(state.importedAt)
+  useEffect(() => {
+    if (lastImportedAt.current === state.importedAt) return
+    lastImportedAt.current = state.importedAt
+    if (routeEnabled) refetchAllAds()
+  }, [state.importedAt, routeEnabled, refetchAllAds])
+
+  // The 14 days run to the current date, and the screen can stay open past midnight.
+  useEffect(() => {
+    const timer = setInterval(() => setReference(Date.now()), 60 * 60 * 1000)
+    return () => clearInterval(timer)
+  }, [])
+
   const applications = useApplications()
   // Tracking comes from the application store; `state.jobs` stays as saved and is what gets persisted.
   const viewJobs = useMemo(
@@ -120,35 +154,86 @@ export default function JobDiscoveryScreen() {
   )
   const applicationStore = applications.status === 'ready' ? applications.store : null
   const appliedIds = useMemo(() => appliedJobIds(applicationStore), [applicationStore])
+  // What is stored, as ever: Export and the numbers elsewhere keep reading it.
   const listed = useMemo(() => listedJobs(state.jobs, state.filters), [state.jobs, state.filters])
-  const sites = useMemo(() => getUniqueSites(listed), [listed])
-  const providers = useMemo(() => getUniqueProviders(listed), [listed])
+
+  // Display only, recomputed from its inputs and never saved. Until the route has answered, Active is today's list.
+  const composed = useMemo(
+    () => (routeEnabled ? composeJobList({ stored: state.jobs, server: allAds.rows, applications, reference }) : null),
+    [routeEnabled, state.jobs, allAds.rows, applications, reference],
+  )
+  const useComposed = routeEnabled && (allAds.rows !== null || listMode === 'all')
+  const composedRows = useMemo(() => {
+    if (!useComposed) return null
+    const rows = overlayTracking(listMode === 'all' ? composed.all : composed.active, applicationStore, applications.settings)
+    // An application needs no stored row: the row says Applied as Job Details does, for display only.
+    return rows.map((row) => (row.serverOnly && row.applicationTracking ? { ...row, status: 'applied_manually' } : row))
+  }, [useComposed, listMode, composed, applicationStore, applications.settings])
+  const shownRows = useMemo(
+    () => (useComposed && listMode === 'all' ? applyAllControls(composedRows, { classes: listClasses, recent: seenRecentlyOnly, reference }) : composedRows),
+    [useComposed, listMode, composedRows, listClasses, seenRecentlyOnly, reference],
+  )
+  const baseRows = composedRows ?? listed
+  const sites = useMemo(() => getUniqueSites(baseRows), [baseRows])
+  const providers = useMemo(() => getUniqueProviders(baseRows), [baseRows])
   const effectiveFilters = useMemo(() => withProfileSalaryDefaults(state.filters, profile?.basicProfile), [state.filters, profile?.basicProfile])
   const filteredJobs = useMemo(() => {
+    if (useComposed) return filterComposed(shownRows, effectiveFilters, { appliedJobIds: appliedIds })
     return filterJobs(viewJobs, effectiveFilters, { appliedJobIds: appliedIds })
-  }, [viewJobs, effectiveFilters, appliedIds])
+  }, [useComposed, shownRows, viewJobs, effectiveFilters, appliedIds])
+  // Changing a filter starts the selection and the paging again; a sort, Show more or a row's new status do not.
+  const filterKey = useMemo(
+    () => JSON.stringify([effectiveFilters, listMode, [...listClasses].sort(), seenRecentlyOnly]),
+    [effectiveFilters, listMode, listClasses, seenRecentlyOnly],
+  )
+  const notices = routeEnabled ? listNotices({
+    mode: listMode, status: allAds.status, error: allAds.error, meta: allAds.meta, rows: allAds.rows, copies: composed?.copies,
+    hasServerOnly: Boolean(composedRows?.some((row) => row.serverOnly)),
+  }) : []
+  const filtersShown = useComposed ? { ...effectiveFilters, showOffList: false } : effectiveFilters
+  const selectedJobIds = selectionFor(selection, filterKey)
 
-  const handleRerunDiscovery = useCallback(async () => {
-    setRerunning(true)
-    setRerunMsg('Discovering new jobs…')
+  const handleRescrapeFinished = useCallback(async (run) => {
+    if (routeEnabled) refetchAllAds() // the ledger may have moved even if the scored file below cannot be read
+    if (run?.status === 'cancelled') {
+      setRerunMsg(cancelledText(run.cancel).replace('The last run was cancelled.', 'Re-scrape was cancelled.'))
+      return
+    }
+    if (run?.import?.nothingSaved === 'no_usable_source') {
+      setRerunMsg('Re-scrape found nothing usable: no source gave a usable result, so the list was not changed. Details in Activity.')
+      return
+    }
+    if (!run || run.status === 'failed' || run.status === 'interrupted') {
+      setRerunMsg(run?.status === 'interrupted' ? 'Re-scrape was interrupted.' : 'Re-scrape failed. Details below.')
+      return
+    }
     try {
-      const intelligence = loadIntelligence()
-      if (!intelligence?.searchStrategy?.jobSpySearchTerms?.length) {
-        throw new Error('Run candidate intelligence generation first (Module 2).')
-      }
-      await runDiscovery({ providers: 'serbia', country: searchCountry(profile, intelligence), intelligence, profile })
-      setRerunMsg('Scoring jobs…')
-      await runScoring()
       const jobs = await loadLatestScoredJobs()
       setState((prev) => importJobsFromFile(jobs, prev))
       const p1 = (jobs.jobs || []).filter((j) => j.priority === 'P1').length
       setRerunMsg(`Done — ${jobs.jobs?.length || 0} jobs, ${p1} P1`)
     } catch (e) {
       setRerunMsg(`Error: ${e.message}`)
+    }
+  }, [routeEnabled, refetchAllAds])
+
+  const rescrape = useRescrapeRun({ enabled: pipelineApiAvailable, onFinished: handleRescrapeFinished })
+
+  const handleRerunDiscovery = useCallback(async () => {
+    setRerunning(true)
+    setRerunMsg('')
+    try {
+      const intelligence = loadIntelligence()
+      if (!intelligence?.searchStrategy?.jobSpySearchTerms?.length) {
+        throw new Error('Run candidate intelligence generation first (Module 2).')
+      }
+      await rescrape.start({ providers: 'serbia', country: searchCountry(profile, intelligence), intelligence, profile })
+    } catch (e) {
+      setRerunMsg(`Error: ${e.message}`)
     } finally {
       setRerunning(false)
     }
-  }, [profile])
+  }, [profile, rescrape])
 
   const handleRescore = useCallback(async () => {
     setRerunning(true)
@@ -181,6 +266,12 @@ export default function JobDiscoveryScreen() {
     setAddNote(result.scored
       ? { text: `Added “${job.title}” and scored it.`, jobId: job.jobId, retry: false }
       : { text: `Added “${job.title}” as Unreviewed. ${result.message}`, jobId: job.jobId, retry: !result.noDescription })
+  }, [])
+
+  // Opens the form with what the ad gave. Nothing is saved until Save.
+  const handleAddFromRow = useCallback((row) => {
+    setAddInitial({ title: row.title, company: row.company, jobUrl: row.jobUrl })
+    setAddJobOpen(true)
   }, [])
 
   const handleScoreNow = useCallback(async (jobId, title) => {
@@ -218,21 +309,18 @@ export default function JobDiscoveryScreen() {
   const handleJobUpdated = useCallback((updatedJob) => {
     setState((prev) => ({
       ...prev,
-      jobs: updateJobRecord(prev.jobs, updatedJob.jobId, updatedJob),
+      jobs: updateJobRecord(prev.jobs, updatedJob.jobId, stripDisplayFields(updatedJob)), // the row may be a composed one
     }))
     setSelectedJob((prev) => (prev?.jobId === updatedJob.jobId ? updatedJob : prev))
   }, [])
 
   const handleToggleSelect = useCallback((jobId) => {
-    setSelectedJobIds((prev) => (
-      prev.includes(jobId) ? prev.filter((id) => id !== jobId) : [...prev, jobId]
-    ))
-  }, [])
+    setSelection((prev) => toggleSelected(prev, filterKey, jobId))
+  }, [filterKey])
 
   const handleToggleSelectAll = useCallback(() => {
-    const ids = filteredJobs.map((j) => j.jobId)
-    setSelectedJobIds((prev) => (prev.length === ids.length ? [] : ids))
-  }, [filteredJobs])
+    setSelection((prev) => toggleAllSelected(prev, filterKey, selectableIds(filteredJobs)))
+  }, [filteredJobs, filterKey])
 
   const handleBulkTailor = useCallback(async (opts) => {
     setBulkRunning(true)
@@ -253,7 +341,7 @@ export default function JobDiscoveryScreen() {
     setState((prev) => ({
       ...prev,
       jobs: prev.jobs.map((j) => (
-        selectedJobIds.includes(j.jobId) ? { ...j, status } : j
+        selectedJobIds.has(j.jobId) ? { ...j, status } : j
       )),
     }))
   }, [selectedJobIds])
@@ -272,7 +360,7 @@ export default function JobDiscoveryScreen() {
     setExportOpen(false)
   }
 
-  const hasJobs = state.jobs.length > 0
+  const hasJobs = state.jobs.length > 0 || Boolean(allAds.rows?.length && routeEnabled)
 
   return (
     <div className="space-y-6">
@@ -285,12 +373,12 @@ export default function JobDiscoveryScreen() {
       {activeTab === 'jobs' && (
         <>
           <div className="flex justify-end">
-            <Button variant="secondary" onClick={() => setAddJobOpen(true)}>
+            <Button variant="secondary" onClick={() => { setAddInitial(null); setAddJobOpen(true) }}>
               <Plus className="h-4 w-4" />
               Add job
             </Button>
           </div>
-          {addJobOpen && <AddJobDialog onClose={() => setAddJobOpen(false)} onSaved={handleJobAdded} />}
+          {addJobOpen && <AddJobDialog initial={addInitial} onClose={() => setAddJobOpen(false)} onSaved={handleJobAdded} />}
           {addNote && (
             <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-teal-700 dark:text-teal-300">
               <span>{addNote.text}</span>
@@ -305,11 +393,11 @@ export default function JobDiscoveryScreen() {
 
           {pipelineApiAvailable && (
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 dark:border-stone-800 dark:bg-stone-900">
-              <Button onClick={handleRerunDiscovery} disabled={rerunning || !pipelineApiAvailable}>
-                {rerunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <Button onClick={handleRerunDiscovery} disabled={rerunning || rescrape.view.active || !pipelineApiAvailable}>
+                {rerunning || rescrape.view.active ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Re-scrape jobs
               </Button>
-              <Button variant="secondary" onClick={handleRescore} disabled={rerunning}>
+              <Button variant="secondary" onClick={handleRescore} disabled={rerunning || rescrape.view.active}>
                 <RefreshCw className="h-4 w-4" />
                 Re-score
               </Button>
@@ -317,6 +405,7 @@ export default function JobDiscoveryScreen() {
               {rerunMsg && (
                 <p className="ml-1 text-xs text-stone-500 dark:text-stone-400">{rerunMsg}</p>
               )}
+              <RescrapeProgress view={rescrape.view} />
             </div>
           )}
 
@@ -327,30 +416,45 @@ export default function JobDiscoveryScreen() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-3">
                   <p className="text-sm text-stone-600 dark:text-stone-400">
-                    {filteredJobs.length} of {listed.length} jobs shown
+                    {filteredJobs.length} of {baseRows.length} jobs shown
                   </p>
                 </div>
                   <div className="relative">
-                  <Button variant="secondary" onClick={() => setExportOpen(!exportOpen)}>
+                  <Button variant="secondary" title={EXPORT_NOTE} onClick={() => setExportOpen(!exportOpen)}>
                     <MoreHorizontal className="h-4 w-4" />
                     Export
                   </Button>
                   {exportOpen && (
                     <div className="absolute right-0 z-10 mt-1 w-40 rounded-lg border border-stone-200 bg-white py-1 shadow-lg dark:border-stone-700 dark:bg-stone-900">
                       <button type="button" onClick={handleExportJson} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-stone-50 dark:hover:bg-stone-800">
-                        <Download className="h-4 w-4" /> JSON
+                        <Download className="h-4 w-4" /> JSON, saved rows
                       </button>
                       <button type="button" onClick={handleExportCsv} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-stone-50 dark:hover:bg-stone-800">
-                        <Download className="h-4 w-4" /> CSV
+                        <Download className="h-4 w-4" /> CSV, saved rows
                       </button>
                     </div>
                   )}
                   </div>
               </div>
 
-              <JobFilters filters={effectiveFilters} sites={sites} providers={providers} jobs={listed} applicationStore={applicationStore} basicProfile={profile?.basicProfile} onChange={handleFilterChange} />
+              {routeEnabled && (
+                <JobListControls
+                  mode={listMode}
+                  onMode={setListMode}
+                  options={listMode === 'all' && composedRows ? classOptions(composedRows) : []}
+                  classes={listClasses}
+                  onClasses={setListClasses}
+                  recent={seenRecentlyOnly}
+                  onRecent={setSeenRecentlyOnly}
+                  notices={notices}
+                  onRetry={refetchAllAds}
+                  retrying={allAds.status === 'loading'}
+                />
+              )}
+
+              <JobFilters filters={filtersShown} searchNote={useComposed && listMode === 'all' ? ALL_SEARCH_NOTE : null} offListDisabledNote={useComposed ? OFF_LIST_NOTE : null} sites={sites} providers={providers} jobs={baseRows} applicationStore={applicationStore} basicProfile={profile?.basicProfile} onChange={handleFilterChange} />
               <BulkActionsBar
-                selectedCount={selectedJobIds.length}
+                selectedCount={selectedJobIds.size}
                 running={bulkRunning}
                 jobs={state.jobs}
                 selectedJobIds={selectedJobIds}
@@ -365,6 +469,9 @@ export default function JobDiscoveryScreen() {
                 apiAvailable={pipelineApiAvailable}
                 onJobUpdated={handleJobUpdated}
                 selectedJobIds={selectedJobIds}
+                filterKey={filterKey}
+                classView={useComposed}
+                onAddFromRow={handleAddFromRow}
                 onToggleSelect={handleToggleSelect}
                 onToggleSelectAll={handleToggleSelectAll}
                 onJobSelect={setSelectedJob}

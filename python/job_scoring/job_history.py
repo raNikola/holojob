@@ -7,9 +7,11 @@ survives: for each jobId, when it was first and last seen, when it stopped being
 listed, and the facts enrichment extracted, keyed by the same content
 fingerprint (job_fingerprint.py) so an ad that changed is read again.
 
-Closing a job means "discovery no longer finds it", which is only safe to say
-for sources that list every open posting. LinkedIn searches return a rolling
-window of recent ads, so a LinkedIn job missing from one run is not closed.
+Closing a job means "the source no longer lists it", which is only safe to say
+for a snapshot source (a board that lists every open posting), and only with proof
+the board was read whole (S5c): two consecutive complete fetches of the same board
+that do not list the ad. LinkedIn searches return a rolling window of recent ads, so
+absence from a search-based source is never proof, and it closes nothing.
 """
 
 from __future__ import annotations
@@ -37,8 +39,11 @@ write_text_atomic = _atomic_module.write_text_atomic
 LEDGER_FILE = "job_history.json"
 
 # Providers whose API returns every open posting of a board, so a job that is
-# no longer listed has really been taken down.
-CLOSURE_PROVIDERS = {"greenhouse", "lever", "ashby"}
+# no longer listed has really been taken down. Anything not named here is search-based: absence closes nothing.
+# Infostud is unclassified until its coverage is confirmed, and behaves as search-based.
+SOURCE_CLASS = {"greenhouse": "snapshot", "lever": "snapshot", "ashby": "snapshot", "infostud": "unclassified"}
+CLOSURE_PROVIDERS = {name for name, kind in SOURCE_CLASS.items() if kind == "snapshot"}
+MISSES_TO_CLOSE = 2  # consecutive complete fetches of the board that do not list the ad
 
 # A description shorter than this is not a real ad; LinkedIn returns one when
 # it rate-limits the detail fetch. It never replaces a fuller description the
@@ -50,7 +55,10 @@ CLOSED_KEEP_DAYS = 14  # how long a closed job stays in discovered_jobs.json
 PRUNE_AFTER_DAYS = 90  # how long a closed job stays in the ledger
 
 # Fields the ledger adds to a job; they are not part of the stored snapshot.
-HISTORY_FIELDS = ("firstSeen", "lastSeen", "closedAt", "isNew", "isClosed", "llmFacts")
+# On a row a run kept open without finding it: see row_state.py. Comes from the entry's `heldRunId`, so it survives any rebuild of the view.
+NOT_FOUND_MARK = "notFoundThisRun"
+STALE_MARK = "isStale"  # on a row the ledger shows without finding it, when `stale_rule.py` says so; written by `view_guard.derive_view`
+HISTORY_FIELDS = ("firstSeen", "lastSeen", "closedAt", "isNew", "isClosed", "llmFacts", "isAbsent", "absentSince", "closedAfterChecks", NOT_FOUND_MARK, STALE_MARK)
 
 
 def now_iso() -> str:
@@ -80,7 +88,12 @@ def ledger_path(jobs_file: Path) -> Path:
     return jobs_file.with_name(LEDGER_FILE)
 
 
-def load(path: Path) -> dict:
+def load(path: Path, *, read_only: bool = False) -> dict:
+    """The ledger, or an empty one when there is none. An unreadable ledger is moved aside by the run that commits.
+
+    `read_only` is for a reader that must change nothing (a scrape): it gets an empty ledger for an unreadable file and
+    leaves the file where it is, so the committing run, or the owner, still finds it.
+    """
     if not path.exists():
         return empty_ledger()
     try:
@@ -89,6 +102,8 @@ def load(path: Path) -> dict:
             return data
     except (OSError, ValueError):
         pass
+    if read_only:
+        return empty_ledger()
     # An unreadable ledger is moved aside, never overwritten: it is the only copy.
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
     path.rename(path.with_name(f"{path.name}.corrupt-{stamp}"))
@@ -103,6 +118,17 @@ def save(path: Path, ledger: dict) -> None:
 
 def _snapshot(job: dict) -> dict:
     return {k: v for k, v in job.items() if k not in HISTORY_FIELDS}
+
+
+def source_class(provider) -> str:
+    return SOURCE_CLASS.get(provider, "search")
+
+
+def _lifecycle_marks(entry: dict, closed: bool) -> dict:
+    """What a row says beyond the usual fields: only on a row it applies to, so every other row keeps its bytes."""
+    if closed:
+        return {"closedAfterChecks": entry["absentRuns"]} if entry.get("absentRuns", 0) >= MISSES_TO_CLOSE else {}
+    return {"isAbsent": True, "absentSince": entry["absentSince"]} if entry.get("absentSince") else {}
 
 
 def _annotate(job: dict, entry: dict, *, now: datetime, closed: bool) -> dict:
@@ -121,6 +147,7 @@ def _annotate(job: dict, entry: dict, *, now: datetime, closed: bool) -> dict:
             and now - first <= timedelta(days=NEW_WINDOW_DAYS)
         ),
         "isClosed": closed,
+        **_lifecycle_marks(entry, closed),
     }
 
 
@@ -132,6 +159,82 @@ def _board_listed(entry: dict, by_provider: dict[str, set[str] | None]) -> bool:
     boards = by_provider[provider]
     board = (entry.get("job") or {}).get("source")
     return boards is None or not board or board in boards
+
+
+def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datetime, key: str, role_key, run_id: str | None,
+             previous_facts: dict, seen_before: dict, stats: dict) -> tuple[dict, dict]:
+    """The half of a run that sees an ad: add it to the ledger or refresh its entry. Returns (the job as stored, its record for the view).
+
+    Shared by `apply_run` (a whole run) and `apply_partial` (a cancelled one), so the two can never disagree about what seeing an ad does.
+    """
+    job_id = job["jobId"]
+    entry = entries.get(job_id)
+    stored_description = ((entry or {}).get("job") or {}).get("description") or ""
+    if (
+        len((job.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS
+        and len(stored_description.strip()) >= THIN_DESCRIPTION_CHARS
+    ):
+        job = {**job, "description": stored_description}
+        stats["keptFullerDescription"] += 1
+    fingerprint = job_fingerprint(job)
+
+    if entry is None:
+        entry = entries[job_id] = {
+            "firstSeen": seen_before.get(job_id, now), "lastSeen": now,
+            "closedAt": None, "llmFacts": None,
+        }
+        if job_id in seen_before:
+            entry["seeded"] = True
+        stats["new"] += 1
+        candidate = previous_facts.get(job_id)
+    else:
+        stats["known"] += 1
+        entry["lastSeen"] = now
+        if entry.get("closedAt"):
+            entry["closedAt"] = None
+            stats["reopened"] += 1
+        for field in ("absentRuns", "absentSince", "lastAbsentRunId"):
+            entry.pop(field, None)
+        candidate = entry.get("llmFacts") or previous_facts.get(job_id)
+
+    if candidate and candidate.get("_fingerprint") == fingerprint:
+        entry["llmFacts"] = candidate
+        stats["carriedFacts"] += 1
+    else:
+        if entry.get("llmFacts"):
+            stats["changed"] += 1  # the ad changed, so its old facts no longer apply
+        entry["llmFacts"] = None
+
+    entry.update(provider=job.get("provider"), roleKey=role_key(job), seenUnder=key, job=_snapshot(job))
+    if run_id is not None:
+        entry.update(lastRunId=run_id, lastRunPos=position)
+    record = _annotate(job, entry, now=moment, closed=False)
+    if entry["llmFacts"]:
+        record["llmFacts"] = entry["llmFacts"]
+    return job, record
+
+
+def apply_partial(ledger: dict, jobs: list[dict], *, now: str, key: str, role_key, list_run_id: str) -> dict:
+    """Save the ads a CANCELLED run collected, and nothing else (S6). Returns the counts.
+
+    The ledger describes the last complete run's list, so this run may only add to it. Each collected ad is added or refreshed
+    exactly as a whole run would (`found_ad`) and joins the last complete run's list: `lastRunId` is that run's id, in the place it
+    already had, or after the last one for an ad new to the list. Every other entry is not looked at: none becomes held, absent,
+    closed or stale, no miss is counted, and `lastImport`, `sourceRuns`, `lastListedAt` and the stamps of other entries stay as they are.
+    """
+    entries = ledger["jobs"]
+    stats = {"new": 0, "known": 0, "reopened": 0, "changed": 0, "carriedFacts": 0, "keptFullerDescription": 0}
+    moment = _parse(now) or datetime.now(timezone.utc)
+    next_position = 1 + max((e.get("lastRunPos", 0) for e in entries.values() if e.get("lastRunId") == list_run_id), default=-1)
+    for job in jobs:
+        entry = entries.get(job["jobId"])
+        if entry is not None and entry.get("lastRunId") == list_run_id:
+            position = entry.get("lastRunPos", 0)
+        else:
+            position, next_position = next_position, next_position + 1
+        found_ad(entries, job, position, now=now, moment=moment, key=key, role_key=role_key, run_id=list_run_id,
+                 previous_facts={}, seen_before={}, stats=stats)
+    return stats
 
 
 def apply_run(
@@ -147,6 +250,9 @@ def apply_run(
     failed_boards: dict[str, set[str] | None] | None = None,
     empty_boards: dict[str, set[str]] | None = None,
     sources_not_run: set[str] | None = None,
+    run_id: str | None = None,
+    prune: bool = True,
+    board_evidence: dict[str, dict[str, dict]] | None = None,
 ) -> tuple[list[dict], dict]:
     """Record one discovery run; return the jobs to write and what changed.
 
@@ -164,9 +270,22 @@ def apply_run(
     out of it. `empty_boards` maps a provider to the boards that answered with no jobs at all: held the same way, since
     a board losing every ad at once is more likely a glitch than a hiring freeze. Only CLOSURE_PROVIDERS read these: a
     search-based provider's missing ad is not closed anyway.
+    `board_evidence` (S5c, the importer builds it) maps a snapshot provider to {board: {"complete": bool, "listed": set of jobIds}}.
+    It is the only thing that can close an ad: with none, nothing closes and no miss is counted. A complete fetch that does not
+    list an open ad is a miss: the first sets `absentRuns` 1 and `absentSince` and the row stays shown, marked; the second in a
+    row sets `closedAt`. The search key plays no part here (owner, D4). `lastAbsentRunId` keeps one run from counting twice. A
+    listed ad a filter dropped is no miss and, on a complete fetch, clears an earlier one; it stays as it is, out of the output.
+    A failed, empty, unproven or unread board neither raises nor clears the count. `providers_returned` no longer decides anything.
     `sources_not_run` are the providers that skipped or failed this run, of any kind. They looked at nothing, so their
     open ads stay in the output unchanged. The search does not have to match: a source skipped for an unsupported country
     is by definition on a different search from the one that found its ads.
+
+    `prune=False` (the importer) keeps closed entries for good: nothing is deleted automatically (owner, S4a). The default is the
+    old 90-day prune, for the callers and tests that still rely on it.
+
+    `run_id` (the importer passes it) stamps each entry with how this run saw it, so the
+    discovered view can be derived from the ledger alone: `lastRunId` and `lastRunPos` (its place in the output) on an ad this
+    run found, `heldRunId` on one kept open. Nothing else changes, and without it nothing is stamped.
     """
     moment = _parse(now) or datetime.now(timezone.utc)
     entries = ledger["jobs"]
@@ -178,56 +297,33 @@ def apply_run(
     stats = {
         "new": 0, "known": 0, "reopened": 0, "changed": 0, "carriedFacts": 0, "closed": 0,
         "keptFullerDescription": 0, "keptFailedBoard": 0, "keptEmptyBoard": 0, "keptSourceNotRun": 0,
+        "absent": 0, "keptUnproven": 0, "keptBoardNotRead": 0, "listedButFiltered": 0,
     }
+    board_evidence = board_evidence or {}
+    miss_token = run_id or now
+
+    def keep_shown(entry: dict, held_by: str) -> None:
+        if run_id is not None:
+            entry["heldRunId"] = run_id
+        record = _annotate(entry["job"], entry, now=moment, closed=False)
+        if run_id is not None:
+            record[NOT_FOUND_MARK] = True
+        if entry.get("llmFacts"):
+            record["llmFacts"] = entry["llmFacts"]
+        out.append(record)
+        stats[held_by] += 1
+
     found_ids = set()
     found_roles = set()
     out = []
 
-    for job in jobs:
-        job_id = job["jobId"]
-        found_ids.add(job_id)
-        entry = entries.get(job_id)
-        stored_description = ((entry or {}).get("job") or {}).get("description") or ""
-        if (
-            len((job.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS
-            and len(stored_description.strip()) >= THIN_DESCRIPTION_CHARS
-        ):
-            job = {**job, "description": stored_description}
-            stats["keptFullerDescription"] += 1
-        found_roles.add(role_key(job))
-        fingerprint = job_fingerprint(job)
-
-        if entry is None:
-            entry = entries[job_id] = {
-                "firstSeen": seen_before.get(job_id, now), "lastSeen": now,
-                "closedAt": None, "llmFacts": None,
-            }
-            if job_id in seen_before:
-                entry["seeded"] = True
-            stats["new"] += 1
-            candidate = previous_facts.get(job_id)
-        else:
-            stats["known"] += 1
-            entry["lastSeen"] = now
-            if entry.get("closedAt"):
-                entry["closedAt"] = None
-                stats["reopened"] += 1
-            candidate = entry.get("llmFacts") or previous_facts.get(job_id)
-
-        if candidate and candidate.get("_fingerprint") == fingerprint:
-            entry["llmFacts"] = candidate
-            stats["carriedFacts"] += 1
-        else:
-            if entry.get("llmFacts"):
-                stats["changed"] += 1  # the ad changed, so its old facts no longer apply
-            entry["llmFacts"] = None
-
-        entry.update(
-            provider=job.get("provider"), roleKey=role_key(job), seenUnder=key, job=_snapshot(job)
+    for position, job in enumerate(jobs):
+        found_ids.add(job["jobId"])
+        job, record = found_ad(
+            entries, job, position, now=now, moment=moment, key=key, role_key=role_key, run_id=run_id,
+            previous_facts=previous_facts, seen_before=seen_before, stats=stats,
         )
-        record = _annotate(job, entry, now=moment, closed=False)
-        if entry["llmFacts"]:
-            record["llmFacts"] = entry["llmFacts"]
+        found_roles.add(role_key(job))
         out.append(record)
 
     for job_id, entry in entries.items():
@@ -236,30 +332,58 @@ def apply_run(
         provider = entry.get("provider")
         if entry.get("roleKey") in found_roles:  # still listed under another copy
             continue
-        if provider not in sources_not_run and (provider not in CLOSURE_PROVIDERS or entry.get("seenUnder") != key):
+        if provider in sources_not_run:
+            keep_shown(entry, "keptSourceNotRun")
             continue
+        if provider not in CLOSURE_PROVIDERS:  # search-based: absence is no proof
+            continue
+        # An ad of another search stays out of the output, as ever, unless a proven miss has already put it back.
+        shown = entry.get("seenUnder") == key or bool(entry.get("absentSince"))
         held_by = (
-            "keptSourceNotRun" if provider in sources_not_run
-            else "keptFailedBoard" if _board_listed(entry, failed_boards)
+            "keptFailedBoard" if _board_listed(entry, failed_boards)
             else "keptEmptyBoard" if _board_listed(entry, empty_boards)
             else None
         )
         if held_by:
+            if shown:
+                keep_shown(entry, held_by)
+            continue
+        boards = board_evidence.get(provider) or {}
+        evidence = boards.get((entry.get("job") or {}).get("source"))
+        if evidence is not None and job_id in evidence["listed"]:
+            stats["listedButFiltered"] += 1
+            if evidence["complete"]:
+                for field in ("absentRuns", "absentSince", "lastAbsentRunId"):
+                    entry.pop(field, None)
+            continue
+        if evidence is None or not evidence["complete"]:
+            if shown:
+                keep_shown(entry, "keptBoardNotRead" if boards and evidence is None else "keptUnproven")
+            continue
+        if entry.get("lastAbsentRunId") != miss_token:
+            entry["lastAbsentRunId"] = miss_token
+            entry["absentRuns"] = entry.get("absentRuns", 0) + 1
+            entry.setdefault("absentSince", now)
+            if entry["absentRuns"] < MISSES_TO_CLOSE:
+                stats["absent"] += 1
+        if entry["absentRuns"] >= MISSES_TO_CLOSE:
+            entry["closedAt"] = now
+            stats["closed"] += 1
+        else:
             record = _annotate(entry["job"], entry, now=moment, closed=False)
+            if run_id is not None:
+                entry["heldRunId"] = run_id
+                record[NOT_FOUND_MARK] = True
             if entry.get("llmFacts"):
                 record["llmFacts"] = entry["llmFacts"]
             out.append(record)
-            stats[held_by] += 1
-        elif providers_returned.get(provider, 0) > 0:
-            entry["closedAt"] = now
-            stats["closed"] += 1
 
     for job_id, entry in list(entries.items()):
         closed_at = _parse(entry.get("closedAt"))
         if not closed_at:
             continue
         age = moment - closed_at
-        if age > timedelta(days=PRUNE_AFTER_DAYS):
+        if prune and age > timedelta(days=PRUNE_AFTER_DAYS):
             del entries[job_id]
         elif age <= timedelta(days=CLOSED_KEEP_DAYS) and job_id not in found_ids:
             record = _annotate(entry["job"], entry, now=moment, closed=True)

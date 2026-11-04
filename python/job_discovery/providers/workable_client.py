@@ -26,7 +26,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-from providers.role_filter import is_relevant_role
+from providers.role_filter import role_drop_reason
 
 API = "https://jobs.workable.com/api/v1/jobs"
 USER_AGENT = (
@@ -140,6 +140,7 @@ def normalize(row: dict) -> dict:
         description = f"{description}\n\n{requirements}".strip()
 
     return {
+        "externalId": row.get("id"),  # Workable's own id; the canonical job has no slot for it (staging keeps it beside)
         "jobId": "",
         "provider": "workable",
         "source": "workable",
@@ -163,18 +164,36 @@ def fetch_jobs(
     extra_terms: tuple[str, ...] = (),
     delay: float = 1.0,
     counts: dict | None = None,
+    on_batch=None,
 ) -> list[dict]:
-    """The relevant ads. `counts`, when given, receives "read": how many different ads came back before the role filter."""
+    """The relevant ads. `counts`, when given, receives "read": how many different ads came back before the role filter.
+    `on_batch`, when given, is called after each search term with (term, the ads that term added, the ads it dropped as
+    [(ad, reason, counted)]). An ad seen again under another term is a copy, not a second ad, and is not reported twice."""
     by_url: dict[str, dict] = {}
     read: set[str] = set()
+    dropped_urls: set[str] = set()
     for term in search_terms:
+        added = []
+        dropped = []
         for row in search(term, location):
             job = normalize(row)
+            first_sight = job["jobUrl"] not in read
             read.add(job["jobUrl"])
-            if not job["jobUrl"] or job["jobUrl"] in by_url:
+            if not job["jobUrl"]:
+                # All rows without an address count as one entry in `read`, so only the first is counted.
+                dropped.append((job, "no_url", first_sight))
                 continue
-            if is_relevant_role(job["title"], "", extra_terms or search_terms):
+            if job["jobUrl"] in by_url:
+                continue
+            reason = role_drop_reason(job["title"], "", extra_terms or search_terms)
+            if reason is None:
                 by_url[job["jobUrl"]] = job
+                added.append(job)
+            elif job["jobUrl"] not in dropped_urls:
+                dropped_urls.add(job["jobUrl"])
+                dropped.append((job, reason, True))
+        if on_batch is not None:
+            on_batch(term, added, dropped)
         time.sleep(delay)
     if counts is not None:
         counts["read"] = len(read)

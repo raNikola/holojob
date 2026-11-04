@@ -28,6 +28,9 @@ data/profile/cvs/
 data/profile.bak-*/
 data/jobs/*.json
 data/jobs/*.csv
+data/jobs/staging/
+data/jobs/*.bak-*
+data/jobs/.view.lock
 data/jobs/.pipeline.lock
 data/intelligence/*.json
 data/competencies-review.md

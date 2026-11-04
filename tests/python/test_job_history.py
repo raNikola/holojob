@@ -35,10 +35,15 @@ def facts_for(j):
             "yearsRequired": 5, "_fingerprint": job_fingerprint(j)}
 
 
-def run(ledger, jobs, day=0, returned=None, key=KEY, previous_facts=None):
+def run(ledger, jobs, day=0, returned=None, key=KEY, previous_facts=None, evidence=None):
     returned = returned if returned is not None else {p: 1 for p in ("greenhouse", "lever", "ashby", "jobspy")}
     return jh.apply_run(ledger, jobs, now=iso(day), providers_returned=returned, key=key,
-                        role_key=_crosspost_key, previous_facts=previous_facts)
+                        role_key=_crosspost_key, previous_facts=previous_facts, board_evidence=evidence)
+
+
+def proven(*boards, provider="greenhouse"):
+    """A complete fetch of these boards (None: an ad with no board name) that listed nothing but what the run found."""
+    return {provider: {board: {"complete": True, "listed": set()} for board in (boards or (None,))}}
 
 
 # --- first sight and known jobs -----------------------------------------------------------------
@@ -81,17 +86,26 @@ def test_facts_from_the_file_being_replaced_seed_a_new_ledger():
 # --- closing ------------------------------------------------------------------------------------
 
 
-def seen_then_missing(provider="greenhouse", returned=None, key2=KEY, other=None):
+def seen_then_missing(provider="greenhouse", returned=None, key2=KEY, other=None, evidence=None):
     ledger = jh.empty_ledger()
     run(ledger, [job(provider=provider)])
-    out, stats = run(ledger, other or [], day=1, returned=returned, key=key2)
+    out, stats = run(ledger, other or [], day=1, returned=returned, key=key2, evidence=evidence)
     return ledger, out, stats
 
 
-def test_a_board_job_that_is_no_longer_listed_is_closed_and_still_emitted_as_closed():
-    ledger, out, stats = seen_then_missing()
-    assert ledger["jobs"]["g1"]["closedAt"] == iso(1) and stats["closed"] == 1
-    assert [(o["jobId"], o["isClosed"], o["isNew"], o["closedAt"]) for o in out] == [("g1", True, False, iso(1))]
+def closed_after_two_misses():
+    ledger, _, _ = seen_then_missing(evidence=proven())
+    out, stats = run(ledger, [], day=2, evidence=proven())
+    return ledger, out, stats
+
+
+def test_a_board_job_that_is_no_longer_listed_is_closed_after_two_complete_fetches_and_still_emitted_as_closed():
+    ledger, out, stats = seen_then_missing(evidence=proven())
+    assert ledger["jobs"]["g1"]["closedAt"] is None and stats["closed"] == 0 and stats["absent"] == 1
+    assert [(o["jobId"], o["isClosed"], o["isAbsent"], o["absentSince"]) for o in out] == [("g1", False, True, iso(1))]
+    out, stats = run(ledger, [], day=2, evidence=proven())
+    assert ledger["jobs"]["g1"]["closedAt"] == iso(2) and stats["closed"] == 1
+    assert [(o["jobId"], o["isClosed"], o["isNew"], o["closedAt"], o["closedAfterChecks"]) for o in out] == [("g1", True, False, iso(2), 2)]
 
 
 def test_a_linkedin_job_missing_from_a_run_is_not_closed():
@@ -116,16 +130,17 @@ def test_a_role_still_listed_under_another_copy_is_not_closed():
 
 
 def test_a_closed_job_that_returns_is_reopened():
-    ledger, _, _ = seen_then_missing()
-    out, stats = run(ledger, [job()], day=2)
+    ledger, _, _ = closed_after_two_misses()
+    out, stats = run(ledger, [job()], day=3)
     assert out[0]["closedAt"] is None and out[0]["isClosed"] is False and stats["reopened"] == 1
+    assert "absentRuns" not in ledger["jobs"]["g1"] and "isAbsent" not in out[0]
 
 
 def test_closed_jobs_leave_the_output_after_two_weeks_and_the_ledger_after_ninety_days():
-    ledger, _, _ = seen_then_missing()
-    out, _ = run(ledger, [], day=1 + jh.CLOSED_KEEP_DAYS + 1)
+    ledger, _, _ = closed_after_two_misses()
+    out, _ = run(ledger, [], day=2 + jh.CLOSED_KEEP_DAYS + 1)
     assert out == [] and "g1" in ledger["jobs"]
-    run(ledger, [], day=1 + jh.PRUNE_AFTER_DAYS + 1)
+    run(ledger, [], day=2 + jh.PRUNE_AFTER_DAYS + 1)
     assert "g1" not in ledger["jobs"]
 
 
@@ -349,9 +364,9 @@ def two_boards(provider="greenhouse"):
     return ledger, jobs
 
 
-def run_failed(ledger, jobs, failed, day=1, returned=None, key=KEY):
+def run_failed(ledger, jobs, failed, day=1, returned=None, key=KEY, evidence=None):
     return jh.apply_run(ledger, jobs, now=iso(day), providers_returned=returned or {"greenhouse": 1}, key=key,
-                        role_key=_crosspost_key, failed_boards=failed)
+                        role_key=_crosspost_key, failed_boards=failed, board_evidence=evidence)
 
 
 def test_a_failed_board_changes_nothing_while_another_board_succeeds():
@@ -369,8 +384,9 @@ def test_a_failed_board_changes_nothing_while_another_board_succeeds():
 def test_without_the_fix_signal_the_same_run_would_close_the_ad():
     """The bug this guards against: other boards succeed, so the provider count is above zero."""
     ledger, jobs = two_boards()
-    out, stats = run_failed(ledger, [jobs[0]], None)
-    assert stats["closed"] == 1 and ledger["jobs"]["b1"]["closedAt"] == iso(1)
+    run_failed(ledger, [jobs[0]], None, evidence=proven("good", "bad"))
+    out, stats = run_failed(ledger, [jobs[0]], None, day=2, evidence=proven("good", "bad"))
+    assert stats["closed"] == 1 and ledger["jobs"]["b1"]["closedAt"] == iso(2)
     assert next(j for j in out if j["jobId"] == "b1")["isClosed"] is True
 
 
@@ -378,8 +394,9 @@ def test_a_successful_board_still_closes_its_absent_ads_while_another_board_fail
     ledger, jobs = two_boards()
     gone = board_job("g2", "good")
     run(ledger, [*jobs, gone], day=0)
-    out, stats = run_failed(ledger, [jobs[0]], {"greenhouse": {"bad"}})
-    assert stats["closed"] == 1 and ledger["jobs"]["g2"]["closedAt"] == iso(1)
+    run_failed(ledger, [jobs[0]], {"greenhouse": {"bad"}}, evidence=proven("good"))
+    out, stats = run_failed(ledger, [jobs[0]], {"greenhouse": {"bad"}}, day=2, evidence=proven("good"))
+    assert stats["closed"] == 1 and ledger["jobs"]["g2"]["closedAt"] == iso(2)
     assert ledger["jobs"]["b1"]["closedAt"] is None
 
 
@@ -524,9 +541,9 @@ def test_from_a_failing_board_to_the_ledger_nothing_of_that_board_closes(monkeyp
 # --- a board that answers with no jobs holds its ads ---------------------------------------------
 
 
-def run_empty(ledger, jobs, empty, day=1, returned=None, failed=None, key=KEY):
+def run_empty(ledger, jobs, empty, day=1, returned=None, failed=None, key=KEY, evidence=None):
     return jh.apply_run(ledger, jobs, now=iso(day), providers_returned=returned or {"greenhouse": 1}, key=key,
-                        role_key=_crosspost_key, failed_boards=failed, empty_boards=empty)
+                        role_key=_crosspost_key, failed_boards=failed, empty_boards=empty, board_evidence=evidence)
 
 
 def test_an_empty_board_holds_its_ads_while_another_board_returns_jobs():
@@ -544,8 +561,9 @@ def test_a_non_empty_board_still_closes_its_absent_ads_while_another_board_is_em
     ledger, jobs = two_boards()
     gone = board_job("g2", "good")
     run(ledger, [*jobs, gone], day=0)
-    out, stats = run_empty(ledger, [jobs[0]], {"greenhouse": {"bad"}})
-    assert stats["closed"] == 1 and ledger["jobs"]["g2"]["closedAt"] == iso(1)
+    run_empty(ledger, [jobs[0]], {"greenhouse": {"bad"}}, evidence=proven("good"))
+    out, stats = run_empty(ledger, [jobs[0]], {"greenhouse": {"bad"}}, day=2, evidence=proven("good"))
+    assert stats["closed"] == 1 and ledger["jobs"]["g2"]["closedAt"] == iso(2)
     assert next(j for j in out if j["jobId"] == "g2")["isClosed"] is True
     assert ledger["jobs"]["b1"]["closedAt"] is None
 
@@ -593,9 +611,9 @@ def test_a_provider_names_the_board_that_answered_empty(monkeypatch, name):
 # --- a source that did not run keeps its ads ------------------------------------------------------
 
 
-def run_not_run(ledger, jobs, not_run, day=1, returned=None, key=KEY):
+def run_not_run(ledger, jobs, not_run, day=1, returned=None, key=KEY, evidence=None):
     return jh.apply_run(ledger, jobs, now=iso(day), providers_returned=returned or {}, key=key,
-                        role_key=_crosspost_key, sources_not_run=not_run)
+                        role_key=_crosspost_key, sources_not_run=not_run, board_evidence=evidence)
 
 
 @pytest.mark.parametrize("provider", ["infostud", "joberty", "workable", "jobspy", "wellfound", "greenhouse"])
@@ -649,6 +667,7 @@ def test_a_search_source_that_ran_and_did_not_return_an_ad_behaves_as_before(pro
 
 def test_a_board_source_that_ran_and_lost_an_ad_still_closes_it():
     ledger, jobs = two_boards()
-    out, stats = run_not_run(ledger, [jobs[0]], {"another-source"}, returned={"greenhouse": 1})
-    assert stats["closed"] == 1 and ledger["jobs"]["b1"]["closedAt"] == iso(1)
+    run_not_run(ledger, [jobs[0]], {"another-source"}, returned={"greenhouse": 1}, evidence=proven("good", "bad"))
+    out, stats = run_not_run(ledger, [jobs[0]], {"another-source"}, day=2, returned={"greenhouse": 1}, evidence=proven("good", "bad"))
+    assert stats["closed"] == 1 and ledger["jobs"]["b1"]["closedAt"] == iso(2)
     assert next(j for j in out if j["jobId"] == "b1")["isClosed"] is True

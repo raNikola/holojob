@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-from providers.base_provider import JobProvider, build_canonical_job, filter_jobs, parts_outcome
+from providers.base_provider import JobProvider, board_read, build_canonical_job, dropped_ad, filter_jobs, parts_outcome, split_by_filter
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +17,20 @@ CONFIG_PATH = Path(__file__).resolve().parents[3] / "companies" / "greenhouse.js
 API_URL = "https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true"
 
 
+def board_completeness(postings: int, reported_total) -> tuple[bool, str | None]:
+    """A board's read is complete only if the total Greenhouse reports (`meta.total`) is the number of postings read (S5b)."""
+    if isinstance(reported_total, bool) or not isinstance(reported_total, int):
+        return False, "the answer reports no total"
+    if reported_total != postings:
+        return False, f"the answer reports {reported_total} postings and {postings} were read"
+    return True, None
+
+
 class GreenhouseProvider(JobProvider):
     provider_name = "greenhouse"
+
+    def __init__(self) -> None:
+        self._reported_totals: dict = {}
 
     def _load_boards(self) -> list[dict]:
         if not CONFIG_PATH.exists():
@@ -33,6 +45,7 @@ class GreenhouseProvider(JobProvider):
         jobs = data.get("jobs") if isinstance(data, dict) else None
         if not isinstance(jobs, list):
             raise ValueError("the answer has no jobs list")
+        self._reported_totals[board] = (data.get("meta") or {}).get("total") if isinstance(data.get("meta"), dict) else None
         return jobs
 
     def _normalize_posting(
@@ -88,6 +101,7 @@ class GreenhouseProvider(JobProvider):
         primary_loc = locations[0] if locations else ""
         failures: dict[str, str] = {}
         empty: list[str] = []
+        boards_read: list[dict] = []
 
         for entry in boards:
             company = entry.get("company") or entry.get("board") or ""
@@ -102,13 +116,27 @@ class GreenhouseProvider(JobProvider):
                 continue
             if not postings:
                 empty.append(board)
+            board_jobs, external, dropped = [], {}, []
             for posting in postings:
                 job = self._normalize_posting(posting, company, board, primary_term, primary_loc)
                 if job["title"]:
-                    all_jobs.append(job)
+                    board_jobs.append(job)
+                    external[job["jobId"]] = posting.get("id")
+                else:  # never counted as read
+                    dropped.append(dropped_ad(job, "no_title", posting.get("id"), counted=False))
+            all_jobs.extend(board_jobs)
+            # The board is staged as soon as it is read (filtered the way the whole list is below), so a stop keeps it.
+            board_kept, board_dropped = split_by_filter(board_jobs, search_terms, locations, remote_filters, country)
+            self.stage(
+                board_kept, part=board, read=len(board_jobs), external_ids=external,
+                dropped=dropped + [dropped_ad(job, reason, external.get(job["jobId"])) for job, reason in board_dropped],
+            )
+            reported = self._reported_totals.get(board)
+            complete, why = board_completeness(len(postings), reported)
+            boards_read.append(board_read(board, read=len(board_jobs), postings=len(postings), complete=complete, reason=why, reportedTotal=reported))
 
         kept = filter_jobs(all_jobs, search_terms, locations, remote_filters, country)
         self.last_outcome = parts_outcome(
-            read=len(all_jobs), kept=len(kept), total=len(boards), failures=failures, empty=empty
+            read=len(all_jobs), kept=len(kept), total=len(boards), failures=failures, empty=empty, boards_read=boards_read
         )
         return kept

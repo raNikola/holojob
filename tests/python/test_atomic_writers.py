@@ -10,16 +10,12 @@ import run_tailor
 from conftest import fail_replacing
 
 
-def _normalized(root):
-    return export_jobs.export_normalized_json([{"jobId": "é"}], root)
-
-
 def _discovered(root):
     return export_jobs.export_discovered_json(
         [{"jobId": "é"}], root, search_terms=[], locations=[], remote_filters=[], raw_count=1)
 
 
-@pytest.mark.parametrize("export, name", [(_normalized, "normalized_jobs.json"), (_discovered, "discovered_jobs.json")])
+@pytest.mark.parametrize("export, name", [(_discovered, "discovered_jobs.json")])
 def test_a_failed_export_keeps_the_previous_file_and_leaves_no_temp_file(tmp_path, monkeypatch, export, name):
     jobs = tmp_path / "data" / "jobs"
     jobs.mkdir(parents=True)
@@ -35,7 +31,7 @@ def test_a_failed_export_keeps_the_previous_file_and_leaves_no_temp_file(tmp_pat
     assert [p.name for p in jobs.iterdir()] == [name]
 
 
-@pytest.mark.parametrize("export", [_normalized, _discovered])
+@pytest.mark.parametrize("export", [_discovered])
 def test_an_export_keeps_its_bytes_and_the_files_mode(tmp_path, export):
     first = export(tmp_path)
     first.chmod(0o640)

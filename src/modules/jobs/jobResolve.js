@@ -14,6 +14,9 @@ const jobFromLedger = (ledger) => ({
   lastSeen: ledger.lastSeen,
   closedAt: ledger.closedAt,
   isClosed: Boolean(ledger.closedAt),
+  ...(ledger.closedAt
+    ? (ledger.absentRuns >= 2 ? { closedAfterChecks: ledger.absentRuns } : {})
+    : (ledger.absentSince ? { isAbsent: true, absentSince: ledger.absentSince } : {})),
 })
 
 /** The base record and which source gave it. */
