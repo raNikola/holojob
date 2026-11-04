@@ -71,6 +71,15 @@ def test_all_sources_failing_or_skipped_together_are_still_no_usable_source(tmp_
     assert snapshot(tmp_path) == before
 
 
+def test_a_source_that_finished_but_whose_ads_are_not_whole_is_not_usable(tmp_path, monkeypatch):
+    good_run(tmp_path, monkeypatch, "a", day(0), ads=(JOB,))
+    before = snapshot(tmp_path)
+    # The source says it finished, but its staged ads differ from what the provider returned: held as not run, so not usable.
+    staged(tmp_path, monkeypatch, "b", day(10), {"jobspy": ([NEW], {"mismatch": True}, [])})
+    assert run_it(tmp_path, "b").result.report["nothingSaved"] == importer.NO_USABLE_SOURCE
+    assert snapshot(tmp_path) == before
+
+
 def test_one_usable_source_makes_it_an_ordinary_import(tmp_path, monkeypatch):
     good_run(tmp_path, monkeypatch, "a", day(0), ads=(JOB,))
     staged(tmp_path, monkeypatch, "b", day(10), {"jobspy": ([JOB], {"status": "failed", "complete": False}, []), "workable": ([canon(5, provider="workable")], GOOD, [])})
