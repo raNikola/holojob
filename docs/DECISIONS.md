@@ -741,7 +741,7 @@ In the real container every request of `scripts/check-view-recovery.js` answered
 |---|---|
 | Search-based source: status ok, ads read, nothing lost, files add up | Yes, under its key |
 | Failed, partial, skipped or unfinished | No |
-| Status ok but nothing read (a throttled source can do this) | No |
+| Status ok but nothing read (a throttled source can do this) | No (single rule, 2026-11-04: ok with 0 read is not automatically proof; see [Roadmap v2](#roadmap-v2-and-the-single-discovery-safety-rule-2026-11-04)) |
 | A lost ad, staged ads that differ, `discardMismatch`, a failed part, or a damaged discards file | No |
 | A disabled source (not in the run) | No: it has no run |
 | A board proven complete by S5b/S5c | Yes, under the board |
@@ -1169,3 +1169,33 @@ list from 56 to 1,990 rows, cut the corpus from 55 to 8 and moved the generation
 - **Screens:** Activity shows the sentence and the ledger effect; the Jobs screen says "Re-scrape found nothing usable: no source gave a usable result, so the list was not changed. Details in Activity."
 - **Tests edited (11), each decided separately:** see the S8b report. Tests of the new rule were updated to exit codes and unchanged bytes;
   tests of something else kept their scenario and got a usable (whole) source.
+
+## Roadmap v2 and the single discovery safety rule (2026-11-04)
+
+Owner-approved, GPT-reviewed. Documentation only: no code, test or data changed. History above is not rewritten; where an earlier entry conflicts with this section, this section wins. The wave table is in [ROADMAP.md](ROADMAP.md#roadmap-v2-recorded-2026-11-04). Goal: Scoring -> Matching -> Application Tracking.
+
+**State:** S1 to S8b are built, deployed from a clean build and merged to main at `d44d9cd`. The "Built, not deployed" statuses in ROADMAP.md were stale and are corrected.
+
+**Execution order:**
+
+- **Wave 0 (P0, minimal):** verified backup plus restore check covering server data and browser state (Keep, statuses, applications), with integrity hashes and a tested restore; include `data/analytics` if not reconstructable; rotate the OpenAI key and `li_at` (the owner does this); align the rules in ROADMAP.md and DECISIONS.md.
+- **Wave 1 (P0):** (k)+(q) discovery safety, the one rule below.
+- **Wave 2 (P0):** (a1) scoring correctness (junk baseline at most about 5 plus a distinct Insufficient Data state, hard/soft requirements, low-confidence reasons); (e) manual Re-score and tailoring for kept ads; (g) exclude closed ads from the IDF corpus (approved; measured effect at most 1 point); (i) `scoringBehind` after a cancel.
+- **Wave 3 (P0):** (a2) scoring quality (skills from the whole candidate history, domain transferability) after basic validation, then (b) the three-level role filter.
+- **Wave 4 (P1):** (h) `older_key` policy; (c) Infostud coverage; (n) `lastImport.meta` for partial imports.
+- **Wave 5 (P1):** (j) Application Tracking: all records including history-only and voided, snapshots, applied sync, the Applied button opens the tracker, fix history-only showing "Unreviewed", remove the shadow badge.
+- **Wave 6 (P2, release blockers):** profile import slices; Phase 4 protections (fact gate, identifier redaction, confirm) are release blockers for AI and application workflows; review the 11 of 17 resume docs with stale unverified-degree findings before use for applications.
+- **Wave 7 (P2):** UX, Settings, (d). (d) is likely not a bug: the toggle exists only for Joberty, other boards follow group `serbia`. Treat it as a missing feature and confirm the UX first.
+- **Wave 8 (P3):** Step 5 server master (TRACKER_PLAN.md); a verified backup is mandatory before bigger changes.
+- **Wave 9 (P3):** (f) ledger growth; (m) hand-edited `appliedRuns` double-count; (o) truncated ledger with unchanged generation; (p) never run the old `import_run --backfill-filtered` below S6; Step 6; tech debt.
+
+**The single discovery safety rule (Wave 1).** A throttled source never proves an ad disappeared. "Ok with 0 read" is not automatically proof of closure; a confirmed-empty source is distinguished from an incomplete or failed read. Successful sources import independently: a partial source must not block the import. Failed sources never affect closing.
+
+**Conflicts resolved (both files now use this rule):**
+
+- ROADMAP.md, DEFERRED: "a source that is `ok` with zero reads counts as usable" and "a sole `partial` source counts as not usable" are replaced by a pointer to this rule. Code still behaves as those lines described until Wave 1 ships; the S8b `require_usable` definition (state `complete`, not held as not run) is to be revisited there.
+- DECISIONS.md, S5f "What counts as a proven run": the row "Status ok but nothing read" already said No (for Stale). Under this rule that applies to closing as well, and the row now points here. The Stale rule (30 days, 3 proven runs) and the closure rule (two proven complete board checks, S5c) are both read through the same proof: a source that is throttled, empty-unconfirmed, partial or failed proves nothing.
+
+**Backlog added:** rotate the OpenAI key and `li_at`; resume findings (11 of 17 docs, stale unverified-degree findings).
+
+**Open decisions:** (1) whether the four "Fix scoring" items in ROADMAP.md belong to a1/a2 as split above (hard/soft and low-confidence reasons to a1; whole-history skills and domain transferability to a2); (2) the `older_key` retention window; (3) the Infostud coverage check.
