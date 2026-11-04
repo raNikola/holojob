@@ -14,8 +14,9 @@ The registry names below are confirmed: all of them were added to a scratch proj
 
 Notes:
 
-- Today's `min-h-[44px]` against the preset's `h-7` is an [open decision](REDESIGN_BACKLOG.md#open-po-decisions) (O3).
-- The `link` variant of `button` and `badge` uses `text-primary`, which computes to 2.23:1 on the dark background (O10).
+- **Sizes (decided, O3):** minimum 44 x 44 px interactive target on mobile; compact desktop controls allowed where appropriate. Today's `Button` has `min-h-[44px]` everywhere and the preset's default is `h-7`, so `ds/button` needs the edit below.
+- The `link` variant of `button` and `badge` uses `text-primary`, measured at 2.23:1 on the dark background. It moves to `--primary-strong` ([correction U1](TOKENS.md#proposed-corrections), pending).
+- **Teal text (decided, O10):** each `text-teal-*` is judged by what it does, never replaced blindly. Links: accessible styling, underlined where appropriate. Status messages: their semantic token. Decorative text and icons: neutral. Primary Blue: actions and fills where contrast is sufficient.
 
 ## Inputs and forms
 
@@ -88,14 +89,14 @@ Notes:
 | Today | Decision | Target |
 |---|---|---|
 | `ui/Card.jsx` (43 files), props `title`, `description`, `action`, `className` | Use shadcn, same props | `ds/card` parts inside. `title` uses `--font-heading` through the registry |
-| `ui/StatCard.jsx` (6 files) | Compose | `ds/card`. The `accent` prop's palette classes go away |
+| `ui/StatCard.jsx` (6 files) | Compose | `ds/card`. **Neutral by default (decided, O7).** The `accent` prop's palette classes go away; semantic colour only where it carries meaning |
 | `outreach/ContactCard.jsx`, `quality/QualityScoreCard.jsx`, `intelligence/*Card.jsx` | Compose | `ds/card` |
 
 ## Badges and status
 
 | Today | Decision | Target |
 |---|---|---|
-| `ui/Badge.jsx` (17 files), variants `default`, `high`, `medium`, `warn`, `low`, `derived` | Use shadcn, **same variant names, extended** | `ds/badge` with success, warning, error, info and neutral from the [extension tokens](TOKENS.md#part-2-extension-not-defined-by-the-preset). Mapping: `high` success, `medium` warning, `warn` error, `low` and `default` neutral, `derived` info |
+| `ui/Badge.jsx` (17 files), variants `default`, `high`, `medium`, `warn`, `low`, `derived` | Use shadcn, **same variant names, extended** | `ds/badge` with success, warning, error, info and neutral from the [extension tokens](TOKENS.md#part-2-extension-not-defined-by-the-preset). Mapping: `high` success, `medium` warning, `warn` danger, `low` and `default` neutral, `derived` info |
 | `jobs/FitScore.jsx`, `jobs/JobScoreBadge.jsx`, `jobs/AuthorizationBadge.jsx` | Keep custom | Project meaning over `Badge`. Text labels stay |
 | `modules/jobs/fitScore.js` `SCORE_TEXT`, `modules/jobs/engineShadow.js` | **Keep the modules, change only the class strings** to tokens | These are the only palette strings in `src/modules/` |
 | `STATUS_VARIANT`, `MATCH_LABEL_VARIANT`, `PRIORITY_VARIANT`, `APPLY_VARIANT` | Keep | Names unchanged; these maps are the logic |
@@ -125,7 +126,10 @@ Registry source is otherwise kept as supplied.
 | File | Edit | Why |
 |---|---|---|
 | `ds/sidebar` | **Remove the `document.cookie` write** (`sidebar_state`). Drive open state through `open` / `onOpenChange` from `modules/sidebarState.js` | Verified in source: it writes the cookie on every toggle. `tests/js/browserStorageAllowlist.test.js` scans for `document.cookie` and the storage policy forbids new keys |
-| `ds/sidebar` | Remove the Ctrl/Cmd+B shortcut, or get owner approval | It is a behaviour addition (`SIDEBAR_KEYBOARD_SHORTCUT = "b"`) |
+| `ds/sidebar` | **Remove the Ctrl/Cmd+B shortcut (decided, O9)** | Not introduced during migration; existing navigation behaviour and the browser storage policy are preserved (`SIDEBAR_KEYBOARD_SHORTCUT = "b"`) |
+| `ds/button`, `ds/input`, `ds/textarea`, `ds/native-select`, other controls | Add the 44 x 44 px minimum on mobile, compact on desktop (O3) | The registry default is `h-7` |
+| `ds/button`, `ds/badge`, `ds/dropdown-menu` | Corrections U2 and U3 | [Contrast](TOKENS.md#proposed-corrections), pending |
+| `ds/button`, `ds/badge`, `ds/field`, `ds/empty`, `ds/progress`, `ds/switch`, `ds/checkbox`, `ds/radio-group` | Correction U1, `--primary-strong` | [Contrast](TOKENS.md#proposed-corrections), pending |
 | `ds/badge`, `ds/alert` | Add the extension variants | Status colours are not in the preset |
 | `ds/scroll-area` | Remove the unused `React` import, if lint flags it | Seen in the scaffold's `tsc` (TS6133). The repo's ESLint has `no-unused-vars` as an error. Whether the JS conversion keeps the import is checked when it is added |
 

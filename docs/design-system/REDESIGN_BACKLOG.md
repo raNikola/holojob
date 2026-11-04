@@ -2,6 +2,8 @@
 
 Status: **planning only**, recorded 2026-11-04. No GitHub issues are created. Implementation has not been approved. The title is the owner's; the app keeps its current name until the owner decides otherwise.
 
+**Implementation is not authorized.** A separate approval is required.
+
 **Goal:** replace the custom styling and components with one Design System (shadcn/ui preset `b1a1cZcRs` plus a semantic extension), with no change to behaviour, backend, APIs or routing.
 
 ## Scope
@@ -15,7 +17,7 @@ Status: **planning only**, recorded 2026-11-04. No GitHub issues are created. Im
 - Behaviour, `src/modules/*` logic (only the class strings in `fitScore.js` and `engineShadow.js` change), Python, Node routes, data files, browser storage keys, new routing.
 - New features, including what the waves add (Insufficient Data state, role filter, tracker rework).
 - Renaming the app.
-- Visual regression tooling, screenshot baselines and browser test suites (excluded by the [permanent policy](README.md#testing-and-browser-policy-permanent)).
+- Playwright, visual regression tooling, screenshot baselines and new browser tests (excluded by the [permanent policy](README.md#testing-and-browser-policy-permanent)).
 
 ## Business rules
 
@@ -23,6 +25,9 @@ Status: **planning only**, recorded 2026-11-04. No GitHub issues are created. Im
 |---|---|
 | BR1 | No behaviour changes. Any accessibility gain from a primitive (Escape, focus trap) is listed in the slice report |
 | BR2 | No colour or font outside the token layer |
+| BR2a | Interactive targets are at least 44 x 44 px on mobile; compact on desktop where appropriate |
+| BR2b | Text meets 4.5:1 and applicable non-text UI 3:1, measured programmatically |
+| BR2c | The final release is visually consistent; coexistence of old and new UI is only temporary, during development |
 | BR3 | Status keeps its text label; colour is never the only signal |
 | BR4 | Fit, priority and status bands stay computed where they are today; the redesign only maps a result to a token |
 | BR5 | Every AI, privacy and destructive confirm keeps its text, its condition and its `"confirm": true` path |
@@ -50,7 +55,7 @@ Checked on 2026-11-04 by reading the repo or running the CLI.
 - `ds/sidebar` as supplied writes a `sidebar_state` cookie and binds a keyboard shortcut.
 - The scaffold's `theme-provider` writes a `localStorage` key `theme`.
 - `button` and `input` default to `h-7`; the current `Button` has `min-h-[44px]`.
-- `muted-foreground` on `muted` computes to 4.15:1 (light).
+- Contrast is measured from the committed snapshot by `preset/contrast_check.py`. With the proposed corrections, 0 applicable pairs stay below target.
 
 ## Assumptions (not verified)
 
@@ -62,7 +67,7 @@ Checked on 2026-11-04 by reading the repo or running the CLI.
 
 ## PO decisions
 
-### Decided (2026-11-04)
+### Decided earlier (2026-11-04)
 
 1. Keep the current app name until the owner decides otherwise.
 2. Apply the complete preset, colours and fonts, now `b1a1cZcRs`.
@@ -73,22 +78,27 @@ Checked on 2026-11-04 by reading the repo or running the CLI.
 7. Design System = preset plus central semantic extension. No arbitrary colours in components.
 8. Permanent testing and browser policy.
 
+### Decided on 2026-11-04 (O2 to O10 closed)
+
+Full text: [DECISIONS.md](../DECISIONS.md#design-system-final-po-decisions-2026-11-04).
+
+| # | Decision |
+|---|---|
+| O2 | Foundations may be prepared first. Jobs and Scoring UI migration aligns with the scoring roadmap. Tracker redesign aligns with the tracker changes. Small independent slices and PRs; avoid conflicts with parallel work |
+| O3 | Minimum 44 x 44 px interactive target on mobile; compact desktop controls allowed where appropriate |
+| O4 | Geist for headings, body, tables, forms and numerical data. Not activated globally in the foundations slice; the font migration is a separate controlled step with functional regression verification and PO visual approval |
+| O5 | Temporary coexistence of old and new UI during development is allowed; the final release must be visually consistent |
+| O6 | Settings redesign is coordinated with the Wave 7 Settings roadmap to avoid duplicate work |
+| O7 | Neutral cards and surfaces by default; semantic colours only where they carry meaning (fit, status, priority, errors) |
+| O8 | WCAG AA with the smallest centralized corrections; Blue/Mist/Geist preserved; no palette redesign. [Measured pairs and proposed values](TOKENS.md#part-3-contrast-o8) |
+| O9 | The sidebar keyboard shortcut is not introduced during migration; existing navigation and the browser storage policy are preserved |
+| O10 | Decorative `text-teal-*` becomes semantic or neutral; accessible link styling; primary Blue for actions and fills where contrast is sufficient; never replaced blindly |
+
 ### Open PO decisions
 
-Re-evaluated for preset `b1a1cZcRs` on 2026-11-04.
-
-| # | Status | Decision | Why it matters | Recommendation |
-|---|---|---|---|---|
-| O1 | **Changed, still open** | Approve the extension values and aliases in [TOKENS.md](TOKENS.md#part-2-extension-not-defined-by-the-preset) | Blocks the token slice. Values and ratios are unchanged. New point: `--info` now sits near the blue `--primary`, and `--fit-insufficient` points at it | Approve, or adjust by eye once seen |
-| O2 | Unchanged | Sequencing of slices against Waves 2 to 5 | Tasks D and E touch what those waves rewrite | Tasks A to C and H before or between; D after the Wave 2 UI; E with or after Wave 5 |
-| O3 | Unchanged | Control size: preset `h-7` (28 px) or today's 44 px minimum | Component source is identical in both presets. The app is used on a phone | Preset on desktop, 44 px on touch. This is a recorded deviation, so it needs your approval |
-| O4 | **Closed** | ~~Serif everywhere~~ | The new preset's body font is Geist, a sans-serif, so the question no longer exists | Nothing to decide. The look stays your acceptance |
-| O5 | Unchanged | May a mixed look be deployed between slices? | With no long-lived branch, `main` holds old and new together until screens are done | Merge freely, hold deploys until Tasks A and B are done, then your call per slice |
-| O6 | Unchanged | Does Wave 7's Settings and UX work merge into Task H? | Otherwise Settings is touched twice | Merge |
-| O7 | Unchanged | Colours with no meaning today (`violet`, `indigo`, `green` stat cards) go to neutral? | Removes decoration you may like | Yes |
-| O8 | Unchanged | `muted-foreground` on `muted` at 4.15:1 in light mode, a preset value below AA | Those tokens did not change | Keep, and avoid that pairing for body text |
-| O9 | Unchanged | Ctrl/Cmd+B sidebar shortcut from the registry | Small behaviour addition | Leave out |
-| O10 | **New** | What replaces today's `text-teal-*` (141 uses) for links and emphasis, given dark `--primary` as text is 2.23:1 (was 2.72:1)? | The `link` variant of `button` and `badge` has the same problem. Light mode is fine (6.82:1) | `text-foreground` with an underline for links, and keep `--primary` for fills, where `primary-foreground` on it is 8.11:1. No invented token. A registry edit to the `link` variant needs your approval |
+| # | Status | Decision | What to verify |
+|---|---|---|---|
+| O1 | **Approved in principle, values PENDING. Not closed** | Concrete semantic token values and aliases | [Scale and aliases](TOKENS.md#part-2-extension-not-defined-by-the-preset) with measured ratios, plus the O8 [corrections](TOKENS.md#proposed-corrections). Three points need a specific look: `--fit-insufficient` near Blue, `--app-state-offer-accepted` as a new meaning, and the `--input` side effect |
 
 ## Standard implementation choices
 
@@ -109,11 +119,12 @@ Each sub-task is one branch and PR. Each ends with lint, targeted Vitest and a "
 
 ## Task A: Design System foundations
 
-Dependencies: minimal Wave 0 backup; approval of these docs; O1.
+Dependencies: separate implementation approval; minimal Wave 0 backup; PO verification of the O1 values.
 
 - **A1.** Tooling and tokens, additive.
 - **A2.** Rework the `ui/` kit on `ds/`, same props: Button, Badge, Alert, Card, Input, Textarea, SelectField, Tabs, StatCard, then the rest. One or a few per PR.
-- **A3.** Global cutover: Geist (`--font-sans` and the import, in one change), radius scale, default border, surfaces. Remove Google Fonts and unused variables.
+- **A3.** Global rules: radius scale, default border, surfaces. Remove unused variables.
+- **A4.** Global font migration to Geist (`--font-sans`, the import, removing Google Fonts, in one change): a separate controlled step with functional regression verification and PO visual approval.
 
 **Acceptance criteria**
 
@@ -124,8 +135,10 @@ Dependencies: minimal Wave 0 backup; approval of these docs; O1.
 - Given `ui/Input` after A2, when rendered with `label`, `required` and `error`, then the label is linked by `id` and `aria-required`, `aria-invalid` and `aria-describedby` are set as today.
 - Given `ui/SelectField` after A2, when a value is chosen, then `onChange` receives the value string, as today.
 - Given any A slice, when the storage allowlist test runs, then it passes with no new key or `document.cookie` user.
-- Given A1 or A2, when `src/index.css` is read, then `--font-sans` is still DM Sans.
-- Given A3, when `index.html` is read, then it has no `fonts.googleapis.com` link, and `--font-sans` is Geist.
+- Given A1, A2 or A3, when `src/index.css` is read, then `--font-sans` is still DM Sans.
+- Given A4, when `index.html` is read, then it has no `fonts.googleapis.com` link, `--font-sans` is Geist, and the full functional regression passes. PO visual approval is recorded by the PO.
+- Given `ds/` controls, when a test reads them, then the mobile minimum of 44 x 44 px is present (O3).
+- Given the committed token file, when `contrast_check.py` runs against it, then 0 applicable pairs are below target.
 
 ## Task B: Global layout and navigation
 
@@ -147,7 +160,7 @@ Dependencies: A1, A2.
 Dependencies: A2, B. Coordinate `JobFilters.jsx` with Wave 3 (role filter) and the Active/All work.
 
 - **C1.** JobTable and rows, on `ds/table`, mobile cards.
-- **C2.** JobFilters, SalaryFilter, JobListControls, BulkActionsBar, summary.
+- **C2.** JobFilters, SalaryFilter, JobListControls, BulkActionsBar, summary (stat cards neutral by default, O7).
 - **C3.** PipelineOrchestrator, RescrapeProgress, health and import panels, AddJobDialog.
 
 **Acceptance criteria**
@@ -161,7 +174,7 @@ Dependencies: A2, B. Coordinate `JobFilters.jsx` with Wave 3 (role filter) and t
 
 ## Task D: Job Details and scoring UI
 
-Dependencies: A2, C1, Wave 2 UI (O2).
+Dependencies: A2, C1, Wave 2 UI (aligned with the scoring roadmap, O2).
 
 - **D1.** Drawer on `ds/sheet`, JobDetailBody, Job Details page.
 - **D2.** FitScore, badges, FitJudgement, EngineShadow; class strings in `fitScore.js`, `engineShadow.js` become tokens.
@@ -178,7 +191,7 @@ Dependencies: A2, C1, Wave 2 UI (O2).
 
 ## Task E: Application Tracker
 
-Dependencies: A2, D1, Wave 5 (O2). Do not restyle what Wave 5 is rewriting.
+Dependencies: A2, D1, Wave 5 (aligned with the tracker changes, O2). Do not restyle what Wave 5 is rewriting.
 
 - **E1.** ApplicationTrackerPanel, Summary, Timeline.
 - **E2.** ApplicationHome, Board, Statistics.
@@ -219,7 +232,7 @@ Dependencies: A2, D1, Wave 6 Phase 4 protections for anything that changes the f
 
 ## Task H: Settings and Sources
 
-Dependencies: A2, B; O6.
+Dependencies: A2, B; coordinated with the Wave 7 Settings roadmap (O6).
 
 - **H1.** SettingsHome shell.
 - **H2.** Panels: AI budget and AI settings, Secrets, Job boards, Application settings, Scoring weights, Reset, Migration.
@@ -253,8 +266,8 @@ Runs alongside, and closes the epic.
 
 - **J1.** Ratchet covers all of `src/components`; the temporary dark variant is replaced by the preset's.
 - **J2.** Remove leftovers: `.font-display`, `--color-surface`, `--color-text`, and `dark:` colour variants.
-- **J3.** Accessibility pass by code and tests.
-- **J4.** Owner's visual, responsive and UX acceptance, screen by screen.
+- **J3.** Accessibility pass by code, tests and `contrast_check.py`.
+- **J4.** PO's visual, UX and responsive acceptance, screen by screen. The release must be visually consistent (O5).
 
 **Acceptance criteria**
 
@@ -273,8 +286,8 @@ Runs alongside, and closes the epic.
 # Dependency summary
 
 ```
-Wave 0 backup + docs approved + O1
-  -> A1 -> A2 -> A3
+Implementation approval + Wave 0 backup + O1 values verified
+  -> A1 -> A2 -> A3 -> A4 (font, any time after A3)
        A2 -> B -> I1 (pilot) -> C -> H
                                 C -> D (after Wave 2 UI) -> E (with or after Wave 5)
                                      D -> G (Wave 6 protections for flow changes)
