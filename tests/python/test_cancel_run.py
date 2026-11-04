@@ -322,6 +322,21 @@ def test_a_cancel_request_file_is_not_mistaken_for_a_record(tmp_path):
     assert not run_log.is_record_name(run_log.decision_path(record).name)
 
 
+def test_the_lock_probe_matches_the_inode_and_not_the_device(tmp_path, monkeypatch):
+    """/proc/locks may print another device number than stat() for the same file (bind mount, subvolume). That must still read as held."""
+    lock = tmp_path / "pipeline.lock"
+    lock.write_text("")
+    inode = lock.stat().st_ino
+    table = tmp_path / "locks"
+    table.write_text(f"1: FLOCK  ADVISORY  WRITE 4242 de:ad:{inode} 0 EOF\n2: POSIX  ADVISORY  READ 7 fc:00:{inode + 1} 0 EOF\n")
+    assert run_rescrape.lock_is_held(table) is True
+    table.write_text(f"1: FLOCK  ADVISORY  WRITE 4242 de:ad:{inode + 1} 0 EOF\n2: POSIX  ADVISORY  WRITE 7 fc:00:{inode} 0 EOF\n")
+    assert run_rescrape.lock_is_held(table) is False, "only a flock on this inode, not a POSIX lock on another"
+    assert run_rescrape.lock_is_held(tmp_path / "missing") is None, "cannot tell: the caller treats it as alive"
+    lock.unlink()
+    assert run_rescrape.lock_is_held(table) is False
+
+
 def test_a_cancel_takes_no_lock_and_no_data_file(held, tmp_path):
     """Asked while another process holds the lock: it answers, and the only thing written is the request file."""
     record = run_log.new_record("busyrun001", "manual")
@@ -609,6 +624,20 @@ def tree_bytes(root):
     return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file() and "staging" not in p.parts}
 
 
+def view_lock_free(jobs) -> bool:
+    """Nothing holds data/jobs/.view.lock (the lock readers take to rebuild the view)."""
+    import fcntl
+
+    fd = os.open(jobs / ".view.lock", os.O_RDWR | os.O_CREAT)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except BlockingIOError:
+        return False
+    finally:
+        os.close(fd)
+
+
 def leftover(repo):
     listing = subprocess.run(["ps", "-eo", "pid,pgid,stat,cmd"], capture_output=True, text=True).stdout.splitlines()
     return [line for line in listing if str(repo) in line and "pytest" not in line]
@@ -664,6 +693,7 @@ def test_the_real_run_cancelled_mid_scrape_commit_point_and_hard_kill(scratch):
     assert not alive(browser) and lock_is_free() and leftover(repo) == []
     assert tree_bytes(jobs) == before_c, "no data file changed"
     assert (jobs / "staging/runC00000003/cancelled.json").is_file() and not (jobs / "staging/runC00000003/imported.json").exists()
+    assert view_lock_free(jobs), "a killed run left the view lock free"
     assert "runC00000003" not in filtered_ads.unrecorded(repo), "and no later path will count it"
 
     # D: the cancel arrives while the commit is being written. The commit finishes, the run is not killed, scoring is skipped.
@@ -685,3 +715,4 @@ def test_the_real_run_cancelled_mid_scrape_commit_point_and_hard_kill(scratch):
     saved = on_disk("runE00000005")
     assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok", "ok"]
     assert ledger()["generation"] == 4 and counted_runs()[-1] == "runE00000005" and applied_runs()[-1] == "runE00000005"
+    assert view_lock_free(jobs) and lock_is_free()
