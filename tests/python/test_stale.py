@@ -334,6 +334,24 @@ def test_a_later_sighting_ends_it_and_the_count_starts_over(tmp_path, monkeypatc
     assert classes(tmp_path)[JOB["jobId"]] == "absent", "one run since, however long ago it was seen"
 
 
+def test_a_stale_ad_seen_again_loses_the_flag_and_returns_to_the_actionable_buckets(tmp_path, monkeypatch):
+    """The whole way back, through real imports: Stale -> found again. The ad is a view row again, with no `isStale` and no not-found mark, so it is in the
+    scoring corpus and the model calls again; the class and the counts say found; the ledger's history is not rewritten."""
+    scenario(tmp_path, monkeypatch, [day(10), day(20), day(30)])
+    assert JOB["jobId"] not in {r["jobId"] for r in view_guard.derive_view(ledger_at(tmp_path))["jobs"]}, "a search-based miss is out of the view"
+    assert all_ads.build(ledger_at(tmp_path), None)["meta"]["counts"]["stale"] == 1
+
+    good_run(tmp_path, monkeypatch, "back", day(40), ads=(JOB, OTHER))
+    view = json.loads((tmp_path / "data/jobs/discovered_jobs.json").read_text())
+    after = next(r for r in view["jobs"] if r["jobId"] == JOB["jobId"])
+    assert "isStale" not in after and not row_state.not_found(after)
+    assert after["lastSeen"] == day(40)
+    counts = all_ads.build(ledger_at(tmp_path), None)["meta"]["counts"]
+    assert counts["stale"] == 0 and counts["found"] == 2 and counts["absent"] == 0 and counts["held"] == 0
+    assert classes(tmp_path)[JOB["jobId"]] == "found"
+    assert ledger_at(tmp_path)["jobs"][JOB["jobId"]]["firstSeen"] == day(0), "seen again is not a new ad"
+
+
 def test_a_filter_dropped_listing_keeps_it_from_going_stale_and_changes_no_history(tmp_path, monkeypatch):
     good_run(tmp_path, monkeypatch, "start", day(0), ads=(JOB, OTHER))
     for n, at in enumerate((day(10), day(20))):
@@ -388,6 +406,19 @@ def test_the_view_marks_a_held_row_that_is_stale_and_only_that(tmp_path):
     assert rows["held"]["isStale"] is True and "isStale" not in rows["recent"] and "isStale" not in rows["found"]
     assert row_state.not_found(rows["held"]), "out of the corpus and of model calls, as it already was as a held row"
     assert jh.STALE_MARK in jh.HISTORY_FIELDS
+
+
+def test_a_held_stale_row_found_by_the_next_import_loses_the_flag_in_the_view():
+    ledger = held_ledger()
+    rows = {row["jobId"]: row for row in view_guard.derive_view(ledger)["jobs"]}
+    assert rows["held"]["isStale"] is True and row_state.not_found(rows["held"])
+    entry_ = ledger["jobs"]["held"]
+    entry_.update(lastRunId="next", lastRunPos=0, lastSeen=day(40))
+    entry_.pop("heldRunId")
+    ledger["lastImport"] = {**ledger["lastImport"], "runId": "next"}
+    again = {row["jobId"]: row for row in view_guard.derive_view(ledger)["jobs"]}
+    assert "isStale" not in again["held"] and not row_state.not_found(again["held"])
+    assert all_ads.build(ledger, None)["rows"] and next(r for r in all_ads.build(ledger, None)["rows"] if r["jobId"] == "held")["class"] == "found"
 
 
 def test_a_ledger_from_before_derives_the_same_bytes():

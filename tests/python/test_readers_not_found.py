@@ -124,6 +124,19 @@ def test_a_real_scoring_run_gives_active_ads_the_same_bytes_and_carries_the_mark
     assert "matchScore" in by_id["x1"] and "matchScore" in by_id["x2"]
 
 
+def test_a_stale_row_survives_a_real_scoring_run_and_moves_no_active_score(scoring):
+    """Permanent form of the S5f one-off check: `isStale` goes through the real `run_scoring.main()` untouched, the row is scored like a
+    held one, and the active ads come out with the same bytes as without it."""
+    alone = scoring(ACTIVE, name="alone")["jobs"]
+    mixed = scoring([*ACTIVE, STALE], name="mixed")["jobs"]
+    ids = {j["jobId"] for j in ACTIVE}
+    pick = lambda rows: {r["jobId"]: json.dumps(r, sort_keys=True) for r in rows if r["jobId"] in ids}  # noqa: E731
+    assert pick(alone) == pick(mixed)
+    stale = next(r for r in mixed if r["jobId"] == STALE["jobId"])
+    assert stale["isStale"] is True and "matchScore" in stale
+    assert not any("isStale" in r for r in mixed if r["jobId"] in ids)
+
+
 # --- enrichment --------------------------------------------------------------------------------------------------------
 
 
