@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import http from 'node:http'
@@ -24,6 +24,9 @@ let server
 const cache = () => client.getApplicationsState()
 
 beforeEach(async () => {
+  // The store's clock is fixed below; the defaults read `new Date()`. Both must say the same day, or the test fails on any later date.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-03T10:00:00.000Z'))
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'psummary-'))
   fs.mkdirSync(path.join(root, 'data/profile/cvs'), { recursive: true })
   fs.writeFileSync(path.join(root, `data/profile/cvs/${LIB}.pdf`), '%PDF')
@@ -37,6 +40,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.useRealTimers()
   client.configureClient()
   await new Promise((resolve) => server.close(resolve))
   fs.rmSync(root, { recursive: true, force: true })
