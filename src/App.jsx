@@ -15,6 +15,7 @@ import CareerStrategyScreen from './components/ai/CareerStrategyScreen'
 import AICommandCenter from './components/ai/AICommandCenter'
 import OutreachDashboard from './components/outreach/OutreachDashboard'
 import QualityDashboard from './components/quality/QualityDashboard'
+import ActivityScreen from './components/activity/ActivityScreen'
 import JobDetailsPage from './components/jobs/JobDetailsPage'
 import { useJobRoute } from './hooks/useJobRoute'
 import { useBackgroundRefresh } from './hooks/useBackgroundRefresh'
@@ -114,6 +115,7 @@ function AppContent() {
       {!routedJobId && activeView === VIEWS.CAREER_STRATEGY && <CareerStrategyScreen />}
       {!routedJobId && activeView === VIEWS.AI_COMMAND && <AICommandCenter />}
       {!routedJobId && activeView === VIEWS.OUTREACH && <OutreachDashboard />}
+      {!routedJobId && activeView === VIEWS.ACTIVITY && <ActivityScreen />}
       {!routedJobId && activeView === VIEWS.QUALITY && <QualityDashboard />}
       {!routedJobId && activeView === VIEWS.SETTINGS && <SettingsHome />}
     </AppShell>

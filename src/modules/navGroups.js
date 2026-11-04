@@ -9,7 +9,7 @@ export const NAV_GROUPS = [
   { id: 'work', title: 'Work', items: [VIEWS.JOBS, VIEWS.APPLICATIONS, VIEWS.OUTREACH] },
   { id: 'candidate', title: 'Candidate', items: [VIEWS.PROFILE, VIEWS.INTELLIGENCE, VIEWS.CVS, VIEWS.CAREER_STRATEGY] },
   { id: 'tools', title: 'Tools', items: [VIEWS.RESUMES, VIEWS.AI_COMMAND] },
-  { id: 'system', title: 'System', items: [VIEWS.QUALITY] },
+  { id: 'system', title: 'System', items: [VIEWS.ACTIVITY, VIEWS.QUALITY] },
   { id: 'settings', title: null, items: [VIEWS.SETTINGS], pinned: true },
 ]
 

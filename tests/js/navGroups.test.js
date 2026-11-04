@@ -16,7 +16,7 @@ describe('NAV_GROUPS', () => {
       ['Work', [VIEWS.JOBS, VIEWS.APPLICATIONS, VIEWS.OUTREACH]],
       ['Candidate', [VIEWS.PROFILE, VIEWS.INTELLIGENCE, VIEWS.CVS, VIEWS.CAREER_STRATEGY]],
       ['Tools', [VIEWS.RESUMES, VIEWS.AI_COMMAND]],
-      ['System', [VIEWS.QUALITY]],
+      ['System', [VIEWS.ACTIVITY, VIEWS.QUALITY]],
       [null, [VIEWS.SETTINGS]],
     ])
   })
@@ -24,6 +24,15 @@ describe('NAV_GROUPS', () => {
   it('pins only the Settings group and has unique group ids', () => {
     expect(NAV_GROUPS.filter((group) => group.pinned).map((group) => group.id)).toEqual(['settings'])
     expect(new Set(NAV_GROUPS.map((group) => group.id)).size).toBe(NAV_GROUPS.length)
+  })
+
+  it('puts Activity first in System, as the view "activity" with a title', async () => {
+    const { VIEW_TITLES, isShellView } = await import('../../src/modules/appNavigation')
+    expect(VIEWS.ACTIVITY).toBe('activity')
+    expect(NAV_GROUPS.find((group) => group.title === 'System').items[0]).toBe(VIEWS.ACTIVITY)
+    expect(NAV_ITEMS.find((item) => item.id === VIEWS.ACTIVITY)).toMatchObject({ label: 'Activity', icon: 'Activity' })
+    expect(VIEW_TITLES[VIEWS.ACTIVITY]).toBe('Activity')
+    expect(isShellView('activity')).toBe(true)
   })
 
   it('resolves to the NAV_ITEMS entries', () => {
