@@ -2,6 +2,8 @@
 
 Status: **planning only** (2026-11-04). Nothing here is built. No application code, dependency, test or data was changed. The redesign has not started.
 
+**Current preset: `b1a1cZcRs`.** It superseded `b7CScIWmG` on 2026-11-04 ([decision](../DECISIONS.md#design-system-preset-changed-to-b1a1czcrs-2026-11-04)). The old preset is not a live reference.
+
 | Document | Content |
 |---|---|
 | [TOKENS.md](TOKENS.md) | Actual preset values, and the semantic extension proposed for owner approval |
@@ -10,7 +12,7 @@ Status: **planning only** (2026-11-04). Nothing here is built. No application co
 | [REDESIGN_BACKLOG.md](REDESIGN_BACKLOG.md) | Epic, tasks, acceptance criteria, facts and assumptions, decisions |
 | [preset/](preset/) | Reference snapshot of the preset, not wired into the app |
 
-Decisions: [DECISIONS.md](../DECISIONS.md#design-system-and-ui-redesign-planning-2026-11-04). Roadmap: [ROADMAP.md](../ROADMAP.md#roadmap-v2-recorded-2026-11-04).
+Decisions: [planning](../DECISIONS.md#design-system-and-ui-redesign-planning-2026-11-04), [preset change](../DECISIONS.md#design-system-preset-changed-to-b1a1czcrs-2026-11-04). Roadmap: [ROADMAP.md](../ROADMAP.md#roadmap-v2-recorded-2026-11-04).
 
 ## Overview
 
@@ -24,33 +26,43 @@ The redesign changes how the app looks and how its markup is built. It does not 
 
 | Item | Value | Source |
 |---|---|---|
-| Preset ID | `b7CScIWmG` | Owner |
+| Preset ID | `b1a1cZcRs` | Owner |
 | Style | `base-mira` | CLI output |
 | Primitives | Base UI (`@base-ui/react`), accepted by the owner | CLI output |
 | Base colour | `mist` | CLI output |
 | Icons | `lucide` | CLI output |
-| Fonts | Lora for everything: headings through `--font-heading`, body through `html { @apply font-serif }` | CLI output |
+| Accent theme | No name in the output. The values equal Tailwind's `blue` palette (primary is blue 700) | Compared with `tailwindcss/theme.css` |
+| Fonts | Geist for everything: headings through `--font-heading: var(--font-sans)`, body through `html { @apply font-sans }` | CLI output |
 | CLI used | `shadcn@4.23.0`, in `node:20-bookworm` (Node 20.20.2) | Run on 2026-11-04 |
 
-The owner's link names `template=react-router`. That only selects a scaffold. Scaffolds for `vite` and `react-router` were both generated and their tokens are identical; only the CSS path and the alias differ. **The app has no router and does not get one.**
+`-t vite` was used because the app is a Vite app. The earlier check with `b7CScIWmG` showed a `template` only selects a scaffold, and the app has **no router and does not get one**. The `react-router` scaffold was not regenerated for this preset.
 
 ### How the preset was retrieved
 
 In a throwaway container with `--security-opt label=disable`, mounting only a new empty scratch folder, so the container could not see the repo:
 
 ```
-npx shadcn@4.23.0 init -t vite -p b7CScIWmG -n ds-vite -y --no-monorepo
+npx shadcn@4.23.0 init -t vite -p b1a1cZcRs -n ds-new -y --no-monorepo
 ```
+
+The owner's official command, `pnpm dlx shadcn@latest apply --preset b1a1cZcRs -y`, was also run, only on a scratch project (`@latest` was 4.23.0).
+
+**`apply` over an existing preset is not clean:** on a project that already had `b7CScIWmG`, it gave the same tokens but kept the old `@import` of Lora, the `--font-serif` line and the Lora dependency. Reasoning from that: when a preset changes, do not rely on `apply` alone; review the diff against `preset/`.
 
 Nothing was installed into the frontend or copied into `src/`.
 
 ### Reproducing it from Git, without the website
 
-- `preset/init.b7CScIWmG.json`: the raw answer of the official endpoint.
-- `preset/components.generated.json`: the `components.json` the CLI wrote.
-- `preset/index.generated.css`: the CSS the CLI wrote, with every token.
+Everything needed is in [preset/](preset/README.md), with `MANIFEST.sha256`:
 
-Component source comes from the registry at implementation time. Once the first slice commits `src/components/ds/*`, `components.json` and the token file, **the committed files are the master** and no build needs the website. Anyone adding a component later runs the CLI once and commits the result.
+- `init.b1a1cZcRs.json`: the raw answer of the official endpoint.
+- `components.generated.json`: the `components.json` the CLI wrote.
+- `index.generated.css`: the CSS the CLI wrote, with every token.
+- `registry-base-mira/`: the source of all 38 components, as the CLI wrote it, plus the hook, `utils` and `theme-provider`.
+- `shadcn-tailwind.4.23.0.css`: the file the CSS imports from the `shadcn` package.
+- `locked-versions.json`: the locked direct dependencies.
+
+The npm packages still come from the npm registry, not from Git. Once the first slice commits `src/components/ds/*`, `components.json` and the token file, **those committed files are the master**.
 
 ## Usage rules
 
@@ -154,7 +166,7 @@ Versions locked in the CLI's scaffold on 2026-11-04. Pin exact versions.
 | `@base-ui/react` | 1.9.0 | dependencies | Primitives | 21 MB on disk; imported by subpath. Bundle effect not measured |
 | `class-variance-authority` | 0.7.1 | dependencies | Variants | |
 | `cn` | 0.4.0 | dependencies | Class merging | Zero dependencies, no install script, maintained by shadcn. Replaces `clsx` + `tailwind-merge`. Young: 0.5.2 was already published on the day of this check |
-| `@fontsource-variable/lora` | 5.3.0 | dependencies | Self-hosted font | Includes latin-ext and Cyrillic subsets, needed for Serbian text |
+| `@fontsource-variable/geist` | 5.3.0 | dependencies | Self-hosted font | OFL-1.1. Serbian Latin and Cyrillic letters and tabular digits checked in the font files |
 | `tw-animate-css` | 1.4.0 | devDependencies | CSS at build time | |
 | `shadcn` | 4.23.0 | devDependencies | `shadcn/tailwind.css` is imported at build time | 32 dependencies of its own. The `frontend` stage of the `Dockerfile` runs a full `npm ci`, and the runtime stage `npm ci --omit=dev`, so it does not reach the running image |
 
@@ -164,7 +176,8 @@ Existing versions meet the peer requirements (React 19.2.7, Tailwind 4.3.0, Vite
 
 - `@` alias in `vite.config.js` and `vitest.config.js`. `jsconfig.json` declares it, and neither build config does.
 - `src/index.css` becomes the token layer. `--color-accent`, `--color-accent-hover` and `--color-border` go away. Measured: they have no consumers. Only `var(--color-surface)` (6) and `var(--color-text)` (1) are used.
-- `index.html`: the Google Fonts links go away once Lora is applied, which also removes an external request from every page load.
+- `--font-sans` **collides by name:** the repo sets it to DM Sans in `src/index.css` and the preset sets it to Geist. Changing it flips the whole app at once, so it moves only in the global cutover.
+- `index.html`: the Google Fonts links go away once Geist is applied, which also removes an external request from every page load.
 
 ### Custom components
 
@@ -202,7 +215,7 @@ Functional only, under the policy above:
 ## Design System
 
 `docs/design-system/README.md` is the rule set for all UI work; read it and `COMPONENTS.md` before touching
-`src/components/**`. Design System = shadcn/ui preset `b7CScIWmG` (`base-mira`, Base UI, Lora, lucide) plus a central
+`src/components/**`. Design System = shadcn/ui preset `b1a1cZcRs` (`base-mira`, Base UI, Geist, lucide) plus a central
 semantic extension (fit score, job status, priority, success, warning, error), defined once in the token layer.
 No arbitrary colours or fonts in components: semantic classes only, no hex, no Tailwind palette classes. Registry
 components live in `src/components/ds/`; `src/components/ui/` keeps its props. No new router, browser storage key or

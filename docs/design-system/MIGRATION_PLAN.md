@@ -31,13 +31,16 @@ Implementation starts after the minimal Wave 0 backup and the owner's approval o
 | 4 | `@` alias only in `jsconfig.json` | Add to `vite.config.js` and `vitest.config.js` |
 | 5 | Default `ui/` holds the existing kit | `aliases.ui` to `@/components/ds`. Verified |
 | 6 | `shadcn/tailwind.css` makes the CLI package a build input | Pinned dev dependency; `frontend` Docker stage has it, runtime stage does not |
-| 7 | Global rules in the preset CSS: `html { font-serif }`, `* { border-border }`, body colours, radius scale | Held back until slice A3, so A1 and A2 stay additive |
+| 7 | Global rules in the preset CSS: `html { font-sans }`, `* { border-border }`, body colours, radius scale | Held back until slice A3, so A1 and A2 stay additive |
 | 8 | `.panel-text-up` is inherited, and portals escape it; `panelTextScale.test.js` pins it | Handled in D1 |
 | 9 | Base UI under jsdom 24 not tried | First slice tries it |
 | 10 | `ds/sidebar` writes a cookie; `theme-provider` and `next-themes` write storage | Edit the first, leave out the others |
 | 11 | Settings keeps categories mounted; tracker forms guard drafts; `window.confirm` is synchronous | Keep custom shell, `keepMounted` on tabs, `window.confirm` stays in MVP |
 | 12 | Preset `h-7` against today's 44 px minimum | Open owner decision O3 |
 | 13 | `dark` variant differs from the repo's | Keep the repo's until `dark:` colour uses are gone |
+| 14 | **New with this preset.** `--font-sans` is defined by both the repo (DM Sans) and the preset (Geist), and `body` in `src/index.css` reads it | `--font-sans` and the Geist import move only in A3, in one change. Until then `--font-heading` resolves to DM Sans, which is harmless because nothing uses it |
+| 15 | **Worse with this preset.** Dark `--primary` as text is 2.23:1 on the background (was 2.72:1); 141 `text-teal-*` classes need a target | Do not map them to `text-primary` by default. Open decision O10 |
+| 16 | `ds/scroll-area` has an unused `React` import (`tsc` TS6133 in the scaffold) | Same in both presets. Fix if lint flags it after JS conversion |
 
 ## Pages
 
@@ -111,17 +114,18 @@ Not built. After the minimal Wave 0 backup, approval of these docs and O1. On it
 - Add the dependencies, exact versions, and `components.json` (`tsx: false`, `aliases.ui` to `@/components/ds`).
 - Add the `@` alias to `vite.config.js` and `vitest.config.js`.
 - Add the `cn` re-export.
-- Add the preset tokens and the approved extension tokens to the token layer. Remove the three unused variables. **Hold back** the global rules (`html { font-serif }`, `* { border-border }`, body colours, radius scale, the font import).
+- Add the preset tokens and the approved extension tokens to the token layer. Remove the three unused variables. **Hold back** the global rules (`html { font-sans }`, `* { border-border }`, body colours, radius scale) and the fonts (`--font-sans` and the Geist import).
 - Add one `ds/button.jsx`, imported by nothing in the app.
 
 **Verification, functional only:**
 
 - `ds/button` renders under jsdom and fires clicks (this also answers the Base UI and jsdom question).
-- A test confirms the token file holds every required name with the snapshot's value.
+- A test confirms the token file holds every required name with the snapshot's value, except the held-back ones it lists.
+- A test confirms `--font-sans` is still DM Sans after this slice.
 - The storage allowlist test still passes.
 - Lint, targeted Vitest and build pass.
 
-**No browser test is expected.** No visible change is intended, and Claude cannot confirm that without a browser, so the report says so and the owner reviews. Rollback is reverting the one PR.
+**No browser test is expected.** Colour tokens are not used by any screen yet. No visible change is intended, and Claude cannot confirm that without a browser, so the report says so and the owner reviews. Rollback is reverting the one PR.
 
 # Appendix: every component file
 

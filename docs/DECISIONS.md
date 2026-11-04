@@ -1244,3 +1244,23 @@ Planning only. No application code, dependency, test or data changed, and the re
 - O9: the registry's sidebar keyboard shortcut.
 
 **Not approved:** any application code change, installing dependencies into the frontend, or starting the redesign.
+
+## Design System preset changed to b1a1cZcRs (2026-11-04)
+
+Owner decision. Still planning only: no application code, dependency, test or data changed. This entry supersedes the preset named in [the planning section](#design-system-and-ui-redesign-planning-2026-11-04); the other decisions there stand.
+
+**What changes in the decisions above:** decision 2 now means the complete preset `b1a1cZcRs`. Decision 3 now gives **Geist**, a sans-serif, so "the whole interface is serif" no longer applies. The snapshot in [design-system/preset/](design-system/preset/README.md) is replaced, and now also holds the component source so the preset can be rebuilt from Git without the website.
+
+**Verified from generated output (`shadcn@4.23.0`, isolated container, only an empty scratch folder mounted, never against the application):**
+
+- **Same:** style `base-mira`, Base UI, base colour `mist`, lucide, radius `0.625rem`, `menuColor: default`, `menuAccent: subtle`; neutral, surface, border, ring and destructive tokens; all 38 component files, byte-identical; every dependency except the font.
+- **Changed:** `--primary`, `--primary-foreground`, `--chart-1` to `--chart-5`, `--sidebar-primary`, `--sidebar-primary-foreground` (cyan-based or neutral, now Tailwind `blue` values); `@fontsource-variable/lora` to `@fontsource-variable/geist`; `--font-heading` and the `html` rule from serif to sans.
+- **Re-checked, unchanged:** `ds/sidebar` still writes the `sidebar_state` cookie and binds the shortcut; `theme-provider` still writes `localStorage` key `theme`; controls are still `h-7`; `muted-foreground` on `muted` is still 4.15:1; `tsx: false` still gives `.jsx` in `ds/`.
+- **New:** `--font-sans` collides by name with the repo's DM Sans, and `body` reads it, so it moves only in the global cutover. Dark `--primary` as text fell from 2.72:1 to 2.23:1. `shadcn apply` over an existing preset leaves the old font import and dependency behind.
+- **Closed assumptions:** Geist has Serbian Latin and Cyrillic glyphs and a working `tnum`, read from the font files.
+
+**Open decisions re-evaluated** ([details](design-system/REDESIGN_BACKLOG.md#open-po-decisions)): O4 closed, as serif is gone. O1 changed and still open: values are the same, and `--info` now sits near the blue primary. O10 is new: what replaces `text-teal-*` given dark `--primary` as text. O2, O3, O5, O6, O7, O8 and O9 are unchanged.
+
+**Constraints kept:** React and Vite, no React Router, `src/components/ds/` isolated until migration, no change to business logic, APIs, routing or state, no new browser storage keys, current sidebar and Settings draft behaviour preserved, semantic colours centralized as extension tokens, no invented token values without approval, small independent branches and PRs later.
+
+**Not verified:** nothing was looked at in a browser, so nothing is visually approved. The preset's CSS was built only in the scratch project (Vite 8.3.5, Tailwind 4.3.4), not with the repo's versions. Base UI under the repo's jsdom is still untried.

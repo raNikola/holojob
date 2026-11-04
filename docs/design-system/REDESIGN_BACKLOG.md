@@ -2,7 +2,7 @@
 
 Status: **planning only**, recorded 2026-11-04. No GitHub issues are created. Implementation has not been approved. The title is the owner's; the app keeps its current name until the owner decides otherwise.
 
-**Goal:** replace the custom styling and components with one Design System (shadcn/ui preset `b7CScIWmG` plus a semantic extension), with no change to behaviour, backend, APIs or routing.
+**Goal:** replace the custom styling and components with one Design System (shadcn/ui preset `b1a1cZcRs` plus a semantic extension), with no change to behaviour, backend, APIs or routing.
 
 ## Scope
 
@@ -37,8 +37,12 @@ Status: **planning only**, recorded 2026-11-04. No GitHub issues are created. Im
 Checked on 2026-11-04 by reading the repo or running the CLI.
 
 - Stack: React 19.2.7, Vite 8.0.16, Tailwind 4.3.0 with no config file, JavaScript, no router, no `components.json`.
-- The preset resolves to `base-mira`, Base UI, `mist`, lucide, Lora, radius `0.625rem`.
-- **Body font is Lora** (`html { @apply font-serif }`). The JSON endpoint alone does not show this; the CLI output does.
+- The preset resolves to `base-mira`, Base UI, `mist`, lucide, Geist, radius `0.625rem`, `shadcn@4.23.0`.
+- **Body font is Geist** (`html { @apply font-sans }`). The JSON endpoint names the font, and only the CLI's CSS shows it is applied to the body.
+- Component source is byte-identical to the superseded preset; only tokens and fonts differ.
+- The preset's CSS builds in the scratch project with Vite 8.3.5 and Tailwind 4.3.4 (`vite build`). The repo has Vite 8.0.16 and Tailwind 4.3.0, which were not tried.
+- Geist has the Serbian Latin and Cyrillic letters and a `tnum` feature (read from the font files).
+- `--font-sans` is defined by both the repo and the preset.
 - Tokens are identical between the `vite` and `react-router` scaffolds.
 - With `tsx: false` and `aliases.ui` set to `@/components/ds`, the CLI writes `.jsx` to `ds/` with types stripped (tried on `button` and `dialog`).
 - 129 component files; 2,207 palette classes; 951 `dark:`.
@@ -52,9 +56,8 @@ Checked on 2026-11-04 by reading the repo or running the CLI.
 
 - Base UI primitives work under the repo's jsdom 24 test harness.
 - The registry's lucide icon names exist in the repo's `lucide-react` 1.17.0.
-- The bundle stays acceptable after adding Base UI and Lora (not measured).
-- Lora's digits work with `tabular-nums`.
-- Extension values sit well beside `mist` (a visual question for the owner).
+- The bundle stays acceptable after adding Base UI and Geist (not measured in this app; the scaffold's CSS was 120.67 kB, 19.13 kB gzip).
+- Extension values sit well beside `mist` and the blue primary (a visual question for the owner).
 - Reworking kit internals keeps the source-reading tests passing (14 test files read `src/` text directly).
 
 ## PO decisions
@@ -62,8 +65,8 @@ Checked on 2026-11-04 by reading the repo or running the CLI.
 ### Decided (2026-11-04)
 
 1. Keep the current app name until the owner decides otherwise.
-2. Apply the complete preset, colours and fonts.
-3. Body font comes from the real CLI output: Lora.
+2. Apply the complete preset, colours and fonts, now `b1a1cZcRs`.
+3. Body font comes from the real CLI output: Geist.
 4. Base UI primitives accepted.
 5. Planning before Wave 0; implementation after the minimal Wave 0 backup.
 6. No long-lived branch; small independent branches and PRs.
@@ -72,17 +75,20 @@ Checked on 2026-11-04 by reading the repo or running the CLI.
 
 ### Open PO decisions
 
-| # | Decision | Why it matters | Recommendation |
-|---|---|---|---|
-| O1 | Approve the extension values and aliases in [TOKENS.md](TOKENS.md#part-2-extension-not-defined-by-the-preset) | Blocks the token slice | Approve, or adjust by eye once seen |
-| O2 | Sequencing of slices against Waves 2 to 5 | Tasks D and E touch what those waves rewrite | Tasks A to C and H before or between; D after the Wave 2 UI; E with or after Wave 5 |
-| O3 | Control size: preset `h-7` (28 px) or today's 44 px minimum | The app is used on a phone; the complete preset means small targets | Preset on desktop, 44 px on touch. This is a recorded deviation, so it needs your approval |
-| O4 | Serif everywhere, confirmed once you see it | Follows from decision 2 and 3, and is larger than the earlier wording suggested: tables and numbers are Lora too | Decide after the first visible slice |
-| O5 | May a mixed look be deployed between slices? | With no long-lived branch, `main` holds old and new together until screens are done | Merge freely, hold deploys until Tasks A and B are done, then your call per slice |
-| O6 | Does Wave 7's Settings and UX work merge into Task H? | Otherwise Settings is touched twice | Merge |
-| O7 | Colours with no meaning today (`violet`, `indigo`, `green` stat cards) go to neutral? | Removes decoration you may like | Yes |
-| O8 | `muted-foreground` on `muted` at 4.15:1, a preset value below AA | Decision 2 keeps it | Keep, and avoid that pairing for body text |
-| O9 | Ctrl/Cmd+B sidebar shortcut from the registry | Small behaviour addition | Leave out |
+Re-evaluated for preset `b1a1cZcRs` on 2026-11-04.
+
+| # | Status | Decision | Why it matters | Recommendation |
+|---|---|---|---|---|
+| O1 | **Changed, still open** | Approve the extension values and aliases in [TOKENS.md](TOKENS.md#part-2-extension-not-defined-by-the-preset) | Blocks the token slice. Values and ratios are unchanged. New point: `--info` now sits near the blue `--primary`, and `--fit-insufficient` points at it | Approve, or adjust by eye once seen |
+| O2 | Unchanged | Sequencing of slices against Waves 2 to 5 | Tasks D and E touch what those waves rewrite | Tasks A to C and H before or between; D after the Wave 2 UI; E with or after Wave 5 |
+| O3 | Unchanged | Control size: preset `h-7` (28 px) or today's 44 px minimum | Component source is identical in both presets. The app is used on a phone | Preset on desktop, 44 px on touch. This is a recorded deviation, so it needs your approval |
+| O4 | **Closed** | ~~Serif everywhere~~ | The new preset's body font is Geist, a sans-serif, so the question no longer exists | Nothing to decide. The look stays your acceptance |
+| O5 | Unchanged | May a mixed look be deployed between slices? | With no long-lived branch, `main` holds old and new together until screens are done | Merge freely, hold deploys until Tasks A and B are done, then your call per slice |
+| O6 | Unchanged | Does Wave 7's Settings and UX work merge into Task H? | Otherwise Settings is touched twice | Merge |
+| O7 | Unchanged | Colours with no meaning today (`violet`, `indigo`, `green` stat cards) go to neutral? | Removes decoration you may like | Yes |
+| O8 | Unchanged | `muted-foreground` on `muted` at 4.15:1 in light mode, a preset value below AA | Those tokens did not change | Keep, and avoid that pairing for body text |
+| O9 | Unchanged | Ctrl/Cmd+B sidebar shortcut from the registry | Small behaviour addition | Leave out |
+| O10 | **New** | What replaces today's `text-teal-*` (141 uses) for links and emphasis, given dark `--primary` as text is 2.23:1 (was 2.72:1)? | The `link` variant of `button` and `badge` has the same problem. Light mode is fine (6.82:1) | `text-foreground` with an underline for links, and keep `--primary` for fills, where `primary-foreground` on it is 8.11:1. No invented token. A registry edit to the `link` variant needs your approval |
 
 ## Standard implementation choices
 
@@ -107,7 +113,7 @@ Dependencies: minimal Wave 0 backup; approval of these docs; O1.
 
 - **A1.** Tooling and tokens, additive.
 - **A2.** Rework the `ui/` kit on `ds/`, same props: Button, Badge, Alert, Card, Input, Textarea, SelectField, Tabs, StatCard, then the rest. One or a few per PR.
-- **A3.** Global cutover: Lora, radius scale, default border, surfaces. Remove Google Fonts and unused variables.
+- **A3.** Global cutover: Geist (`--font-sans` and the import, in one change), radius scale, default border, surfaces. Remove Google Fonts and unused variables.
 
 **Acceptance criteria**
 
@@ -118,7 +124,8 @@ Dependencies: minimal Wave 0 backup; approval of these docs; O1.
 - Given `ui/Input` after A2, when rendered with `label`, `required` and `error`, then the label is linked by `id` and `aria-required`, `aria-invalid` and `aria-describedby` are set as today.
 - Given `ui/SelectField` after A2, when a value is chosen, then `onChange` receives the value string, as today.
 - Given any A slice, when the storage allowlist test runs, then it passes with no new key or `document.cookie` user.
-- Given A3, when `index.html` is read, then it has no `fonts.googleapis.com` link.
+- Given A1 or A2, when `src/index.css` is read, then `--font-sans` is still DM Sans.
+- Given A3, when `index.html` is read, then it has no `fonts.googleapis.com` link, and `--font-sans` is Geist.
 
 ## Task B: Global layout and navigation
 

@@ -2,7 +2,7 @@
 
 Decision per category: **use shadcn**, **compose** primitives, or **keep custom** with a reason. Existing files are in `src/components/`; registry files will go to `src/components/ds/`. Counts are from `src/` on 2026-11-04. Nothing here is built.
 
-The registry names below are confirmed: all of them were added to a scratch project with `shadcn@4.23.0` under `base-mira`.
+The registry names below are confirmed: all of them were added to a scratch project with `shadcn@4.23.0` under `base-mira`, for preset `b1a1cZcRs`. Their source is byte-identical to what the superseded preset gave, so the decisions here did not change. Source copy: [preset/registry-base-mira/](preset/registry-base-mira/).
 
 ## Buttons
 
@@ -12,7 +12,10 @@ The registry names below are confirmed: all of them were added to a scratch proj
 | 92 raw `<button>` in 47 files | Compose | `ds/button` with size `icon*` for icon buttons; keep every `aria-label` |
 | `jobs/KeepAdButton.jsx`, `settings/SettingsLink.jsx` | Keep custom | Behaviour, composed over `ds/button` |
 
-Note: today's `min-h-[44px]` against the preset's `h-7` is an [open decision](REDESIGN_BACKLOG.md#open-po-decisions).
+Notes:
+
+- Today's `min-h-[44px]` against the preset's `h-7` is an [open decision](REDESIGN_BACKLOG.md#open-po-decisions) (O3).
+- The `link` variant of `button` and `badge` uses `text-primary`, which computes to 2.23:1 on the dark background (O10).
 
 ## Inputs and forms
 
@@ -124,6 +127,7 @@ Registry source is otherwise kept as supplied.
 | `ds/sidebar` | **Remove the `document.cookie` write** (`sidebar_state`). Drive open state through `open` / `onOpenChange` from `modules/sidebarState.js` | Verified in source: it writes the cookie on every toggle. `tests/js/browserStorageAllowlist.test.js` scans for `document.cookie` and the storage policy forbids new keys |
 | `ds/sidebar` | Remove the Ctrl/Cmd+B shortcut, or get owner approval | It is a behaviour addition (`SIDEBAR_KEYBOARD_SHORTCUT = "b"`) |
 | `ds/badge`, `ds/alert` | Add the extension variants | Status colours are not in the preset |
+| `ds/scroll-area` | Remove the unused `React` import, if lint flags it | Seen in the scaffold's `tsc` (TS6133). The repo's ESLint has `no-unused-vars` as an error. Whether the JS conversion keeps the import is checked when it is added |
 
 Not used because of the same issue: `theme-provider` (writes `localStorage` key `theme`).
 

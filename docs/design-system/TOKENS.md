@@ -1,6 +1,6 @@
 # Tokens
 
-Part 1 lists the **actual preset values**, from the CLI's output in [preset/index.generated.css](preset/index.generated.css) (`shadcn@4.23.0`, preset `b7CScIWmG`, retrieved 2026-11-04). Part 2 is the **extension, not defined by the preset**, with proposed values awaiting owner approval. None of this is in the app yet.
+Part 1 lists the **actual preset values**, from the CLI's output in [preset/index.generated.css](preset/index.generated.css) (`shadcn@4.23.0`, preset `b1a1cZcRs`, retrieved 2026-11-04). Part 2 is the **extension, not defined by the preset**, with proposed values awaiting owner approval. None of this is in the app yet.
 
 # Part 1: Preset values
 
@@ -14,8 +14,8 @@ Part 1 lists the **actual preset values**, from the CLI's output in [preset/inde
 | `--card-foreground` | `oklch(0.148 0.004 228.8)` | `oklch(0.987 0.002 197.1)` |
 | `--popover` | `oklch(1 0 0)` | `oklch(0.218 0.008 223.9)` |
 | `--popover-foreground` | `oklch(0.148 0.004 228.8)` | `oklch(0.987 0.002 197.1)` |
-| `--primary` | `oklch(0.52 0.105 223.128)` | `oklch(0.45 0.085 224.283)` |
-| `--primary-foreground` | `oklch(0.984 0.019 200.873)` | `oklch(0.984 0.019 200.873)` |
+| `--primary` | `oklch(0.488 0.243 264.376)` | `oklch(0.424 0.199 265.638)` |
+| `--primary-foreground` | `oklch(0.97 0.014 254.604)` | `oklch(0.97 0.014 254.604)` |
 | `--secondary` | `oklch(0.967 0.001 286.375)` | `oklch(0.274 0.006 286.033)` |
 | `--secondary-foreground` | `oklch(0.21 0.006 285.885)` | `oklch(0.985 0 0)` |
 | `--muted` | `oklch(0.963 0.002 197.1)` | `oklch(0.275 0.011 216.9)` |
@@ -31,11 +31,11 @@ Part 1 lists the **actual preset values**, from the CLI's output in [preset/inde
 
 | Token | Light | Dark |
 |---|---|---|
-| `--chart-1` | `oklch(0.872 0.007 219.6)` | `oklch(0.872 0.007 219.6)` |
-| `--chart-2` | `oklch(0.56 0.021 213.5)` | `oklch(0.56 0.021 213.5)` |
-| `--chart-3` | `oklch(0.45 0.017 213.2)` | `oklch(0.45 0.017 213.2)` |
-| `--chart-4` | `oklch(0.378 0.015 216)` | `oklch(0.378 0.015 216)` |
-| `--chart-5` | `oklch(0.275 0.011 216.9)` | `oklch(0.275 0.011 216.9)` |
+| `--chart-1` | `oklch(0.809 0.105 251.813)` | `oklch(0.809 0.105 251.813)` |
+| `--chart-2` | `oklch(0.623 0.214 259.815)` | `oklch(0.623 0.214 259.815)` |
+| `--chart-3` | `oklch(0.546 0.245 262.881)` | `oklch(0.546 0.245 262.881)` |
+| `--chart-4` | `oklch(0.488 0.243 264.376)` | `oklch(0.488 0.243 264.376)` |
+| `--chart-5` | `oklch(0.424 0.199 265.638)` | `oklch(0.424 0.199 265.638)` |
 
 ### Sidebar
 
@@ -43,8 +43,8 @@ Part 1 lists the **actual preset values**, from the CLI's output in [preset/inde
 |---|---|---|
 | `--sidebar` | `oklch(0.987 0.002 197.1)` | `oklch(0.218 0.008 223.9)` |
 | `--sidebar-foreground` | `oklch(0.148 0.004 228.8)` | `oklch(0.987 0.002 197.1)` |
-| `--sidebar-primary` | `oklch(0.609 0.126 221.723)` | `oklch(0.715 0.143 215.221)` |
-| `--sidebar-primary-foreground` | `oklch(0.984 0.019 200.873)` | `oklch(0.302 0.056 229.695)` |
+| `--sidebar-primary` | `oklch(0.546 0.245 262.881)` | `oklch(0.623 0.214 259.815)` |
+| `--sidebar-primary-foreground` | `oklch(0.97 0.014 254.604)` | `oklch(0.97 0.014 254.604)` |
 | `--sidebar-accent` | `oklch(0.963 0.002 197.1)` | `oklch(0.275 0.011 216.9)` |
 | `--sidebar-accent-foreground` | `oklch(0.218 0.008 223.9)` | `oklch(0.987 0.002 197.1)` |
 | `--sidebar-border` | `oklch(0.925 0.005 214.3)` | `oklch(1 0 0 / 10%)` |
@@ -52,21 +52,27 @@ Part 1 lists the **actual preset values**, from the CLI's output in [preset/inde
 
 ### What the preset does not define
 
-No success, warning or info colour, and no status scale. `--destructive` has no `-foreground` token in this output. Part 2 addresses the first; the second is noted for the first slice.
+Not defined by the preset: success, warning or info colours, a status scale, and a `--destructive-foreground` token. The accent theme also has no name in the output; its values equal Tailwind's `blue` palette. Part 2 addresses the first; the second is noted for the first slice.
 
 ## Typography and fonts
 
 | Item | Value |
 |---|---|
-| `--font-serif` | `'Lora Variable', serif` |
-| `--font-heading` | `var(--font-serif)` |
-| Body font | **Lora.** `@layer base { html { @apply font-serif; } }` |
-| Package | `@fontsource-variable/lora`, imported in CSS (self-hosted) |
-| Subsets in the package | latin, latin-ext, cyrillic, cyrillic-ext, vietnamese, math, symbols |
-| `--font-sans`, `--font-mono` | Not defined by the preset; Tailwind's defaults remain, and nothing applies them by default |
+| `--font-sans` | `'Geist Variable', sans-serif` |
+| `--font-heading` | `var(--font-sans)` |
+| Body font | **Geist.** `@layer base { html { @apply font-sans; } }` |
+| Package | `@fontsource-variable/geist` 5.3.0, imported in CSS (self-hosted) |
+| Subsets in the package | latin, latin-ext, cyrillic, cyrillic-ext, vietnamese |
+| Variable axis | `wght` 100 to 900 |
+| `--font-serif`, `--font-mono` | Not defined by the preset. Tailwind's default mono stack stays for the 3 `font-mono` uses in `src/` |
 | Type scale | Not defined by the preset; Tailwind's default scale. Registry components set sizes themselves (default button `text-xs/relaxed`, input `text-sm`) |
 
-Consequence of the owner's decision to apply the complete preset: **the whole interface is set in a serif font, including tables and numbers.** Whether Lora's digits line up under `tabular-nums` (`FitScore.jsx`) was not checked; the first look is the owner's.
+**Checked in the font files** (with `fontkit`, no browser):
+
+- Serbian Latin (`čćšžđ` and capitals) and Serbian Cyrillic (including `ђјљњћџ`) have glyphs.
+- `tnum` exists. Default digits vary in width (384 to 663); with `tnum` all are 600, so `tabular-nums` in `FitScore.jsx` has an effect.
+
+How the font looks is the owner's call.
 
 ## Radius
 
@@ -82,7 +88,7 @@ Consequence of the owner's decision to apply the complete preset: **the whole in
 | `--radius-3xl` | `calc(var(--radius) * 2.2)` |
 | `--radius-4xl` | `calc(var(--radius) * 2.6)` |
 
-Applying this redefines `rounded-*` for every existing class, so it counts as a global change.
+Applying this redefines `rounded-*` for every existing class, so it counts as a global change. Same value as the superseded preset.
 
 ## Spacing
 
@@ -92,7 +98,7 @@ Not defined by the preset. Tailwind's default scale.
 
 - `@layer base { * { @apply border-border outline-ring/50; } }` sets the default border and outline colour on every element.
 - `body { @apply bg-background text-foreground; }`
-- Shadows: no token. Tailwind's defaults; registry components use them directly.
+- Shadows: not defined by the preset. Tailwind's defaults; registry components use them directly.
 - Overlays: `dialog`, `sheet`, `drawer` and `alert-dialog` use `bg-black` with an opacity. This is the registry's only hard-coded colour and stays as supplied.
 
 ## Themes
@@ -115,7 +121,7 @@ Not defined by the preset. Tailwind's defaults. The registry's `use-mobile` hook
 
 **Status: proposed values, marked for PO approval.** No value here is from the preset. Defined once in the token layer; components never name a colour.
 
-The values are Tailwind palette values already installed in the repo (`node_modules/tailwindcss/theme.css`) and the same hues the app uses for these meanings today, so the meaning of a colour does not change. Only `error` reuses a preset value. They were not designed against `mist`, and how they sit beside it is for the owner to judge.
+The values are Tailwind palette values already installed in the repo (`node_modules/tailwindcss/theme.css`) and the same hues the app uses for these meanings today, so the meaning of a colour does not change. Only `error` reuses a preset value. They were not designed against `mist` or the blue primary, and how they sit beside them is for the owner to judge. In particular, `--info` (sky) is the nearest hue to `--primary` (blue), about 22 degrees apart in light mode, and `--fit-insufficient` points at `--info`, so that state may read like an action colour.
 
 ## Semantic scale (proposed)
 
@@ -216,11 +222,15 @@ Preset pairs:
 
 | Pair | Light | Dark |
 |---|---|---|
-| foreground on background | 19.71 | not computed |
-| primary-foreground on primary | 5.07 | 6.97 |
+| foreground on background | 19.71 | 19.00 |
+| primary-foreground on primary | 6.26 | 8.11 |
+| **primary as text on background** (`link` variant of button and badge) | 6.82 | **2.23, below AA** |
 | secondary-foreground on secondary | 16.11 | 14.26 |
 | muted-foreground on background | 4.61 | 8.07 |
-| **muted-foreground on muted** | **4.15, below AA** | not computed |
+| **muted-foreground on muted** | **4.15, below AA** | 6.05 |
 | destructive on background (also `--error`) | 4.76 | 6.82 |
+| sidebar-primary-foreground on sidebar-primary | 4.82 | **3.45, below AA** |
 
-The one pair below AA is a preset value, left unchanged because the owner decided on the complete preset. It is flagged in [the backlog](REDESIGN_BACKLOG.md#open-po-decisions).
+Values outside sRGB were clamped, so the blue ratios are close approximations. The pairs below AA are preset values, left unchanged because the owner decided on the complete preset. They are flagged in [the backlog](REDESIGN_BACKLOG.md#open-po-decisions). No registry component in the install list uses `sidebar-primary`, so that pair has no consumer yet.
+
+The extension ratios did not change with the new preset: the backgrounds they sit on are the same.
