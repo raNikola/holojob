@@ -8,8 +8,6 @@ import {
   salaryMarker,
   salaryMarkerText,
   profileSalaryFigures,
-  salaryMarkerText,
-  profileSalaryFigures,
   salaryModeOf,
   salaryRangeOf,
   sanitizeAmount,
