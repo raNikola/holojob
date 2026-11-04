@@ -276,7 +276,7 @@ describe('Details', () => {
     const issues = Array.from({ length: 14 }, () => ({ level: 'warning', source: null, message: 'Every source was skipped: no source searched in this run' }))
     const screen = await mount(fakeFetch(api([record(1, { issues })])))
     await screen.openAll()
-    expect(screen.rows()[0].textContent).toContain('Showing 10 of 14')
+    expect(screen.rows()[0].textContent).toContain('The first 10 of 14 issues are shown.')
   })
 
   it('a source that had not finished when the run was cancelled is Unfinished, never Failed', async () => {

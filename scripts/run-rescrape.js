@@ -183,7 +183,7 @@ export async function startRescrape(body = {}, options = {}) {
 
 const RUN_ID = /^[0-9A-Za-z]{1,32}$/
 const CANCEL_ANSWERS = {
-  cancel_requested: [202, 'Cancel requested. The run stops at its next safe point; what it collected is imported, held, and scoring is skipped.'],
+  cancel_requested: [202, 'Cancel requested. The run stops at its next safe point. The ads it has already collected are saved, nothing else changes, and scoring is skipped.'],
   cancel_already_requested: [200, 'A cancel was already requested for this run.'],
   already_cancelled: [200, 'This run was already cancelled. Nothing changed.'],
   already_finished: [200, 'This run has already finished. Nothing changed.'],

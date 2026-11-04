@@ -373,11 +373,14 @@ describe('what it does not touch', () => {
     expect(spawned).toEqual([])
   })
 
-  it('names no ledger, staging or event log in its source', () => {
+  it('names no ledger, staging or process in its source, and the LIST reads no event log (only the one-run reader does)', () => {
     const source = fs.readFileSync(path.join(REPO, 'scripts/run-history.js'), 'utf-8')
     const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-    expect(code).not.toMatch(/job_history|events\.jsonl|spawn|execFile|child_process|'staging|staging'|\/staging/)
+    expect(code).not.toMatch(/job_history|spawn|execFile|child_process|'staging|staging'|\/staging/)
     expect(code).not.toMatch(/data\/jobs(?!\/\.pipeline)/)
+    const list = code.slice(0, code.indexOf('export function projectEvent'))
+    expect(list).not.toMatch(/events\.jsonl|readEvents/)
+    expect(code).toMatch(/events\.jsonl/) // and the one-run reader is where it lives
   })
 })
 

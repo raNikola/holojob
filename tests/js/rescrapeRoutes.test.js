@@ -109,6 +109,24 @@ describe('GET /api/runs', () => {
     expect((await call('GET', '/api/runs?before=../../x')).status).toBe(422)
   })
 
+  it('GET /api/runs/<id> answers one run and its events, from the cursor, and starts nothing', async () => {
+    fs.writeFileSync(path.join(dir, 'runs', '20261103T100000Z-abc123.events.jsonl'), `${JSON.stringify({ type: 'run_start', at: '2026-11-03T10:00:00+00:00' })}\n${JSON.stringify({ type: 'step_start', step: 'discovery' })}\n`)
+    const first = await call('GET', '/api/runs/abc123')
+    expect(first.status).toBe(200)
+    expect(first.data).toMatchObject({ ok: true, active: false, next: 2, run: { runId: 'abc123' } })
+    expect(first.data.events.map((e) => e.type)).toEqual(['run_start', 'step_start'])
+    expect((await call('GET', '/api/runs/abc123?after=1')).data.events.map((e) => e.type)).toEqual(['step_start'])
+    for (const fn of ['start', 'status', 'cancel', 'busy', 'lock', 'discovery', 'pipeline', 'scoring', 'ensureView']) expect(run[fn], fn).not.toHaveBeenCalled()
+  })
+
+  it('GET /api/runs/<id> is 404 for an unknown run and 422 for a bad cursor, and POST does nothing', async () => {
+    expect((await call('GET', '/api/runs/nosuchrun')).status).toBe(404)
+    expect((await call('GET', '/api/runs/abc123?after=abc')).status).toBe(422)
+    const post = await call('POST', '/api/runs/abc123', {})
+    expect(post.data?.run).toBeUndefined()
+    expect(run.cancel).not.toHaveBeenCalled()
+  })
+
   it('is GET only: a POST does not list, start or cancel anything', async () => {
     const { data } = await call('POST', '/api/runs', {})
     expect(data?.runs).toBeUndefined()

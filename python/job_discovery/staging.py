@@ -20,7 +20,7 @@ files as they were when the run began. Both are replaced by rename, never rewrit
 and an import can be replayed on exactly what the run started from.
 
 `status.json` in a run's folder says whether staging itself worked. `imported.json` says the run was imported (written only by a
-real import). `cancelled.json` (S6) says the owner cancelled it: it is imported held, and no later path counts it as a proven run. Staging is removed by status (`prune`): only runs that were imported, and only beyond the newest KEEP_IMPORTED of
+real import). `cancelled.json` (S6) says the owner cancelled it: only the ads it collected are saved (importer._plan_partial), and no later path counts it as a proven run. Staging is removed by status (`prune`): only runs that were imported, and only beyond the newest KEEP_IMPORTED of
 them. A run that waits for an import or for recovery, and a run whose staging failed (evidence, never importable), stay.
 `usage()` says how much room staging takes.
 """
@@ -722,7 +722,7 @@ class RunStage:
     sources: dict[str, SourceStage]
     discards: DiscardStage | None = None
     status: dict | None = None  # status.json: did staging itself work (absent: the run never reached its end)
-    cancelled: dict | None = None  # cancelled.json (S6): present means the run is imported held; a file that cannot be read still counts
+    cancelled: dict | None = None  # cancelled.json (S6): present means only the ads it collected are saved; a file that cannot be read still counts
 
     @property
     def discovered_before(self) -> Path | None:
