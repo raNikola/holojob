@@ -1,6 +1,8 @@
 # Tokens
 
-Part 1 lists the **actual preset values**, from the CLI's output in [preset/index.generated.css](preset/index.generated.css) (`shadcn@4.23.0`, preset `b1a1cZcRs`, retrieved 2026-11-04). Part 2 is the **extension, not defined by the preset**, approved in principle with values pending PO verification. Part 3 is the measured contrast and the proposed corrections. None of this is in the app yet.
+Part 1 lists the **actual preset values**, from the CLI's output in [preset/index.generated.css](preset/index.generated.css) (`shadcn@4.23.0`, preset `b1a1cZcRs`, retrieved 2026-11-04). Part 2 is the **extension, not defined by the preset**. Part 3 is the measured contrast and the proposed corrections. None of this is in the app.
+
+**All extension values and contrast corrections are PROVISIONAL**, approved for planning purposes only. Before implementation, the complete palette is reviewed again, finalized and approved by the PO, and these tables are revalidated.
 
 # Part 1: Preset values
 
@@ -119,11 +121,11 @@ Not defined by the preset. Tailwind's defaults. The registry's `use-mobile` hook
 
 # Part 2: Extension, not defined by the preset
 
-**Status: O1 approved in principle, values PENDING PO verification.** Centralized semantic tokens for success, warning, danger, information, fit scores and application states, plus job status and priority. No arbitrary colours in components. No value here is from the preset unless it says so.
+**Status: O1 structure, aliases and values approved FOR PLANNING ONLY. All values are PROVISIONAL; none is permanently approved.** Centralized semantic tokens for success, warning, danger, information, fit scores and application states, plus job status and priority. No arbitrary colours in components. No value here is from the preset unless it says so.
 
 The values are Tailwind palette values already installed in the repo (`node_modules/tailwindcss/theme.css`), and the same hues the app uses for these meanings today. All ratios are measured by [`preset/contrast_check.py`](preset/contrast_check.py); full table in [`preset/contrast-report.md`](preset/contrast-report.md). How they look beside Blue and Mist is the PO's call.
 
-## Semantic scale (values pending)
+## Semantic scale (provisional)
 
 | Token | Light | Dark | Source |
 |---|---|---|---|
@@ -131,7 +133,7 @@ The values are Tailwind palette values already installed in the repo (`node_modu
 | `--success-subtle` | `oklch(0.95 0.052 163.051)` | `oklch(0.378 0.077 168.94)` | emerald 100 / 900 |
 | `--success-subtle-foreground` | `oklch(0.432 0.095 166.913)` | `oklch(0.845 0.143 164.978)` | emerald 800 / 300 |
 | `--success-border` | `oklch(0.905 0.093 164.15)` | `oklch(0.378 0.077 168.94)` | emerald 200 / 900 |
-| `--warning` | `oklch(0.555 0.163 48.998)` | `oklch(0.879 0.169 91.605)` | amber 700 / 300 |
+| `--warning` | `oklch(0.473 0.137 46.201)` | `oklch(0.879 0.169 91.605)` | amber 800 / 300. Light was amber 700, changed for margin on muted |
 | `--warning-subtle` | `oklch(0.962 0.059 95.617)` | `oklch(0.414 0.112 45.904)` | amber 100 / 900 |
 | `--warning-subtle-foreground` | `oklch(0.473 0.137 46.201)` | `oklch(0.879 0.169 91.605)` | amber 800 / 300 |
 | `--warning-border` | `oklch(0.924 0.12 95.746)` | `oklch(0.414 0.112 45.904)` | amber 200 / 900 |
@@ -155,13 +157,13 @@ Neutral states use preset tokens: `--secondary` with `--secondary-foreground` fo
 | danger-subtle-foreground on danger-subtle | 6.86 | 5.24 |
 | info-subtle-foreground on info-subtle | 6.54 | 5.68 |
 | success text on background / card / muted | 5.37 / 5.37 / 4.82 | 12.99 / 11.45 / 9.74 |
-| warning text on background / card / muted | 5.05 / 5.05 / 4.54 | 13.63 / 12.01 / 10.22 |
+| warning text on background / card / muted | 7.13 / 7.13 / 6.41 | 13.63 / 12.01 / 10.22 |
 | info text on background / card / muted | 5.85 / 5.85 / 5.26 | 11.83 / 10.43 / 8.87 |
 | danger (`--destructive`) on background / card | 4.76 / 4.76 | 6.82 / 6.01 |
 
-`warning` text on `muted` passes narrowly in light mode (4.54). `--danger` must not be used as text on `muted` or on a tint; see the corrections below.
+`warning` text on `muted` in light mode rose from 4.54 to 6.41 with amber 800, a value already in this scale. `--danger` must not be used as text on `muted` or on a tint; see the corrections below.
 
-## Domain aliases (pending)
+## Domain aliases (provisional)
 
 These point at the scale above. Apart from what is marked new, the mapping copies today's code, so **no state changes meaning**.
 
@@ -176,7 +178,7 @@ Labels and thresholds come from `python/job_scoring/labels.py` via `job.matchLab
 | `--fit-good` | Good | warning | `medium` |
 | `--fit-weak` | Weak | neutral | `low` |
 | `--fit-reject` | Reject | neutral | `default` |
-| `--fit-insufficient` | Insufficient Data (Wave 2, not built) | info | **New.** Reserved so the state stays distinct from a low score. `--info` is the nearest hue to `--primary`, about 22 degrees apart in light mode, so the PO should check it does not read like an action |
+| `--fit-insufficient` | Insufficient Data (Wave 2, not built) | neutral | **New.** Same colour as Weak and Reject, so its label and the absence of a score band tell it apart from a low score |
 
 ### Priority and apply recommendation
 
@@ -212,7 +214,7 @@ Today the stage badge is one neutral `Badge` for every stage (`ApplicationTracki
 | `--app-state-active` | `applied`, work stages (default `screen`, `tech`, `onsite`, `offer`) | neutral | Neutral |
 | `--app-state-closed` | `rejected`, `ghosted`, `withdrawn`, `position_closed`, `offer_declined` | neutral | Neutral |
 | `--app-state-unfiled` | `unfiled` | neutral | Neutral |
-| `--app-state-offer-accepted` | `offer_accepted` | success | **New meaning:** neutral today. Pending PO verification |
+| `--app-state-offer-accepted` | `offer_accepted` | success | **New meaning:** neutral today. Approved for planning |
 | `--app-state-stale` | A stale board card | warning | Amber (`ApplicationBoard.jsx`) |
 | `--app-state-error` | A failed tracker call | danger | Red |
 
@@ -234,7 +236,7 @@ Neutral cards and surfaces by default. `violet-*` ("Scored", "Avg Score", shadow
 
 **Measured** from the committed snapshot with [`preset/contrast_check.py`](preset/contrast_check.py). OKLCH to sRGB, clipped to the gamut; alpha composited over its backdrop. Reproduce: `python3 docs/design-system/preset/contrast_check.py`.
 
-**Corrected values are pending PO verification, with O1.** Nothing is applied.
+**All corrections are provisional planning recommendations.** Nothing is applied. They are recalculated against the final palette before implementation.
 
 ## Failing combinations in use
 
@@ -276,7 +278,7 @@ No planned component uses these, so nothing changes. A rule stops them being use
 
 ## Proposed corrections
 
-Token changes, one place each:
+Token changes, one place each. C2 is accepted for planning as proposed, with no separate `--input-border` token:
 
 | ID | Token | Theme | Original | Proposed |
 |---|---|---|---|---|
@@ -286,7 +288,7 @@ Token changes, one place each:
 | C3 | `--ring`, `--sidebar-ring` | Light | `oklch(0.723 0.014 214.4)` | `var(--primary)` |
 | C3 | `--ring`, `--sidebar-ring` | Dark | `oklch(0.56 0.021 213.5)` | `var(--sidebar-primary)` |
 
-Usage changes, using existing or pending tokens:
+Usage changes, using existing or provisional tokens:
 
 | ID | Change | Where |
 |---|---|---|
@@ -294,9 +296,9 @@ Usage changes, using existing or pending tokens:
 | U2 | `hover:bg-primary/80` becomes `hover:bg-primary/85` | `ds/button`, `ds/badge` |
 | U3 | Text on destructive tints or muted uses `--danger-subtle-foreground` | `ds/button`, `ds/badge`, `ds/dropdown-menu`; app code |
 
-## Side effects for the PO to check
+## Side effects
 
-- **C2 also changes fills.** `--input` also drives `bg-input/20` and `bg-input/30`, so input fields get a stronger tint in both themes. Separating a border token would avoid that, but needs edits in about 10 registry files; it was not measured further.
+- **C2 also changes fills.** `--input` also drives `bg-input/20` and `bg-input/30`, so input fields get a stronger tint in both themes. Accepted by the PO for planning.
 - **C2 is the largest visible change here.** Light input borders go from very pale to mid-grey.
 - **C3 uses Blue for focus rather than grey.** A grey at 3:1 would match the corrected input border, so a focused field would only differ by its faint halo. Blue differs in hue, but the luminance change from the resting border to the focus border is 2.23:1 in light and 1.67:1 in dark, below 3:1. AA does not require 3:1 there; the halo adds to it.
 - **Dark `--sidebar-primary`** is slightly outside sRGB and was clipped, so its ratios are close approximations.

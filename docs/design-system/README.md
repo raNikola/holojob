@@ -4,7 +4,9 @@ Status: **planning only** (2026-11-04). Nothing here is built. No application co
 
 **Approved preset: `b1a1cZcRs`** (Blue / Mist / Geist / Base UI / Lucide). It superseded `b7CScIWmG` on 2026-11-04 ([decision](../DECISIONS.md#design-system-preset-changed-to-b1a1czcrs-2026-11-04)). The old preset is not a live reference.
 
-**Decisions:** O2 to O10 are closed as approved. O1 is approved in principle, and its concrete values are pending PO verification ([final decisions](../DECISIONS.md#design-system-final-po-decisions-2026-11-04)). **Implementation is not authorized** until a separate approval is given.
+**Status: POSTPONED.** The Epic and all its work are To Do. Nothing starts until the PO explicitly authorizes implementation and the [six prerequisites](REDESIGN_BACKLOG.md#implementation-prerequisites) are met.
+
+**All colours are PROVISIONAL.** O1 is approved for planning purposes only, and no value is permanently approved. The complete palette is reviewed again, finalized and approved by the PO before implementation ([final planning decisions](../DECISIONS.md#design-system-final-planning-decisions-epic-postponed-2026-11-04)). O2 to O10 stand as approved.
 
 | Document | Content |
 |---|---|
@@ -14,15 +16,15 @@ Status: **planning only** (2026-11-04). Nothing here is built. No application co
 | [REDESIGN_BACKLOG.md](REDESIGN_BACKLOG.md) | Epic, tasks, acceptance criteria, facts and assumptions, decisions |
 | [preset/](preset/) | Reference snapshot of the preset, not wired into the app |
 
-Decisions: [planning](../DECISIONS.md#design-system-and-ui-redesign-planning-2026-11-04), [preset change](../DECISIONS.md#design-system-preset-changed-to-b1a1czcrs-2026-11-04), [final PO decisions](../DECISIONS.md#design-system-final-po-decisions-2026-11-04). Roadmap: [ROADMAP.md](../ROADMAP.md#roadmap-v2-recorded-2026-11-04).
+Decisions: [planning](../DECISIONS.md#design-system-and-ui-redesign-planning-2026-11-04), [preset change](../DECISIONS.md#design-system-preset-changed-to-b1a1czcrs-2026-11-04), [PO decisions](../DECISIONS.md#design-system-final-po-decisions-2026-11-04), [final planning decisions](../DECISIONS.md#design-system-final-planning-decisions-epic-postponed-2026-11-04). Roadmap: [ROADMAP.md](../ROADMAP.md#roadmap-v2-recorded-2026-11-04).
 
 ## Overview
 
-The goal is to replace the custom frontend styling and components with shadcn/ui as the single Design System. **Design System = the preset plus a central semantic extension** (success, warning, danger, information, fit scores, job status, priority and application states), defined once in the token layer. Approved in principle; values pending (O1).
+The goal is to replace the custom frontend styling and components with shadcn/ui as the single Design System. **Design System = the preset plus a central semantic extension** (success, warning, danger, information, fit scores, job status, priority and application states), defined once in the token layer. Structure approved; all values provisional (O1).
 
 The redesign changes how the app looks and how its markup is built. It does not change behaviour, the backend, the APIs or the routing.
 
-**Name:** the app keeps its current name until the owner decides otherwise. The repo says Holojob and `index.html` still says Career OS. The word "HolyJobs" appears only as the title of the epic the owner named, and nowhere in the repo.
+**Name:** the app keeps its current name until the owner decides otherwise. The repo says Holojob and `index.html` still says Career OS. The Epic is titled "UI Redesign & Design System".
 
 ## Preset and source
 
@@ -131,9 +133,9 @@ Owner decision, 2026-11-04.
 
 **Browser use**
 
-- No Playwright, visual regression tooling, screenshot baselines or new browser tests.
+- No Playwright, screenshot baselines, visual regression tooling or Chrome tests.
 - Use the existing Vitest, pytest and other automated tests.
-- A browser only when functionally necessary **and** explicitly authorized by the PO.
+- Browser testing needs separate explicit authorization from the PO.
 
 **Reporting**
 
@@ -226,15 +228,16 @@ semantic extension (success, warning, danger, information, fit scores, job statu
 No arbitrary colours or fonts in components: semantic classes only, no hex, no Tailwind palette classes. Registry
 components live in `src/components/ds/`; `src/components/ui/` keeps its props. No new router, browser storage key,
 cookie or keyboard shortcut as a side effect of a component. Implementation goes through small independent branches and PRs, never a
-long-lived redesign branch.
+long-lived redesign branch. All colours are provisional until the PO finalizes the palette, and implementation needs
+separate PO approval.
 
 ## UI testing and browser policy
 
 - Claude Code owns unit, integration, functional regression, lint, build, token consistency checks and programmatic
   contrast verification.
 - The PO owns visual appearance, aesthetics, UX review, responsive visual acceptance and final design approval.
-- No Playwright, visual regression tooling, screenshot baselines or new browser tests. Use the existing Vitest, pytest
-  and other automated tests. A browser only when functionally necessary and explicitly authorized by the PO.
+- No Playwright, screenshot baselines, visual regression tooling or Chrome tests. Use the existing Vitest, pytest and
+  other automated tests. Browser testing needs separate explicit authorization from the PO.
 - Claude must state what it could not verify without a browser. Visually unverified UI must never be presented as
   visually approved.
 ```
@@ -243,13 +246,13 @@ long-lived redesign branch.
 
 | Wave | Interaction | Handling |
 |---|---|---|
-| 0 | Implementation waits for the minimal backup (owner decision) | Task A starts after it. Planning comes first |
+| 0 | Implementation waits for the minimal backup (owner decision) | Prerequisite G1. T1 starts after it. Planning comes first |
 | 1 | Discovery safety: no UI overlap expected, except texts on Activity and Jobs | Activity slice carries over whatever Wave 1 adds |
-| 2 | Insufficient Data state, scoring correctness and hard/soft requirements add UI to Jobs and Job Details | Jobs and Scoring UI migration aligns with the scoring roadmap (O2). Task D waits for the Wave 2 UI; the token is reserved (`--fit-insufficient`, pending O1) |
+| 2 | Insufficient Data state, scoring correctness and hard/soft requirements add UI to Jobs and Job Details | Jobs and Scoring UI migration aligns with the scoring roadmap (O2). T4 waits for the Wave 2 UI; the alias is reserved (`--fit-insufficient`, neutral, provisional) |
 | 3 | Three-level role filter adds to `JobFilters.jsx` | Migrate filters first or after, not at the same time |
-| 5 | Application Tracking reworks the tracker panel and removes the shadow badge | Tracker redesign aligns with the tracker changes (O2). Task E does not restyle what Wave 5 is about to rewrite |
-| 6 | Profile import slices; Phase 4 fact gate and confirm for AI and application flows | Task F and G wait for the flows being rebuilt there |
-| 7 | UX, Settings, (d) overlap the Settings task | Task H is coordinated with the Wave 7 Settings roadmap to avoid duplicate work (O6) |
+| 5 | Application Tracking reworks the tracker panel and removes the shadow badge | Tracker redesign aligns with the tracker changes (O2). T5 does not restyle what Wave 5 is about to rewrite |
+| 6 | Profile import slices; Phase 4 fact gate and confirm for AI and application flows | T6 and T7 wait for the flows being rebuilt there |
+| 7 | UX, Settings, (d) overlap the Settings task | T8 is coordinated with the Wave 7 Settings roadmap to avoid duplicate work (O6) |
 | 8 | Step 5 server master changes the data flow of Jobs and Profile | Markup-only slices do not conflict if `modules/*` stays untouched |
 
 The other waves are not reordered. Sequencing is decided (O2): foundations may be prepared first, in small independent slices and PRs that avoid conflicts with parallel work.
