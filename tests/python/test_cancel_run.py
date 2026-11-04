@@ -20,6 +20,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 import filtered_ads  # noqa: E402
+import row_state  # noqa: E402
 import pipeline_lock  # noqa: E402
 import run_discovery  # noqa: E402
 import run_log  # noqa: E402
@@ -56,7 +57,7 @@ else:
 def term(*_):
     (marks / "term-seen").write_text("x")
     if mode == "cooperate":
-        record["cancel"] = {{"requestedAt": run_log.cancel_info(record)["requestedAt"], "outcome": "collected_ads_imported"}}
+        record["cancel"] = {{"requestedAt": run_log.cancel_info(record)["requestedAt"], "outcome": "collected_ads_saved", "saved": 0}}
         run_log.save(record)
         sys.exit(run_log.EXIT_CANCELLED)
 
@@ -158,7 +159,7 @@ def test_cancel_during_discovery_stops_the_step_and_records_a_cancelled_run(fake
     assert saved["status"] == "cancelled" and saved["finishedAt"]
     assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "cancelled")], "scoring was not started"
     assert not (fake.marks / "scoring-started").exists()
-    assert saved["cancel"]["outcome"] == "collected_ads_imported" and saved["cancel"]["requestedAt"]
+    assert saved["cancel"]["outcome"] == "collected_ads_saved" and saved["cancel"]["requestedAt"]
     types = [e["type"] for e in events_of(saved)]
     assert types.index("cancel_requested") < types.index("cancel_signal") < types.index("step_end") < types.index("run_end")
     assert not alive(pid) and not alive(grandchild(fake)), "the step and what it started are gone"
@@ -406,20 +407,23 @@ def ledger_of(root):
     return json.loads((root / "data/jobs/job_history.json").read_text())
 
 
-def test_a_request_that_arrives_while_the_source_is_read_imports_what_was_collected_held(managed, tmp_path):
+def test_a_request_that_arrives_while_the_source_is_read_saves_what_was_collected_and_nothing_else(managed, tmp_path):
     assert managed("run00000001")[0] == 0
+    before = ledger_of(tmp_path)
     code, record = managed("run00000002", act=lambda provider, record: run_log.request_cancel(record), jobs=("g1", "g3"))
     assert code == run_log.EXIT_CANCELLED
     ledger = ledger_of(tmp_path)
-    assert ledger["lastImport"]["runId"] == "run00000002" and ledger["lastImport"]["cancelled"] is True
+    assert ledger["lastImport"] == before["lastImport"], "the list is still the last complete run's"
     assert "g3" in ledger["jobs"] and ledger["generation"] == 2
-    assert not ledger["jobs"]["g2"].get("absentSince") and not ledger["jobs"]["g2"].get("closedAt")
+    assert ledger["jobs"]["g2"] == before["jobs"]["g2"], "an ad it did not find is exactly as it was"
     assert proven(tmp_path) == ["run00000001"]
     assert filtered_ads.load(tmp_path)["appliedRuns"] == ["run00000001"]
-    assert record["cancel"]["outcome"] == "collected_ads_imported" and record["status"] == "running", "the orchestrator finishes the record"
+    assert record["cancel"] == {"requestedAt": record["cancel"]["requestedAt"], "outcome": "collected_ads_saved", "saved": 2}
+    assert record["status"] == "running", "the orchestrator finishes the record"
     assert (tmp_path / "data/jobs/staging/run00000002" / "cancelled.json").is_file()
     assert "cancelled" in [e["type"] for e in events_of(record)]
-    assert json.loads((tmp_path / "data/jobs/discovered_jobs.json").read_text())["meta"]["ledgerGeneration"] == 2
+    view = json.loads((tmp_path / "data/jobs/discovered_jobs.json").read_text())
+    assert view["meta"]["ledgerGeneration"] == 2 and [j["jobId"] for j in view["jobs"]] == ["g1", "g2", "g3"]
 
 
 def test_a_request_during_the_first_source_means_the_second_never_starts(managed, tmp_path):
@@ -441,8 +445,9 @@ def test_a_request_made_in_the_same_instant_as_the_commit_claim_still_cancels(ma
         return won
 
     monkeypatch.setattr(run_log, "claim", claim_then_request)
-    code, _ = managed("run00000002")
-    assert code == run_log.EXIT_CANCELLED and ledger_of(tmp_path)["lastImport"]["cancelled"] is True
+    code, _ = managed("run00000002", jobs=("g1", "g5"))
+    ledger = ledger_of(tmp_path)
+    assert code == run_log.EXIT_CANCELLED and ledger["lastImport"]["runId"] == "run00000001" and "g5" in ledger["jobs"]
     assert proven(tmp_path) == ["run00000001"]
 
 
@@ -456,8 +461,9 @@ def test_a_request_before_the_scrape_starts_collects_and_changes_nothing(managed
     assert record["cancel"]["outcome"] == "stopped_nothing_imported"
 
 
-def test_a_cancel_inside_the_fetch_leaves_the_source_unfinished_and_imports_its_ads_held(managed, tmp_path):
+def test_a_cancel_inside_the_fetch_leaves_the_source_unfinished_and_saves_its_ads_only(managed, tmp_path):
     managed("run00000001")
+    before = ledger_of(tmp_path)
 
     def term(provider, record):
         raise run_discovery.RunCancelled()  # what the SIGTERM handler raises while a source is being read
@@ -467,8 +473,8 @@ def test_a_cancel_inside_the_fetch_leaves_the_source_unfinished_and_imports_its_
     staged = (tmp_path / "data/jobs/staging/run00000002/jobspy.jsonl").read_text().splitlines()
     assert json.loads(staged[-1])["t"] == "batch", "no footer: the source did not finish"
     ledger = ledger_of(tmp_path)
-    assert "g4" in ledger["jobs"] and not ledger["jobs"]["g2"].get("absentSince") and ledger["jobs"]["g2"]["heldRunId"] == "run00000002"
-    assert "run00000002" not in proven(tmp_path)
+    assert "g4" in ledger["jobs"] and ledger["jobs"]["g2"] == before["jobs"]["g2"] and "heldRunId" not in ledger["jobs"]["g2"]
+    assert "run00000002" not in proven(tmp_path) and record["cancel"]["saved"] == 2
 
 
 def test_a_run_whose_kill_was_claimed_imports_nothing(managed, tmp_path):
@@ -655,6 +661,8 @@ def test_the_real_run_cancelled_mid_scrape_commit_point_and_hard_kill(scratch):
     assert on_disk("runA00000001")["status"] == "ok"
     assert ledger()["generation"] == 1 and counted_runs() == ["runA00000001"] and applied_runs() == ["runA00000001"]
 
+    after_a = ledger()
+
     # B: slow. It has staged ads 1 and 3 and is still "reading", with a browser of its own in another session.
     proc = scratch.start("runB00000002", SLOW_MODE="slow", SLOW_ADS="1,3")
     assert wait_for((scratch.marks / "in-flight").exists, 60)
@@ -667,18 +675,19 @@ def test_the_real_run_cancelled_mid_scrape_commit_point_and_hard_kill(scratch):
     assert proc.wait(30) == 0
     assert time.monotonic() - asked < 15, "a cooperative cancel does not wait out the slow source"
     saved = on_disk("runB00000002")
-    assert saved["status"] == "cancelled" and saved["cancel"]["outcome"] == "collected_ads_imported"
+    assert saved["status"] == "cancelled" and saved["cancel"]["outcome"] == "collected_ads_saved" and saved["cancel"]["saved"] == 2
     assert [(s["name"], s["status"], s["exitCode"]) for s in saved["steps"]] == [("discovery", "cancelled", run_log.EXIT_CANCELLED)]
     assert not alive(browser) and not alive(provider) and lock_is_free() and leftover(repo) == []
     after_b = ledger()
-    assert after_b["generation"] == 2 and after_b["lastImport"]["runId"] == "runB00000002" and after_b["lastImport"]["cancelled"] is True
+    assert after_b["generation"] == 2 and after_b["lastImport"] == after_a["lastImport"], "the list is still A's"
     assert len(after_b["jobs"]) == 3, "ads 1 and 2 from A, and ad 3 which B collected"
     ad2 = next(e for e in after_b["jobs"].values() if e["job"]["title"] == "Role 2")
-    assert not ad2.get("closedAt") and not ad2.get("absentSince") and ad2["heldRunId"] == "runB00000002", "B did not return it and said nothing about it"
+    assert ad2 == next(e for e in after_a["jobs"].values() if e["job"]["title"] == "Role 2"), "B did not return it and changed nothing about it"
     assert counted_runs() == ["runA00000001"] and applied_runs() == ["runA00000001"], "B is neither a proven run nor an applied one"
     assert (jobs / "staging/runB00000002/cancelled.json").is_file()
     guard = json.loads((jobs / "discovered_jobs.json").read_text())
-    assert guard["meta"]["ledgerGeneration"] == 2 and len(guard["jobs"]) == 3
+    assert guard["meta"]["ledgerGeneration"] == 2 and sorted(j["title"] for j in guard["jobs"]) == ["Role 1", "Role 2", "Role 3"]
+    assert not any(row_state.not_found(j) for j in guard["jobs"]), "no ad is held; the corpus is the list"
     assert run_log.sweep_interrupted() == []
 
     # C: a source that ignores SIGTERM. After the grace it is killed, and nothing is imported.

@@ -59,7 +59,7 @@ class CancelState:
     """What a cancel may do to this process (S6). SIGTERM raises RunCancelled only while `interruptible`, which is the source loop and
     nothing else: staging is append-only there and the ledger is not touched. Everywhere else, and always from the moment the commit is
     claimed, the signal only sets `pending`, and the code looks at it at the points it chose. So a cancel can never land inside the
-    import's writes: it either arrives before the claim (the run imports held) or after (the import finishes)."""
+    import's writes: it either arrives before the claim (the run saves its collected ads only) or after (the import finishes)."""
 
     def __init__(self) -> None:
         self.interruptible = False
@@ -186,7 +186,7 @@ def stop(record: dict, message: str) -> int:
 
 
 def cancelled_without_staging(record: dict) -> int:
-    """Cancelled before the scrape began: nothing was collected, nothing is imported, no file other than the record changes."""
+    """Cancelled before the scrape began: nothing was collected, nothing is saved, no file other than the record changes."""
     record["cancel"] = {"requestedAt": run_log.cancel_info(record).get("requestedAt"), "outcome": "stopped_nothing_imported"}
     run_log.event(record, "cancelled", imported=0, sourcesDone=0)
     return run_log.EXIT_CANCELLED
@@ -338,6 +338,16 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
     run_log.clear_commit_marker(record)  # a marker left by the old commit protocol: this commit finished, so the files agree again
     run_log.event(record, "commit_end", files=["job_history", "discovered_jobs"])
     result = outcome.result
+    if cancelled:
+        # S6: only the ads collected were saved (importer._plan_partial). The list, the lifecycle and the proven runs were not touched.
+        run_log.set_new_counts(record, Counter(result.new_by_provider))
+        run_log.set_staging_usage(record, outcome.usage)
+        for warning in outcome.warnings:
+            logger.warning("%s", warning)
+        record["cancel"] = {"requestedAt": run_log.cancel_info(record).get("requestedAt"), "outcome": "collected_ads_saved", "saved": outcome.saved}
+        run_log.event(record, "cancelled", saved=outcome.saved, sourcesDone=len(record["sources"]))
+        print(f"Cancelled. {outcome.saved} collected ads saved. Nothing else changed." if outcome.saved else "Cancelled. No ads were saved. Nothing else changed.")
+        return run_log.EXIT_CANCELLED
     history_stats = result.stats
     to_write = result.view["jobs"]
     run_log.set_new_counts(record, Counter(result.new_by_provider))
@@ -350,13 +360,6 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
         logger.warning("%s", warning)
     if not result.report.get("complete"):
         logger.info("Import: not a complete scrape (%s)", ", ".join(result.report.get("incompleteSources") or ["see the report"]))
-
-    if cancelled:
-        # Held import: every source counted as not run, nothing closed or marked absent, no proven run, dropped ads not counted.
-        record["cancel"] = {"requestedAt": run_log.cancel_info(record).get("requestedAt"), "outcome": "collected_ads_imported"}
-        run_log.event(record, "cancelled", imported=result.view["meta"]["dedupedCount"], sourcesDone=len(record["sources"]))
-        print(f"Cancelled. {result.view['meta']['dedupedCount']} collected ads imported, held; no source counts as read.")
-        return run_log.EXIT_CANCELLED
 
     found_count = result.view["meta"]["dedupedCount"]
     discovered_path = ROOT / "data" / "jobs" / "discovered_jobs.json"

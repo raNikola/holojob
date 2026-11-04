@@ -853,6 +853,7 @@ Fields added later, in the browser job store and not in this file until saved:
 
 - **Path:** `data/jobs/filtered_ads.json`
 - **Purpose:** Every ad a source returned and a filter dropped, kept after its staging run is pruned. Read by `job_discovery/all_ads.py` for `GET /api/jobs/all` (S5e2).
+- **Cancelled runs (S6):** their dropped ads are counted once under `partialRuns` (a list of run ids), never in `appliedRuns`.
 - **Written by:** `job_discovery/filtered_ads.py`, from the real import and `import_run.py --backfill-filtered`. A dry run never writes it. Not in backups, like the ledger.
 
 ```json
@@ -971,7 +972,7 @@ Fields added later, in the browser job store and not in this file until saved:
 
 - **Path:** `data/analytics/runs/<startedAt>-<runId>.json`, one file per run, kept 90 days. Status also `running` and `interrupted`; a Re-scrape adds `steps`, an interrupted record may add `incompleteCommit` (DECISIONS.md, Activity slice 2a).
 - **Event log:** `data/analytics/runs/<startedAt>-<runId>.events.jsonl`, append-only, one JSON object per line (`type`, `at`, then fields of that type), pruned with its record.
-- **Cancel (S6):** status also `cancelled`; a Re-scrape record has `orchestrator: "rescrape"`, and a cancelled or cancel-touched one adds `cancel: {requestedAt, outcome}` (`collected_ads_imported`, `stopped_nothing_imported`, `imported_before_cancel`, `finished_before_cancel`). `<startedAt>-<runId>.cancel` is the request and `.decision` the commit/kill claim (`commit` or `kill`), both pruned with the record. A held import sets `ledger.lastImport.cancelled: true`; its staging folder holds `cancelled.json`. DECISIONS.md, S6.
+- **Cancel (S6):** status also `cancelled`; a Re-scrape record has `orchestrator: "rescrape"`, and a cancel-touched one adds `cancel: {requestedAt, outcome, saved?}` (`collected_ads_saved`, `stopped_nothing_imported`, `imported_before_cancel`, `finished_before_cancel`). `<startedAt>-<runId>.cancel` is the request and `.decision` the commit/kill claim (`commit` or `kill`), both pruned with the record. A cancelled run's staging folder holds `cancelled.json`; its `imported.json` adds `cancelled` and `saved`. The ledger gains `partialRuns` (ids of cancelled runs saved, newest 200) and `lastImport` is not changed by them. DECISIONS.md, S6.
 - **Commit marker:** `data/analytics/runs/.commit-in-progress.json` (`runId`, `startedAt`, `files`, `written`), on disk only during discovery's writes. There with the lock free: an incomplete commit.
 - **Purpose:** What each discovery run did per source, for the Activity screen.
 - **Written by:** `run_discovery.py` through `run_log.py`. Field meanings: [DECISIONS.md](../DECISIONS.md#activity-slice-1-as-built-2026-11-02).

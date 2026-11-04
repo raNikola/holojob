@@ -488,9 +488,9 @@ def mark_imported(root: Path, run_id: str, info: dict | None = None) -> Path:
 
 
 def mark_cancelled(root: Path, run_id: str, info: dict | None = None) -> Path:
-    """The owner cancelled this run (S6): staging/<runId>/cancelled.json, 600, atomic. The importer reads it and imports the run HELD:
-    no source counts as read to its end, so nothing is closed, marked absent or recorded as a proven run, and the run's dropped ads
-    are not counted. It is written before the import starts and never removed."""
+    """The owner cancelled this run (S6): staging/<runId>/cancelled.json, 600, atomic. The importer reads it and saves only the ads the
+    run validly collected (importer._plan_partial): the list is not rebuilt, nothing is closed or marked absent, no proven run is
+    recorded. It is written before the import starts and never removed."""
     folder = staging_dir(Path(root)) / run_id
     if not RUN_ID.match(str(run_id)) or not folder.is_dir():
         raise ValueError("no staging folder for this run")
@@ -501,6 +501,15 @@ def mark_cancelled(root: Path, run_id: str, info: dict | None = None) -> Path:
 
 def is_cancelled(root: Path, run_id: str) -> bool:
     return (staging_dir(Path(root)) / run_id / CANCELLED).is_file()
+
+
+def imported_info(root: Path, run_id: str) -> dict | None:
+    """imported.json of a run, or None."""
+    try:
+        info = json.loads((staging_dir(Path(root)) / run_id / IMPORTED).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return info if isinstance(info, dict) else None
 
 
 def is_imported(root: Path, run_id: str) -> bool:

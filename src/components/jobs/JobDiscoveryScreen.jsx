@@ -47,6 +47,7 @@ import {
 import { runScoring, loadLatestScoredJobs } from '../../modules/jobs/pipelineRunner'
 import { useRescrapeRun } from '../../modules/jobs/useRescrapeRun'
 import RescrapeProgress from './RescrapeProgress'
+import { cancelledText } from '../../modules/jobs/rescrapeRun'
 import { withProfileSalaryDefaults } from '../../modules/jobs/jobSalary'
 import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { useProfile } from '../../context/ProfileContext'
@@ -195,7 +196,7 @@ export default function JobDiscoveryScreen() {
   const handleRescrapeFinished = useCallback(async (run) => {
     if (routeEnabled) refetchAllAds() // the ledger may have moved even if the scored file below cannot be read
     if (run?.status === 'cancelled') {
-      setRerunMsg('Re-scrape was cancelled. Scoring was skipped; Re-score scores what was collected.')
+      setRerunMsg(cancelledText(run.cancel).replace('The last run was cancelled.', 'Re-scrape was cancelled.'))
       return
     }
     if (!run || run.status === 'failed' || run.status === 'interrupted') {

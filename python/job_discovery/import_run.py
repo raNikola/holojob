@@ -251,7 +251,10 @@ def main(argv=None, root: Path | None = None) -> int:
         print(f"Imported run {run_id}: generation {outcome.generation}" + (" (it was already imported; the view was checked)" if not outcome.committed else ""))
         if outcome.committed:
             print(f"  ledger: " + ", ".join(f"{k} {v}" for k, v in rep["ledgerChanges"].items()))
-            print(f"  complete scrape: {'yes' if rep['complete'] else 'NO (' + ', '.join(rep['incompleteSources'] or ['see the rejections']) + ')'}")
+            if rep.get("cancelled"):
+                print(f"  cancelled run: {outcome.saved} collected ads saved, nothing else changed")
+            else:
+                print(f"  complete scrape: {'yes' if rep['complete'] else 'NO (' + ', '.join(rep['incompleteSources'] or ['see the rejections']) + ')'}")
         print(f"  staging: {outcome.usage['runs']} runs, {megabytes(outcome.usage['bytes'])}; removed {outcome.pruned or 'nothing'}")
         for warning in outcome.warnings:
             print(f"  WARNING: {warning}", file=sys.stderr)

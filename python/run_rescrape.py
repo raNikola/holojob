@@ -13,7 +13,7 @@ Stdlib only until a step starts: a status poll runs `reconcile`.
 
 Cancel (S6) is cooperative. `cancel` writes `<record>.cancel` and nothing else. This process polls for that file while a step runs,
 and sends SIGTERM to the step's own process group (the step has one, so the whole tree can be stopped and the lock is not left with
-an orphan). Discovery turns SIGTERM into "stop scraping, import what is written, held" (run_discovery.py); it can only be killed
+an orphan). Discovery turns SIGTERM into "stop scraping, save what was collected, change nothing else" (run_discovery.py); it can only be killed
 hard when it ignored SIGTERM for CANCEL_GRACE seconds AND the orchestrator wins the "kill" claim, which discovery's "commit" claim
 excludes. Scoring writes one file atomically, so SIGTERM at any moment leaves the old file or the new one.
 """
@@ -229,8 +229,8 @@ def start(args) -> int:
 def settle_cancel(record: dict, succeeded: bool) -> tuple[bool, bool]:
     """After the steps: write what a cancel request amounted to into the record. Returns (the run is a cancelled one, the run succeeded).
 
-    cancelled: the scrape was stopped. Its collected ads were imported held (discovery says so in `cancel`), or, when the step had to
-      be killed, nothing was imported and the staging is marked so that no path will ever count it as a proven run.
+    cancelled: the scrape was stopped. The ads it had validly collected were saved, and nothing else changed (discovery says so in `cancel`), or, when the step had to
+      be killed, nothing was saved and the staging is marked so that no path will ever count it as a proven run.
     imported_before_cancel: the request came after the commit point. The import happened as any import does and counts; the run keeps
       its own status and only scoring is missing (or was stopped), which the status route reports as `scoringBehind`.
     A request on a run that failed anyway changes nothing: the run failed.
@@ -242,10 +242,10 @@ def settle_cancel(record: dict, succeeded: bool) -> tuple[bool, bool]:
         cancel = record.setdefault("cancel", {"requestedAt": run_log.cancel_info(record).get("requestedAt"), "outcome": "stopped_nothing_imported"})
         if cancel["outcome"] == "stopped_nothing_imported":
             _mark_staging_cancelled(record)
+        saved = cancel.get("saved") or 0
         run_log.add_issue(record, "warning", (
-            "Cancelled. The ads written so far were imported, held: no ad was closed or marked absent, and this run does not count as a proven run."
-            if cancel["outcome"] == "collected_ads_imported"
-            else "Cancelled. The scrape had to be stopped hard: nothing was imported and no job changed."
+            ("Cancelled. %d collected ads were saved. Nothing else changed." % saved) if saved
+            else "Cancelled. No ads were saved. Nothing else changed."
         ) + " Scoring was skipped.")
         return True, True
     scoring_stopped = bool(scoring and scoring["status"] == "cancelled")
