@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Brain, MessageSquare, Settings, ShieldCheck, Target, Users, X } from 'lucide-react'
+import { Activity, Brain, MessageSquare, Settings, ShieldCheck, Target, Users, X } from 'lucide-react'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { VIEWS, VIEW_TITLES } from '../../modules/appNavigation'
@@ -81,6 +81,14 @@ export default function AppShell({ activeView, onNavigate, children }) {
             >
               <Users className="h-4 w-4" />
               Outreach
+            </button>
+            <button
+              type="button"
+              onClick={() => { onNavigate(VIEWS.ACTIVITY); setMoreOpen(false) }}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
+            >
+              <Activity className="h-4 w-4" />
+              Activity
             </button>
             <button
               type="button"

@@ -346,7 +346,7 @@ describe('messages', () => {
 
   it('summarises a source error part by part and keeps the board names', () => {
     expect(errorSummary('acme: HTTPError 404 CANARY-TITLE; beta: timeout CANARY-DESCRIPTION')).toBe('acme: details withheld (HTTPError, HTTP 404); beta: details withheld')
-    expect(errorSummary('something with CANARY-TITLE')).toBe('Error details withheld')
+    expect(errorSummary('something with CANARY-TITLE')).toBe('Details withheld')
     expect(summarise('status code 429 and TimeoutError')).toBe('details withheld (TimeoutError, HTTP 429)')
   })
 })

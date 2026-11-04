@@ -131,7 +131,8 @@ export function errorSummary(value) {
   if (cleaned === null) return null
   return cleaned.split('; ').slice(0, 20).map((part) => {
     const match = /^([\w.-]{1,60}): (.*)$/s.exec(part)
-    return match ? `${match[1]}: ${summarise(match[2])}` : `Error ${summarise(part)}`
+    const summary = summarise(part)
+    return match ? `${match[1]}: ${summarise(match[2])}` : `${summary[0].toUpperCase()}${summary.slice(1)}`
   }).join('; ')
 }
 
