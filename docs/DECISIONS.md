@@ -304,6 +304,21 @@ Recorded from the owner's addendum. Docs only; no code changed. Backlog entries:
 3. **Infostud stays unclassified** (not snapshot-based) until its fetch coverage is confirmed; the six checks are postponed to the end. Consistent with the entry under "Scrape, import, scoring".
 4. **Process rule.** Every decision is recorded in the md files, not only in chat. The owner tests everything at the end; no merge and no production before the real-container integration check.
 
+## Testing and commit policy (owner decision, 2026-11-04)
+
+Docs only; no code changed. The short form is in `CLAUDE.md`. It extends item 4 of "Owner decisions: baseline score, role filter, Infostud, testing (2026-11-03)" (no merge and no production before the real-container integration check).
+
+**Rules**
+
+1. **During development:** run only the targeted tests relevant to the changed code, plus the relevant lint. Mutation tests only for changed logic, when necessary.
+2. **Before each commit:** the targeted tests and the relevant lint must pass. The full suite is not run solely to create a commit.
+3. **Before a push or merge:** once, after the feature is complete, run the full Python pytest, the full Vitest, the JS lint, the production build, the mutation checks, the required integration tests, and the data-integrity fingerprint verification (the method used so far: a sha256 over `data/` leaving out `data/ai` and `data/analytics`, compared before and after).
+4. **If the full gate fails:** fix, and rerun the failed checks. Repeat the full gate only when later changes could affect previously verified areas.
+5. **Never** bypass a failing test (no `--no-verify`, no skipping or `xfail` to turn a test green, no loosened assertion), and **never** modify production data to make a test pass. **Never** push, merge or deploy without the owner's explicit approval.
+6. **Explicit task-specific testing requirements override this policy.**
+
+**Where it meets what exists.** The pre-push hook (`scripts/git-hooks/pre-push`) already runs the lint, the JS tests, pytest `-m "not network"` and the build on the pushed commit; it covers that part of rule 3. Mutation checks, integration tests and the fingerprint are not in the hook and are done by hand. A search of `CLAUDE.md`, `.claude/rules/`, `docs/` and `README.md` found **no earlier rule that required the full gate before every commit**, so nothing was replaced. Slices S4 to S7 ran the full gate before each slice commit because their task briefs said so; that was a task requirement, never a rule in these files.
+
 ## S4a as built: the switch (2026-11-03)
 
 **Owner decisions recorded first:**
