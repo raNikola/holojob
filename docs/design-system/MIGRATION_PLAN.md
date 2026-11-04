@@ -1,8 +1,8 @@
 # Migration plan
 
-Status: **planning only** (2026-11-04). Nothing is migrated. Tasks (A to J) are defined in [REDESIGN_BACKLOG.md](REDESIGN_BACKLOG.md). Each row moves in small independent branches and PRs. Testing is functional only, under the [permanent policy](README.md#testing-and-browser-policy-permanent); the look is the owner's acceptance.
+Status: **planning only** (2026-11-04). Nothing is migrated. Tasks (A to J) are defined in [REDESIGN_BACKLOG.md](REDESIGN_BACKLOG.md). Each row moves in small independent branches and PRs. Testing is functional only, under the [permanent policy](README.md#testing-and-browser-policy-permanent); visual appearance is the PO's acceptance.
 
-Implementation starts after the minimal Wave 0 backup and the owner's approval of these docs.
+Implementation is **not authorized**. It needs a separate approval, the minimal Wave 0 backup and the PO's verification of the O1 values.
 
 ## Audit summary
 
@@ -36,10 +36,11 @@ Implementation starts after the minimal Wave 0 backup and the owner's approval o
 | 9 | Base UI under jsdom 24 not tried | First slice tries it |
 | 10 | `ds/sidebar` writes a cookie; `theme-provider` and `next-themes` write storage | Edit the first, leave out the others |
 | 11 | Settings keeps categories mounted; tracker forms guard drafts; `window.confirm` is synchronous | Keep custom shell, `keepMounted` on tabs, `window.confirm` stays in MVP |
-| 12 | Preset `h-7` against today's 44 px minimum | Open owner decision O3 |
+| 12 | Preset `h-7` against today's 44 px minimum | Decided (O3): 44 x 44 px minimum on mobile, compact desktop allowed. A recorded edit to `ds/` controls |
 | 13 | `dark` variant differs from the repo's | Keep the repo's until `dark:` colour uses are gone |
-| 14 | **New with this preset.** `--font-sans` is defined by both the repo (DM Sans) and the preset (Geist), and `body` in `src/index.css` reads it | `--font-sans` and the Geist import move only in A3, in one change. Until then `--font-heading` resolves to DM Sans, which is harmless because nothing uses it |
-| 15 | **Worse with this preset.** Dark `--primary` as text is 2.23:1 on the background (was 2.72:1); 141 `text-teal-*` classes need a target | Do not map them to `text-primary` by default. Open decision O10 |
+| 14 | **New with this preset.** `--font-sans` is defined by both the repo (DM Sans) and the preset (Geist), and `body` in `src/index.css` reads it | `--font-sans` and the Geist import move only in the separate font migration, A4 (O4). Until then `--font-heading` resolves to DM Sans, which is harmless because nothing uses it |
+| 15 | Dark `--primary` as text is 2.23:1 on the background; 141 `text-teal-*` classes need a target | Decided (O10): judged per use, never replaced blindly. Links use `--primary-strong` (U1, pending) |
+| 17 | Measured contrast failures in specific pairs | Decided (O8): [smallest corrections](TOKENS.md#part-3-contrast-o8), centralized, pending PO verification |
 | 16 | `ds/scroll-area` has an unused `React` import (`tsc` TS6133 in the scaffold) | Same in both presets. Fix if lint flags it after JS conversion |
 
 ## Pages
@@ -51,7 +52,7 @@ Complexity: S, M, L. Order is the recommended slice order; see [dependencies](RE
 | 1 | Shell | `layout/AppShell`, `Sidebar`, `TopBar`, `StorageNotice` | Custom, 9 raw buttons in AppShell, hand-built "More" | `ds/sidebar` (edited), `ds/sheet`, tokens | Compose, keep state module | A2 | Cookie and shortcut in the registry file; `sidebarState.test.js` | M |
 | 2 | Activity | `activity/*` | Cards, tables, polling, cancel | `ds/card`, `ds/table`, Badge | Markup only | A2, B | DOM tests pin text and roles; a good pilot | S |
 | 3 | Jobs | `jobs/JobDiscoveryScreen`, `JobTable`, `JobFilters`, `SalaryFilter`, `JobListControls`, `BulkActionsBar`, `JobDiscoverySummary`, `PipelineOrchestrator`, `RescrapeProgress`, `JobImportPanel`, `AddJobDialog` | Largest screen, 512 + 361 lines, long-list logic | `ds/table`, `ds/dialog`, kit | Keep logic, replace markup | A2, B, Wave 3 coordination | Most-used screen; source-reading tests; Active/All logic; AI confirm panel | L |
-| 4 | Settings | `settings/*`, `ai/AIBudgetPanel`, `AISettingsPanel`, selectors, usage | Custom shell, mounted categories | Keep shell, tokens, kit | Panels migrate one by one | A2, B, O6 | Drafts; 409 confirm lists; secrets display | L |
+| 4 | Settings | `settings/*`, `ai/AIBudgetPanel`, `AISettingsPanel`, selectors, usage | Custom shell, mounted categories | Keep shell, tokens, kit | Panels migrate one by one | A2, B, coordinated with Wave 7 (O6) | Drafts; 409 confirm lists; secrets display | L |
 | 5 | Job Details page and drawer | `jobs/JobDetailsPage`, `JobDetailDrawer`, `JobDetailBody`, `FitScore`, `JobScoreBadge`, `AuthorizationBadge`, `FitJudgementCard`, `FitJudgementSection`, `EngineShadowSection`, `ManualJobSection`, `JobDescription` | Hand-built drawer, panel type scale | `ds/sheet`, kit, extension tokens | Class strings in `fitScore.js`, `engineShadow.js` | C1, Wave 2 UI | Portal escapes `.panel-text-up`; focus trap is new; Wave 2 adds Insufficient Data; Wave 5 removes shadow badge | L |
 | 6 | Applications | `applications/ApplicationHome`, `ApplicationBoard`, `ApplicationStatistics`; `jobs/ApplicationTrackerPanel`, `ApplicationTrackingSummary`, `ApplicationTimeline`, `ApplicationDashboard` | Tables, board, stateful forms | Kit, `ds/table` | Markup only | D1, **Wave 5** | Wave 5 rewrites this; draft guards; stage labels | M |
 | 7 | Profile | `profile/*` | 66 palette classes in the form, 7 raw buttons, 6 selects | Kit, `native-select` | Markup only | A2 | Required-field tests; browser-held profile data | M |
@@ -62,7 +63,7 @@ Complexity: S, M, L. Order is the recommended slice order; see [dependencies](RE
 | 12 | Career Strategy | `ai/CareerStrategyScreen` | Cards | Kit | Markup only | A2 | Low | S |
 | 13 | AI Copilot | `ai/AICommandCenter` | Chat | Kit | Markup only | A2 | Low | S |
 | 14 | Dashboard | `dashboard/DashboardHome` | Mostly kit (2 palette classes) | Kit carries it | Little | A2 | Low | S |
-| 15 | Intelligence | `intelligence/*` | Cards, tabs | Kit, `ds/tabs` | Markup only | A2 | `stretch` indigo decision (O7) | M |
+| 15 | Intelligence | `intelligence/*` | Cards, tabs | Kit, `ds/tabs` | Markup only | A2 | `stretch` indigo goes neutral (O7) | M |
 | 16 | Outreach | `outreach/*` | Lists, composer, drawer | Kit, `ds/sheet` | Markup only | A2, B | `[CONTACT NAME]` placeholder; contact privacy | M |
 | 17 | Quality Audit | `quality/*` | Cards, table, drawer | Kit, `ds/sheet`, `ds/table` | Markup only | A2, B | Low | M |
 | n/a | Gates | `demo/DemoBootstrapGate`, `jobs/JobTextGate` | Small | Tokens | Colour only | A2 | Must render before any screen | S |
@@ -75,11 +76,11 @@ Complexity: S, M, L. Order is the recommended slice order; see [dependencies](RE
 
 | Order | Component | Importers | Current | Target | Changes | Risks | Size |
 |---|---|---|---|---|---|---|---|
-| 1 | `Button` | 54 | Palette variants, `min-h-[44px]` | Adapter over `ds/button` | Map variants | O3 size decision; `className` overrides at call sites | S |
+| 1 | `Button` | 54 | Palette variants, `min-h-[44px]` | Adapter over `ds/button` | Map variants; 44 px on mobile (O3) | `className` overrides at call sites | S |
 | 2 | `Badge` | 17 | Six variants, palette | Adapter over `ds/badge` plus extension | Add variants | Meaning map must not move | S |
 | 3 | `Alert` | 39 | Three variants, icons | Adapter over `ds/alert` | Map variants | Low | S |
 | 4 | `Card` | 43 | `title`, `description`, `action` | Adapter over `ds/card` | Keep props | Heading font change | S |
-| 5 | `StatCard` | 6 | `accent` prop with palette | `ds/card` | Drop palette `accent` | O7 | S |
+| 5 | `StatCard` | 6 | `accent` prop with palette | `ds/card` | Drop palette `accent`; neutral by default (O7) | Low | S |
 | 6 | `Input` | 10 | Label, error, aria | `ds/input`, `ds/field` | Keep props and id rule | `requiredFields.test.js` | S |
 | 7 | `Textarea` | 6 | As Input | `ds/textarea` | Same | Low | S |
 | 8 | `SelectField` | 8 | Native select | `ds/native-select` | Same | Low | S |
@@ -99,7 +100,8 @@ Complexity: S, M, L. Order is the recommended slice order; see [dependencies](RE
 1. **A1** additive foundations (the [proposed first slice](#proposed-first-implementation-slice)).
 2. **A2** kit adapters: Button, Badge, Alert, Card, then the rest of the table above.
 3. **B** shell.
-4. **A3** global cutover. It comes after the kit and shell so the visible change lands on Design System components. The look of the cutover is reviewed by the owner.
+4. **A3** global rules (radius, default border, surfaces). It comes after the kit and shell so the visible change lands on Design System components. The look is reviewed by the PO.
+4a. **A4** global font migration to Geist: a separate controlled step, with functional regression verification and PO visual approval. It may run at any point after A3.
 5. **I1** Activity as the pilot screen.
 6. **C** Jobs, **H** Settings.
 7. **D** Job Details, after the Wave 2 UI.
@@ -109,23 +111,25 @@ Complexity: S, M, L. Order is the recommended slice order; see [dependencies](RE
 
 ## Proposed first implementation slice
 
-Not built. After the minimal Wave 0 backup, approval of these docs and O1. On its own small branch and PR:
+Not built and not authorized. It needs a separate implementation approval, the minimal Wave 0 backup and PO verification of the O1 values. On its own small branch and PR:
 
 - Add the dependencies, exact versions, and `components.json` (`tsx: false`, `aliases.ui` to `@/components/ds`).
 - Add the `@` alias to `vite.config.js` and `vitest.config.js`.
 - Add the `cn` re-export.
-- Add the preset tokens and the approved extension tokens to the token layer. Remove the three unused variables. **Hold back** the global rules (`html { font-sans }`, `* { border-border }`, body colours, radius scale) and the fonts (`--font-sans` and the Geist import).
+- Add the preset tokens, the verified extension tokens and the verified contrast corrections to the token layer. Remove the three unused variables. **Hold back** the global rules (`html { font-sans }`, `* { border-border }`, body colours, radius scale) and the fonts (`--font-sans` and the Geist import).
 - Add one `ds/button.jsx`, imported by nothing in the app.
 
 **Verification, functional only:**
 
 - `ds/button` renders under jsdom and fires clicks (this also answers the Base UI and jsdom question).
 - A test confirms the token file holds every required name with the snapshot's value, except the held-back ones it lists.
-- A test confirms `--font-sans` is still DM Sans after this slice.
+- A test confirms `--font-sans` is still DM Sans after this slice, so Geist is not active (O4).
+- A test confirms the 44 x 44 px minimum classes are on `ds/button` for mobile (O3).
+- `contrast_check.py`, run against the values committed, reports 0 applicable pairs below target.
 - The storage allowlist test still passes.
 - Lint, targeted Vitest and build pass.
 
-**No browser test is expected.** Colour tokens are not used by any screen yet. No visible change is intended, and Claude cannot confirm that without a browser, so the report says so and the owner reviews. Rollback is reverting the one PR.
+**No browser is used.** Colour tokens are not used by any screen yet. No visible change is intended, and Claude cannot confirm that without a browser, so the report says so and the PO reviews. Rollback is reverting the one PR.
 
 # Appendix: every component file
 
