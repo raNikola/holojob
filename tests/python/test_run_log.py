@@ -317,6 +317,14 @@ def test_a_failed_search_source_keeps_its_ads_in_the_file_with_nothing_changed(d
     assert "No source gave a usable result, so nothing was imported and the job list was not changed." in messages(record, "error")
 
 
+def test_a_skipped_source_beside_a_failed_one_is_a_failed_run_not_a_skipped_one(discovery, tmp_path):
+    discovery({"infostud": Fake([infostud_job()], ProviderOutcome(read=1, kept=1))})
+    before = job_files(tmp_path)
+    assert discovery({"infostud": Fake(outcome=skipped()), "greenhouse": Fake(boom=RuntimeError("down"))}) == 1  # attempted, nothing usable
+    assert job_files(tmp_path) == before
+    assert records()[-1]["status"] == "failed"
+
+
 def test_a_search_source_that_ran_and_lost_an_ad_behaves_as_before(discovery, tmp_path):
     discovery({"infostud": Fake([infostud_job(), infostud_job("i2", "Head of Product")], ProviderOutcome(read=2, kept=2))})
     discovery({"infostud": Fake([infostud_job()], ProviderOutcome(read=1, kept=1))})

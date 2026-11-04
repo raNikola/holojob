@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { JOBS_STORAGE_KEY, onJobsSaved, saveJobs } from '../../src/modules/jobs/jobStorage.js'
 import { getStorageHealth, resetStorageHealth, STORAGE_QUOTA_CHARS } from '../../src/modules/jobs/storageHealth.js'
@@ -97,11 +98,13 @@ describe('saveJobs tiers', () => {
 
   it('the error level is not cleared by reading the older copy', async () => {
     const { loadJobs } = await import('../../src/modules/jobs/jobStorage.js')
+    localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify({ jobs: [{ jobId: 'old' }], degraded: 'lean' })) // the older copy, itself a lean one, the failed save left in place
     const storage = storageWithLimit(50)
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     saveJobs(stateOf(jobs), storage)
     expect(getStorageHealth().level).toBe('error')
-    loadJobs()
+    expect(loadJobs().jobs.map((j) => j.jobId)).toEqual(['old'])
     expect(getStorageHealth().level).toBe('error')
+    localStorage.clear()
   })
 })

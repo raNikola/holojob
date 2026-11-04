@@ -509,7 +509,7 @@ def plan_import(
         report.update(complete=False, saved=0, provenRuns=[], nothingSaved=NO_USABLE_SOURCE)
         for one in (report.get("proof") or {}).values():
             one["proven"] = False
-        result.ledger = copy.deepcopy(ledger)  # whatever was worked out above is dropped: this run changes nothing
+        # result.ledger is still the untouched copy made at the start: nothing above has applied the run to it
         return result
 
     previous_facts, seen_before = _previous(previous)
