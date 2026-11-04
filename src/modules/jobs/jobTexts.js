@@ -1,6 +1,6 @@
 // The ad text of stored rows that the browser kept a shorter copy of (S8a). This is the ONE place where it is put back.
 //
-// `saveJobs` (jobStorage.js) may store the list without the ad text of some rows when the list outgrows localStorage. Every reader of the
+// `saveJobs` (jobStorage.js) may store the list without the ad text of some rows when the list outgrows the browser storage. Every reader of the
 // list goes through `loadJobs()`, which calls `mergeCachedTexts` below, so a text that is in this cache is in every reader's rows at once:
 // the search filter, the outreach providers, the AI context, the Jobs, Applications and Outreach screens. The cache is filled
 //   1. by `saveJobs`, with the texts it is about to leave out (they are in memory at that moment), so one tab never loses a text it had; and
