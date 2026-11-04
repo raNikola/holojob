@@ -270,27 +270,30 @@ def _mark_staging_cancelled(record: dict) -> None:
         run_log.add_issue(record, "error", f"The cancelled run's staging could not be marked, so it is not safe to import it as a proven run: {exc}")
 
 
-def lock_is_held() -> bool | None:
+def lock_is_held(proc_locks: Path = Path("/proc/locks")) -> bool | None:
     """Is anyone holding the pipeline lock? Read from /proc/locks, so asking takes nothing and cannot make a starting run see it busy.
-    None when it cannot be told."""
+    None when it cannot be told.
+
+    Matched on the inode alone. /proc/locks prints the filesystem's own device number, which a bind mount, a container or a btrfs
+    subvolume may show differently from stat(); comparing it could read a live run as "not running" and make a cancel do nothing.
+    An inode shared with an unrelated lock on another filesystem only reads as held, and then a harmless request file is written."""
     try:
-        info = pipeline_lock.lock_path().stat()
+        inode = pipeline_lock.lock_path().stat().st_ino
     except FileNotFoundError:
         return False  # never created: nobody has held it
     except OSError:
         return None
     try:
-        rows = [row.split() for row in Path("/proc/locks").read_text().splitlines()]
+        rows = [row.split() for row in proc_locks.read_text().splitlines()]
     except OSError:
         return None
     for row in rows:
         if len(row) > 5 and "FLOCK" in row:
             try:
-                major, minor, inode = (int(part, 16 if i < 2 else 10) for i, part in enumerate(row[5].split(":")))
+                if int(row[5].rsplit(":", 1)[-1]) == inode:
+                    return True
             except ValueError:
                 continue
-            if inode == info.st_ino and (major, minor) == (os.major(info.st_dev), os.minor(info.st_dev)):
-                return True
     return False
 
 
