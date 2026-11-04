@@ -1199,3 +1199,48 @@ Owner-approved, GPT-reviewed. Documentation only: no code, test or data changed.
 **Backlog added:** rotate the OpenAI key and `li_at`; resume findings (11 of 17 docs, stale unverified-degree findings).
 
 **Open decisions:** (1) whether the four "Fix scoring" items in ROADMAP.md belong to a1/a2 as split above (hard/soft and low-confidence reasons to a1; whole-history skills and domain transferability to a2); (2) the `older_key` retention window; (3) the Infostud coverage check.
+
+## Design System and UI redesign planning (2026-11-04)
+
+Planning only. No application code, dependency, test or data changed, and the redesign has not started. Documents: [design-system/](design-system/README.md). Roadmap: one row before Wave 0, marked planning only; the other waves are not reordered.
+
+**Owner decisions:**
+
+1. **Name:** keep the current app name until the owner decides otherwise. "HolyJobs" is only the epic's title; the repo says Holojob and `index.html` says Career OS.
+2. **Preset:** apply the complete preset `b7CScIWmG`, colours and fonts.
+3. **Body font:** from the real CLI output, never guessed. Result: **Lora**, through `html { @apply font-serif }`, so the whole interface is serif.
+4. **Primitives:** Base UI accepted (the preset's choice, not Radix).
+5. **Sequence:** planning comes before Wave 0; implementation comes after the minimal Wave 0 backup.
+6. **Branching:** no long-lived redesign branch. After the docs are reviewed and approved, implementation goes through small independent branches and PRs, so it does not collide with the scoring and matching roadmap.
+7. **Design System = the preset plus a central semantic extension:** tokens for fit score, job status, priority, success, warning and error, defined once in the token layer and documented in `TOKENS.md` as "extension, not defined by the preset", with proposed values marked for PO approval. No arbitrary colours inside components.
+8. **Testing and browser policy (permanent).** Text in [design-system/README.md](design-system/README.md#testing-and-browser-policy-permanent). Claude Code owns unit, integration, functional regression, build, lint and existing tests. The owner owns visual look and aesthetics, responsive look and UX acceptance, and final design approval. Default: no browser tests. A browser only when a function cannot be reliably verified without it. No crawling, mass screenshots, visual regression, pixel comparison or screenshot baseline. At most one targeted browser smoke test per slice, with a justified need; more only with the owner's approval. Claude states what it could not verify without a browser; visually unverified UI is never presented as visually approved.
+
+**Removed from the plan at the owner's request:** the Playwright dependency, the demo-mode screenshot baseline, all visual regression tooling, browser-based visual tests, any duty for Claude to confirm aesthetics or layout, and the long-lived branch with its rebase rhythm.
+
+**Constraints kept:** no behaviour change, no backend or API change, no new routing framework, no overwriting of existing UI components, no colours or fonts outside the Design System, no secrets or env files in Git. Proposed CLAUDE.md lines are in the README; CLAUDE.md itself is not edited.
+
+**Verified while planning (`shadcn@4.23.0`, in an isolated container with only an empty scratch folder mounted):**
+
+- Preset: `base-mira`, Base UI, `mist`, lucide, Lora, radius `0.625rem`. Snapshot in [design-system/preset/](design-system/preset/README.md).
+- `template=react-router` does not matter: tokens are identical to the `vite` scaffold. The app keeps having no router.
+- `tsx: false` and `aliases.ui` set to `@/components/ds` give `.jsx` files in `ds/`, so the existing `src/components/ui/` is not touched.
+- `ds/sidebar` as supplied writes a `sidebar_state` cookie and binds a keyboard shortcut, and `theme-provider` writes a `localStorage` key; both conflict with the browser storage policy. `theme-provider`, `next-themes` and `sonner` are left out, and the cookie write is removed from `ds/sidebar`.
+- `--color-accent`, `--color-accent-hover` and `--color-border` have no consumers, so the preset's same-named tokens do not collide in practice.
+- Preset controls default to `h-7`; the current `Button` has `min-h-[44px]`.
+- Computed contrast of `muted-foreground` on `muted` in light mode is 4.15:1, below AA. It is a preset value and is left unchanged.
+
+**Implementation choices (standard, not owner decisions):** `src/components/ds/` for registry files; exact version pins; `shadcn` and `tw-animate-css` as dev dependencies; `native-select` before `select`; the repo's dark variant kept until the `dark:` colour uses are gone; `window.confirm` kept in MVP; a ratchet test for palette classes.
+
+**Open PO decisions** (details in [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md#open-po-decisions)):
+
+- O1: approval of the extension token values and aliases.
+- O2: sequencing of slices against Waves 2 to 5.
+- O3: control size, preset `h-7` or today's 44 px minimum.
+- O4: serif everywhere, confirmed once seen.
+- O5: whether a mixed look may be deployed between slices.
+- O6: whether Wave 7's Settings and UX work merges into Task H.
+- O7: colours with no meaning today (`violet`, `indigo`, `green` stat cards) go to neutral.
+- O8: `muted-foreground` on `muted` at 4.15:1.
+- O9: the registry's sidebar keyboard shortcut.
+
+**Not approved:** any application code change, installing dependencies into the frontend, or starting the redesign.
