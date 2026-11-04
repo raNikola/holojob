@@ -521,7 +521,8 @@ def gather(root: Path, run_id: str | None, *, as_of: str, measure: bool = True, 
     runs = []
     for one in all_ids:
         run = staging.read_run(root, one)
-        if run.cancelled is None and isinstance(run.manifest, dict) and not (run.status is not None and run.status.get("ok") is False):
+        if (run.cancelled is None and isinstance(run.manifest, dict) and not (run.status is not None and run.status.get("ok") is False)
+                and not (staging.imported_info(root, one) or {}).get("nothing")):
             runs.append(run)
     runs.sort(key=lambda r: (r.manifest.get("startedAt") or "", r.run_id))
     if run_id:

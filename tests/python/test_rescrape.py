@@ -478,13 +478,19 @@ def test_the_record_is_on_disk_at_the_start_and_after_every_source(discovery, mo
     seen = []
 
     class Spy(Provider):
+        def __init__(self, name):
+            super().__init__()
+            self.name = name
+
         def fetch_jobs(self, *args):
             found = [p for p in run_log.runs_dir().iterdir() if run_log.is_record_name(p.name)]
             seen.append(json.loads(found[0].read_text()))
-            return super().fetch_jobs(*args)
+            self.last_outcome = ProviderOutcome(status="ok", read=1, kept=1)
+            return [{**job(), "provider": self.name}]  # the source's own name: an ad under another provider's name is not a whole ad
 
-    monkeypatch.setattr(run_discovery, "get_provider", lambda name: Spy())
-    monkeypatch.setattr(run_discovery, "effective_provider_names", lambda spec: ["one", "two"])
+    # The sources are named as the ads say, so the import has a usable source; the test is about the record being on disk meanwhile.
+    monkeypatch.setattr(run_discovery, "get_provider", lambda name: Spy(name))
+    monkeypatch.setattr(run_discovery, "effective_provider_names", lambda spec: ["greenhouse", "lever"])
     assert discovery() == 0
     assert [(r["status"], len(r["sources"])) for r in seen] == [("running", 0), ("running", 1)]
 
@@ -533,6 +539,10 @@ if lock is None:
 run_id = sys.argv[sys.argv.index("--run-id") + 1]
 record = run_log.find_record(run_id)
 run_log.add_source(record, "greenhouse", SimpleNamespace(status="ok", read=1, kept=1, error=None, boards_failed=[], skip_reason=None, warnings=[]))
+if os.environ.get("FAKE_DISCOVERY_NOTHING"):  # S8b: the real discovery found no usable source and imported nothing (exit 0 when all were skipped)
+    record["sources"] = []
+    run_log.add_source(record, "greenhouse", SimpleNamespace(status="skipped", read=0, kept=0, error=None, boards_failed=[], skip_reason="not here", warnings=[]))
+    record["import"] = {{"kind": "nothing", "nothingSaved": "no_usable_source", "complete": False, "saved": 0, "new": 0, "refreshed": 0, "sources": []}}
 run_log.save(record)
 (marks / "discovery-started").write_text(str(os.getpid()))
 for _ in range(50):  # noisy on purpose: a closed output must not stop a step
@@ -673,6 +683,16 @@ def test_a_failed_discovery_stops_before_scoring_as_today(fake):
     assert saved["status"] == "failed"
     assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "failed")]
     assert any("discovery" in i["message"] for i in saved["issues"])
+
+
+def test_a_run_that_imported_nothing_because_every_source_was_skipped_is_skipped_not_failed_and_is_not_scored(fake):
+    assert fake.start(FAKE_DISCOVERY_NOTHING="1").wait(30) == 0
+    assert not (fake.marks / "scoring-done").exists(), "the list did not change, so there is nothing to score"
+    saved = on_disk(RUN_ID)
+    assert saved["status"] == "skipped" and saved["import"]["nothingSaved"] == "no_usable_source"
+    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok")]
+    events = [json.loads(line) for line in run_log.events_path(saved).read_text().splitlines() if line.strip()]
+    assert any(e["type"] == "step_skipped" and e.get("step") == "scoring" and e.get("reason") == "nothing_imported" for e in events)
 
 
 def test_a_failed_scoring_fails_the_run_and_names_the_reason_without_secrets(fake):

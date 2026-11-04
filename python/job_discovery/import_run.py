@@ -236,7 +236,7 @@ def main(argv=None, root: Path | None = None) -> int:
         return 0
     if args.do_import:
         try:
-            outcome = importer.import_staged_run(root, run_id, allow_older=args.allow_older)
+            outcome = importer.import_staged_run(root, run_id, allow_older=args.allow_older, require_usable=True)
         except Exception as exc:  # noqa: BLE001 - say what stopped; the next reader rebuilds the view if the ledger was written
             print(f"Import stopped: {type(exc).__name__}: {exc}", file=sys.stderr)
             return 2
@@ -249,7 +249,9 @@ def main(argv=None, root: Path | None = None) -> int:
             return 2
         rep = outcome.result.report
         print(f"Imported run {run_id}: generation {outcome.generation}" + (" (it was already imported; the view was checked)" if not outcome.committed else ""))
-        if outcome.committed:
+        if rep.get("nothingSaved") == importer.NO_USABLE_SOURCE and not rep.get("cancelled"):
+            print("  no source gave a usable result: nothing was imported, the list was not changed")
+        elif outcome.committed:
             print(f"  ledger: " + ", ".join(f"{k} {v}" for k, v in rep["ledgerChanges"].items()))
             if rep.get("cancelled"):
                 print(f"  cancelled run: {outcome.saved} collected ads saved, nothing else changed")

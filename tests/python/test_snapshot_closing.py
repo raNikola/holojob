@@ -447,10 +447,10 @@ def test_the_replay_a_snapshot_ad_goes_absent_closes_and_reopens_through_the_rea
     board = Board()
     monkeypatch.setattr(requests, "get", board.get)
 
-    def step():
+    def step(expect=0):
         provider = greenhouse_provider.GreenhouseProvider()
         monkeypatch.setattr(provider, "_load_boards", lambda: [{"company": "Acme", "board": "acme"}])
-        assert discover(root, monkeypatch, {"greenhouse": provider}) == 0
+        assert discover(root, monkeypatch, {"greenhouse": provider}) == expect
         ledger = json.loads((jobs_dir / "job_history.json").read_text())
         view = json.loads((jobs_dir / "discovered_jobs.json").read_text())
         state = view_state(jobs_dir / "discovered_jobs.json", jobs_dir / "job_history.json")
@@ -484,22 +484,26 @@ def test_the_replay_a_snapshot_ad_goes_absent_closes_and_reopens_through_the_rea
     absent_since = entry["absentSince"]
     # 3. the board fails: no change
     board.fail = True
-    ledger, view = step()
+    before = ((jobs_dir / "job_history.json").read_bytes(), (jobs_dir / "discovered_jobs.json").read_bytes())
+    # S8b: the board is the run's only source and it failed, so nothing is imported (exit 1): not even the generation moves, and the
+    # ledger and the view are the bytes step 2 left. (Before S8b this run held the entries and moved the generation to 3.)
+    ledger, view = step(expect=1)
+    assert ((jobs_dir / "job_history.json").read_bytes(), (jobs_dir / "discovered_jobs.json").read_bytes()) == before
     entry = ledger["jobs"][job_id]
-    assert ledger["generation"] == 3 and entry["absentRuns"] == 1 and entry["absentSince"] == absent_since and entry["closedAt"] is None
-    assert by_title(view, title_a)["isAbsent"] is True and view["meta"]["history"]["keptSourceNotRun"] == 2
+    assert ledger["generation"] == 2 and entry["absentRuns"] == 1 and entry["absentSince"] == absent_since and entry["closedAt"] is None
+    assert by_title(view, title_a)["isAbsent"] is True
     # 4. still missing: closed
     board.fail = False
     ledger, view = step()
     entry = ledger["jobs"][job_id]
-    assert ledger["generation"] == 4 and entry["closedAt"] and entry["absentRuns"] == 2
+    assert ledger["generation"] == 3 and entry["closedAt"] and entry["absentRuns"] == 2
     ad_a = by_title(view, title_a)
     assert ad_a["isClosed"] is True and ad_a["closedAfterChecks"] == 2 and "isAbsent" not in ad_a and view["meta"]["history"]["closed"] == 1
     # 5. listed again: reopened, with firstSeen and facts kept
     board.jobs = [posting(1), posting(2)]
     ledger, view = step()
     entry = ledger["jobs"][job_id]
-    assert ledger["generation"] == 5 and view["meta"]["history"]["reopened"] == 1 and entry["closedAt"] is None and "absentRuns" not in entry
+    assert ledger["generation"] == 4 and view["meta"]["history"]["reopened"] == 1 and entry["closedAt"] is None and "absentRuns" not in entry
     ad_a = by_title(view, title_a)
     assert ad_a["isClosed"] is False and "isAbsent" not in ad_a and ad_a["firstSeen"] == first_seen
     assert ad_a["llmFacts"]["workMode"] == "remote" and entry["llmFacts"]["workMode"] == "remote"

@@ -177,6 +177,9 @@ def run_locked(args: argparse.Namespace) -> int:
             run_log.event(record, "run_end", status=record["status"])
 
 
+NO_USABLE_SOURCE_TEXT = "No source gave a usable result, so nothing was imported and the job list was not changed."
+
+
 def stop(record: dict, message: str) -> int:
     """A run that cannot start: reported like any other failed run."""
     logger.error("%s", message)
@@ -332,12 +335,24 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
     # the two writes leaves a view one generation behind, which every reader rebuilds before it uses it.
     run_log.event(record, "commit_start", files=["job_history", "discovered_jobs"])
     try:
-        outcome = importer.import_staged_run(ROOT, source_run_id)
+        outcome = importer.import_staged_run(ROOT, source_run_id, require_usable=True)
     except (view_guard.ViewRecoveryError, OSError) as exc:
         return stop(record, f"The import stopped while writing: {exc}. The next reader rebuilds the job list from the ledger.")
     if not outcome.ok:
         record["import"] = {"kind": "refused", "saved": 0, "new": 0, "refreshed": 0, "sources": []}
         return stop(record, "Import refused: " + "; ".join(outcome.refused))
+    if not cancelled and outcome.result.report.get("nothingSaved") == importer.NO_USABLE_SOURCE:
+        # S8b: no source gave a usable result (all skipped, failed, partial, unfinished or held as not run). Nothing was written: the list,
+        # the ledger and the view are as the last run left them. The run is still recorded, with its sources and this reason.
+        record["import"] = importer.evidence_block(outcome.result.report, outcome.result.stats)
+        run_log.set_staging_usage(record, outcome.usage)
+        if all(one.get("state") == "skipped" for one in outcome.result.report.get("sources") or []):
+            # Skipped is not failed: nothing was searched, so nothing went wrong. Exit 0 keeps the record's status "skipped" (run_log.finish);
+            # the orchestrator sees the reason in the record and does not score a list that did not change.
+            run_log.add_issue(record, "warning", NO_USABLE_SOURCE_TEXT)
+            print(NO_USABLE_SOURCE_TEXT)
+            return 0
+        return stop(record, NO_USABLE_SOURCE_TEXT)  # scraping was attempted and nothing came of it: a failed run
     run_log.clear_commit_marker(record)  # a marker left by the old commit protocol: this commit finished, so the files agree again
     run_log.event(record, "commit_end", files=["job_history", "discovered_jobs"])
     result = outcome.result

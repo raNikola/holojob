@@ -214,6 +214,9 @@ def start(args) -> int:
                 record, succeeded = run_step(record, name, cmd, lock)
                 if not succeeded:
                     break  # as the browser did: a failed discovery is not scored
+                if name == "discovery" and (record.get("import") or {}).get("nothingSaved") == "no_usable_source":
+                    run_log.event(record, "step_skipped", step="scoring", reason="nothing_imported")
+                    break  # S8b: no source was usable, the list did not change, so there is nothing to score
         except Exception as exc:
             succeeded = False
             run_log.add_issue(record, "error", f"The run stopped: {exc}")

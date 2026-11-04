@@ -84,6 +84,7 @@ export function text(value, max = MAX_TEXT) {
 const WHOLE = [
   /^0 ads kept \((?:read \d+, all filtered out|read 0)\); nothing was closed for this source$/,
   /^Every source was skipped: no source searched in this run$/,
+  /^No source gave a usable result, so nothing was imported and the job list was not changed\.$/,
   /^(?:discovery|scoring) failed with exit code -?\d+/, // a step's output tail follows the colon and is cut (see `message`)
   /^Run \w+ left an incomplete save of the job files\. Written: [^.]*\. Not written: [^.]*\. They may not match each other\. Nothing was repaired\.$/,
   /^A save of the job files did not finish \(its marker is unreadable\); they may not match each other\. Nothing was repaired\.$/,

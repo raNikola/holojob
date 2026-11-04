@@ -839,4 +839,6 @@ def test_the_older_run_override_is_never_reachable_from_an_automatic_path():
     assert importer_text.count("allow_older: bool = False") == 2, "off by default, both signatures"
     assert [l for l in importer_text.splitlines() if "allow_older=True" in l and "`" not in l] == [], "no code passes it"
     discovery = (repo / "python/job_discovery/run_discovery.py").read_text(encoding="utf-8")
-    assert "import_staged_run(ROOT, source_run_id)" in discovery, "the live run calls the importer with no override"
+    assert "import_staged_run(ROOT, source_run_id, require_usable=True)" in discovery, "the live run calls the importer with require_usable and no override"
+    assert "import_staged_run(" not in discovery.replace("import_staged_run(ROOT, source_run_id, require_usable=True)", ""), "it calls it nowhere else"
+    assert "allow_older" not in discovery

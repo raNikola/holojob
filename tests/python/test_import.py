@@ -477,8 +477,9 @@ def test_a_run_staged_before_the_discovered_file_was_kept_is_replayed_but_marked
 def test_derive_view_changes_nothing_and_gives_the_same_bytes_every_time(tmp_path, monkeypatch):
     root = tmp_path / "root"
     root.mkdir()
-    run_and_replay(root, monkeypatch, {"greenhouse": Prov([canon(1), canon(2)])})
-    _, dry = run_and_replay(root, monkeypatch, {"greenhouse": Prov([canon(1)], status="partial", boards_failed=["acme"])})
+    # A second, whole source in both runs: a run whose only source is partial has no usable source and imports nothing (S8b).
+    run_and_replay(root, monkeypatch, {"greenhouse": Prov([canon(1), canon(2)]), "lever": Prov([canon(10, "lever")])})
+    _, dry = run_and_replay(root, monkeypatch, {"greenhouse": Prov([canon(1)], status="partial", boards_failed=["acme"]), "lever": Prov([canon(10, "lever")])})
     ledger = dry.result.ledger
     before = copy.deepcopy(ledger)
     one, two = importer.derive_view(ledger), importer.derive_view(ledger)

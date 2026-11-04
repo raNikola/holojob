@@ -199,6 +199,10 @@ export default function JobDiscoveryScreen() {
       setRerunMsg(cancelledText(run.cancel).replace('The last run was cancelled.', 'Re-scrape was cancelled.'))
       return
     }
+    if (run?.import?.nothingSaved === 'no_usable_source') {
+      setRerunMsg('Re-scrape found nothing usable: no source gave a usable result, so the list was not changed. Details in Activity.')
+      return
+    }
     if (!run || run.status === 'failed' || run.status === 'interrupted') {
       setRerunMsg(run?.status === 'interrupted' ? 'Re-scrape was interrupted.' : 'Re-scrape failed. Details below.')
       return
