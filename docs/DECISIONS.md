@@ -1354,3 +1354,11 @@ Owner-authorized (S1 to S6, autonomous execution, no push or merge). Code: `tool
 - **D12, one set of graph rules (CLAUDE.md).** Agents query `architecture.json` for architecture questions and `test-deps.json` for impact analysis and related tests; the original `graph.json` is used only to verify raw data. Check: the CLAUDE.md "graphify" section has no rule that queries the default graph.
 
 **Not done:** `graphify update .` on the real repo (graph.json kept as built; run the cycle above), the upstream Graphify issue (configurable Python import roots; draft in the S6 report, the owner files it), push or merge.
+
+## Workflow sizes and UI skills (owner decision, 2026-11-08)
+
+Recorded in `CLAUDE.md` ("Workflow sizes", "UI skills"). Docs only; no code changes.
+
+- **Workflow sizes.** S (columns, UI fixes): implement, test, commit. M (role scoring, filters, ad statuses): short self-directed analysis, implement, test, commit, no separate analysis round. L (discovery pipeline, importer, migrations, AI scoring architecture): Plan Mode, one approval, then autonomous implementation; stop only for a blocking product decision or significant risk; one final report. The owner decides product behavior, Code decides the technical approach. Skills and plugins add no ceremony to S and M.
+- **UI skills.** `docs/design-system` has priority over any UI plugin guidance (UI UX Pro Max). No external image-generation or logo / icon services from plugins, since they send prompts off the server (principle: personal data and prompts stay on the home server).
+- **Code check:** none; these are working rules for the agent, nothing in the code enforces them.

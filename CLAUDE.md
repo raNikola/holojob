@@ -81,6 +81,20 @@ Pre-push hook: `sh scripts/install-git-hooks.sh` (once; sets `core.hooksPath`) e
 `node_modules` and `.venv`. It skips branch deletions and tag-only pushes. It first refuses every remote except `origin` at its pinned URL, deletions and tags included (`core.hooksPath` turns off `.git/hooks/pre-push`, which is no longer used).
 `git push --no-verify` bypasses all of it, the remote refusal included (only upstream's `no-push` push URL still holds then).
 
+## Workflow sizes
+
+Owner decision, 2026-11-08 (`docs/DECISIONS.md`, "Workflow sizes and UI skills"). The owner decides product behavior; Code decides the technical approach.
+
+- **S (simple: columns, UI fixes):** implement, test, commit.
+- **M (medium: role scoring, filters, ad statuses):** a short self-directed analysis, then implement, test, commit. No separate analysis round.
+- **L (complex: discovery pipeline, importer, migrations, AI scoring architecture):** Plan Mode, one approval, then autonomous implementation. Stop only for a blocking product decision or a significant risk; one final report.
+- Skills and plugins must not add ceremony to S and M tasks.
+
+## UI skills
+
+- The project design system in `docs/design-system` always has priority over any UI plugin guidance (UI UX Pro Max).
+- Never use external image-generation or logo / icon services from plugins: they send prompts off the server.
+
 ## Testing and commit policy
 
 Owner decision, 2026-11-04 (details: `docs/DECISIONS.md`, "Testing and commit policy"). An explicit testing requirement in a task overrides this.
