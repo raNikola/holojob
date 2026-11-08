@@ -71,12 +71,12 @@ Found 2026-11-02 on a real posting (a PM role at a B2B-adjacent consumer marketp
 "Maybe"; the owner's manual review put the real fit near 6/10, with the mismatch mainly on remote / location, not on
 skills or domain. GitHub Issues are disabled on this repo, so the work is tracked here. Not started.
 
-- [ ] **Skill extraction covers the whole work history.** JavaScript, React, PHP, HTML, CSS, Git, Figma and REST APIs
+- [x] **Skill extraction covers the whole work history** (Wave 3). JavaScript, React, PHP, HTML, CSS, Git, Figma and REST APIs
   were flagged missing although they are explicit in an earlier role (Senior Web Programmer, 2014-2021). Today only
   recent roles are read.
 - [ ] **Hard vs. nice-to-have requirements.** A "plus if you have X" line was weighted like a must-have. The model
   tags each requirement hard or soft as a fact; `scorer.py` decides the weight (architectural rule in CLAUDE.md).
-- [ ] **Domain transferability.** "No clear industry match" was emitted for B2B two-sided dynamics (carrier / shipper)
+- [x] **Domain transferability** (Wave 3; a fixed table of adjacent industries, so the marketplace example below is not covered). "No clear industry match" was emitted for B2B two-sided dynamics (carrier / shipper)
   that are structurally similar to the posting's marketplace (host / guest). Judge structural similarity, not a flat
   mismatch.
 - [ ] **Low-confidence reasons only when the signal is absent.** "seniority not stated" and "no strong culture
@@ -100,7 +100,7 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 | 0 | P0, minimal | **Built on branch `wave0-backup`, not merged or deployed** ([as built](DECISIONS.md#wave-0-verified-backup-and-restore-check-2026-11-08); owner still rotates the keys and runs one real backup through `scripts/backup-check.js`). Verified backup plus restore check covering server data and browser state (Keep, statuses, applications), with integrity hashes and a tested restore; include `data/analytics` if it cannot be reconstructed. Rotate the OpenAI key and `li_at` (the owner does this). Align the rules in ROADMAP.md and DECISIONS.md. |
 | 1 | P0 | **(k) + (q) discovery safety**, one rule (below): a throttled source never proves an ad disappeared; "ok with 0 read" is not automatically proof of closure; a confirmed-empty source is told apart from an incomplete or failed read; successful sources import independently (a partial source must not block the import); failed sources never affect closing. |
 | 2 | P0 | **Built on branch `wave2-scoring-correctness` (local, not merged)** ([as built](DECISIONS.md#wave-2-scoring-correctness-built-2026-11-08)). **(a1) scoring correctness:** junk baseline of at most about 5 plus a distinct Insufficient Data state, hard/soft requirement handling, low-confidence reasons. **(e)** manual Re-score and tailoring for kept ads. **(g)** exclude closed ads from the IDF corpus (approved; measured effect at most 1 point). **(i)** `scoringBehind` after a cancel. |
-| 3 | P0 | **(a2) scoring quality:** skills from the whole candidate history, domain transferability, after basic validation. Then **(b)** the three-level role filter. |
+| 3 | P0 | **Built on branch `wave3-scoring-quality` (local, not merged)** ([as built](DECISIONS.md#wave-3-scoring-quality-and-the-three-level-role-filter-built-2026-11-08)). **(a2)** skills from the whole history, domain transferability (proven vs assumed), the keyword bank holds keywords only, `TARGET_COVERAGE` recalibrated. **(b)** the three-level role filter (Target / Near / Excluded). Owner steps: regenerate the intelligence, then Re-score. |
 | 4 | P1 | **(h)** `older_key` policy; **(c)** Infostud coverage; **(n)** `lastImport.meta` for partial imports. |
 | 5 | P1 | **(j) Application Tracking:** all records including history-only and voided, snapshots, applied sync, the Applied button opens the tracker, fix history-only showing "Unreviewed", remove the shadow badge. |
 | 6 | P2, release blockers | Profile import slices. Phase 4 protections (fact gate, identifier redaction, confirm) are release blockers for AI and application workflows. Review the 11 of 17 resume docs with stale unverified-degree findings before they are used for applications. |
@@ -129,7 +129,7 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 - [x] Open before closed on the default sort only.
 - [x] Salary column (stated pay; EUR monthly only as an approximate second line); Lever and Ashby structured pay.
 - [x] Apply by column with warnings and sort.
-- [ ] Not started on purpose: "Urgent only" filter, Greenhouse per-job pay and deadline, keyword-bank recalibration (Wave 3, a2).
+- [ ] Not started on purpose: "Urgent only" filter, Greenhouse per-job pay and deadline. (Keyword-bank recalibration: done in Wave 3.)
 
 Decisions: [DECISIONS.md](DECISIONS.md#job-relevance-lifecycle-salary-and-deadline-2026-11-08).
 
@@ -141,7 +141,7 @@ Decisions: [DECISIONS.md](DECISIONS.md#job-relevance-lifecycle-salary-and-deadli
 |---|---|---|
 | 1. Design System Integration & Foundations | To Do | |
 | 2. Application Layout & Navigation | To Do | |
-| 3. Jobs Listing & Filtering | To Do | Wave 3 role filter |
+| 3. Jobs Listing & Filtering | To Do | Wave 3 role filter built (discovery side) |
 | 4. Job Details & Scoring UI | To Do | Wave 2 UI |
 | 5. Application Tracker | To Do | Wave 5 |
 | 6. Profile & Resume Management | To Do | Wave 6 profile import |

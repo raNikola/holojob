@@ -1,0 +1,34 @@
+{
+  "_comment": "Industry domains, the capabilities that can carry experience from one domain to another, and the pairs of domains where that is a fair reading. Read by src/modules/intelligence/historySkills.js (to tag the candidate's history) and python/job_scoring/domain_transfer.py (to tag an ad). Text is matched as whole words after the accents are folded. An edge needs a `why`; a bridge counts only when the candidate's own history entry states the capability AND the ad asks for it.",
+  "domains": {
+    "telecom": { "label": "telecom", "markers": ["telecom", "telecommunications", "telekom", "mobile operator", "network operator", "broadband", "5g", "lte", "bss", "oss"] },
+    "banking": { "label": "banking and payments", "markers": ["bank", "banking", "banka", "fintech", "payments", "payment", "card", "lending", "kredit", "credit"] },
+    "insurance": { "label": "insurance", "markers": ["insurance", "insurtech", "osiguranje", "underwriting"] },
+    "ecommerce": { "label": "e-commerce and retail", "markers": ["e-commerce", "ecommerce", "retail", "marketplace", "webshop", "maloprodaja"] },
+    "healthcare": { "label": "healthcare", "markers": ["healthcare", "health care", "medical", "pharma", "pharmaceutical", "hospital", "zdravstvo"] },
+    "public_sector": { "label": "public sector", "markers": ["public sector", "government", "govtech", "e-government", "municipal", "javna uprava"] },
+    "logistics": { "label": "logistics", "markers": ["logistics", "supply chain", "warehouse", "freight", "shipping", "logistika"] },
+    "energy": { "label": "energy and utilities", "markers": ["energy", "utilities", "oil and gas", "power grid", "energetika"] },
+    "saas": { "label": "software and SaaS", "markers": ["saas", "software platform", "b2b software", "cloud platform", "software as a service"] }
+  },
+  "capabilities": {
+    "program_delivery": { "label": "program and delivery management", "markers": ["program management", "programme management", "project management", "delivery management", "release management", "program manager", "programme manager", "project manager", "delivery manager"] },
+    "vendor_management": { "label": "vendor management", "markers": ["vendor management", "vendor", "vendors", "supplier management", "third-party", "outsourcing", "procurement"] },
+    "regulatory": { "label": "regulatory compliance", "markers": ["regulatory", "regulator", "regulators", "compliance", "audit", "gdpr", "psd2", "sox"] },
+    "integration": { "label": "system integration", "markers": ["integration", "integrations", "api", "apis", "migration", "legacy"] }
+  },
+  "edges": [
+    { "between": ["telecom", "banking"], "capability": "regulatory", "why": "both run regulated, always-on platforms where change goes through compliance review" },
+    { "between": ["telecom", "banking"], "capability": "vendor_management", "why": "both deliver platform change through external vendors and integrators" },
+    { "between": ["telecom", "energy"], "capability": "program_delivery", "why": "both deliver large, multi-year infrastructure programs with many parties" },
+    { "between": ["telecom", "saas"], "capability": "integration", "why": "both ship products on top of integrated back-end systems" },
+    { "between": ["banking", "insurance"], "capability": "regulatory", "why": "both are supervised financial sectors with the same kind of compliance work" },
+    { "between": ["banking", "ecommerce"], "capability": "integration", "why": "both depend on payment and partner integrations" },
+    { "between": ["banking", "saas"], "capability": "integration", "why": "both build products around integrations with customer systems" },
+    { "between": ["healthcare", "insurance"], "capability": "regulatory", "why": "both work under strict data-protection and sector rules" },
+    { "between": ["public_sector", "banking"], "capability": "regulatory", "why": "both deliver under formal regulation and audit" },
+    { "between": ["public_sector", "telecom"], "capability": "vendor_management", "why": "both buy and run large systems through formal vendor processes" },
+    { "between": ["logistics", "ecommerce"], "capability": "integration", "why": "both run operations-heavy platforms with many partner integrations" },
+    { "between": ["energy", "public_sector"], "capability": "program_delivery", "why": "both run long, regulated delivery programs" }
+  ]
+}

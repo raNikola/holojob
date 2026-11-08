@@ -2,6 +2,7 @@ import { SKILLS_DICTIONARY } from '../../data/skillsDictionary.js'
 import { matchSkillToBucket } from './skillBuckets.js'
 import { containsTerm } from '../../utils/termMatch.js'
 import { isNonTechnicalPhrase } from './mappingPhrases.js'
+import { vocabularyCategory } from './historySkills.js'
 
 function dedupe(arr) {
   return [...new Set(arr.filter(Boolean))]
@@ -100,7 +101,7 @@ function routeLabeledItem(item, routingMap, buckets) {
   }
 }
 
-export function classifySkills(ctx) {
+export function classifySkills(ctx, historySkills = []) {
   const buckets = {
     technicalSkills: [],
     frontend: [],
@@ -128,9 +129,15 @@ export function classifySkills(ctx) {
     if (bucket && buckets[bucket]) buckets[bucket].push(skill)
   }
 
+  // Skills the whole history states (historySkills.js) that are not technical used to vanish here; the ones in the
+  // vocabulary now land in their bucket, each backed by an entry of the history or a CV skill list.
+  const fromHistory = (category) => historySkills.filter((h) => vocabularyCategory(h.term) === category).map((h) => h.term)
+
   buckets.productBusiness = dedupe([
     ...buckets.productBusiness,
     ...ctx.questionnaire.productBusiness,
+    ...fromHistory('productBusiness'),
+    ...fromHistory('delivery'),
   ])
 
   for (const item of ctx.questionnaire.culturePreference) {
@@ -140,6 +147,7 @@ export function classifySkills(ctx) {
   buckets.leadership = dedupe([
     ...buckets.leadership,
     ...ctx.questionnaire.leadershipExamples,
+    ...fromHistory('leadership'),
   ])
 
   for (const item of ctx.questionnaire.recruiterPerception) {

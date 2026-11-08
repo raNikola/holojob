@@ -72,19 +72,7 @@ def accounted(stage, discards, outcome):
     return {d["reason"] for d in discards if d["counted"]}, {d["reason"] for d in discards if not d["counted"]}
 
 
-# --- the reason-returning variants give the old answers ----------------------------------------------------------------
-
-
-def old_is_relevant_role(title, position="", extra_terms=()):
-    """The rule as it was before this slice, kept here to hold the new function to it."""
-    title_lower = (title or "").lower()
-    position_lower = (position or "").lower()
-    if any(role_filter._has_phrase(title_lower, term) for term in role_filter.TITLE_EXCLUDE):
-        return False
-    if position_lower in role_filter.POSITION_WHITELIST:
-        return True
-    includes = role_filter.TITLE_INCLUDE + tuple(t.lower() for t in extra_terms if t)
-    return any(role_filter._has_phrase(title_lower, term) for term in includes)
+# --- the reason-returning variants agree with the tiers --------------------------------------------------------------
 
 
 TITLES = [
@@ -100,12 +88,13 @@ EXTRA = [(), ("Program Lead",), ("Growth", ""), ("delivery lead",)]
 
 
 @pytest.mark.parametrize("extra", EXTRA, ids=str)
-def test_role_drop_reason_agrees_with_the_old_yes_no_for_every_title_and_position(extra):
+def test_role_drop_reason_and_is_relevant_role_follow_the_tier(extra):
     for title in TITLES:
         for position in POSITIONS:
-            reason = role_filter.role_drop_reason(title, position, extra)
-            assert (reason is None) == old_is_relevant_role(title, position, extra), (title, position, extra)
-            assert role_filter.is_relevant_role(title, position, extra) == old_is_relevant_role(title, position, extra)
+            tier, reason = role_filter.role_tier(title, position, extra)
+            assert role_filter.role_drop_reason(title, position, extra) == reason
+            assert (reason is None) == (tier != role_filter.EXCLUDED), (title, position, extra)
+            assert role_filter.is_relevant_role(title, position, extra) == (tier != role_filter.EXCLUDED)
 
 
 def test_the_reason_codes_of_the_role_filter():
@@ -113,7 +102,8 @@ def test_the_reason_codes_of_the_role_filter():
     for term in role_filter.TITLE_EXCLUDE:
         title = f"Senior {term.title()} Product Manager"
         assert drop(title) == f"title_excluded:{role_filter.TITLE_EXCLUDE[[t in title.lower() for t in role_filter.TITLE_EXCLUDE].index(True)]}"
-    assert drop("Medior Dev Project Manager", "IT Project Manager") == "title_excluded:project manager"
+    assert drop("Medior Dev Project Manager", "IT Project Manager") is None, "a project manager is Near, not dropped by name"
+    assert drop("Junior Project Manager") == "title_excluded:junior"
     assert drop("Chef") == "title_not_matched"
     assert drop("Growth Lead") == "title_not_matched" and drop("Growth Lead", "", ("growth",)) is None
     assert drop("Developer", "Product Manager") is None, "a board's own position lets an ad in"
@@ -259,10 +249,10 @@ def test_jobspy_drops_and_reasons(run, monkeypatch, tmp_path):
     monkeypatch.setattr(jobspy_provider, "fetch_jobs", lambda term, location, remote=False, country="": answers[term])
     returned, outcome, stage, discards = gather(jobspy_provider.JobSpyProvider(), run, "jobspy", tmp_path, ["Remote"])
     counted, uncounted = accounted(stage, discards, outcome)
-    assert counted == {"title_excluded:project manager", "title_not_matched", "title_excluded:intern"}
+    assert counted == {"title_not_matched", "title_excluded:intern"}
     assert uncounted == {"no_title"}
-    assert (outcome.read, outcome.kept, stage.footer["discarded"], stage.footer["discardedUncounted"]) == (5, 2, 3, 1)
-    assert stage.external_ids == {j["jobId"]: f"li-{n}" for j, n in zip(returned, (1, 5))}
+    assert (outcome.read, outcome.kept, stage.footer["discarded"], stage.footer["discardedUncounted"]) == (5, 3, 2, 1)
+    assert stage.external_ids == {j["jobId"]: f"li-{n}" for j, n in zip(returned, (1, 2, 5))}
     [no_title] = [d for d in discards if d["reason"] == "no_title"]
     assert no_title["externalId"] == "li-4" and no_title["url"] == "https://x.example/4"
 
@@ -377,28 +367,30 @@ def test_infostud_drops_and_reasons(run, monkeypatch, tmp_path):
     monkeypatch.setattr(infostud_client, "enrich", lambda job, delay=1.0: job)
     returned, outcome, stage, discards = gather(infostud_provider.InfostudProvider(), run, "infostud", tmp_path)
     counted, uncounted = accounted(stage, discards, outcome)
-    assert counted == {"title_excluded:project manager", "title_not_matched", "location_not_matched"} and not uncounted
-    assert (outcome.read, outcome.kept, stage.footer["total"]) == (4, 1, 4)
-    assert stage.external_ids == {returned[0]["jobId"]: "1001"}
+    assert counted == {"title_not_matched", "location_not_matched"} and not uncounted
+    assert (outcome.read, outcome.kept, stage.footer["total"]) == (4, 2, 4)
+    assert stage.external_ids == {j["jobId"]: e for j, e in zip(returned, ("1001", "1002"))}
     by_ext = {d["externalId"]: d for d in discards}
     assert by_ext["1004"]["reason"] == "location_not_matched" and by_ext["1003"]["reason"] == "title_not_matched"
     for d in discards:
         assert d["jobId"] == _make_job_id(d["url"], d["title"], d["company"], d["location"]), "the id the ad would have had"
 
 
-def test_infostud_project_manager_with_an_it_position_is_dropped_and_its_id_recorded(run, monkeypatch, tmp_path):
-    """The case that prompted this slice: the board's own position says Project Manager, the title says Project Manager."""
-    rows = [infostud_row(5150, "Medior Dev Project Manager", "Zxqville", position="IT Project Manager")]
-    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None: (rows, 1))
-    monkeypatch.setattr(infostud_client, "enrich", lambda job, delay=1.0: pytest.fail("a dropped ad is never read in full"))
+def test_infostud_project_manager_with_an_it_position_is_kept_as_near_and_a_junior_one_is_dropped(run, monkeypatch, tmp_path):
+    """The case that prompted the slice: the board's own position says Project Manager, the title says Project Manager.
+    It is Near now: read in full and sent to scoring, which caps it. A junior one stays dropped, its id recorded."""
+    rows = [infostud_row(5150, "Medior Dev Project Manager", "Zxqville", position="IT Project Manager"),
+            infostud_row(5151, "Junior Project Manager", "Zxqville", position="IT Project Manager")]
+    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None: (rows, 2))
+    read_in_full = []
+    monkeypatch.setattr(infostud_client, "enrich", lambda job, delay=1.0: read_in_full.append(job["title"]) or job)
     returned, outcome, stage, discards = gather(infostud_provider.InfostudProvider(), run, "infostud", tmp_path)
-    assert returned == [] and (outcome.read, outcome.kept) == (1, 0)
+    assert [j["title"] for j in returned] == ["Medior Dev Project Manager"] == read_in_full
+    assert (outcome.read, outcome.kept) == (2, 1)
     [drop] = discards
-    assert drop["reason"] == "title_excluded:project manager" and drop["externalId"] == "5150"
-    assert (drop["title"], drop["company"], drop["location"], drop["url"]) == (
-        "Medior Dev Project Manager", "Acme", "Zxqville, Serbia", "https://www.infostud.com/oglas/5150")
-    assert drop["source"] == "infostud" and drop["counted"] is True and "description" not in drop
-    assert role_filter.is_relevant_role("Medior Dev Project Manager", "IT Project Manager") is False, "no rule was changed"
+    assert drop["reason"] == "title_excluded:junior" and drop["externalId"] == "5151"
+    assert (drop["title"], drop["source"], drop["counted"]) == ("Junior Project Manager", "infostud", True) and "description" not in drop
+    assert role_filter.role_tier("Medior Dev Project Manager", "IT Project Manager") == (role_filter.NEAR, None)
 
 
 def workable_row(n, title, city, url=True):
@@ -408,19 +400,19 @@ def workable_row(n, title, city, url=True):
 
 def test_workable_drops_and_reasons(run, monkeypatch, tmp_path):
     answers = {
-        "Product Manager": [workable_row(1, "Product Manager", "Zxqville"), workable_row(2, "Project Manager", "Zxqville"),
+        "Product Manager": [workable_row(1, "Product Manager", "Zxqville"), workable_row(2, "Account Manager", "Zxqville"),
                             workable_row(3, "Product Manager", "Paris"), workable_row(4, "Product Manager", "Zxqville", url=False)],
-        "Product Lead": [workable_row(2, "Project Manager", "Zxqville"), workable_row(1, "Product Manager", "Zxqville"),
+        "Product Lead": [workable_row(2, "Account Manager", "Zxqville"), workable_row(1, "Product Manager", "Zxqville"),
                          workable_row(5, "Chef", "Zxqville"), workable_row(6, "Product Lead", "Zxqville", url=False)],
     }
     monkeypatch.setattr(workable_client, "search", lambda term, location="", limit=100: answers[term])
     monkeypatch.setattr(workable_client.time, "sleep", lambda s: None)
     returned, outcome, stage, discards = gather(workable_provider.WorkableProvider(), run, "workable", tmp_path)
     counted, uncounted = accounted(stage, discards, outcome)
-    assert counted == {"title_excluded:project manager", "title_not_matched", "location_not_matched", "no_url"}
+    assert counted == {"title_excluded:account manager", "title_not_matched", "location_not_matched", "no_url"}
     assert uncounted == {"no_url"}, "rows with no address are one entry in `read`: the first is counted, the rest are not"
     assert (outcome.read, outcome.kept) == (5, 1) and [j["jobUrl"][-1] for j in returned] == ["1"]
-    assert sum(1 for d in discards if d["reason"] == "title_excluded:project manager") == 1, "seen under two terms, dropped once"
+    assert sum(1 for d in discards if d["reason"] == "title_excluded:account manager") == 1, "seen under two terms, dropped once"
     assert stage.external_ids == {returned[0]["jobId"]: "w1"}
 
 
@@ -436,7 +428,7 @@ def test_joberty_drops_and_reasons(run, monkeypatch, tmp_path):
     from test_joberty import CITIES, DETAIL, product_ad
 
     items = [
-        product_ad(1), product_ad(2, title="Project Manager"), product_ad(3, title="Chef"),
+        product_ad(1), product_ad(2, title="Account Manager"), product_ad(3, title="Chef"),
         product_ad(4, city="Zagreb (Croatia)"), product_ad(5), product_ad(6),
         {"id": "abc", "jobTitle": "Odd row", "companyName": "Odd"},
         product_ad(3, title="Chef"), product_ad(1),  # the same ads again: copies, not second ads
@@ -447,11 +439,11 @@ def test_joberty_drops_and_reasons(run, monkeypatch, tmp_path):
     monkeypatch.setattr(joberty_client, "MAX_DETAILS", 2)
     returned, outcome, stage, discards = gather(joberty_provider.JobertyProvider(ledger_path=tmp_path / "none.json"), run, "joberty", tmp_path, SERBIA)
     counted, uncounted = accounted(stage, discards, outcome)
-    assert counted == {"title_excluded:project manager", "title_not_matched", "location_not_matched", "no_detail_text", "detail_cap"}
+    assert counted == {"title_excluded:account manager", "title_not_matched", "location_not_matched", "no_detail_text", "detail_cap"}
     assert uncounted == {"unparsable_row"}
     assert (outcome.read, outcome.kept, stage.footer["discarded"]) == (6, 1, 5)
     assert {d["externalId"]: d["reason"] for d in discards if d["counted"]} == {
-        "joberty:2": "title_excluded:project manager", "joberty:3": "title_not_matched", "joberty:4": "location_not_matched",
+        "joberty:2": "title_excluded:account manager", "joberty:3": "title_not_matched", "joberty:4": "location_not_matched",
         "joberty:5": "no_detail_text", "joberty:6": "detail_cap",
     }
     assert stage.external_ids == {returned[0]["jobId"]: "joberty:1"} and returned[0]["externalId"] == "joberty:1"

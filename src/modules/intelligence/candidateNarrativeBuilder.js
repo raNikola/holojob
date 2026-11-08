@@ -1,6 +1,8 @@
 import { countryOfLocation } from '../../utils/searchCountry.js'
 import { normalizeAllowedLocations, normalizeRelocation, normalizeWorkAuthorization } from '../../utils/workAuthorization.js'
 import { salaryPreferences } from '../../utils/salary.js'
+import { entryLabel } from './keywordCleaner.js'
+import { isKeywordShaped } from './keywordShape.js'
 
 function dedupe(arr) {
   return [...new Set(arr.filter(Boolean))]
@@ -25,11 +27,12 @@ function extractWorkDomains(workExperience) {
   if (!Array.isArray(workExperience)) return []
   return workExperience
     .flatMap((w) => {
-      if (typeof w === 'string') return [w]
-      return [w.company, w.industry, w.title].filter(Boolean)
+      if (typeof w === 'string') return [entryLabel(w)]
+      return [w.company, w.industry, w.title]
     })
-    .map((s) => String(s).trim())
     .filter(Boolean)
+    .map((s) => String(s).trim())
+    .filter(isKeywordShaped)
 }
 
 const CANDIDATE_TYPES = [

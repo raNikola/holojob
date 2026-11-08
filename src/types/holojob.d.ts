@@ -72,6 +72,8 @@
  * @property {string[]} candidateWeaknesses
  * @property {string[]} resumeKeywords
  * @property {Object} atsKeywordBank
+ * @property {{ term: string, entries: number, listed: boolean }[]} [historySkills] Skills the whole work history states; `entries` counts the history entries that state each.
+ * @property {{ role: string, period: string, domains: string[], capabilities: string[] }[]} [historyEntries] Per history entry: role, period, industry ids and capability ids (src/data/domainAdjacency.json); no text.
  * @property {Object} searchStrategy
  * @property {string[]} languages Derived from basicProfile.languages, e.g. "Serbian (native)".
  * @property {string|null} roleFamily basicProfile.roleFamily; null when none is chosen.

@@ -1,0 +1,28 @@
+{
+  "accept": [
+    "Product Management",
+    "Cross-functional Leadership",
+    "Node.js",
+    "CI/CD",
+    "A/B testing",
+    "C++",
+    "Stakeholder management",
+    "Technical Product Manager",
+    "Go",
+    "Menadžment proizvoda"
+  ],
+  "reject": [
+    "",
+    "   ",
+    "Led a team of twelve engineers and shipped the new billing platform across three markets",
+    "Senior Product Manager at Example Corp. Owned the roadmap for the payments product and reported to the CPO",
+    "Managed vendors, budgets and timelines",
+    "Owned the roadmap; reported to the CPO",
+    "Delivered the programme on time. Reduced costs.",
+    "A very long single word line that goes on and on and on and on",
+    "- Led the migration",
+    "• Led the migration",
+    "Line one\nLine two",
+    "Result: 30% faster"
+  ]
+}

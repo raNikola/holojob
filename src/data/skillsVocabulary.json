@@ -1,0 +1,19 @@
+{
+  "_comment": "Short skill and capability terms scanned in the whole work history (historySkills.js). Technical terms come from skillsDictionary.js. Each term is a whole-term match (termMatch.js). Add a term here, not in code.",
+  "productBusiness": [
+    "Product Management", "Product Strategy", "Product Discovery", "Roadmapping", "Roadmap", "Backlog", "Prioritization",
+    "User Research", "User Stories", "Requirements", "Go-to-market", "Product Analytics", "A/B testing", "OKRs", "KPIs",
+    "Business Analysis", "Market Research", "Pricing", "Monetization", "Stakeholder Management", "Customer Discovery",
+    "Product Operations", "Product Launch", "Experimentation", "Competitive Analysis", "Business Case", "Process Improvement"
+  ],
+  "delivery": [
+    "Program Management", "Programme Management", "Project Management", "Delivery Management", "Release Management",
+    "Vendor Management", "Budgeting", "Risk Management", "Change Management", "Resource Planning", "Agile", "Scrum",
+    "Kanban", "Waterfall", "SAFe", "Jira", "Confluence", "Sprint Planning", "Dependency Management", "Governance",
+    "Regulatory Compliance", "Compliance", "Service Delivery", "Implementation", "Migration", "Integration", "Rollout"
+  ],
+  "leadership": [
+    "Team Leadership", "Cross-functional Leadership", "People Management", "Mentoring", "Coaching", "Hiring", "Executive Reporting",
+    "Strategic Planning", "Negotiation", "Decision Making"
+  ]
+}

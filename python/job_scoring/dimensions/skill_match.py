@@ -18,6 +18,7 @@ missingSkills, because that is what a tailored resume has to answer.
 from __future__ import annotations
 
 from corpus import flat_idf
+from keyword_shape import is_keyword_shaped
 from text_utils import term_tokens
 
 HIGH_WEIGHT = 3
@@ -31,7 +32,12 @@ MIN_COVERAGE = 0.5
 # distribution collapses into a tie: at 0.22, twelve of 23 jobs (coverage
 # 0.22-0.30) all scored exactly 100. Calibrated against the 2026-10-21 run,
 # where the best ad covers 0.30; 0.32 puts that near 95 and leaves headroom.
-TARGET_COVERAGE = 0.32
+# Wave 3 (2026-11-08): the bank no longer holds CV prose and now carries the skills of the whole history (about 50
+# keywords instead of 20), so the same ads cover a different share of it. Recalibrated on the 436 jobs of that day's
+# scored_jobs.json with the regenerated bank: 0.36 keeps the mean score of the run (-0.1) and its shape (>= 80: 9 before,
+# 12 after); 0.32 would have lifted the mean by 0.9 and doubled the P1 count. Not valid for a stale bank that still
+# holds prose: that is why such a bank is reported on every ad ("regenerate the intelligence").
+TARGET_COVERAGE = 0.36
 
 # A token this common across the corpus carries no information about fit, so
 # it is dropped from requirement matching rather than diluting it.
@@ -44,11 +50,20 @@ FLOOR = 20
 CEILING = 100
 
 
+def bank_prose_count(intelligence: dict) -> int:
+    """How many bank entries are prose (a CV sentence or paragraph) and not a keyword; they are ignored (keyword_shape.py)."""
+    bank = intelligence.get("atsKeywordBank") or {}
+    return sum(
+        1 for key in ("highPriority", "mediumPriority", "supportingKeywords")
+        for k in (bank.get(key) or []) if k and not is_keyword_shaped(k)
+    )
+
+
 def _bank(intelligence: dict) -> tuple[list[str], list[str], list[str]]:
     bank = intelligence.get("atsKeywordBank") or {}
-    high = [k for k in (bank.get("highPriority") or []) if k]
-    medium = [k for k in (bank.get("mediumPriority") or []) if k]
-    supporting = [k for k in (bank.get("supportingKeywords") or []) if k]
+    high = [k for k in (bank.get("highPriority") or []) if k and is_keyword_shaped(k)]
+    medium = [k for k in (bank.get("mediumPriority") or []) if k and is_keyword_shaped(k)]
+    supporting = [k for k in (bank.get("supportingKeywords") or []) if k and is_keyword_shaped(k)]
 
     if not (high or medium or supporting):
         skills_map = intelligence.get("skillsMap") or {}
@@ -69,10 +84,16 @@ def _candidate_tokens(intelligence: dict) -> set[str]:
         container = intelligence.get(section) or {}
         for value in container.values():
             if isinstance(value, list):
-                parts.extend(str(v) for v in value if v)
+                parts.extend(str(v) for v in value if v and (section != "atsKeywordBank" or is_keyword_shaped(v)))
 
     for key in ("resumeKeywords", "candidateStrengths"):
-        parts.extend(str(v) for v in (intelligence.get(key) or []) if v)
+        parts.extend(str(v) for v in (intelligence.get(key) or []) if v and (key != "resumeKeywords" or is_keyword_shaped(v)))
+
+    # Skills the whole work history states (historySkills in the intelligence): proven, each with entries behind it.
+    for item in intelligence.get("historySkills") or []:
+        term = item.get("term") if isinstance(item, dict) else None
+        if term and is_keyword_shaped(term):
+            parts.append(str(term))
 
     experience = intelligence.get("experienceMap") or {}
     for key in ("domainsWorkedIn", "projectHighlights", "ownershipExamples"):
@@ -163,6 +184,9 @@ def score_skill_match(
         f"{len(med_hits)}/{len(medium)} medium, "
         f"{len(sup_hits)}/{len(supporting)} supporting"
     ]
+    ignored = bank_prose_count(intelligence)
+    if ignored:
+        reasons.append(f"{ignored} keyword-bank entries are CV prose, not keywords, and were ignored; regenerate the intelligence")
     matched = high_hits + med_hits + sup_hits
     missing = [k for k in high if k not in high_hits]
 

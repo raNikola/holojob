@@ -1,4 +1,6 @@
 import { SKILLS_DICTIONARY } from '../../data/skillsDictionary.js'
+import { isKeywordShaped } from './keywordShape.js'
+import vocabulary from '../../data/skillsVocabulary.json'
 
 export const GENERIC_KEYWORD_NOISE = new Set([
   'full', 'stack', 'engineer', 'software', 'internal', 'state', 'university',
@@ -13,6 +15,8 @@ const KNOWN_TECH_SINGLE_WORDS = new Set([
   'postgresql', 'kubernetes', 'redis', 'mongodb', 'graphql', 'linux', 'nginx',
   'vue', 'angular', 'rust', 'ruby', 'php', 'swift', 'kotlin', 'terraform',
   ...SKILLS_DICTIONARY.map((s) => s.toLowerCase().split(/[\s/]+/)[0]),
+  // One-word skills the work history can state (skillsVocabulary.json), such as "Roadmapping".
+  ...Object.values(vocabulary).filter(Array.isArray).flat().filter((t) => !/[\s/-]/.test(t)).map((t) => t.toLowerCase()),
 ])
 
 function normalizeKey(value) {
@@ -63,6 +67,9 @@ export function cleanKeywordBank(keywords, options = {}) {
     const trimmed = String(kw).trim()
     if (!trimmed) continue
 
+    // A bank entry is a skill or a role name; a sentence or paragraph of a CV is not (keywordShape.js).
+    if (!isKeywordShaped(trimmed)) continue
+
     const lower = normalizeKey(trimmed)
     if (seen.has(lower)) continue
 
@@ -84,18 +91,26 @@ export function cleanKeywordBank(keywords, options = {}) {
   return result
 }
 
+/**
+ * The short label of one work-experience entry: its role ("Role at Company" gives "Role"), or the entry itself when it is
+ * already keyword-shaped. Prose gives null. Entries are strings or { title } objects.
+ */
+export function entryLabel(entry) {
+  const text = typeof entry === 'string' ? entry : entry?.title
+  if (typeof text !== 'string' || !text.trim()) return null
+  const trimmed = text.trim()
+  const roleAt = trimmed.match(/^(.+?)\s+at\s+/i)
+  if (roleAt && isKeywordShaped(roleAt[1])) return roleAt[1].trim()
+  return isKeywordShaped(trimmed) ? trimmed : null
+}
+
 export function extractMeaningfulPhrases(items) {
   const phrases = []
   for (const item of items || []) {
-    if (typeof item !== 'string' || !item.trim()) continue
-    const trimmed = item.trim()
-    if (isPhrase(trimmed) || KNOWN_TECH_SINGLE_WORDS.has(trimmed.toLowerCase())) {
-      phrases.push(trimmed)
-      continue
-    }
-    const roleAt = trimmed.match(/^(.+?)\s+at\s+/i)
-    if (roleAt) {
-      phrases.push(roleAt[1].trim())
+    const label = entryLabel(item)
+    if (!label) continue
+    if (isPhrase(label) || KNOWN_TECH_SINGLE_WORDS.has(label.toLowerCase()) || label !== (typeof item === 'string' ? item.trim() : item?.title?.trim())) {
+      phrases.push(label)
     }
   }
   return phrases
