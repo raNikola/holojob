@@ -29,6 +29,8 @@ from pathlib import Path
 PINNED_GRAPHIFY_VERSION = "0.9.103"
 SCHEMA_VERSION = 1
 TOP_KEYS = frozenset({"directed", "multigraph", "graph", "nodes", "links", "hyperedges", "built_at_commit"})
+# Graphify writes built_at_commit only inside a git repository.
+OPTIONAL_TOP_KEYS = frozenset({"built_at_commit"})
 HERE = Path(__file__).resolve().parent
 DEFAULT_ROOT = HERE.parents[1]
 OUT_SUBDIR = "holojob"
@@ -58,7 +60,7 @@ def canon(obj) -> str:
 
 
 def check_schema(graph) -> None:
-    if not isinstance(graph, dict) or set(graph) != TOP_KEYS:
+    if not isinstance(graph, dict) or not (TOP_KEYS - OPTIONAL_TOP_KEYS) <= set(graph) <= TOP_KEYS:
         found = sorted(graph) if isinstance(graph, dict) else type(graph).__name__
         raise AdapterError(f"unexpected graph.json top-level keys: {found}")
     meta = graph["graph"]
@@ -169,7 +171,7 @@ class Work:
             "nodes": [entry["n"] for entry in self.nodes],
             "links": [entry["e"] for entry in self.live_edges()],
             "hyperedges": graph["hyperedges"],
-            "built_at_commit": graph["built_at_commit"],
+            **({"built_at_commit": graph["built_at_commit"]} if "built_at_commit" in graph else {}),
         }
 
 
@@ -1115,8 +1117,11 @@ def make_view(index: dict, name: str, keep_node, keep_edge, keep_hyperedges: boo
     links = [e for e in index["links"] if e["source"] in ids and e["target"] in ids and keep_edge(e)]
     hyper = [h for h in index["hyperedges"] if keep_hyperedges and all(n in ids for n in h.get("nodes", []))]
     meta = {**index["graph"], "hyperedges": hyper, "holojob_view": name}
-    return {"directed": index["directed"], "multigraph": index["multigraph"], "graph": meta,
-            "nodes": nodes, "links": links, "hyperedges": hyper, "built_at_commit": index["built_at_commit"]}
+    view = {"directed": index["directed"], "multigraph": index["multigraph"], "graph": meta,
+            "nodes": nodes, "links": links, "hyperedges": hyper}
+    if "built_at_commit" in index:
+        view["built_at_commit"] = index["built_at_commit"]
+    return view
 
 
 def build_views(index: dict) -> dict[str, dict]:

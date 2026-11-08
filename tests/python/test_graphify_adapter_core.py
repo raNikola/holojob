@@ -52,6 +52,14 @@ def test_schema_or_version_mismatch_is_refused(tmp_path):
         repo.build()
     assert not (tmp_path / "graphify-out" / "holojob").exists()
     graph = repo.graph()
+    del graph["built_at_commit"]  # optional: Graphify omits it outside a git repository
+    (tmp_path / "graphify-out" / "graph.json").write_text(json.dumps(graph))
+    assert "built_at_commit" not in repo.build()["index"]
+    graph["surprise"] = 1
+    (tmp_path / "graphify-out" / "graph.json").write_text(json.dumps(graph))
+    with pytest.raises(adapter().AdapterError, match="top-level keys"):
+        repo.build()
+    graph = repo.graph()
     del graph["hyperedges"]
     (tmp_path / "graphify-out" / "graph.json").write_text(json.dumps(graph))
     with pytest.raises(adapter().AdapterError, match="top-level keys"):
