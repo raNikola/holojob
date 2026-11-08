@@ -8,10 +8,11 @@ generic word like "lead" was enough to pass the old 50% overlap threshold.
 
 from __future__ import annotations
 
-from role_tier import names_another_job
+from role_tier import NEAR, names_another_job, title_tier
 from text_utils import normalize_text, tokenize
 
 SENIORITY_NOUNS = frozenset({"manager", "management", "owner", "lead", "head"})
+_NO_TARGET_MATCH = 45
 
 
 def _is_leading_fragment(variant: str, targets: list[str]) -> bool:
@@ -61,6 +62,9 @@ def score_role_match(job: dict, intelligence: dict) -> tuple[int, list[str]]:
     if "product" in title_tokens and title_tokens & SENIORITY_NOUNS:
         return 65, ["Product role, wording outside target list"]
 
+    if title_tier(title, _NO_TARGET_MATCH, intelligence.get("roleFamily"), job.get("llmFacts")) == NEAR:
+        return 65, ["Near-target role, wording outside target list"]
+
     if title_tokens:
-        return 45, ["Title does not match target roles"]
+        return _NO_TARGET_MATCH, ["Title does not match target roles"]
     return 30, ["Missing job title"]

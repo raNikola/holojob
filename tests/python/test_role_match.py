@@ -97,3 +97,23 @@ def test_head_of_product_is_still_the_target():
 def test_without_a_family_no_phrase_is_set_aside():
     no_family = {k: v for k, v in FRAGMENTS.items() if k != "roleFamily"}
     assert _score("Head of Product Marketing", no_family)[0] == 95
+
+
+def test_a_near_title_scores_like_a_product_role_in_other_words():
+    score, reasons = _score("Senior Technical Program Manager", FRAGMENTS)
+    assert score == 65
+    assert reasons == ["Near-target role, wording outside target list"]
+
+
+def test_a_project_title_stays_at_the_bottom_without_product_responsibility():
+    assert _score("Technical Project Manager", FRAGMENTS)[0] == 45
+
+
+def test_a_project_title_with_evidenced_product_responsibility_is_near():
+    job = {"title": "Technical Project Manager", "llmFacts": {"roleTrack": "product_management", "roleTrackEvidence": "Owns the roadmap"}}
+    assert score_role_match(job, FRAGMENTS)[0] == 65
+
+
+def test_near_titles_need_a_family():
+    no_family = {k: v for k, v in FRAGMENTS.items() if k != "roleFamily"}
+    assert _score("Senior Technical Program Manager", no_family)[0] == 45
