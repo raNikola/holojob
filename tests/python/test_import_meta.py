@@ -52,3 +52,9 @@ def test_a_cancelled_run_leaves_last_import_and_writes_last_partial(tmp_path, mo
     after = ledger_at(tmp_path)
     assert after["lastImport"] == before["lastImport"], "lifecycle rules: the list is still the last complete run's"
     assert after["lastPartial"]["runId"] == "b" and after["lastPartial"]["saved"] == 2 and after["lastPartial"]["reason"] == "cancelled"
+
+
+def test_the_run_record_import_block_carries_the_held_counts():
+    import importer
+    block = importer.evidence_block({"saved": 1, "complete": True}, {"closed": 0, "absent": 0, "reopened": 0, "changed": 0, "known": 1, "keptUnproven": 4})
+    assert block["held"] == {key: (4 if key == "keptUnproven" else 0) for key in importer.HELD_KEYS}

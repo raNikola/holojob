@@ -350,6 +350,9 @@ def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, m
     return result
 
 
+HELD_KEYS = ("keptFailedBoard", "keptEmptyBoard", "keptSourceNotRun", "keptUnproven", "keptBoardNotRead", "listedButFiltered")
+
+
 def evidence_block(report: dict, stats: dict) -> dict:
     """The `import` block of a new run record (S7a): what the import saved, and what it knew about each source. Report only: it reads the
     plan's answers and makes none. Counts only; no ad, title, link or description is in it.
@@ -372,6 +375,8 @@ def evidence_block(report: dict, stats: dict) -> dict:
     }
     if kind == "complete":
         block["ledger"] = {key: int(stats.get(key) or 0) for key in ("closed", "absent", "reopened", "changed", "known")}
+        # Wave 4 (n): why ads stayed open. Counts only; the Activity view shows them so "0 closed" can be told from "held".
+        block["held"] = {key: int(stats.get(key) or 0) for key in HELD_KEYS}
     if report.get("nothingSaved"):
         block["nothingSaved"] = str(report["nothingSaved"])
     return block

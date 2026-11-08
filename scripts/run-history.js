@@ -233,9 +233,13 @@ function projectSource(source, imported) {
   }
 }
 
+// Wave 4 (n): the counts of ads an import kept open, and why (python importer.HELD_KEYS).
+const HELD_KEYS = ['keptFailedBoard', 'keptEmptyBoard', 'keptSourceNotRun', 'keptUnproven', 'keptBoardNotRead', 'listedButFiltered']
+
 function projectImport(imported) {
   if (!imported || typeof imported !== 'object') return null
   const ledger = imported.ledger && typeof imported.ledger === 'object' ? imported.ledger : null
+  const held = imported.held && typeof imported.held === 'object' ? imported.held : null
   return {
     kind: pick(imported.kind, IMPORT_KINDS, 'unknown'),
     complete: imported.complete === true,
@@ -246,6 +250,7 @@ function projectImport(imported) {
     crosspostsMerged: count(imported.crosspostsMerged),
     rejected: count(imported.rejected),
     ledger: ledger ? Object.fromEntries(['closed', 'absent', 'reopened', 'changed', 'known'].map((key) => [key, count(ledger[key])])) : null,
+    held: held ? Object.fromEntries(HELD_KEYS.map((key) => [key, count(held[key])])) : null,
     nothingSaved: typeof imported.nothingSaved === 'string' && CODE.test(imported.nothingSaved) ? imported.nothingSaved : null,
   }
 }
