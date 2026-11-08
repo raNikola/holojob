@@ -10,7 +10,12 @@ const LIMITS = {
   supportingKeywords: 30,
 }
 
-export function generateAtsKeywords(ctx, roleStrategy, skillsMap) {
+export function generateAtsKeywords(ctx, roleStrategy, skillsMap, historySkills = []) {
+  // Proven by two or more history entries: high priority. Stated once, or only listed in a CV: medium / supporting.
+  const evidenced = historySkills.filter((h) => h.entries >= 2).map((h) => h.term)
+  const stated = historySkills.filter((h) => h.entries === 1).map((h) => h.term)
+  const listedOnly = historySkills.filter((h) => h.entries === 0).map((h) => h.term)
+
   const cleanerOptions = {
     workExperience: ctx.parsedData.workExperience,
   }
@@ -20,6 +25,7 @@ export function generateAtsKeywords(ctx, roleStrategy, skillsMap) {
       ...ctx.targetRoles,
       ctx.currentRole,
       ...skillsMap.technicalSkills.slice(0, 15),
+      ...evidenced,
     ]),
     cleanerOptions,
   ).slice(0, LIMITS.highPriority)
@@ -30,6 +36,7 @@ export function generateAtsKeywords(ctx, roleStrategy, skillsMap) {
       ...ctx.parsedData.projects,
       ...ctx.parsedData.certifications,
       ...extractMeaningfulPhrases(ctx.parsedData.workExperience),
+      ...stated,
     ]),
     cleanerOptions,
   ).slice(0, LIMITS.mediumPriority)
@@ -40,6 +47,7 @@ export function generateAtsKeywords(ctx, roleStrategy, skillsMap) {
       ...ctx.questionnaire.preferredIndustries,
       ...skillsMap.productBusiness,
       ...skillsMap.softSkills,
+      ...listedOnly,
     ]),
     cleanerOptions,
   ).slice(0, LIMITS.supportingKeywords)

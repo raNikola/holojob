@@ -1,5 +1,6 @@
 import { SKILLS_DICTIONARY } from '../../data/skillsDictionary.js'
 import { isKeywordShaped } from './keywordShape.js'
+import vocabulary from '../../data/skillsVocabulary.json'
 
 export const GENERIC_KEYWORD_NOISE = new Set([
   'full', 'stack', 'engineer', 'software', 'internal', 'state', 'university',
@@ -14,6 +15,8 @@ const KNOWN_TECH_SINGLE_WORDS = new Set([
   'postgresql', 'kubernetes', 'redis', 'mongodb', 'graphql', 'linux', 'nginx',
   'vue', 'angular', 'rust', 'ruby', 'php', 'swift', 'kotlin', 'terraform',
   ...SKILLS_DICTIONARY.map((s) => s.toLowerCase().split(/[\s/]+/)[0]),
+  // One-word skills the work history can state (skillsVocabulary.json), such as "Roadmapping".
+  ...Object.values(vocabulary).filter(Array.isArray).flat().filter((t) => !/[\s/-]/.test(t)).map((t) => t.toLowerCase()),
 ])
 
 function normalizeKey(value) {

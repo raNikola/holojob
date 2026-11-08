@@ -1,6 +1,7 @@
 import { normalizeProfile } from './profileNormalizer.js'
 import { classifySkills } from './skillsClassifier.js'
 import { generateRoleStrategy } from './roleStrategyGenerator.js'
+import { deriveHistorySkills } from './historySkills.js'
 import { generateAtsKeywords } from './atsKeywordGenerator.js'
 import { generateSearchStrategy } from './searchStrategyGenerator.js'
 import {
@@ -44,9 +45,10 @@ export function resolveScoringWeights(saved) {
  */
 export function generateCandidateIntelligence(rawProfile, options = {}) {
   const ctx = normalizeProfile(rawProfile)
-  const skillsMap = classifySkills(ctx)
+  const historySkills = deriveHistorySkills(ctx)
+  const skillsMap = classifySkills(ctx, historySkills)
   const roleStrategy = generateRoleStrategy(ctx)
-  const { resumeKeywords, atsKeywordBank } = generateAtsKeywords(ctx, roleStrategy, skillsMap)
+  const { resumeKeywords, atsKeywordBank } = generateAtsKeywords(ctx, roleStrategy, skillsMap, historySkills)
   const searchStrategy = generateSearchStrategy(ctx, roleStrategy, skillsMap)
   const candidateSummary = buildCandidateSummary(ctx, skillsMap)
   const experienceMap = buildExperienceMap(ctx)
@@ -66,6 +68,8 @@ export function generateCandidateIntelligence(rawProfile, options = {}) {
     candidateWeaknesses,
     resumeKeywords,
     atsKeywordBank,
+    // Skills the whole work history states (all CVs), with the number of entries that state each: proven, never assumed.
+    historySkills,
     searchStrategy,
     // Derived from basicProfile.languages ("Serbian (native)"); the fit judge's
     // digest reads this list, so it is never typed in by hand here.

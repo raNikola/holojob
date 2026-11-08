@@ -84,6 +84,12 @@ def _candidate_tokens(intelligence: dict) -> set[str]:
     for key in ("resumeKeywords", "candidateStrengths"):
         parts.extend(str(v) for v in (intelligence.get(key) or []) if v and (key != "resumeKeywords" or is_keyword_shaped(v)))
 
+    # Skills the whole work history states (historySkills in the intelligence): proven, each with entries behind it.
+    for item in intelligence.get("historySkills") or []:
+        term = item.get("term") if isinstance(item, dict) else None
+        if term and is_keyword_shaped(term):
+            parts.append(str(term))
+
     experience = intelligence.get("experienceMap") or {}
     for key in ("domainsWorkedIn", "projectHighlights", "ownershipExamples"):
         parts.extend(str(v) for v in (experience.get(key) or []) if v)

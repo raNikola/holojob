@@ -40,3 +40,12 @@ def test_prose_in_the_bank_is_ignored_and_reported_and_does_not_lower_the_score(
     assert clean_result[0] == polluted_result[0], "a paragraph in the bank must not change the score"
     assert any("CV prose" in r for r in polluted_result[1]) and not any("CV prose" in r for r in clean_result[1])
     assert "1/1 high, 1/1 medium" in polluted_result[1][0], "the paragraph is not counted as an achievable keyword"
+
+
+def test_history_skills_reach_the_requirement_check():
+    """Skills the whole history states (historySkills) count as evidenced when an ad's stated requirements are checked."""
+    job = {**JOB, "llmFacts": {"mustHaves": ["Vendor management for a regulated programme"]}}
+    without = score_skill_match(job, intelligence([]))
+    with_history = score_skill_match(job, {**intelligence([]), "historySkills": [{"term": "Vendor Management", "entries": 1, "listed": False}]})
+    covered = lambda result: next(r for r in result[1] if r.startswith("Stated requirements"))
+    assert covered(without).endswith("0/1") and covered(with_history).endswith("1/1")
