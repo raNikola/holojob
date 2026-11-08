@@ -18,8 +18,9 @@ from test_import import canon
 from test_stale import GOOD, JOB, KEY, OTHER, counted, day, good_run, ledger_at, staged
 
 NEW = canon(3, provider="jobspy")
+# Wave 1: a partial source that gave ads (or a whole board) is usable, see the tests at the end; a partial one with nothing proven is not.
 UNUSABLE = [{"status": "failed", "complete": False}, {"status": "partial", "complete": False}, {"status": "skipped", "complete": False}, None]
-IDS = ["failed", "partial", "skipped", "unfinished"]
+IDS = ["failed", "partial-nothing-read", "skipped", "unfinished"]
 
 
 def snapshot(root):
@@ -41,7 +42,9 @@ def test_a_run_with_no_usable_source_changes_nothing(tmp_path, monkeypatch, foot
     good_run(tmp_path, monkeypatch, "a", day(0), ads=(JOB, OTHER))
     before = snapshot(tmp_path)
     ledger = ledger_at(tmp_path)
-    staged(tmp_path, monkeypatch, "b", day(10), {"jobspy": ([NEW], footer, [dropped_ad({**ad(7), "jobId": "dropped-7", "jobUrl": "https://x.example/7"}, "title_not_matched", "e")])})
+    # A partial source is only unusable when it proved nothing: no ads came out of it (Wave 1).
+    ads = [] if footer and footer["status"] == "partial" else [NEW]
+    staged(tmp_path, monkeypatch, "b", day(10), {"jobspy": (ads, footer, [dropped_ad({**ad(7), "jobId": "dropped-7", "jobUrl": "https://x.example/7"}, "title_not_matched", "e")])})
     outcome = run_it(tmp_path, "b")
     assert snapshot(tmp_path) == before, "ledger, view, scored-side files and the dropped-ads store are the same bytes"
     after = ledger_at(tmp_path)
@@ -148,3 +151,11 @@ def test_the_live_path_and_the_import_command_are_the_only_callers_that_turn_it_
     callers = sorted(f.relative_to(repo).as_posix() for f in (repo / "python").rglob("*.py") if "require_usable=True" in f.read_text(encoding="utf-8"))
     assert callers == ["python/job_discovery/import_run.py", "python/job_discovery/run_discovery.py"]
     assert json.loads('"x"') == "x"
+
+
+def test_wave1_a_partial_source_that_read_ads_is_usable_and_its_good_part_imports(tmp_path, monkeypatch):
+    good_run(tmp_path, monkeypatch, "a", day(0), ads=(JOB,))
+    staged(tmp_path, monkeypatch, "b", day(10), {"jobspy": ([NEW], {"status": "partial", "complete": False}, [])})
+    outcome = run_it(tmp_path, "b")
+    assert outcome.committed and outcome.result.report.get("nothingSaved") is None
+    assert NEW["jobId"] in ledger_at(tmp_path)["jobs"]

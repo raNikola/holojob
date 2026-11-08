@@ -38,7 +38,7 @@ from providers.base_provider import JobProvider, ProviderOutcome
 TERMS = ["product manager"]
 REMOTE = ["Remote"]
 RECORD_KEYS = {"version", "runId", "trigger", "startedAt", "finishedAt", "status", "sources", "issues", "staging", "import"}  # "import": S7a
-SOURCE_KEYS = {"name", "status", "read", "kept", "new", "error", "boardsFailed", "skipReason", "startedAt", "finishedAt"}  # the last two: S7a
+SOURCE_KEYS = {"name", "status", "read", "kept", "new", "error", "boardsFailed", "skipReason", "startedAt", "finishedAt", "readClass"}  # the last two: S7a; readClass: Wave 1
 # Decided on purpose: discovery does not know these yet, and a later slice fills them.
 NOT_KNOWN_YET = {"scored", "closed", "missing", "expired"}
 
@@ -130,7 +130,7 @@ def test_a_run_writes_exactly_one_record_with_the_documented_fields(discovery, t
     times = {key: record["sources"][0].pop(key) for key in ("startedAt", "finishedAt")}
     assert datetime.fromisoformat(record["startedAt"]) <= datetime.fromisoformat(times["startedAt"]) <= datetime.fromisoformat(times["finishedAt"])
     assert record["sources"] == [{"name": "greenhouse", "status": "ok", "read": 1, "kept": 1, "new": 1, "error": None,
-                                  "boardsFailed": [], "skipReason": None}]
+                                  "boardsFailed": [], "skipReason": None, "readClass": "ok"}]
     record["sources"][0].update(times)
     assert set(record["sources"][0]) == SOURCE_KEYS and not NOT_KNOWN_YET & set(record["sources"][0])
 

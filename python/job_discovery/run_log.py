@@ -17,7 +17,7 @@ Record, version 1. A later slice adds fields; a reader ignores what it does not 
       "startedAt": "<ISO>", "finishedAt": "<ISO>" | null,
       "status": "running" | "ok" | "partial" | "failed" | "skipped" | "interrupted" | "cancelled",
       "sources": [{"name", "status": "ok" | "partial" | "failed" | "skipped", "read", "kept", "new", "error",
-                   "boardsFailed", "skipReason"}],
+                   "boardsFailed", "skipReason", "readClass"}],
       "issues": [{"level": "error" | "warning", "source": "<name>" | null, "message"}],
       "staging": {"ok": true | false, "problems": ["..."]}      (S3; absent in older records = unknown)
       "import": {...}                                            (S7a; absent in older records = not recorded; see importer.evidence_block)
@@ -118,6 +118,12 @@ def add_issue(record: dict, level: str, message: str, source: str | None = None)
     record["issues"].append({"level": level, "source": source, "message": _clean(message)})
 
 
+def _read_class(outcome) -> str:
+    """ok, confirmed_empty, incomplete, failed or skipped: status and counts only. Only a complete read of a board can support closing."""
+    from read_class import classify_read
+    return classify_read(outcome)
+
+
 def add_source(record: dict, name: str, outcome) -> None:
     """One source's row and its issues. 0 ads is a warning: it says something may be wrong, and it never closes an ad."""
     if outcome.status not in SOURCE_STATUSES:
@@ -132,6 +138,7 @@ def add_source(record: dict, name: str, outcome) -> None:
         "error": error,
         "boardsFailed": list(outcome.boards_failed),
         "skipReason": outcome.skip_reason,
+        "readClass": _read_class(outcome),
     })
     if error:
         add_issue(record, "error", error, name)

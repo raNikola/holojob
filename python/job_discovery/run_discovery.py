@@ -293,7 +293,7 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
             record["sources"][-1].update(startedAt=source_started, finishedAt=run_log.now_iso())
             run_log.save(record)
             run_log.event(record, "source_end", source=name, status=outcome.status, read=outcome.read, kept=outcome.kept,
-                          error=outcome.error, skipReason=outcome.skip_reason)
+                          readClass=record["sources"][-1]["readClass"], error=outcome.error, skipReason=outcome.skip_reason)
             provider_counts[name] = len(jobs)
             all_jobs.extend(jobs)
             logger.info("Provider %s returned %d jobs", name, len(jobs))

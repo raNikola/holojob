@@ -227,11 +227,13 @@ def fetch_jobs(
     try:
         df = _scrape(sites, search_term, loc, is_remote, country)
         if df is not None and not df.empty:
+            df.attrs["sitesFailed"] = []
             return df
     except Exception as exc:
         logger.warning("Batch scrape failed for %r @ %r: %s", search_term, loc or "remote", exc)
 
     frames: list[pd.DataFrame] = []
+    sites_failed: list[str] = []  # sites that raised (throttle, block, timeout): their silence proves nothing
     for site in sites:
         try:
             df = _scrape([site], search_term, loc, is_remote, country)
@@ -247,6 +249,7 @@ def fetch_jobs(
                     country_norm,
                 )
         except Exception as exc:
+            sites_failed.append(site)
             label = "Indeed" if site == SITE_INDEED else "Glassdoor" if site == SITE_GLASSDOOR else site
             logger.warning(
                 "%s failed for %r @ %r (country=%s): %s",
@@ -257,11 +260,12 @@ def fetch_jobs(
                 exc,
             )
 
-    if not frames:
-        return _empty_frame()
-
     frames = [f for f in frames if f is not None and not f.empty]
     if not frames:
-        return _empty_frame()
+        empty = _empty_frame()
+        empty.attrs["sitesFailed"] = list(sites_failed)  # the caller tells a blocked search from a really empty one
+        return empty
 
-    return pd.concat(frames, ignore_index=True)
+    merged = pd.concat(frames, ignore_index=True)
+    merged.attrs["sitesFailed"] = list(sites_failed)  # ads from the sites that answered are kept
+    return merged

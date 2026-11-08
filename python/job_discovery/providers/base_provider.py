@@ -44,6 +44,13 @@ class ProviderOutcome:
     total_reported: int | None = None  # the total the source itself reports for its search (Infostud), for the staging footer
     # Per board of a snapshot source (S5b): {"board", "read", "postings", "complete", "reason", ...}. Staged in the footer; nothing reads it yet.
     boards_read: list[dict] = field(default_factory=list)
+    # How the read went, apart from `status` (Wave 1 safety rule): see `classify_read`. None = derive from the fields above.
+    read_class: str | None = None
+
+
+from read_class import (  # noqa: E402  (stdlib-only module, shared with run_log and staging)
+    READ_CLASSES, READ_CONFIRMED_EMPTY, READ_FAILED, READ_INCOMPLETE, READ_OK, READ_SKIPPED, classify_read,
+)
 
 
 def board_read(board: str, *, read: int, postings: int, complete: bool, reason: str | None, **facts) -> dict:
@@ -55,10 +62,12 @@ def _settled_boards(boards_read: list[dict], failures: dict[str, str], empty: li
     """The one place that says a failed or empty board is not complete, whatever its provider's proof said. Every such board gets a line."""
     settled = {row["board"]: dict(row) for row in boards_read}
     for board in failures:
-        settled[board] = board_read(board, read=0, postings=0, complete=False, reason="the board could not be read")
+        settled[board] = {**board_read(board, read=0, postings=0, complete=False, reason="the board could not be read"), "readClass": READ_FAILED}
     for board in empty:
         settled[board] = {**settled.get(board, board_read(board, read=0, postings=0, complete=False, reason=None)),
-                          "complete": False, "reason": "the board answered with no ads"}
+                          "complete": False, "reason": "the board answered with no ads", "readClass": READ_CONFIRMED_EMPTY}
+    for row in settled.values():
+        row.setdefault("readClass", READ_OK if row.get("complete") else READ_INCOMPLETE)
     return list(settled.values())
 
 
@@ -72,8 +81,14 @@ def parts_outcome(
     status = "ok"
     if failures:
         status = "failed" if len(failures) >= total else "partial"
+    # Every part answered and none held an ad: confirmed empty. Some parts failed: incomplete. All failed: failed.
+    read_class = (
+        READ_FAILED if status == "failed" else READ_INCOMPLETE if status == "partial"
+        else READ_CONFIRMED_EMPTY if read == 0 and total > 0 else READ_OK
+    )
     return ProviderOutcome(
         status=status,
+        read_class=read_class,
         read=read,
         kept=kept,
         error="; ".join(f"{part}: {error}" for part, error in failures.items()) or None,

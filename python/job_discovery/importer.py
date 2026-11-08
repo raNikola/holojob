@@ -183,6 +183,15 @@ def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bo
             why.append(proof.BOARD_UNREADABLE)
         if board in empty:
             why.append(proof.BOARD_EMPTY)
+        # Wave 1: a board's own read class must say the read was whole. A class other than "ok" (a staged line from a
+        # provider that classified it) is never proof, whatever `complete` says.
+        board_class = row.get("readClass")
+        if board_class == "failed":
+            why.append(proof.BOARD_UNREADABLE)
+        elif board_class == "confirmed_empty":
+            why.append(proof.BOARD_EMPTY)
+        elif board_class is not None and board_class != "ok":
+            why.append(proof.BOARD_NOT_COMPLETE)
         if not accounted:
             why.append(proof.FILES_DONT_ADD_UP)
         if in_doubt:
@@ -504,8 +513,21 @@ def plan_import(
     if run.cancelled is not None:
         return _plan_partial(result, report, run, manifest, deduped, moment)
 
-    # Usable: the source ran to its end (state complete) and its ads are whole (not held as not run). Failed, partial, skipped and unfinished are not.
-    if require_usable and providers and not any(one["state"] == "complete" and not one["heldAsNotRun"] for one in report["sources"]):
+    # Usable (Wave 1): the source ran to its end (state complete), or it is partial but gave something proven: a board read whole,
+    # or ads from a search that did not fail. Its ads must be whole (not held as not run). Failed, skipped, unfinished, and a partial
+    # source with nothing proven are not. A partial source's failed boards stay held either way (failed_boards), so this only decides
+    # whether the good part of the run is imported at all.
+    def _usable(one: dict) -> bool:
+        if one["heldAsNotRun"]:
+            return False
+        if one["state"] == "complete":
+            return True
+        if one["state"] != "partial":
+            return False
+        boards = evidence.get(one["name"])
+        return any(b.get("complete") for b in boards.values()) if boards else one["imported"] > 0
+
+    if require_usable and providers and not any(_usable(one) for one in report["sources"]):
         report.update(complete=False, saved=0, provenRuns=[], nothingSaved=NO_USABLE_SOURCE)
         for one in (report.get("proof") or {}).values():
             one["proven"] = False
