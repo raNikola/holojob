@@ -108,3 +108,78 @@ def test_the_report_prints_no_title(world, capsys):
     assert module.main(["--root", str(root)]) == 0
     captured = capsys.readouterr()
     assert "Product Manager" not in captured.out + captured.err and "INVISIBLE" in captured.err
+
+
+# --- the guarded write ------------------------------------------------------------------------------------------------------
+
+
+def run_prune(root, apply, days=180, app=frozenset(), protect=frozenset()):
+    return retention.prune(root, days=days, now=NOW, application_ids=set(app), protect_ids=set(protect), apply=apply, stamp="t1")
+
+
+def test_a_dry_run_changes_nothing(world):
+    root, ids = world
+    before = (root / "data/jobs/job_history.json").read_bytes()
+    out = run_prune(root, apply=False)
+    assert len(out["candidates"]) == 3 and out["applied"] is False
+    assert (root / "data/jobs/job_history.json").read_bytes() == before and not (root / "data/backups").exists()
+
+
+def test_apply_refuses_without_both_id_lists(world):
+    root, _ = world
+    before = (root / "data/jobs/job_history.json").read_bytes()
+    for app, protect in ((None, set()), (set(), None), (None, None)):
+        with pytest.raises(SystemExit, match="refusing --apply"):
+            retention.prune(root, days=180, now=NOW, application_ids=app, protect_ids=protect, apply=True)
+    assert (root / "data/jobs/job_history.json").read_bytes() == before
+
+
+def test_apply_backs_up_first_removes_only_candidates_and_leaves_the_view_alone(world):
+    root, ids = world
+    ledger_before = load(root)
+    view_before = view_guard.derive_view(ledger_before)
+    out = run_prune(root, apply=True, protect={ids["b_old"]})
+    after = load(root)
+    assert out["applied"] is True and out["removed"] == 2
+    assert set(ledger_before["jobs"]) - set(after["jobs"]) == {ids["a_old"], ids["c_old"]}
+    assert ids["b_old"] in after["jobs"] and ids["d_mid"] in after["jobs"] and ids["new"] in after["jobs"]
+    assert after["lastImport"] == ledger_before["lastImport"] and after["generation"] == ledger_before["generation"]
+    assert view_guard.derive_view(after) == view_before
+    backup = root / out["backup"]
+    assert json.loads((backup / "data/jobs/job_history.json").read_text())["jobs"].keys() == ledger_before["jobs"].keys()
+    assert set((backup / "removed-ids.txt").read_text().split()) == {ids["a_old"], ids["c_old"]}
+    assert (backup / "manifest.json").exists() and oct(backup.stat().st_mode & 0o777) == "0o700"
+    assert oct((backup / "removed-ids.txt").stat().st_mode & 0o777) == "0o600"
+
+
+def test_a_second_apply_has_nothing_left_to_remove(world):
+    root, _ = world
+    run_prune(root, apply=True)
+    again = run_prune(root, apply=True)
+    assert again["candidates"] == [] and again["applied"] is False
+
+
+def test_a_busy_pipeline_stops_the_prune(world):
+    import pipeline_lock
+    root, _ = world
+    lock = pipeline_lock.acquire(path=root / "data/jobs/.pipeline.lock")
+    try:
+        with pytest.raises(SystemExit):
+            run_prune(root, apply=True)
+    finally:
+        lock.release()
+    assert len(load(root)["jobs"]) == 5
+
+
+def test_the_cli_requires_days_and_prints_no_titles(world, capsys):
+    import importlib.util
+    from pathlib import Path
+    root, _ = world
+    spec = importlib.util.spec_from_file_location("prune_script", Path(__file__).resolve().parents[2] / "scripts/prune-older-key.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with pytest.raises(SystemExit):
+        module.main([], root=root)
+    assert module.main(["--days", "180"], root=root) == 0
+    captured = capsys.readouterr()
+    assert "Product Manager" not in captured.out and "DRY RUN" in captured.err and len(load(root)["jobs"]) == 5
