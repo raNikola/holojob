@@ -15,7 +15,7 @@ import run_pipeline as rp
 import run_scoring
 import staging
 import view_guard
-from llm_enhancer import LlmFitEnhancer
+from llm_enhancer import FIT_ADJUSTMENT, LlmFitEnhancer
 from match_engine import shadow
 from scorer import score_jobs
 from test_job_history import facts_for
@@ -32,13 +32,13 @@ META = {"ledgerGeneration": 3, "generatedAt": NOW, "history": {}}
 MARK = row_state.MARK
 
 
-def row(job_id, title="Senior Product Manager", description="Own the product roadmap and discovery with SQL analytics.", seen=NOW, **extra):
+def row(job_id, title="Senior Product Manager", description="Own the product roadmap and discovery with SQL analytics. You will work with engineering, design and stakeholders, define strategy and deliver measurable outcomes. Requirements: five years of product experience.", seen=NOW, **extra):
     return {"jobId": job_id, "title": title, "company": "Acme", "location": "Remote", "description": description, "jobUrl": f"https://x/{job_id}",
             "provider": "greenhouse", "status": "new", "firstSeen": OLD, "lastSeen": seen, "closedAt": None, "isNew": False, "isClosed": False, **extra}
 
 
 ACTIVE = [row("a1"), row("a2", "Product Owner", "Backlog grooming and stakeholders for a fintech product."), row("a3", "Data Analyst", "SQL dashboards and Python.")]
-RARE = "Zebrafish quokka narwhal ocelot pangolin roadmap SQL Kubernetes stakeholders discovery " * 8
+RARE = "Zebrafish quokka narwhal ocelot pangolin roadmap SQL Kubernetes stakeholders discovery experience required strategy " * 8
 ABSENT = row("x1", "Senior Product Manager Kubernetes", RARE, seen=OLD, isAbsent=True, absentSince=NOW, **{MARK: True})
 HELD = row("x2", "Staff Product Manager", RARE + " held", seen=OLD, **{MARK: True})
 STALE = row("x3", "Principal Product Manager", RARE + " stale", seen=OLD, isStale=True)
@@ -257,7 +257,11 @@ def test_a_judgement_already_paid_for_still_applies_so_the_score_does_not_jump(t
     second = LlmFitEnhancer("openai", "gpt-4o", complete=again, threshold=0, cache_path=cache)
     held = [{**ACTIVE[0], "lastSeen": OLD, MARK: True}]
     later = score_jobs(held, INTEL, second, workers=1)
-    assert again.calls == 0 and later[0]["matchScore"] == found[0]["matchScore"] and second.counts["cached"] == 1
+    # The judgement applies as it did when it was paid for: the same adjustment on this row's own local score.
+    # (A lone row's rarity differs by corpus, so the comparison is made against the local score, not the first run's.)
+    local = score_jobs(held, INTEL)[0]["matchScore"]
+    assert again.calls == 0 and second.counts["cached"] == 1
+    assert later[0]["matchScore"] == local + FIT_ADJUSTMENT["good"]
 
 
 # --- the shadow engine -------------------------------------------------------------------------------------------------

@@ -27,6 +27,8 @@ def in_idf_corpus(row: dict) -> bool:
     always in."""
     if row.get("manualEntry"):
         return True
+    if row.get("keptRescore"):  # a kept ad outside the list is scored with the run but is no part of its corpus
+        return False
     return not row.get("isClosed") and not not_found(row)
 
 
