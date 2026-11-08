@@ -28,6 +28,14 @@ export function isClosedAd(row) {
   return row?.class ? row.class === 'closed' : row?.isClosed === true
 }
 
+/** Said on an application whose ad has closed: the application itself is untouched. */
+export const AD_CLOSED_NOTE = 'The ad is no longer listed. This says nothing about your application, which keeps its own status.'
+
+/** The job ids whose ad is closed, for marks on applications. Reads the route's rows, or the stored rows while there is no answer. */
+export function closedAdIds(rows) {
+  return new Set((rows || []).filter(isClosedAd).map((row) => row.jobId))
+}
+
 export function formatSeen(value) {
   return value ? String(value).slice(0, 10) : ''
 }

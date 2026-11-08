@@ -23,6 +23,9 @@ import { isFollowUpDue } from '../../modules/jobs/followUps'
 import { isOutreachFollowUpDue } from '../../modules/outreach/followUpEngine'
 import { computeOutreachMetrics } from '../../modules/outreach/outreachMetrics'
 import SortableTh, { useTableSort } from '../ui/SortableTh'
+import Badge from '../ui/Badge'
+import { closedAdIds, AD_CLOSED_NOTE } from '../../modules/jobs/jobHistory'
+import { useAllAds } from '../../modules/jobs/useAllAds'
 import { sortRows } from '../../modules/tableSort'
 
 const stageOf = (job) => {
@@ -76,6 +79,8 @@ export default function ApplicationHome() {
   useJobsSync(setState)
 
   const applications = useApplications()
+  const allAds = useAllAds({ enabled: pipelineApiAvailable })
+  const adClosed = useMemo(() => closedAdIds(allAds.rows ?? state.jobs), [allAds.rows, state.jobs])
   // Tracking comes from the application store; `state.jobs` stays as saved and is what gets persisted.
   const viewJobs = useMemo(
     () => overlayTracking(state.jobs, applications.status === 'ready' ? applications.store : null, applications.settings),
@@ -122,7 +127,7 @@ export default function ApplicationHome() {
 
       <Tabs tabs={APPLICATION_TABS} active={tab} onChange={setTab} />
 
-      {tab === 'board' && <ApplicationBoard onOpenJob={openJob} />}
+      {tab === 'board' && <ApplicationBoard onOpenJob={openJob} adClosed={adClosed} />}
 
       {tab === 'statistics' && (
         <>
@@ -187,7 +192,7 @@ export default function ApplicationHome() {
                               </span>
                             )}
                           </td>
-                          <td className="py-3 pr-4 text-stone-700 dark:text-stone-300">{job.title || '—'}</td>
+                          <td className="py-3 pr-4 text-stone-700 dark:text-stone-300">{job.title || '—'}{adClosed.has(job.jobId) && <span className="ml-2"><span title={AD_CLOSED_NOTE}><Badge variant="low">Ad closed</Badge></span></span>}</td>
                           <td className="py-3 pr-4">{t.interviewStage || (t.applied ? 'Applied' : '—')}</td>
                           <td className="py-3 pr-4">{formatDate(t.appliedDate)}</td>
                           <td className="py-3 pr-4">

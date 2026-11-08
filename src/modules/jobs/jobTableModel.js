@@ -3,8 +3,15 @@
 // Each state remembers the key it was made under, and a state from another key reads as the starting one, so a reset needs no effect
 // and no list change can reset by accident. A row's status changing rebuilds the list but keeps the key.
 
+import { isClosedAd } from './jobHistory.js'
+
 export const JOB_PAGE_SIZE = 100
 const NOTHING = new Set()
+
+/** Open ads before closed ones, each group in the order given. Only for the default sort: a sort the owner picked is left as it is. */
+export function closedLast(rows) {
+  return [...rows.filter((row) => !isClosedAd(row)), ...rows.filter(isClosedAd)]
+}
 
 /** How many rows are shown under `key`: paging is `{ key, limit }`, and the key holds the filters and the sort. */
 export function pageLimit(paging, key) {

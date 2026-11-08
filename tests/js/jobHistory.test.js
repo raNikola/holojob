@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatSeen, historyBadges, isActionable } from '../../src/modules/jobs/jobHistory.js'
+import { closedAdIds, formatSeen, historyBadges, isActionable } from '../../src/modules/jobs/jobHistory.js'
 import { computeJobStats } from '../../src/modules/jobs/jobStats.js'
 
 describe('history badges', () => {
@@ -63,3 +63,13 @@ describe('closed jobs are not candidates for action', () => {
   })
 })
 
+
+describe('closed ads on applications', () => {
+  it('reads the class first, then the stored mark', () => {
+    expect([...closedAdIds([{ jobId: 'a', class: 'closed' }, { jobId: 'b', class: 'found', isClosed: true }, { jobId: 'c', isClosed: true }, { jobId: 'd' }])]).toEqual(['a', 'c'])
+  })
+
+  it('no rows, no ids', () => {
+    expect(closedAdIds(null).size).toBe(0)
+  })
+})

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import FitScore from '../../src/components/jobs/FitScore.jsx'
 import JobTable from '../../src/components/jobs/JobTable.jsx'
 import {
-  JOB_PAGE_SIZE, everySelected, pageLimit, selectedNotShown, selectionFor, showMore, toggleAllSelected, toggleSelected,
+  JOB_PAGE_SIZE, closedLast, everySelected, pageLimit, selectedNotShown, selectionFor, showMore, toggleAllSelected, toggleSelected,
 } from '../../src/modules/jobs/jobTableModel.js'
 import { getDefaultJobsState, saveJobs, updateFilters } from '../../src/modules/jobs/jobStorage.js'
 
@@ -334,5 +334,23 @@ describe('storage', () => {
     const after = JSON.parse(saved.get(key))
     expect(after.filters.searchText).toBe('pm')
     expect(JSON.stringify(after.jobs)).toBe(JSON.stringify(before.jobs))
+  })
+})
+
+describe('closed ads and the sort', () => {
+  it('the default sort puts open ads first, whatever the score', () => {
+    const rows = [job(1, { matchScore: 90, class: 'closed' }), job(2, { matchScore: 50, class: 'found' }), job(3, { matchScore: 70, isClosed: true }), job(4, { matchScore: 60 })]
+    expect(closedLast(rows).map((row) => row.jobId)).toEqual(['j2', 'j4', 'j1', 'j3'])
+  })
+
+  it('the route\'s class wins over a stored mark', () => {
+    const rows = [job(1, { class: 'found', isClosed: true }), job(2)]
+    expect(closedLast(rows).map((row) => row.jobId)).toEqual(['j1', 'j2'])
+  })
+
+  it('renders the default sort with the closed ad last', () => {
+    viewport(true)
+    const html = render([job(1, { matchScore: 90, class: 'closed', title: 'Closed one' }), job(2, { matchScore: 50, class: 'found', title: 'Open one' })])
+    expect(html.indexOf('Open one')).toBeLessThan(html.indexOf('Closed one'))
   })
 })

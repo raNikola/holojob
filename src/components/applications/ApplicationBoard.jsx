@@ -4,10 +4,14 @@ import { moveApplication } from '../../modules/applications/applicationsClient'
 import { boardFootnote, buildBoard, dropDecision, moveChoices } from '../../modules/applications/boardModel'
 import { useApplications } from '../../hooks/useApplications'
 import SettingsLink from '../settings/SettingsLink'
+import Badge from '../ui/Badge'
+import { AD_CLOSED_NOTE } from '../../modules/jobs/jobHistory'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-function Card({ card, settings, busy, error, onOpen, onMove, onDragStart, onDragEnd }) {
+const NO_IDS = new Set()
+
+function Card({ card, settings, busy, error, adClosed, onOpen, onMove, onDragStart, onDragEnd }) {
   return (
     <li
       draggable={!busy}
@@ -20,6 +24,7 @@ function Card({ card, settings, busy, error, onOpen, onMove, onDragStart, onDrag
         <span className="block font-medium text-stone-900 dark:text-stone-100">{card.company || '—'}</span>
         <span className="block text-stone-600 dark:text-stone-400">{card.title || '—'}</span>
       </button>
+      {adClosed && <p className="mt-1"><span title={AD_CLOSED_NOTE}><Badge variant="low">Ad closed</Badge></span></p>}
       <p className={`mt-1 text-xs ${card.stale ? 'text-amber-700 dark:text-amber-300' : 'text-stone-500'}`}>
         {card.days === null ? 'Days in stage unknown (no date recorded)' : `${card.days} day${card.days === 1 ? '' : 's'} in stage`}
         {card.stale && ' · stale'}
@@ -40,7 +45,7 @@ function Card({ card, settings, busy, error, onOpen, onMove, onDragStart, onDrag
 }
 
 /** The Kanban board: columns from the stage registry, cards from the application store. */
-export default function ApplicationBoard({ onOpenJob }) {
+export default function ApplicationBoard({ onOpenJob, adClosed = NO_IDS }) {
   const applications = useApplications()
   const [busy, setBusy] = useState({})
   const [errors, setErrors] = useState({})
@@ -127,7 +132,7 @@ export default function ApplicationBoard({ onOpenJob }) {
             </h3>
             <ul className="space-y-2">
               {column.cards.map((card) => (
-                <Card key={card.appId} card={card} settings={applications.settings} busy={Boolean(busy[card.appId])} error={errors[card.appId]} onOpen={handleOpen} onMove={handleMove} onDragStart={handleDragStart} onDragEnd={endDrag} />
+                <Card key={card.appId} card={card} adClosed={adClosed.has(card.jobId)} settings={applications.settings} busy={Boolean(busy[card.appId])} error={errors[card.appId]} onOpen={handleOpen} onMove={handleMove} onDragStart={handleDragStart} onDragEnd={endDrag} />
               ))}
             </ul>
           </section>
