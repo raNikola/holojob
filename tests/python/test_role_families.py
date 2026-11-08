@@ -29,8 +29,8 @@ def test_every_family_has_synonyms_and_tracks():
         assert entry["acceptedRoleTracks"], family
 
 
-def test_product_family_accepts_exactly_the_old_set():
-    assert accepted_tracks({"roleFamily": "product"}) == ("product", {"product_management", "product_ownership"})
+def test_product_family_accepts_product_and_program_work_not_delivery():
+    assert accepted_tracks({"roleFamily": "product"}) == ("product", {"product_management", "product_ownership", "program_management"})
 
 
 def test_no_family_assumes_none():

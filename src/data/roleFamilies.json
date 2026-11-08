@@ -14,8 +14,31 @@
       "VP of Product",
       "Chief Product Officer"
     ],
-    "acceptedRoleTracks": ["product_management", "product_ownership"],
+    "acceptedRoleTracks": ["product_management", "product_ownership", "program_management"],
     "titleRules": {
+      "nearTitlePatterns": [
+        "product management",
+        "product operations",
+        "product ops\\b",
+        "technical product (manag|lead|owner|director|head)",
+        "platform product (manag|lead|domain|owner|director|head)",
+        "program(me)? manag",
+        "\\btpm\\b",
+        "director,? (of )?product",
+        "product director",
+        "\\b(vp|vice president),?( of)?( \\w+)? product"
+      ],
+      "otherFunctionPatterns": [
+        "\\bdesign(er|ers)?\\b",
+        "\\bmarket(ing|er|ers)\\b",
+        "product engineering",
+        "\\bsales\\b",
+        "\\b(hr|human resources|recruit(ing|er|ment)|talent)\\b",
+        "\\b(finance|legal|clinical|construction|facilities|supply chain)\\b",
+        "\\bcustomer success\\b"
+      ],
+      "productResponsibilityTitlePatterns": ["project manag", "delivery manag"],
+      "productResponsibilityTracks": ["product_management", "product_ownership"],
       "notTargetPhrases": [
         "head of product marketing",
         "head of product design",

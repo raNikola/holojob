@@ -19,7 +19,7 @@ from corpus import build_idf
 import row_state
 import work_authorization as wa
 from salary import salary_metadata
-from role_tier import ROLE_FAMILIES
+from role_tier import ROLE_FAMILIES, UNRELATED, title_tier
 
 # The one set of default weights, shared with the UI's settings panel and the
 # intelligence generator (src/modules/intelligence/candidateIntelligenceEngine.js).
@@ -47,6 +47,9 @@ def resolve_weights(saved: dict | None) -> dict:
 # intelligence); nothing is assumed without one. Unknown never caps: with no
 # family no job is off track.
 OFF_TRACK_CAP = 50
+# A title that is neither a target role nor near one (role_tier.py). The same answer as the off-track cap, read from
+# the title, so it holds for the many ads enrichment has not read. 40 keeps the ad reviewable (Weak, Maybe) and below a target-role ad held at 45 or 50.
+UNRELATED_TITLE_CAP = 40
 
 
 def track_has_evidence(facts: dict) -> bool:
@@ -121,6 +124,9 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
                  and family_tracks is not None and track not in family_tracks)
     if off_track:
         match_score = min(match_score, OFF_TRACK_CAP)
+    title_capped = title_tier(job.get("title") or "", role_score, family, facts) == UNRELATED
+    if title_capped:
+        match_score = min(match_score, UNRELATED_TITLE_CAP)
 
     authorization = wa.authorization_status(job, intelligence.get("jobFitPreferences") or {})
     authorization_cap = WORK_AUTHORIZATION_CAPS.get(authorization["status"])
@@ -141,6 +147,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         reasons.append(f"Capped: the ad describes {track}, not a {family} role")
     elif track and family is None:
         reasons.append("No role family set in the profile: the role is not checked against one")
+    if title_capped:
+        reasons.append(f"Capped: the title matches no {family} target role")
     if red_flags:
         reasons.extend([f"Red flag: {f}" for f in red_flags])
     if authorization_cap is not None:
@@ -176,7 +184,7 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         # True when a hard rule applies to the job, whether or not it lowered
         # this particular score. The enhancer never lifts such a job, so caps
         # stay decided here.
-        "hardCapped": bool(red_flags) or off_track or authorization_cap is not None,
+        "hardCapped": bool(red_flags) or off_track or title_capped or authorization_cap is not None,
     }
     return enhancer.enhance(job, result, intelligence)
 
