@@ -1,0 +1,1601 @@
+{
+ "_comment": "Every S5 doc->code mention on 2026-11-08, checked by hand in context: 'correct' = the backticked token names that file. Keyed by doc, token and target (not line, which moves). validate.py doclinks computes precision and its 95% Wilson lower bound over the labels that still match a current mention.",
+ "labels": [
+  {
+   "doc": ".claude/rules/resume.md",
+   "token": "src/utils/languages.js",
+   "target": "src/utils/languages.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": ".claude/skills/holojob-architecture/SKILL.md",
+   "token": "docker-compose.yml",
+   "target": "docker-compose.yml",
+   "verdict": "correct"
+  },
+  {
+   "doc": ".claude/skills/holojob-architecture/SKILL.md",
+   "token": "python/llm/claude_code.py",
+   "target": "python/llm/claude_code.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": ".claude/skills/holojob-architecture/SKILL.md",
+   "token": "scripts/api-handler.js",
+   "target": "scripts/api-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": ".claude/skills/holojob-architecture/SKILL.md",
+   "token": "src/utils/cvLibrary.js",
+   "target": "src/utils/cvLibrary.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CHANGELOG.md",
+   "token": "package.json",
+   "target": "package.json",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CHANGELOG.md",
+   "token": "scripts/api-handler.js",
+   "target": "scripts/api-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CHANGELOG.md",
+   "token": "scripts/local-server.js",
+   "target": "scripts/local-server.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "docker-compose.yml",
+   "target": "docker-compose.yml",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "python/job_import/ad_ai.py",
+   "target": "python/job_import/ad_ai.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "python/job_import/safe_fetch.py",
+   "target": "python/job_import/safe_fetch.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "python/job_scoring/atomic_write.py",
+   "target": "python/job_scoring/atomic_write.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "python/job_scoring/manual_jobs.py",
+   "target": "python/job_scoring/manual_jobs.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "python/llm/ai_gate.py",
+   "target": "python/llm/ai_gate.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "python/llm/ai_selection.py",
+   "target": "python/llm/ai_selection.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "python/llm/secret_store.py",
+   "target": "python/llm/secret_store.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "python/match_engine/matcher.py",
+   "target": "python/match_engine/matcher.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/ai-findings-store.js",
+   "target": "scripts/ai-findings-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/ai-gate.js",
+   "target": "scripts/ai-gate.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/ai-redact.js",
+   "target": "scripts/ai-redact.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/ai-settings-handler.js",
+   "target": "scripts/ai-settings-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/atomic-file.js",
+   "target": "scripts/atomic-file.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/git-hooks/pre-push",
+   "target": "scripts/git-hooks/pre-push",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/read-body.js",
+   "target": "scripts/read-body.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/request-guard.js",
+   "target": "scripts/request-guard.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/run-ad-fill.js",
+   "target": "scripts/run-ad-fill.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/run-ai.js",
+   "target": "scripts/run-ai.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/run-manual-job.js",
+   "target": "scripts/run-manual-job.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/secret-mask.js",
+   "target": "scripts/secret-mask.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/secret-paths.js",
+   "target": "scripts/secret-paths.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/secret-store.js",
+   "target": "scripts/secret-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/secrets-handler.js",
+   "target": "scripts/secrets-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/setup-job-discovery.sh",
+   "target": "scripts/setup-job-discovery.sh",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "scripts/tighten-data-permissions.sh",
+   "target": "scripts/tighten-data-permissions.sh",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "src/modules/settings/settingsRegistry.js",
+   "target": "src/modules/settings/settingsRegistry.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "tests/js/adFill.test.js",
+   "target": "tests/js/adFill.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "tests/js/aiRedaction.test.js",
+   "target": "tests/js/aiRedaction.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "tests/js/composePorts.test.js",
+   "target": "tests/js/composePorts.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "tests/js/manualEdit.test.js",
+   "target": "tests/js/manualEdit.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "tests/js/manualScoring.test.js",
+   "target": "tests/js/manualScoring.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "tests/js/settingsRegistry.test.js",
+   "target": "tests/js/settingsRegistry.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "tests/python/test_ad_ai.py",
+   "target": "tests/python/test_ad_ai.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "tests/python/test_engine_privacy.py",
+   "target": "tests/python/test_engine_privacy.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "tests/python/test_manual_jobs.py",
+   "target": "tests/python/test_manual_jobs.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "CLAUDE.md",
+   "token": "vitest.config.js",
+   "target": "vitest.config.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "README.md",
+   "token": "docker-compose.yml",
+   "target": "docker-compose.yml",
+   "verdict": "correct"
+  },
+  {
+   "doc": "companies/README.md",
+   "token": "python/job_discovery/providers/provider_registry.py",
+   "target": "python/job_discovery/providers/provider_registry.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "python/job_scoring/enrich_jobs.py",
+   "target": "python/job_scoring/enrich_jobs.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "python/llm/ai_selection.py",
+   "target": "python/llm/ai_selection.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "python/resume_generator/profile_languages.py",
+   "target": "python/resume_generator/profile_languages.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "scripts/cv-store.js",
+   "target": "scripts/cv-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "scripts/setup-job-discovery.sh",
+   "target": "scripts/setup-job-discovery.sh",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "src/utils/cvLibrary.js",
+   "target": "src/utils/cvLibrary.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "src/utils/languages.js",
+   "target": "src/utils/languages.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "tests/js/judgeBoundary.test.js",
+   "target": "tests/js/judgeBoundary.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "tests/python/test_resume_education.py",
+   "target": "tests/python/test_resume_education.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "tests/python/test_resume_parser.py",
+   "target": "tests/python/test_resume_parser.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "tests/python/test_salary.py",
+   "target": "tests/python/test_salary.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ARCHITECTURE.md",
+   "token": "vite.config.js",
+   "target": "vite.config.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "design-system/preset/contrast_check.py",
+   "target": "docs/design-system/preset/contrast_check.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "docker-compose.yml",
+   "target": "docker-compose.yml",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_discovery/all_ads.py",
+   "target": "python/job_discovery/all_ads.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_discovery/filtered_ads.py",
+   "target": "python/job_discovery/filtered_ads.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_discovery/lifecycle_report.py",
+   "target": "python/job_discovery/lifecycle_report.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_discovery/proof_reasons.py",
+   "target": "python/job_discovery/proof_reasons.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_discovery/providers/role_filter.py",
+   "target": "python/job_discovery/providers/role_filter.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_discovery/run_discovery.py",
+   "target": "python/job_discovery/run_discovery.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_discovery/run_log.py",
+   "target": "python/job_discovery/run_log.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_discovery/staging.py",
+   "target": "python/job_discovery/staging.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_scoring/job_history.py",
+   "target": "python/job_scoring/job_history.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_scoring/pipeline_lock.py",
+   "target": "python/job_scoring/pipeline_lock.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_scoring/row_state.py",
+   "target": "python/job_scoring/row_state.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/job_scoring/stale_rule.py",
+   "target": "python/job_scoring/stale_rule.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/profile_import/vocabulary.py",
+   "target": "python/profile_import/vocabulary.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "python/run_rescrape.py",
+   "target": "python/run_rescrape.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "scripts/backup-handler.js",
+   "target": "scripts/backup-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "scripts/check-view-recovery.js",
+   "target": "scripts/check-view-recovery.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "scripts/git-hooks/pre-push",
+   "target": "scripts/git-hooks/pre-push",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "scripts/job-all-read.js",
+   "target": "scripts/job-all-read.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "scripts/job-history-read.js",
+   "target": "scripts/job-history-read.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "scripts/run-history.js",
+   "target": "scripts/run-history.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "scripts/view-guard.js",
+   "target": "scripts/view-guard.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "src/components/activity/ActivityScreen.jsx",
+   "target": "src/components/activity/ActivityScreen.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "src/modules/activity/runView.js",
+   "target": "src/modules/activity/runView.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "src/modules/activity/useLiveRun.js",
+   "target": "src/modules/activity/useLiveRun.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "src/modules/jobs/allAds.js",
+   "target": "src/modules/jobs/allAds.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "src/modules/jobs/useAllAds.js",
+   "target": "src/modules/jobs/useAllAds.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "src/utils/headingVocabulary.js",
+   "target": "src/utils/headingVocabulary.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/js/activityScreen.dom.test.js",
+   "target": "tests/js/activityScreen.dom.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/js/jobTextsConsumers.test.js",
+   "target": "tests/js/jobTextsConsumers.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/js/jobsScreen.dom.test.js",
+   "target": "tests/js/jobsScreen.dom.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/js/navGroups.test.js",
+   "target": "tests/js/navGroups.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/js/rescrape.test.js",
+   "target": "tests/js/rescrape.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/js/rescrapeRoutes.test.js",
+   "target": "tests/js/rescrapeRoutes.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/js/runHistory.test.js",
+   "target": "tests/js/runHistory.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/js/runLive.test.js",
+   "target": "tests/js/runLive.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/js/runView.test.js",
+   "target": "tests/js/runView.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/js/setup/jobsScreenHarness.js",
+   "target": "tests/js/setup/jobsScreenHarness.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/js/viewRecoveryCheck.test.js",
+   "target": "tests/js/viewRecoveryCheck.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_board_completeness.py",
+   "target": "tests/python/test_board_completeness.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_cancel.py",
+   "target": "tests/python/test_cancel.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_cancel_run.py",
+   "target": "tests/python/test_cancel_run.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_discards.py",
+   "target": "tests/python/test_discards.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_import.py",
+   "target": "tests/python/test_import.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_lifecycle_report.py",
+   "target": "tests/python/test_lifecycle_report.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_no_usable_source.py",
+   "target": "tests/python/test_no_usable_source.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_proof_reasons.py",
+   "target": "tests/python/test_proof_reasons.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_readers_not_found.py",
+   "target": "tests/python/test_readers_not_found.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_rescrape.py",
+   "target": "tests/python/test_rescrape.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_scoring_input.py",
+   "target": "tests/python/test_scoring_input.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_snapshot_closing.py",
+   "target": "tests/python/test_snapshot_closing.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_staging.py",
+   "target": "tests/python/test_staging.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_staging_streaming.py",
+   "target": "tests/python/test_staging_streaming.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_tailor_merge.py",
+   "target": "tests/python/test_tailor_merge.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/DECISIONS.md",
+   "token": "tests/python/test_view_guard.py",
+   "target": "tests/python/test_view_guard.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "python/job_discovery/importer.py",
+   "target": "python/job_discovery/importer.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "python/job_discovery/lifecycle_report.py",
+   "target": "python/job_discovery/lifecycle_report.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "python/job_discovery/run_log.py",
+   "target": "python/job_discovery/run_log.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "python/job_discovery/staging.py",
+   "target": "python/job_discovery/staging.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "python/job_scoring/pipeline_lock.py",
+   "target": "python/job_scoring/pipeline_lock.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "python/job_scoring/row_state.py",
+   "target": "python/job_scoring/row_state.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "python/job_scoring/view_guard.py",
+   "target": "python/job_scoring/view_guard.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "python/match_engine/competencies.py",
+   "target": "python/match_engine/competencies.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "python/run_rescrape.py",
+   "target": "python/run_rescrape.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "scripts/check-view-recovery.js",
+   "target": "scripts/check-view-recovery.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "scripts/run-discovery.js",
+   "target": "scripts/run-discovery.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "scripts/run-rescrape.js",
+   "target": "scripts/run-rescrape.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "scripts/run-tailor.js",
+   "target": "scripts/run-tailor.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "scripts/tighten-data-permissions.sh",
+   "target": "scripts/tighten-data-permissions.sh",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "scripts/view-guard.js",
+   "target": "scripts/view-guard.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/ROADMAP.md",
+   "token": "tests/python/test_llm_tailor.py",
+   "target": "tests/python/test_llm_tailor.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/holojob/FLOW_AUDIT.md",
+   "token": "python/cv_analysis/run_cv_analyze.py",
+   "target": "python/cv_analysis/run_cv_analyze.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/holojob/FLOW_AUDIT.md",
+   "token": "python/llm/claude_code.py",
+   "target": "python/llm/claude_code.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/COMPONENTS.md",
+   "token": "tests/js/browserStorageAllowlist.test.js",
+   "target": "tests/js/browserStorageAllowlist.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/MIGRATION_PLAN.md",
+   "token": "jsconfig.json",
+   "target": "jsconfig.json",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/MIGRATION_PLAN.md",
+   "token": "src/App.jsx",
+   "target": "src/App.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/MIGRATION_PLAN.md",
+   "token": "vite.config.js",
+   "target": "vite.config.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/MIGRATION_PLAN.md",
+   "token": "vitest.config.js",
+   "target": "vitest.config.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/README.md",
+   "token": "jsconfig.json",
+   "target": "jsconfig.json",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/README.md",
+   "token": "preset/contrast_check.py",
+   "target": "docs/design-system/preset/contrast_check.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/README.md",
+   "token": "src/modules/jobs/matchScore.js",
+   "target": "src/modules/jobs/matchScore.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/README.md",
+   "token": "vite.config.js",
+   "target": "vite.config.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/README.md",
+   "token": "vitest.config.js",
+   "target": "vitest.config.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/REDESIGN_BACKLOG.md",
+   "token": "preset/contrast_check.py",
+   "target": "docs/design-system/preset/contrast_check.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/REDESIGN_BACKLOG.md",
+   "token": "tests/js/aiRedaction.test.js",
+   "target": "tests/js/aiRedaction.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/TOKENS.md",
+   "token": "preset/contrast_check.py",
+   "target": "docs/design-system/preset/contrast_check.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/TOKENS.md",
+   "token": "python/job_scoring/labels.py",
+   "target": "python/job_scoring/labels.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/TOKENS.md",
+   "token": "src/components/jobs/JobTable.jsx",
+   "target": "src/components/jobs/JobTable.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/TOKENS.md",
+   "token": "src/modules/activity/runView.js",
+   "target": "src/modules/activity/runView.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/design-system/TOKENS.md",
+   "token": "src/modules/jobs/matchScore.js",
+   "target": "src/modules/jobs/matchScore.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/notes/cv-parsing-known-gaps.md",
+   "token": "python/job_scoring/dimensions/industry_match.py",
+   "target": "python/job_scoring/dimensions/industry_match.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/notes/cv-parsing-known-gaps.md",
+   "token": "python/profile_import/text_parser.py",
+   "target": "python/profile_import/text_parser.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/notes/cv-parsing-known-gaps.md",
+   "token": "python/resume_generator/resume_parser.py",
+   "target": "python/resume_generator/resume_parser.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/notes/cv-parsing-known-gaps.md",
+   "token": "src/data/skillsDictionary.js",
+   "target": "src/data/skillsDictionary.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/notes/cv-parsing-known-gaps.md",
+   "token": "src/utils/profileExtractor.js",
+   "target": "src/utils/profileExtractor.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/notes/cv-parsing-known-gaps.md",
+   "token": "src/utils/termMatch.js",
+   "target": "src/utils/termMatch.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "docker-compose.yml",
+   "target": "docker-compose.yml",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "package.json",
+   "target": "package.json",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "python/llm/ai_gate.py",
+   "target": "python/llm/ai_gate.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "python/llm/ai_selection.py",
+   "target": "python/llm/ai_selection.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "python/llm/secret_store.py",
+   "target": "python/llm/secret_store.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "scripts/run-ai.js",
+   "target": "scripts/run-ai.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "scripts/secret-store.js",
+   "target": "scripts/secret-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "src/components/jobs/JobDetailDrawer.jsx:115",
+   "target": "src/components/jobs/JobDetailDrawer.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "src/components/jobs/JobTable.jsx:146",
+   "target": "src/components/jobs/JobTable.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "src/components/outreach/ContactCard.jsx:47",
+   "target": "src/components/outreach/ContactCard.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "src/components/outreach/LinkedInSearchLinks.jsx:18",
+   "target": "src/components/outreach/LinkedInSearchLinks.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "src/modules/browserStorage/allowlist.js",
+   "target": "src/modules/browserStorage/allowlist.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "src/modules/outreach/linkedinCookie.js",
+   "target": "src/modules/outreach/linkedinCookie.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "tests/js/aiGate.test.js",
+   "target": "tests/js/aiGate.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "tests/js/backupSecrets.test.js",
+   "target": "tests/js/backupSecrets.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "tests/js/browserStorageAllowlist.test.js",
+   "target": "tests/js/browserStorageAllowlist.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "tests/js/linkedinSecret.test.js",
+   "target": "tests/js/linkedinSecret.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "tests/js/requestGuard.test.js",
+   "target": "tests/js/requestGuard.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "tests/js/secretsApi.test.js",
+   "target": "tests/js/secretsApi.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "tests/python/test_ai_selection.py",
+   "target": "tests/python/test_ai_selection.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "tests/python/test_scraper_cli.py",
+   "target": "tests/python/test_scraper_cli.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "tests/python/test_secret_store.py",
+   "target": "tests/python/test_secret_store.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/BROWSER_STORAGE_POLICY.md",
+   "token": "vite.config.js",
+   "target": "vite.config.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/ENGINE_CONTRACT.md",
+   "token": "tests/python/test_engine_snapshot.py",
+   "target": "tests/python/test_engine_snapshot.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "python/job_discovery/run_discovery.py",
+   "target": "python/job_discovery/run_discovery.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "python/job_scoring/job_history.py",
+   "target": "python/job_scoring/job_history.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "python/quality_audit/ats_scorer.py",
+   "target": "python/quality_audit/ats_scorer.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "python/resume_generator/cover_letter_generator.py",
+   "target": "python/resume_generator/cover_letter_generator.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "python/run_pipeline.py",
+   "target": "python/run_pipeline.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "scripts/api-handler.js",
+   "target": "scripts/api-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "scripts/application-store.js",
+   "target": "scripts/application-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "scripts/backup-handler.js",
+   "target": "scripts/backup-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "scripts/cv-store.js",
+   "target": "scripts/cv-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "scripts/run-ai.js",
+   "target": "scripts/run-ai.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "scripts/run-ai.js:76",
+   "target": "scripts/run-ai.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "src/components/jobs/JobDetailDrawer.jsx",
+   "target": "src/components/jobs/JobDetailDrawer.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "src/modules/ai/aiUsageTracker.js",
+   "target": "src/modules/ai/aiUsageTracker.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "src/modules/jobs/followUps.js",
+   "target": "src/modules/jobs/followUps.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "src/modules/jobs/jobStats.js",
+   "target": "src/modules/jobs/jobStats.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "src/modules/outreach/outreachStorage.js",
+   "target": "src/modules/outreach/outreachStorage.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "src/utils/cvLibrary.js",
+   "target": "src/utils/cvLibrary.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "tests/js/applicationStore.test.js",
+   "target": "tests/js/applicationStore.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/GAP_ANALYSIS.md",
+   "token": "tests/python/test_application_store_isolation.py",
+   "target": "tests/python/test_application_store_isolation.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/PHASE0_AUDIT.md",
+   "token": "python/job_scoring/llm_client.py",
+   "target": "python/job_scoring/llm_client.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/PHASE0_AUDIT.md",
+   "token": "python/resume_generator/llm_tailor.py",
+   "target": "python/resume_generator/llm_tailor.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/PHASE0_AUDIT.md",
+   "token": "python/resume_generator/provenance_checker.py",
+   "target": "python/resume_generator/provenance_checker.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/PHASE0_AUDIT.md",
+   "token": "scripts/cv-store.js",
+   "target": "scripts/cv-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/PHASE0_AUDIT.md",
+   "token": "src/data/questions.js",
+   "target": "src/data/questions.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/PHASE0_AUDIT.md",
+   "token": "src/data/skillsDictionary.js",
+   "target": "src/data/skillsDictionary.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/PHASE0_AUDIT.md",
+   "token": "src/modules/intelligence/skillsClassifier.js",
+   "target": "src/modules/intelligence/skillsClassifier.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/PHASE0_AUDIT.md",
+   "token": "src/modules/jobs/applicationTracking.js",
+   "target": "src/modules/jobs/applicationTracking.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/PHASE0_AUDIT.md",
+   "token": "src/modules/jobs/jobStorage.js",
+   "target": "src/modules/jobs/jobStorage.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/PHASE0_AUDIT.md",
+   "token": "src/utils/cvLibrary.js",
+   "target": "src/utils/cvLibrary.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/PHASE0_AUDIT.md",
+   "token": "src/utils/validators.js",
+   "target": "src/utils/validators.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SETTINGS_PLAN.md",
+   "token": "scripts/api-handler.js",
+   "target": "scripts/api-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SETTINGS_PLAN.md",
+   "token": "scripts/profile-reset.js",
+   "target": "scripts/profile-reset.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SETTINGS_PLAN.md",
+   "token": "src/components/settings/SettingsHome.jsx",
+   "target": "src/components/settings/SettingsHome.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SETTINGS_PLAN.md",
+   "token": "src/modules/appNavigation.js",
+   "target": "src/modules/appNavigation.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SETTINGS_PLAN.md",
+   "token": "src/modules/settings/settingsRegistry.js",
+   "target": "src/modules/settings/settingsRegistry.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SETTINGS_PLAN.md",
+   "token": "tests/js/aiRedaction.test.js",
+   "target": "tests/js/aiRedaction.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SETTINGS_PLAN.md",
+   "token": "tests/js/backupSecrets.test.js",
+   "target": "tests/js/backupSecrets.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SETTINGS_PLAN.md",
+   "token": "tests/js/settingsRegistry.test.js",
+   "target": "tests/js/settingsRegistry.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SETTINGS_PLAN.md",
+   "token": "tests/python/test_engine_privacy.py",
+   "target": "tests/python/test_engine_privacy.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SOURCES_SPEC.md",
+   "token": "python/job_discovery/source_settings.py",
+   "target": "python/job_discovery/source_settings.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SOURCES_SPEC.md",
+   "token": "scripts/secret-store.js",
+   "target": "scripts/secret-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/SOURCES_SPEC.md",
+   "token": "scripts/sources-handler.js",
+   "target": "scripts/sources-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/STEP5_SERVER_MASTER_PLAN.md",
+   "token": "python/llm/ai_gate.py",
+   "target": "python/llm/ai_gate.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/STEP5_SERVER_MASTER_PLAN.md",
+   "token": "scripts/ai-findings-store.js",
+   "target": "scripts/ai-findings-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/TRACKER_PLAN.md",
+   "token": "python/quality_audit/outreach_auditor.py",
+   "target": "python/quality_audit/outreach_auditor.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/TRACKER_PLAN.md",
+   "token": "scripts/api-handler.js",
+   "target": "scripts/api-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/TRACKER_PLAN.md",
+   "token": "scripts/application-store.js",
+   "target": "scripts/application-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/TRACKER_PLAN.md",
+   "token": "src/components/applications/ApplicationHome.jsx",
+   "target": "src/components/applications/ApplicationHome.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/TRACKER_PLAN.md",
+   "token": "src/components/jobs/JobDetailDrawer.jsx",
+   "target": "src/components/jobs/JobDetailDrawer.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/TRACKER_PLAN.md",
+   "token": "src/components/settings/SettingsHome.jsx",
+   "target": "src/components/settings/SettingsHome.jsx",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/TRACKER_PLAN.md",
+   "token": "src/modules/applications/applicationEnums.js",
+   "target": "src/modules/applications/applicationEnums.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/TRACKER_PLAN.md",
+   "token": "src/modules/applications/legacyTracking.js",
+   "target": "src/modules/applications/legacyTracking.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/TRACKER_PLAN.md",
+   "token": "src/modules/jobs/applicationTracking.js",
+   "target": "src/modules/jobs/applicationTracking.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/TRACKER_PLAN.md",
+   "token": "tests/js/jobStorage.test.js",
+   "target": "tests/js/jobStorage.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/TRACKER_PLAN.md",
+   "token": "tests/js/trackerCv.test.js",
+   "target": "tests/js/trackerCv.test.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "python/cv_analysis/run_cv_analyze.py",
+   "target": "python/cv_analysis/run_cv_analyze.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "python/job_discovery/proof_reasons.py",
+   "target": "python/job_discovery/proof_reasons.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "python/job_discovery/source_settings.py",
+   "target": "python/job_discovery/source_settings.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "python/job_scoring/pipeline_lock.py",
+   "target": "python/job_scoring/pipeline_lock.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "python/llm/ai_gate.py",
+   "target": "python/llm/ai_gate.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "python/llm/ai_selection.py",
+   "target": "python/llm/ai_selection.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "python/llm/secret_store.py",
+   "target": "python/llm/secret_store.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "python/profile_import/text_parser.py",
+   "target": "python/profile_import/text_parser.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "python/resume_generator/run_tailor.py",
+   "target": "python/resume_generator/run_tailor.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "scripts/ai-findings-store.js",
+   "target": "scripts/ai-findings-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "scripts/ai-gate.js",
+   "target": "scripts/ai-gate.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "scripts/ai-settings-handler.js",
+   "target": "scripts/ai-settings-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "scripts/application-store.js",
+   "target": "scripts/application-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "scripts/secret-paths.js",
+   "target": "scripts/secret-paths.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "scripts/secret-store.js",
+   "target": "scripts/secret-store.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "scripts/secrets-handler.js",
+   "target": "scripts/secrets-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "scripts/sources-handler.js",
+   "target": "scripts/sources-handler.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "src/modules/applications/foldApplication.js",
+   "target": "src/modules/applications/foldApplication.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "src/modules/browserStorage/allowlist.js",
+   "target": "src/modules/browserStorage/allowlist.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "src/modules/profile/importDraft.js",
+   "target": "src/modules/profile/importDraft.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "docs/redesign/data-shapes.md",
+   "token": "src/utils/profileExtractor.js",
+   "target": "src/utils/profileExtractor.js",
+   "verdict": "correct"
+  },
+  {
+   "doc": "python/job_discovery/README.md",
+   "token": "run_discovery.py",
+   "target": "python/job_discovery/run_discovery.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "python/job_discovery/README.md",
+   "token": "source_definitions.py",
+   "target": "python/job_discovery/source_definitions.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "python/job_discovery/README.md",
+   "token": "source_settings.py",
+   "target": "python/job_discovery/source_settings.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "python/quality_audit/README.md",
+   "token": "ats_scorer.py",
+   "target": "python/quality_audit/ats_scorer.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "python/quality_audit/README.md",
+   "token": "cover_letter_auditor.py",
+   "target": "python/quality_audit/cover_letter_auditor.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "python/quality_audit/README.md",
+   "token": "job_lead_auditor.py",
+   "target": "python/quality_audit/job_lead_auditor.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "python/quality_audit/README.md",
+   "token": "outreach_auditor.py",
+   "target": "python/quality_audit/outreach_auditor.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "python/quality_audit/README.md",
+   "token": "provenance_auditor.py",
+   "target": "python/quality_audit/provenance_auditor.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "python/quality_audit/README.md",
+   "token": "resume_auditor.py",
+   "target": "python/quality_audit/resume_auditor.py",
+   "verdict": "correct"
+  },
+  {
+   "doc": "python/quality_audit/README.md",
+   "token": "scoring_auditor.py",
+   "target": "python/quality_audit/scoring_auditor.py",
+   "verdict": "correct"
+  }
+ ]
+}

@@ -12,3 +12,6 @@ data/*
 docs
 tests
 fixtures
+
+# Graphify knowledge graph: not needed at build or runtime
+graphify-out

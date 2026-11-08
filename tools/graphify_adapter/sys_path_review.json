@@ -1,0 +1,173 @@
+{
+ "_comment": "Each sys.path change in the repo, reviewed by hand: the target is derived from Path(__file__) and stays inside the repo (reviewed 2026-11-08). The adapter refuses to run while an unreviewed change exists; add a new one only after checking its target.",
+ "reviewed": [
+  {
+   "file": "python/cv_analysis/run_cv_analyze.py",
+   "code": "sys.path.insert(0, path)"
+  },
+  {
+   "file": "python/job_discovery/import_run.py",
+   "code": "sys.path.insert(0, str(SCRIPT_DIR))"
+  },
+  {
+   "file": "python/job_discovery/lifecycle_report.py",
+   "code": "sys.path = [str(scoring), str(scoring.parent)] + [p for p in sys.path if Path(p or \".\").resolve() != Path(__file__).resolve().parent]"
+  },
+  {
+   "file": "python/job_discovery/run_discovery.py",
+   "code": "sys.path.insert(0, str(SCRIPT_DIR))"
+  },
+  {
+   "file": "python/job_discovery/source_settings.py",
+   "code": "sys.path.insert(0, str(Path(__file__).resolve().parent))"
+  },
+  {
+   "file": "python/job_import/ad_ai.py",
+   "code": "sys.path.insert(0, _path)"
+  },
+  {
+   "file": "python/job_import/ad_fill.py",
+   "code": "sys.path.insert(0, str(Path(__file__).resolve().parent))"
+  },
+  {
+   "file": "python/job_import/ad_reader.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\" / \"job_scoring\"))"
+  },
+  {
+   "file": "python/job_import/import_job_url.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\" / \"llm\"))"
+  },
+  {
+   "file": "python/job_import/import_job_url.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\" / \"job_scoring\"))"
+  },
+  {
+   "file": "python/job_scoring/enrich_jobs.py",
+   "code": "sys.path.insert(0, str(SCRIPT_DIR))"
+  },
+  {
+   "file": "python/job_scoring/enrich_jobs.py",
+   "code": "sys.path.append(str(ROOT / \"python\"))"
+  },
+  {
+   "file": "python/job_scoring/evidence_index.py",
+   "code": "sys.path.append(str(_CV_ANALYSIS))"
+  },
+  {
+   "file": "python/job_scoring/llm_client.py",
+   "code": "sys.path.insert(0, _LLM_DIR)"
+  },
+  {
+   "file": "python/job_scoring/llm_enhancer.py",
+   "code": "sys.path.append(str(_CV_ANALYSIS))"
+  },
+  {
+   "file": "python/job_scoring/run_scoring.py",
+   "code": "sys.path.insert(0, str(SCRIPT_DIR))"
+  },
+  {
+   "file": "python/job_scoring/run_scoring.py",
+   "code": "sys.path.append(str(ROOT / \"python\"))"
+  },
+  {
+   "file": "python/match_engine/__init__.py",
+   "code": "sys.path.append(_path)"
+  },
+  {
+   "file": "python/match_engine/calibrate.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\"))"
+  },
+  {
+   "file": "python/match_engine/competency_audit.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\"))"
+  },
+  {
+   "file": "python/match_engine/competency_backup.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\"))"
+  },
+  {
+   "file": "python/match_engine/competency_report.py",
+   "code": "sys.path.append(str(ROOT / \"python\"))"
+  },
+  {
+   "file": "python/match_engine/stability.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\"))"
+  },
+  {
+   "file": "python/profile_import/run_text_import.py",
+   "code": "sys.path.insert(0, str(PYTHON_DIR))"
+  },
+  {
+   "file": "python/profile_import/run_text_import.py",
+   "code": "sys.path.insert(0, str(Path(__file__).resolve().parent))"
+  },
+  {
+   "file": "python/project_intelligence/run_project_scan.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\" / \"llm\"))"
+  },
+  {
+   "file": "python/project_intelligence/run_project_scan.py",
+   "code": "sys.path.append(str(ROOT / \"python\" / \"job_scoring\"))"
+  },
+  {
+   "file": "python/quality_audit/provenance_auditor.py",
+   "code": "sys.path.insert(0, str(RESUME_GEN))"
+  },
+  {
+   "file": "python/quality_audit/run_audit.py",
+   "code": "sys.path.insert(0, str(SCRIPT_DIR))"
+  },
+  {
+   "file": "python/resume_generator/llm_tailor.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\" / \"llm\"))"
+  },
+  {
+   "file": "python/resume_generator/run_tailor.py",
+   "code": "sys.path.insert(0, str(SCRIPT_DIR))"
+  },
+  {
+   "file": "python/resume_generator/run_tailor.py",
+   "code": "sys.path.append(str(ROOT / \"python\" / \"job_scoring\"))"
+  },
+  {
+   "file": "python/run_pipeline.py",
+   "code": "sys.path.insert(0, str(PY / \"job_scoring\"))"
+  },
+  {
+   "file": "python/run_rescrape.py",
+   "code": "sys.path.append(str(PY / \"job_scoring\"))"
+  },
+  {
+   "file": "python/run_rescrape.py",
+   "code": "sys.path.append(str(PY / \"job_discovery\"))"
+  },
+  {
+   "file": "tests/python/conftest.py",
+   "code": "sys.path.append(str(ROOT / \"python\"))"
+  },
+  {
+   "file": "tests/python/conftest.py",
+   "code": "sys.path.insert(0, str(path))"
+  },
+  {
+   "file": "tests/python/test_ad_ai.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\" / \"job_import\"))"
+  },
+  {
+   "file": "tests/python/test_ad_fill.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\" / \"job_import\"))"
+  },
+  {
+   "file": "tests/python/test_provenance_auditor.py",
+   "code": "sys.path.append(str(Path(__file__).resolve().parents[2] / \"python\" / \"quality_audit\"))"
+  },
+  {
+   "file": "tests/python/test_rescrape.py",
+   "code": "sys.path.insert(0, str(ROOT / \"python\"))"
+  },
+  {
+   "file": "tests/python/test_run_pipeline.py",
+   "code": "sys.path.insert(0, str(Path(__file__).resolve().parents[2] / \"python\"))"
+  }
+ ]
+}

@@ -1,0 +1,362 @@
+{
+ "_comment": "S3 removals, each checked by hand on 2026-11-08 against the binding line in `evidence`. verdict 'wrong' = the edge links the name to a definition it does not refer to; 'correct' would be a false negative. validate.py calls fails on any removal not listed here.",
+ "labels": [
+  {
+   "where": "python/job_import/ad_ai.py:70",
+   "name": "kept",
+   "target_file": "tests/python/test_discovery_filters.py",
+   "verdict": "wrong",
+   "evidence": "python/job_import/ad_ai.py:66: kept: list[str] = []"
+  },
+  {
+   "where": "python/job_scoring/llm_client.py:452",
+   "name": "usage",
+   "target_file": "python/job_discovery/staging.py",
+   "verdict": "wrong",
+   "evidence": "python/job_scoring/llm_client.py:452: return _gated(name, model, None, prompt, lambda usage: _cli_json(prompt, model, usage))"
+  },
+  {
+   "where": "python/llm/ai_gate.py:322",
+   "name": "handle",
+   "target_file": "python/job_discovery/run_discovery.py",
+   "verdict": "wrong",
+   "evidence": "python/llm/ai_gate.py:321: with open(directory / \".ledger.lock\", \"a\", opener=_private_opener) as handle:"
+  },
+  {
+   "where": "python/match_engine/competency_audit.py:102",
+   "name": "mapper",
+   "target_file": "tests/python/test_competency_mapping.py",
+   "verdict": "wrong",
+   "evidence": "python/match_engine/competency_audit.py:96: mapper = competency_mapping.Mapper(comps, aliases, remap)"
+  },
+  {
+   "where": "python/match_engine/stability.py:175",
+   "name": "candidate",
+   "target_file": "tests/python/test_evidence_select.py",
+   "verdict": "wrong",
+   "evidence": "python/match_engine/stability.py:144: candidate = build_candidate(profile, _load(INTELLIGENCE_PATH), load_confirmed_facts())"
+  },
+  {
+   "where": "python/run_rescrape.py:168",
+   "name": "output",
+   "target_file": "tests/python/test_run_scoring_atomic.py",
+   "verdict": "wrong",
+   "evidence": "python/run_rescrape.py:166: with tempfile.TemporaryFile() as output:"
+  },
+  {
+   "where": "tests/python/test_all_ads.py:470",
+   "name": "jobs",
+   "target_file": "python/job_discovery/staging.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_all_ads.py:467: jobs = tmp_path / \"data/jobs/discovered_jobs.json\""
+  },
+  {
+   "where": "tests/python/test_cancel_run.py:483",
+   "name": "record",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_cancel_run.py:483: code, _ = managed(\"run00000002\", before=lambda record: run_log.claim(record, \"kill\"))"
+  },
+  {
+   "where": "tests/python/test_engine_privacy.py:185",
+   "name": "jobs",
+   "target_file": "python/job_discovery/staging.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_engine_privacy.py:175: jobs, intel, profile = tmp_path / \"jobs.json\", tmp_path / \"intel.json\", tmp_path / \"profile.json\""
+  },
+  {
+   "where": "tests/python/test_requirement_frames.py:69",
+   "name": "prompt",
+   "target_file": "tests/python/test_llm_tailor.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_requirement_frames.py:69: monkeypatch.setattr(enrich_jobs, \"complete_json\", lambda prompt, **kw: prompts.append(prompt) or {})"
+  },
+  {
+   "where": "tests/python/test_run_pipeline.py:199",
+   "name": "held",
+   "target_file": "tests/python/test_rescrape.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_run_pipeline.py:198: with open(rp.LOCK, \"w\") as held:"
+  },
+  {
+   "where": "tests/python/test_snapshot_closing.py:453",
+   "name": "root",
+   "target_file": "python/llm/secret_store.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_snapshot_closing.py:444: root = tmp_path / \"root\""
+  },
+  {
+   "where": "tests/python/test_view_guard.py:536",
+   "name": "path",
+   "target_file": "tests/python/test_source_settings.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_view_guard.py:536: monkeypatch.setattr(enrich_jobs, \"write_text_atomic\", lambda path, *a, **k: (order.append(Path(path).name), real(path, *"
+  },
+  {
+   "where": "tests/python/test_view_guard.py:538",
+   "name": "doc",
+   "target_file": "tests/python/test_tailor_merge.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_view_guard.py:538: monkeypatch.setattr(enrich_jobs.job_history, \"save\", lambda path, doc: (order.append(Path(path).name), real_save(path, d"
+  },
+  {
+   "where": "python/job_scoring/enrich_jobs.py:547",
+   "name": "_fingerprint",
+   "target_file": "python/job_scoring/llm_enhancer.py",
+   "verdict": "wrong",
+   "evidence": "python/job_scoring/enrich_jobs.py:70: _fingerprint = job_fingerprint"
+  },
+  {
+   "where": "python/job_scoring/enrich_jobs.py:436",
+   "name": "_fingerprint",
+   "target_file": "python/job_scoring/llm_enhancer.py",
+   "verdict": "wrong",
+   "evidence": "python/job_scoring/enrich_jobs.py:70: _fingerprint = job_fingerprint"
+  },
+  {
+   "where": "python/job_scoring/llm_client.py:221",
+   "name": "replace",
+   "target_file": "tests/python/conftest.py",
+   "verdict": "wrong",
+   "evidence": "python/job_scoring/llm_client.py:31: from dataclasses import dataclass, replace"
+  },
+  {
+   "where": "tests/python/test_engine_snapshot.py:36",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_engine_snapshot.py:19: from match_engine.fit import score"
+  },
+  {
+   "where": "tests/python/test_engine_snapshot.py:44",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_engine_snapshot.py:19: from match_engine.fit import score"
+  },
+  {
+   "where": "tests/python/test_fit.py:301",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:380",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:371",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:307",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:352",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:332",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:176",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:132",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:327",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:151",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:157",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:138",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:144",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:189",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:271",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:183",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:289",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:357",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:296",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:393",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:276",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:246",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:387",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:167",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_fit.py:282",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_fit.py:9: from match_engine.fit import ("
+  },
+  {
+   "where": "tests/python/test_gates.py:269",
+   "name": "score",
+   "target_file": "tests/python/test_all_ads.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_gates.py:264: from match_engine.fit import score"
+  },
+  {
+   "where": "tests/python/test_llm_client.py:18",
+   "name": "resolve",
+   "target_file": "tests/python/test_ad_fill.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_llm_client.py:7: from llm_client import DETERMINISTIC, PROVIDERS, LlmRefused, complete_json, judge_model, resolve"
+  },
+  {
+   "where": "tests/python/test_llm_client.py:36",
+   "name": "resolve",
+   "target_file": "tests/python/test_ad_fill.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_llm_client.py:7: from llm_client import DETERMINISTIC, PROVIDERS, LlmRefused, complete_json, judge_model, resolve"
+  },
+  {
+   "where": "tests/python/test_private_modes.py:320",
+   "name": "Page",
+   "target_file": "python/job_import/safe_fetch.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_private_modes.py:310: class Page:"
+  },
+  {
+   "where": "tests/python/test_discards.py:279",
+   "name": "loc",
+   "target_file": "tests/python/test_work_authorization.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_discards.py:279: \"greenhouse\": lambda i, t, loc, listed=True: {\"id\": i, \"title\": t, \"location\": {\"name\": loc}, \"absolute_url\": f\"https://"
+  },
+  {
+   "where": "tests/python/test_ad_ai.py:147",
+   "name": "answer",
+   "target_file": "tests/python/test_llm_tailor.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_ad_ai.py:142: def run(answer, want, profile=OWNER, page=PAGE):"
+  },
+  {
+   "where": "tests/python/test_engine_privacy.py:193",
+   "name": "sent",
+   "target_file": "tests/python/test_secret_store.py",
+   "verdict": "wrong",
+   "evidence": "tests/python/test_engine_privacy.py:163: sent: dict[str, list[dict]] = {}"
+  }
+ ]
+}

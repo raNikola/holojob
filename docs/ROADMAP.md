@@ -158,6 +158,30 @@ Decisions: [DECISIONS.md](DECISIONS.md#job-relevance-lifecycle-salary-and-deadli
 5. Recheck framework and dependency compatibility.
 6. Obtain separate PO implementation approval.
 
+## Graph tooling (Graphify adapter) - in progress
+
+A minimal, removable, stdlib-only adapter over the local Graphify graph (no services, databases, network or LLM extraction). Primary success measure: the graph reliably answers "if we change this Python module, which other parts of the system may be affected?". Decisions: [DECISIONS.md](DECISIONS.md#graph-tooling-graphify-output-update-cycle-and-backup-2026-11-08).
+
+**Milestone 1** (separate checkpoints, each approved by the owner):
+
+| Checkpoint | Status |
+|---|---|
+| B0. Restorable backup of `graphify-out/` and the Graphify config outside the repo | Done (2026-11-06) |
+| S0. `graphify-out/` git- and docker-ignored; CLAUDE.md Graphify section committed without the committed-graph line | Done |
+| S1. Adapter skeleton: identity pass, invariants, `report.md` with separate code, doc-link and semantic freshness | Done |
+| S2. Python import resolution, only where every run context proves the same file without executing project modules | Done |
+
+**Then (authorized 2026-11-08):**
+
+| Slice | Status |
+|---|---|
+| S3. Remove inferred call edges proven wrong at the call site | Done |
+| S4. `architecture.json` and `test-deps.json` views | Done |
+| S5. Doc-to-code links from exact backticked paths | Done |
+| S6. Zero-token cycle check in a throwaway copy (`zero_token_check.sh`) | Done |
+
+As built: [DECISIONS.md](DECISIONS.md#graph-tooling-the-graphify-adapter-as-built-2026-11-08). Open: run the cycle on the real repo; file the upstream Graphify issue (owner).
+
 ## Activity screen - planned
 
 A new screen named Activity, in the nav group System, built in this repo. Decisions and known gaps:
