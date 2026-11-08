@@ -3,7 +3,6 @@
 import hashlib
 import importlib.util
 import json
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -11,14 +10,17 @@ ADAPTER_PATH = ROOT / "tools" / "graphify_adapter" / "adapter.py"
 VALIDATE_PATH = ROOT / "tools" / "graphify_adapter" / "validate.py"
 
 
+_LOADED = {}
+
+
 def load_module(name, path):
-    if name in sys.modules:
-        return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
+    """Load a tool module by path, once, without registering it as an importable name."""
+    if name not in _LOADED:
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _LOADED[name] = module
+    return _LOADED[name]
 
 
 def adapter():

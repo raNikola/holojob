@@ -15,12 +15,14 @@ Usage:  python3 tools/graphify_adapter/adapter.py build [--no-remove]
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import os
 import re
 import sys
 from collections import Counter
+from importlib.machinery import all_suffixes
 from pathlib import Path
 
 PINNED_GRAPHIFY_VERSION = "0.9.103"
@@ -110,12 +112,18 @@ class Work:
         self.file_nodes = self._file_nodes()
 
     def _file_nodes(self) -> dict[str, str]:
-        """source_file -> id of the node that stands for the whole file (label = basename)."""
+        """source_file -> id of the node that stands for the whole file.
+
+        Its label is the basename, or a longer path suffix where Graphify disambiguates
+        (`match_engine/__init__.py`).
+        """
         found: dict[str, list[str]] = {}
         for entry in self.nodes:
             node = entry["n"]
             path = node.get("source_file") or ""
-            if path and node.get("label") == path.rsplit("/", 1)[-1] and node.get("source_location") in ("L1", None):
+            label = node.get("label") or ""
+            if path and label and (path == label or path.endswith("/" + label)) \
+                    and node.get("source_location") in ("L1", None):
                 found.setdefault(path, []).append(node["id"])
         return {path: ids[0] for path, ids in found.items() if len(ids) == 1}
 
@@ -304,6 +312,412 @@ def freshness(root: Path, graph: dict, manifest) -> dict:
     return {"code": code, "semantic": semantic}
 
 
+# --------------------------------------------------- S2: Python imports
+#
+# Graphify leaves a bare `import x` as a stub node when x lives in another folder
+# and a JavaScript file of the same stem exists (ai_gate.py / ai-gate.js), and a
+# package import (`from match_engine import shadow`) as a stub too. The proof
+# used here does not depend on sys.path order: every directory of the repo is
+# treated as one that could be on sys.path (a superset of every run context:
+# script, pytest, the Node-spawned CLIs), plus the installed packages and the
+# standard library. When exactly one regular module or package of that name
+# exists in that whole set, any successful import of the name loads that file,
+# in every context. Anything else stays unresolved.
+
+STDLIB = frozenset(sys.stdlib_module_names) | frozenset(sys.builtin_module_names)
+MODULE_SUFFIXES = tuple(sorted(set(all_suffixes()), key=len, reverse=True))
+STUB_PREFIX = "ambiguous_python_import_"
+IMPORT_EDGE_RELATIONS = frozenset({"imports", "imports_from"})
+
+
+def module_name(filename: str):
+    for suffix in MODULE_SUFFIXES:
+        if filename.endswith(suffix):
+            name = filename[: -len(suffix)]
+            return name if name.isidentifier() else None
+    return None
+
+
+def norm_module_id(name: str) -> str:
+    return re.sub(r"[^0-9a-zA-Z]+", "_", name).strip("_").lower()
+
+
+def is_stub(node) -> bool:
+    return bool(node) and not node.get("source_file") and (
+        bool(node.get("external")) or node["id"].startswith(STUB_PREFIX))
+
+
+def touches_path(tree: ast.AST) -> bool:
+    """A package __init__ that rewrites __path__ can load submodules from anywhere."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id == "__path__" and isinstance(node.ctx, ast.Store):
+            return True
+        if isinstance(node, ast.Attribute) and node.attr == "__path__" and isinstance(node.ctx, ast.Store):
+            return True
+        if isinstance(node, ast.Call):
+            fn = node.func
+            name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", None)
+            if name in ("extend_path", "declare_namespace"):
+                return True
+    return False
+
+
+def module_level_names(tree: ast.Module) -> set[str]:
+    """Names a module binds at top level (any statement outside a def or class body)."""
+    names: set[str] = set()
+
+    def stores(node):
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Store):
+                names.add(sub.id)
+
+    def visit(stmts):
+        for st in stmts:
+            if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(st.name)
+            elif isinstance(st, ast.Import):
+                names.update(a.asname or a.name.split(".")[0] for a in st.names)
+            elif isinstance(st, ast.ImportFrom):
+                names.update(a.asname or a.name for a in st.names)
+            else:
+                for field in ("targets", "target", "items"):
+                    value = getattr(st, field, None)
+                    for item in value if isinstance(value, list) else [value] if value is not None else []:
+                        stores(item)
+                for field in ("body", "orelse", "finalbody"):
+                    visit(getattr(st, field, []) or [])
+                for handler in getattr(st, "handlers", []) or []:
+                    if handler.name:
+                        names.add(handler.name)
+                    visit(handler.body)
+    visit(tree.body)
+    return names
+
+
+class PythonIndex:
+    """Every Python module and package file in the repo, by name; parsed lazily."""
+
+    def __init__(self, root: Path, files: list[str]):
+        self.root = root
+        self.top: dict[str, set[tuple[str, str]]] = {}
+        self.by_dir: dict[str, list[str]] = {}
+        for path in files:
+            parent, _, base = path.rpartition("/")
+            self.by_dir.setdefault(parent, []).append(base)
+        for parent, bases in self.by_dir.items():
+            for base in bases:
+                name = module_name(base)
+                if name and name != "__init__":
+                    self.top.setdefault(name, set()).add(("module", f"{parent}/{base}" if parent else base))
+                elif name == "__init__" and parent:
+                    pkg = parent.rsplit("/", 1)[-1]
+                    if pkg.isidentifier():
+                        self.top.setdefault(pkg, set()).add(("package", f"{parent}/{base}"))
+        self.py_files = sorted(p for p in files if p.endswith(".py"))
+        self._trees: dict[str, object] = {}
+
+    def tree(self, path: str):
+        if path not in self._trees:
+            try:
+                source = (self.root / path).read_text(encoding="utf-8")
+                self._trees[path] = (ast.parse(source), source)
+            except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+                self._trees[path] = None
+        found = self._trees[path]
+        return found[0] if found else None
+
+    def source(self, path: str):
+        self.tree(path)
+        found = self._trees.get(path)
+        return found[1] if found else None
+
+    def children(self, init_file: str, part: str) -> set[tuple[str, str]]:
+        parent = init_file.rpartition("/")[0]
+        found = set()
+        for base in self.by_dir.get(parent, []):
+            if module_name(base) == part:
+                found.add(("module", f"{parent}/{base}"))
+        for base in self.by_dir.get(f"{parent}/{part}", []):
+            if module_name(base) == "__init__":
+                found.add(("package", f"{parent}/{part}/{base}"))
+        return found
+
+
+def installed_top_level(root: Path):
+    """Top-level names the repo's .venv can import, or (None, reason) when that cannot be listed."""
+    venv = root / ".venv"
+    cfg = venv / "pyvenv.cfg"
+    if not cfg.is_file():
+        return None, "no .venv/pyvenv.cfg"
+    if re.search(r"include-system-site-packages\s*=\s*true", cfg.read_text(encoding="utf-8"), re.I):
+        return None, ".venv includes the system site-packages"
+    site_dirs = sorted(venv.glob("lib/python*/site-packages"))
+    if not site_dirs:
+        return None, "no site-packages folder in .venv"
+    names: set[str] = set()
+    pending = list(site_dirs)
+    seen: set[Path] = set()
+    while pending:
+        site = pending.pop()
+        if site in seen or not site.is_dir():
+            continue
+        seen.add(site)
+        for entry in sorted(site.iterdir()):
+            if entry.suffix == ".pth" and entry.is_file():
+                for line in entry.read_text(encoding="utf-8", errors="replace").splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if line.startswith(("import ", "import\t")):
+                        return None, f"{entry.name} runs code at interpreter start"
+                    pending.append((site / line).resolve())
+            elif entry.is_dir():
+                if entry.name.endswith((".dist-info", ".egg-info", ".data")) or entry.name == "__pycache__":
+                    continue
+                if any(module_name(p.name) == "__init__" for p in entry.iterdir() if p.is_file()):
+                    names.add(entry.name)
+            else:
+                name = module_name(entry.name)
+                if name:
+                    names.add(name)
+    return names, None
+
+
+def _is_sys_attr(node, attr: str) -> bool:
+    return isinstance(node, ast.Attribute) and node.attr == attr and isinstance(node.value, ast.Name) and node.value.id == "sys"
+
+
+def scan_import_state(index: PythonIndex) -> list[dict]:
+    """Every write to sys.path, sys.modules or the import hooks in the repo's Python files."""
+    found = []
+    for path in index.py_files:
+        tree, source = index.tree(path), index.source(path)
+        if tree is None:
+            continue
+        for node in ast.walk(tree):
+            kind, name = None, None
+            if isinstance(node, ast.ImportFrom) and node.module == "sys" and \
+                    {a.name for a in node.names} & {"path", "modules", "meta_path", "path_hooks"}:
+                kind = "sys.path"
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                fn = node.func
+                if _is_sys_attr(fn.value, "path") and fn.attr in ("insert", "append", "extend", "remove", "pop", "clear"):
+                    kind = "sys.path"
+                elif _is_sys_attr(fn.value, "meta_path") or _is_sys_attr(fn.value, "path_hooks") or fn.attr == "addsitedir":
+                    kind = "import-hook"
+                elif _is_sys_attr(fn.value, "modules") and fn.attr in ("update", "setdefault", "__setitem__"):
+                    kind = "sys.modules"
+                    first = node.args[0] if node.args else None
+                    name = first.value if fn.attr != "update" and isinstance(first, ast.Constant) else None
+                elif fn.attr == "setitem" and node.args and _is_sys_attr(node.args[0], "modules"):
+                    kind = "sys.modules"
+                    second = node.args[1] if len(node.args) > 1 else None
+                    name = second.value if isinstance(second, ast.Constant) else None
+            elif isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+                for target in node.targets if isinstance(node, ast.Assign) else [node.target]:
+                    base = target.value if isinstance(target, ast.Subscript) else target
+                    if _is_sys_attr(base, "path"):
+                        kind = "sys.path"
+                    elif _is_sys_attr(base, "meta_path") or _is_sys_attr(base, "path_hooks"):
+                        kind = "import-hook"
+                    elif isinstance(target, ast.Subscript) and _is_sys_attr(target.value, "modules"):
+                        kind = "sys.modules"
+                        name = target.slice.value if isinstance(target.slice, ast.Constant) else None
+            if kind:
+                code = " ".join((ast.get_source_segment(source, node) or "").split())
+                found.append({"file": path, "line": node.lineno, "kind": kind, "name": name, "code": code})
+    return found
+
+
+def load_review(review_path: Path) -> set[tuple[str, str]]:
+    try:
+        data = json.loads(review_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return set()
+    except (OSError, ValueError) as exc:
+        raise AdapterError(f"{review_path} is unreadable: {exc}") from exc
+    return {(item["file"], item["code"]) for item in data.get("reviewed", [])}
+
+
+class Resolver:
+    def __init__(self, index: PythonIndex, installed, installed_reason, blocked: set[str]):
+        self.index = index
+        self.installed = installed
+        self.installed_reason = installed_reason
+        self.blocked = blocked
+
+    def _one(self, found: set, what: str):
+        if len(found) != 1:
+            listed = ", ".join(sorted(f for _, f in found))
+            return "unresolved", f"{len(found)} candidate files for {what}: {listed}"
+        kind, path = next(iter(found))
+        if kind == "package":
+            tree = self.index.tree(path)
+            if tree is None:
+                return "unresolved", f"{path} could not be parsed"
+            if touches_path(tree):
+                return "unresolved", f"{path} changes __path__"
+        return "resolved", (kind, path)
+
+    def resolve(self, dotted: str):
+        """("resolved", (kind, file)) | ("unresolved", reason) | ("external", None)."""
+        parts = dotted.split(".")
+        top = parts[0]
+        found = self.index.top.get(top, set())
+        if not found:
+            return "external", None
+        if self.installed is None:
+            return "unresolved", f"installed packages cannot be listed ({self.installed_reason})"
+        if top in STDLIB:
+            return "unresolved", f"'{top}' is also a standard-library module"
+        if top in self.installed:
+            return "unresolved", f"an installed package is also named '{top}'"
+        if top in self.blocked:
+            return "unresolved", f"the repo writes sys.modules['{top}']"
+        status, value = self._one(found, f"'{top}'")
+        for i, part in enumerate(parts[1:], start=1):
+            if status != "resolved":
+                break
+            kind, path = value
+            if kind != "package":
+                return "unresolved", f"'{'.'.join(parts[:i])}' is a module, not a package"
+            status, value = self._one(self.index.children(path, part), f"'{'.'.join(parts[:i + 1])}'")
+        return status, value
+
+
+def import_statement(tree: ast.Module, line: int, stub_id: str):
+    """(statement, module name) of the import on `line` that produced the stub, if exactly one matches."""
+    hits = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Import, ast.ImportFrom)) or node.lineno != line:
+            continue
+        if isinstance(node, ast.ImportFrom):
+            if node.level == 0 and node.module and (norm_module_id(node.module) == stub_id or stub_id.startswith(STUB_PREFIX)):
+                hits.append((node, node.module))
+        else:
+            for alias in node.names:
+                if norm_module_id(alias.name) == stub_id or stub_id.startswith(STUB_PREFIX):
+                    hits.append((node, alias.name))
+    return hits[0] if len(hits) == 1 else None
+
+
+def resolve_python_imports(work: Work, resolver: Resolver) -> tuple[list[str], Counter, dict]:
+    counts: Counter = Counter()
+    resolved, unresolved, added = [], [], []
+    existing = {(e["e"]["source"], e["e"]["target"], e["e"]["relation"]) for e in work.live_edges()}
+    touched_stubs: set[str] = set()
+    for entry in work.live_edges():
+        edge = entry["e"]
+        importer = edge.get("source_file") or ""
+        if edge["relation"] not in IMPORT_EDGE_RELATIONS or not importer.endswith(".py"):
+            continue
+        stub = work.node(edge["target"])
+        if not is_stub(stub):
+            continue
+        counts["stub import edges"] += 1
+        line = int(str(edge.get("source_location", "L0")).lstrip("L") or 0)
+        where = f"{importer}:{line}"
+        tree = resolver.index.tree(importer)
+        hit = import_statement(tree, line, stub["id"]) if tree is not None else None
+        if hit is None:
+            if stub["id"].startswith(STUB_PREFIX) or tree is None:
+                counts["candidates"] += 1
+                unresolved.append((where, stub["id"], "the import statement could not be matched to the edge"))
+            else:
+                counts["no statement matched (left as is)"] += 1
+            continue
+        statement, module = hit
+        status, value = resolver.resolve(module)
+        if status == "external":
+            counts["external (standard library, installed or missing)"] += 1
+            continue
+        counts["candidates"] += 1
+        if status == "unresolved":
+            unresolved.append((where, module, value))
+            continue
+        kind, path = value
+        target = work.file_nodes.get(path)
+        if target is None:
+            unresolved.append((where, module, f"{path} has no file node in the graph"))
+            continue
+        touched_stubs.add(stub["id"])
+        key = (edge["source"], target, edge["relation"])
+        if key in existing:
+            work.kill(entry, "duplicate of an existing edge once re-pointed")
+            counts["resolved, already present (stub edge dropped)"] += 1
+        else:
+            work.replace(entry, {**edge, "target": target, "_origin": "adapter", "provenance": "reconstructed",
+                                 "original_target": stub["id"], "resolved_module": module}, "reconstructed")
+            existing.add(key)
+            counts["resolved (re-pointed)"] += 1
+        resolved.append((where, module, path))
+        if isinstance(statement, ast.ImportFrom) and kind == "package":
+            init_tree = resolver.index.tree(path)
+            bound = module_level_names(init_tree) if init_tree is not None else None
+            for alias in statement.names:
+                if alias.name == "*" or bound is None or alias.name in bound or "__getattr__" in bound:
+                    continue
+                sub_status, sub_value = resolver._one(resolver.index.children(path, alias.name), f"'{module}.{alias.name}'")
+                if sub_status != "resolved":
+                    continue
+                sub_target = work.file_nodes.get(sub_value[1])
+                if sub_target is None:
+                    continue
+                key = (edge["source"], sub_target, "imports_from")
+                if key in existing:
+                    counts["submodule edges already present"] += 1
+                    continue
+                existing.add(key)
+                work.add_edge({"source": edge["source"], "target": sub_target, "relation": "imports_from",
+                               "confidence": "EXTRACTED", "confidence_score": 1.0, "context": "import",
+                               "source_file": importer, "source_location": edge.get("source_location"),
+                               "weight": 1.0, "_origin": "adapter", "provenance": "reconstructed",
+                               "resolved_module": f"{module}.{alias.name}"}, "reconstructed")
+                counts["submodule edges added"] += 1
+                added.append((where, f"{module}.{alias.name}", sub_value[1]))
+    work.compact()
+    in_hyperedges = {n for h in work.graph["hyperedges"] for n in h.get("nodes", [])}
+    used = {e["e"]["source"] for e in work.edges} | {e["e"]["target"] for e in work.edges}
+    for stub_id in sorted(touched_stubs):
+        if stub_id not in used and stub_id not in in_hyperedges:
+            work.remove_node(stub_id, "stub with no edges left after S2")
+            counts["stub nodes removed"] += 1
+    counts["unresolved"] = len(unresolved)
+    lines = ["## Python imports (S2)", "",
+             "An import is re-pointed only when exactly one module or package of that name exists across every "
+             "folder of the repo, the installed packages and the standard library, so it is the same file in every "
+             "run context. Everything else stays as Graphify left it.", ""]
+    lines += [f"- {k}: {v}" for k, v in sorted(counts.items())]
+    by_module = Counter(m for _, m, _ in resolved)
+    if resolved:
+        lines += ["", "Re-pointed, by module:", ""]
+        lines += [f"- `{m}` -> `{p}`: {by_module[m]}" for m, p in sorted({(m, p) for _, m, p in resolved})]
+    if added:
+        lines += ["", "Submodule edges added (`from package import submodule`):", ""]
+        lines += [f"- `{w}` -> `{p}`" for w, _, p in added]
+    if unresolved:
+        lines += ["", "Unresolved, with the reason:", ""]
+        lines += [f"- `{w}` `{m}`: {r}" for w, m, r in unresolved]
+    return lines, counts, {"resolved": resolved, "added": added, "unresolved": unresolved}
+
+
+def check_import_state(index: PythonIndex, review_path: Path) -> set[str]:
+    """Refuse unreviewed sys.path / import-hook writes; return names the repo injects into sys.modules."""
+    reviewed = load_review(review_path)
+    blocked: set[str] = set()
+    problems = []
+    for item in scan_import_state(index):
+        if item["kind"] == "sys.modules" and item["name"]:
+            blocked.add(str(item["name"]).split(".")[0])
+        elif (item["file"], item["code"]) not in reviewed:
+            problems.append(f"{item['file']}:{item['line']} {item['kind']}: {item['code']}")
+    if problems:
+        raise AdapterError(
+            "unreviewed import-state changes (check each target stays inside the repo, then add it to "
+            f"{review_path.name}; `adapter.py import-state` lists them):\n  " + "\n  ".join(problems))
+    return blocked
+
+
 # ------------------------------------------------------------------ report
 
 
@@ -370,7 +784,8 @@ def write_atomic(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def build(root: Path, graph_path: Path, out_dir: Path, remove: bool = True, review_path: Path | None = None) -> dict:
+def build(root: Path, graph_path: Path, out_dir: Path | None, remove: bool = True, review_path: Path | None = None) -> dict:
+    """Run every pass; write the outputs to out_dir (None: write nothing, for validate.py)."""
     raw = graph_path.read_bytes()
     input_sha = sha256_bytes(raw)
     graph = json.loads(raw)
@@ -384,6 +799,16 @@ def build(root: Path, graph_path: Path, out_dir: Path, remove: bool = True, revi
     work = Work(graph)
     sections: list[list[str]] = []
     counts: Counter = Counter()
+    details: dict = {}
+
+    files = list(walk_repo(root))
+    index = PythonIndex(root, files)
+    blocked = check_import_state(index, review_path or HERE / "sys_path_review.json")
+    installed, installed_reason = installed_top_level(root)
+    resolver = Resolver(index, installed, installed_reason, blocked)
+    lines, s2, details["imports"] = resolve_python_imports(work, resolver)
+    sections.append(lines)
+    counts.update({f"S2 {k}": v for k, v in s2.items()})
 
     verify_invariant(raw, work)
     index = work.result({"version": 1, "removals": remove, "counts": dict(sorted(counts.items()))})
@@ -401,9 +826,9 @@ def build(root: Path, graph_path: Path, out_dir: Path, remove: bool = True, revi
     outputs = {"index.json": json.dumps(index, ensure_ascii=False) + "\n", "report.md": render_report(summary)}
     if sha256_bytes(graph_path.read_bytes()) != input_sha:
         raise AdapterError("graph.json changed while the adapter ran; nothing written")
-    for name, text in outputs.items():
+    for name, text in outputs.items() if out_dir is not None else ():
         write_atomic(out_dir / name, text)
-    return {"summary": summary, "index": index, "counts": counts}
+    return {"summary": summary, "index": index, "counts": counts, "details": details, "resolver": resolver}
 
 
 def main(argv=None) -> int:
@@ -414,12 +839,18 @@ def main(argv=None) -> int:
     b.add_argument("--graph", type=Path, default=None, help="default <root>/graphify-out/graph.json")
     b.add_argument("--out", type=Path, default=None, help="default <root>/graphify-out/holojob")
     b.add_argument("--no-remove", action="store_true", help="report proven-wrong edges but keep them")
+    b.add_argument("--review", type=Path, default=None, help="default tools/graphify_adapter/sys_path_review.json")
+    s = sub.add_parser("import-state", help="list every sys.path / sys.modules / import-hook write (JSON)")
+    s.add_argument("--root", type=Path, default=DEFAULT_ROOT)
     args = parser.parse_args(argv)
     root = args.root.resolve()
+    if args.command == "import-state":
+        print(json.dumps(scan_import_state(PythonIndex(root, list(walk_repo(root)))), indent=1))
+        return 0
     graph_path = args.graph or root / "graphify-out" / "graph.json"
     out_dir = args.out or root / "graphify-out" / OUT_SUBDIR
     try:
-        result = build(root, graph_path, out_dir, remove=not args.no_remove)
+        result = build(root, graph_path, out_dir, remove=not args.no_remove, review_path=args.review)
     except AdapterError as exc:
         print(f"graph adapter: refused: {exc}", file=sys.stderr)
         return 3
