@@ -32,7 +32,12 @@ MIN_COVERAGE = 0.5
 # distribution collapses into a tie: at 0.22, twelve of 23 jobs (coverage
 # 0.22-0.30) all scored exactly 100. Calibrated against the 2026-10-21 run,
 # where the best ad covers 0.30; 0.32 puts that near 95 and leaves headroom.
-TARGET_COVERAGE = 0.32
+# Wave 3 (2026-11-08): the bank no longer holds CV prose and now carries the skills of the whole history (about 50
+# keywords instead of 20), so the same ads cover a different share of it. Recalibrated on the 436 jobs of that day's
+# scored_jobs.json with the regenerated bank: 0.36 keeps the mean score of the run (-0.1) and its shape (>= 80: 9 before,
+# 12 after); 0.32 would have lifted the mean by 0.9 and doubled the P1 count. Not valid for a stale bank that still
+# holds prose: that is why such a bank is reported on every ad ("regenerate the intelligence").
+TARGET_COVERAGE = 0.36
 
 # A token this common across the corpus carries no information about fit, so
 # it is dropped from requirement matching rather than diluting it.
