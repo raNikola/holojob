@@ -1,13 +1,14 @@
 /**
  * Click-to-sort for table views. A column is `{ value(row), type }`, where type is
  * 'text' (A-Z first), 'number' or 'date' (largest / newest first), or 'rank'
- * (an ordered list, best first, given as `order`). Empty values always sort last,
- * whichever way the column runs.
+ * (an ordered list, best first, given as `order`). `firstDir` overrides the natural first direction.
+ * Empty values always sort last, whichever way the column runs.
  */
 
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true })
 
 export function firstDirection(column) {
+  if (column.firstDir) return column.firstDir
   return column.type === 'number' || column.type === 'date' ? 'desc' : 'asc'
 }
 

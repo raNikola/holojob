@@ -21,6 +21,7 @@ import { EngineShadowBadge } from './EngineShadowSection'
 import SortableTh, { useTableSort } from '../ui/SortableTh'
 import { sortRows } from '../../modules/tableSort'
 import { PRIORITIES } from '../../modules/jobs/matchScore'
+import { dayOf, deadlineSortValue, deadlineStatus } from '../../modules/jobs/jobDeadline'
 import { jobStatusLabel } from '../../modules/jobs/manualJob'
 
 const COLUMNS = {
@@ -29,10 +30,12 @@ const COLUMNS = {
   company: { type: 'text', value: (j) => j.company },
   location: { type: 'text', value: (j) => j.location },
   salary: { type: 'number', value: (j) => j.salaryMonthlyEur?.max },
+  deadline: { type: 'number', firstDir: 'asc', value: () => null }, // needs the date: filled in by columnsOn
   provider: { type: 'text', value: (j) => getJobProvider(j) },
   priority: { type: 'rank', order: PRIORITIES, value: (j) => j.priority },
   status: { type: 'text', value: (j) => j.status || 'new' },
 }
+const columnsOn = (today) => ({ ...COLUMNS, deadline: { ...COLUMNS.deadline, value: (j) => deadlineSortValue(j, today) } })
 const DEFAULT_SORT = { key: 'score', dir: 'desc' }
 const NO_SELECTION = new Set()
 const DESKTOP = '(min-width: 768px)' // Tailwind's md, the width the two layouts always switched at
@@ -105,6 +108,13 @@ function SalaryText({ job }) {
   )
 }
 
+function ApplyBy({ job, today }) {
+  const status = deadlineStatus(job, today)
+  if (status.key === 'unknown') return NOT_SPECIFIED
+  if (!status.variant) return <span title={status.note}>{status.label}</span>
+  return <span title={status.note}><Badge variant={status.variant}>{status.label}</Badge></span>
+}
+
 function ProviderBadge({ job }) {
   const provider = getJobProvider(job)
   if (!provider) return <span>—</span>
@@ -154,6 +164,7 @@ function JobCard({
   onJobSelect,
   classView,
   onAddFromRow,
+  today,
 }) {
   const kind = rowKind(job)
   return (
@@ -198,6 +209,7 @@ function JobCard({
         <div><dt className="font-medium text-stone-500">Location</dt><dd><LocationText job={job} /><AuthorizationBadge job={job} /></dd></div>
         <div><dt className="font-medium text-stone-500">Provider</dt><dd><ProviderBadge job={job} /></dd></div>
         <div><dt className="font-medium text-stone-500">Salary</dt><dd><SalaryText job={job} /></dd></div>
+        <div><dt className="font-medium text-stone-500">Apply by</dt><dd><ApplyBy job={job} today={today} /></dd></div>
       </dl>
       <div className="mt-3 flex items-start justify-between gap-2" onClick={(e) => e.stopPropagation()}>
         {kind === 'filtered' ? <FilteredRowActions job={job} onAddFromRow={onAddFromRow} /> : (
@@ -235,16 +247,19 @@ export default function JobTable({
   filterKey = '',
   classView = false,
   onAddFromRow,
+  reference,
 }) {
   const [sort, onSort] = useTableSort(DEFAULT_SORT, COLUMNS)
+  const [openedAt] = useState(() => Date.now())
+  const today = dayOf(reference ?? openedAt)
   const [paging, setPaging] = useState(null)
   const pagerRef = useRef(null)
   const isDesktop = useMediaQuery(DESKTOP, true)
   // The whole list is sorted first; only then is a batch taken from it. The list's other uses read the whole list too.
   const jobs = useMemo(() => {
-    const sorted = sortRows(unsortedJobs, sort, COLUMNS)
+    const sorted = sortRows(unsortedJobs, sort, columnsOn(today))
     return sort === DEFAULT_SORT ? closedLast(sorted) : sorted // DEFAULT_SORT by identity: any click replaces it, even back to the same column
-  }, [unsortedJobs, sort])
+  }, [unsortedJobs, sort, today])
   const pageKey = `${filterKey}|${sort.key}|${sort.dir}`
   const limit = pageLimit(paging, pageKey)
   const visibleJobs = useMemo(() => jobs.slice(0, limit), [jobs, limit])
@@ -283,7 +298,7 @@ export default function JobTable({
       </div>
       {isDesktop ? (
       <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-stone-800">
-        <table className="w-full min-w-[1080px] text-left text-sm">
+        <table className="w-full min-w-[1180px] text-left text-sm">
           <thead className="border-b border-stone-200 bg-stone-50 text-xs uppercase tracking-wide text-stone-500 dark:border-stone-800 dark:bg-stone-900">
             <tr>
               <th className="px-3 py-2">
@@ -294,6 +309,7 @@ export default function JobTable({
               <SortableTh label="Company" sortKey="company" sort={sort} onSort={onSort} className="px-3 py-2" />
               <SortableTh label="Location" sortKey="location" sort={sort} onSort={onSort} className="px-3 py-2" />
               <SortableTh label="Salary" sortKey="salary" sort={sort} onSort={onSort} className="px-3 py-2" />
+              <SortableTh label="Apply by" sortKey="deadline" sort={sort} onSort={onSort} className="whitespace-nowrap px-3 py-2" />
               {showProvider && <SortableTh label="Provider" sortKey="provider" sort={sort} onSort={onSort} className="px-3 py-2" />}
               {showScores && <SortableTh label="Priority" sortKey="priority" sort={sort} onSort={onSort} className="px-3 py-2" />}
               <SortableTh label="Status" sortKey="status" sort={sort} onSort={onSort} className="px-3 py-2" />
@@ -336,6 +352,7 @@ export default function JobTable({
                   <AuthorizationBadge job={job} />
                 </td>
                 <td className="max-w-[11rem] px-3 py-2 align-top text-stone-600 dark:text-stone-400"><SalaryText job={job} /></td>
+                <td className="whitespace-nowrap px-3 py-2 align-top text-stone-600 dark:text-stone-400"><ApplyBy job={job} today={today} /></td>
                 {showProvider && <td className="px-3 py-2 align-top"><ProviderBadge job={job} /></td>}
                 {showScores && <td className="px-3 py-2 align-top"><PriorityBadge priority={job.priority} /></td>}
                 <td className="px-3 py-2 align-top"><StatusBadge status={job.status} /></td>
@@ -358,6 +375,7 @@ export default function JobTable({
             apiAvailable={apiAvailable}
             onJobUpdated={onJobUpdated}
             showScores={showScores}
+            today={today}
             selected={selectedJobIds.has(job.jobId)}
             onToggleSelect={onToggleSelect}
             onJobSelect={onJobSelect}

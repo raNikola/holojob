@@ -473,6 +473,7 @@ export default function JobDiscoveryScreen() {
                 selectedJobIds={selectedJobIds}
                 filterKey={filterKey}
                 classView={useComposed}
+                reference={reference}
                 onAddFromRow={handleAddFromRow}
                 onToggleSelect={handleToggleSelect}
                 onToggleSelectAll={handleToggleSelectAll}

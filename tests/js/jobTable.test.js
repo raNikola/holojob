@@ -371,3 +371,32 @@ describe('the Salary column', () => {
     expect(render([job(1)])).toContain('Not specified')
   })
 })
+
+describe('the Apply by column', () => {
+  const reference = new Date(2026, 10, 8, 12).getTime()
+
+  it('shows the warning text and Not specified', () => {
+    viewport(true)
+    const html = render([job(1, { applyDeadline: '2026-11-09' }), job(2)], { reference })
+    expect(html).toContain('Tomorrow')
+    expect(html).toContain('Not specified')
+  })
+
+  it('an expired ad reads Expired and is still listed', () => {
+    viewport(true)
+    const html = render([job(1, { applyDeadline: '2026-11-01', title: 'Past date' })], { reference })
+    expect(html).toContain('Expired')
+    expect(html).toContain('Past date')
+  })
+
+  it('the default sort stays the Fit Score', () => {
+    viewport(true)
+    const html = render([job(1, { matchScore: 40, applyDeadline: '2026-11-08', title: 'Urgent low' }), job(2, { matchScore: 90, title: 'No date high' })], { reference })
+    expect(html.indexOf('No date high')).toBeLessThan(html.indexOf('Urgent low'))
+  })
+
+  it('the phone layout has it too', () => {
+    viewport(false)
+    expect(render([job(1, { applyDeadline: '2026-11-08' })], { reference })).toContain('Today')
+  })
+})
