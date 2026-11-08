@@ -18,6 +18,7 @@ missingSkills, because that is what a tailored resume has to answer.
 from __future__ import annotations
 
 from corpus import flat_idf
+from keyword_shape import is_keyword_shaped
 from text_utils import term_tokens
 
 HIGH_WEIGHT = 3
@@ -44,11 +45,20 @@ FLOOR = 20
 CEILING = 100
 
 
+def bank_prose_count(intelligence: dict) -> int:
+    """How many bank entries are prose (a CV sentence or paragraph) and not a keyword; they are ignored (keyword_shape.py)."""
+    bank = intelligence.get("atsKeywordBank") or {}
+    return sum(
+        1 for key in ("highPriority", "mediumPriority", "supportingKeywords")
+        for k in (bank.get(key) or []) if k and not is_keyword_shaped(k)
+    )
+
+
 def _bank(intelligence: dict) -> tuple[list[str], list[str], list[str]]:
     bank = intelligence.get("atsKeywordBank") or {}
-    high = [k for k in (bank.get("highPriority") or []) if k]
-    medium = [k for k in (bank.get("mediumPriority") or []) if k]
-    supporting = [k for k in (bank.get("supportingKeywords") or []) if k]
+    high = [k for k in (bank.get("highPriority") or []) if k and is_keyword_shaped(k)]
+    medium = [k for k in (bank.get("mediumPriority") or []) if k and is_keyword_shaped(k)]
+    supporting = [k for k in (bank.get("supportingKeywords") or []) if k and is_keyword_shaped(k)]
 
     if not (high or medium or supporting):
         skills_map = intelligence.get("skillsMap") or {}
@@ -69,10 +79,10 @@ def _candidate_tokens(intelligence: dict) -> set[str]:
         container = intelligence.get(section) or {}
         for value in container.values():
             if isinstance(value, list):
-                parts.extend(str(v) for v in value if v)
+                parts.extend(str(v) for v in value if v and (section != "atsKeywordBank" or is_keyword_shaped(v)))
 
     for key in ("resumeKeywords", "candidateStrengths"):
-        parts.extend(str(v) for v in (intelligence.get(key) or []) if v)
+        parts.extend(str(v) for v in (intelligence.get(key) or []) if v and (key != "resumeKeywords" or is_keyword_shaped(v)))
 
     experience = intelligence.get("experienceMap") or {}
     for key in ("domainsWorkedIn", "projectHighlights", "ownershipExamples"):
@@ -163,6 +173,9 @@ def score_skill_match(
         f"{len(med_hits)}/{len(medium)} medium, "
         f"{len(sup_hits)}/{len(supporting)} supporting"
     ]
+    ignored = bank_prose_count(intelligence)
+    if ignored:
+        reasons.append(f"{ignored} keyword-bank entries are CV prose, not keywords, and were ignored; regenerate the intelligence")
     matched = high_hits + med_hits + sup_hits
     missing = [k for k in high if k not in high_hits]
 
