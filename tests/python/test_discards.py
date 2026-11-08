@@ -363,7 +363,7 @@ def test_infostud_drops_and_reasons(run, monkeypatch, tmp_path):
         infostud_row(1003, "Chef", "Zxqville"),
         infostud_row(1004, "Product Manager", "Beograd"),
     ]
-    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None: (rows, 4))
+    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None, **_: (rows, 4))
     monkeypatch.setattr(infostud_client, "enrich", lambda job, delay=1.0: job)
     returned, outcome, stage, discards = gather(infostud_provider.InfostudProvider(), run, "infostud", tmp_path)
     counted, uncounted = accounted(stage, discards, outcome)
@@ -381,7 +381,7 @@ def test_infostud_project_manager_with_an_it_position_is_kept_as_near_and_a_juni
     It is Near now: read in full and sent to scoring, which caps it. A junior one stays dropped, its id recorded."""
     rows = [infostud_row(5150, "Medior Dev Project Manager", "Zxqville", position="IT Project Manager"),
             infostud_row(5151, "Junior Project Manager", "Zxqville", position="IT Project Manager")]
-    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None: (rows, 2))
+    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None, **_: (rows, 2))
     read_in_full = []
     monkeypatch.setattr(infostud_client, "enrich", lambda job, delay=1.0: read_in_full.append(job["title"]) or job)
     returned, outcome, stage, discards = gather(infostud_provider.InfostudProvider(), run, "infostud", tmp_path)
@@ -460,7 +460,7 @@ def test_a_skipped_or_failed_source_has_nothing_to_account_for(run, tmp_path):
 
 
 def test_a_failed_source_is_not_judged(run, monkeypatch, tmp_path):
-    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None: (_ for _ in ()).throw(RuntimeError("down")))
+    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None, **_: (_ for _ in ()).throw(RuntimeError("down")))
     _, outcome, stage, _ = gather(infostud_provider.InfostudProvider(), run, "infostud", tmp_path)
     assert stage.footer["status"] == "failed" and stage.footer["discardMismatch"] is None
 

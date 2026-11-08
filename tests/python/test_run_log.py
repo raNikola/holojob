@@ -606,7 +606,7 @@ def test_jobspy_reports_read_before_its_title_filter_and_failed_searches(monkeyp
 def test_infostud_reports_ads_read_before_the_clients_role_filter(monkeypatch):
     rows = [{"id": 1, "title": "Product Manager", "url": "https://i/1", "location": "Rad od kuće", "workFromHome": True},
             {"id": 2, "title": "Welder", "url": "https://i/2", "location": "Beograd"}]
-    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories: (rows, 2))
+    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories, **_: (rows, 2))
     provider = infostud_provider.InfostudProvider()
     monkeypatch.setattr(infostud_client, "enrich", lambda job: job)
     assert len(fetch(provider)) == 1

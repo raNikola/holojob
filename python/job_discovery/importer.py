@@ -142,7 +142,12 @@ def _previous(previous) -> tuple[dict, dict]:
     return facts, seen
 
 
-def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bool) -> dict:
+# Sources whose single board is staged in many parts (Infostud: a listing part and one part per ad). Their parts are one board.
+MERGED_PARTS = {"infostud"}
+_MERGED = "*"
+
+
+def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bool, merge_parts: bool = False) -> dict:
     """{board: {"complete", "listed"}} for one snapshot source: what `job_history.apply_run` may close on (S5c). A run staged before
     S5b has no `boardsRead`, so it gives none.
 
@@ -161,6 +166,10 @@ def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bo
     dropped: dict[str, list] = {}
     for record in (run.discards.by_source(name) if run.discards else []):
         dropped.setdefault(record.get("part"), []).append(record)
+    if merge_parts:  # one board read in several parts: add them up, under one key
+        kept = {_MERGED: [job for jobs in kept.values() for job in jobs]}
+        read = {_MERGED: sum(read.values())}
+        dropped = {_MERGED: [r for records in dropped.values() for r in records]}
     damaged = bool(run.discards is None or run.discards.torn or run.discards.unreadable_lines or run.discards.rejected)
     failed = set(footer.get("boardsFailed") or [])
     empty = set(footer.get("boardsEmpty") or [])
@@ -169,10 +178,11 @@ def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bo
         if not isinstance(row, dict) or not isinstance(row.get("board"), str):
             continue
         board = row["board"]
-        records = dropped.get(board, [])
+        part = _MERGED if merge_parts else board
+        records = dropped.get(part, [])
         counted = [r for r in records if r.get("counted")]
         accounted = (
-            read.get(board) == row.get("read") == len(kept.get(board, [])) + len(counted)
+            read.get(part) == row.get("read") == len(kept.get(part, [])) + len(counted)
             and all(r.get("jobId") for r in counted)
         )
         why = []
@@ -203,7 +213,7 @@ def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bo
             "complete": not why,  # each condition above is one clause of the rule as it always was; `why` only names the ones that failed
             "why": proof.once(why) or [proof.BOARD_COMPLETE],
             "detail": row.get("reason") if isinstance(row.get("reason"), str) else None,
-            "listed": {job.get("jobId") for job in kept.get(board, []) if isinstance(job, dict)} | {r["jobId"] for r in records if r.get("jobId")},
+            "listed": {job.get("jobId") for job in kept.get(part, []) if isinstance(job, dict)} | {r["jobId"] for r in records if r.get("jobId")},
         }
     return found
 
@@ -272,6 +282,14 @@ def _source_proof(name: str, state: str, anomaly_codes: list[str], evidence_for_
     rows = [{"board": str(board)[:60], "proven": one["complete"], "why": list(one["why"]), "detail": one.get("detail")}
             for board, one in sorted(boards.items(), key=lambda item: str(item[0]))[:MAX_BOARDS_KEPT]]
     return {"proven": not why and bool(boards), "why": proof.once(why) or [proof.BOARD_COMPLETE], "boards": rows}
+
+
+def _complete_read(boards: dict, state: str) -> dict:
+    """{"complete": bool, "why": [codes]} of a one-board source's listing read, from `board_evidence`. Names the answer, makes none."""
+    if not boards:
+        return {"complete": False, "why": [proof.NOT_FINISHED if state == "unfinished" else proof.NO_BOARD_EVIDENCE]}
+    one = next(iter(boards.values()))
+    return {"complete": bool(one["complete"]), "why": list(one["why"])[:5], "detail": one.get("detail")}
 
 
 MAX_FILTER_REASONS = 12
@@ -369,7 +387,8 @@ def evidence_block(report: dict, stats: dict) -> dict:
         "duplicatesRemoved": int(report.get("duplicatesRemoved") or 0), "crosspostsMerged": int(report.get("crosspostsMerged") or 0),
         "rejected": int(report.get("rejected") or 0),
         "sources": [
-            {"name": name, "proof": one, "filterReasons": (report.get("filterReasons") or {}).get(name, {})}
+            {"name": name, "proof": one, "filterReasons": (report.get("filterReasons") or {}).get(name, {}),
+             **({"completeRead": report["completeRead"][name]} if name in (report.get("completeRead") or {}) else {})}
             for name, one in (report.get("proof") or {}).items()
         ],
     }
@@ -447,6 +466,7 @@ def plan_import(
     evidence: dict[str, dict] = {}
     proven_searches: list[str] = []
     rejected_total = 0
+    shadow_evidence: dict = {}
     meta_sources: list[dict] = []
 
     for name in providers:
@@ -487,11 +507,17 @@ def plan_import(
             not_run.add(name)
         if name in job_history.CLOSURE_PROVIDERS:
             in_doubt = name in not_run or bool(stage and stage.torn) or bool(footer and footer.get("discardMismatch"))
-            evidence[name] = board_evidence(run, name, stage, footer, in_doubt)
+            evidence[name] = board_evidence(run, name, stage, footer, in_doubt, merge_parts=name in MERGED_PARTS)
         else:
             search_reasons = _search_proof_reasons(run, stage, footer, state, anomaly_codes)
             if not search_reasons:
                 proven_searches.append(name)
+            if name in MERGED_PARTS:
+                # Report only (Wave 4, c): the complete-read proof of a source that is not snapshot-based yet. Nothing here closes an ad.
+                in_doubt = name in not_run or bool(stage and stage.torn) or bool(footer and footer.get("discardMismatch"))
+                shadow_evidence = board_evidence(run, name, stage, footer, in_doubt, merge_parts=True)
+        if name in MERGED_PARTS:
+            report.setdefault("completeRead", {})[name] = _complete_read(evidence.get(name) or shadow_evidence, state)
         if footer:
             if footer.get("boardsFailed"):
                 failed_boards[name] = set(footer["boardsFailed"])
@@ -506,7 +532,7 @@ def plan_import(
             manifest.get("searchKey") or "",
         )
         report.setdefault("filterReasons", {})[name] = _filter_reasons(run, name)
-        meta_sources.append(import_meta.source_row(name, state, footer, report["proof"][name]))
+        meta_sources.append(import_meta.source_row(name, state, footer, report["proof"][name], (report.get("completeRead") or {}).get(name)))
         report["sources"].append({
             "name": name, "state": state, "staged": len(stage.jobs) if stage and stage.usable else 0,
             "imported": len(valid), "rejected": len(rejected), "heldAsNotRun": name in not_run, "anomalies": anomalies,

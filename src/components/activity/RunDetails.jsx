@@ -1,6 +1,6 @@
 import Badge from '../ui/Badge'
 import {
-  NOT_RECORDED, NUMBER_HELP, PROOF_HELP, SOURCE_NEW_NOTE, SOURCE_STATUS_TONES, filterReasonText, formatDuration, formatTime, ledgerText, proofView, savedText,
+  NOT_RECORDED, NUMBER_HELP, PROOF_HELP, SOURCE_NEW_NOTE, SOURCE_STATUS_TONES, completeReadText, filterReasonText, formatDuration, formatTime, ledgerText, proofView, savedText,
   scoringText, show, sourceStatusLabel, stagingText,
 } from '../../modules/activity/runView.js'
 
@@ -66,6 +66,7 @@ function Boards({ proof, failedNames }) {
 function SourceRow({ source }) {
   const proof = proofView(source.proof)
   const reasons = filterReasonText(source.filterReasons)
+  const completeRead = completeReadText(source.completeRead)
   return (
     <tr className="border-t border-stone-200 align-top dark:border-stone-800">
       <th scope="row" className="py-2 pr-3 text-left font-medium">{source.name}</th>
@@ -81,6 +82,7 @@ function SourceRow({ source }) {
         <Badge variant={proof.tone}>{proof.label}</Badge>
         {proof.lines.map((line) => <div key={line} className="mt-1 text-xs">{line}</div>)}
         <Boards proof={source.proof} failedNames={source.boardsFailed ?? []} />
+        {completeRead && <div className={`mt-1 text-xs ${muted}`}>{completeRead}</div>}
       </td>
       <td className="min-w-[10rem] py-2 pr-3 text-xs">
         {source.error && <div>Error: {source.error}</div>}

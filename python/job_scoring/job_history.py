@@ -41,7 +41,14 @@ LEDGER_FILE = "job_history.json"
 # Providers whose API returns every open posting of a board, so a job that is
 # no longer listed has really been taken down. Anything not named here is search-based: absence closes nothing.
 # Infostud is unclassified until its coverage is confirmed, and behaves as search-based.
-SOURCE_CLASS = {"greenhouse": "snapshot", "lever": "snapshot", "ashby": "snapshot", "infostud": "unclassified"}
+# Wave 4 (c): Infostud records a complete-read proof on every run (importer.MERGED_PARTS, providers.infostud_provider.completeness),
+# but the owner keeps it unclassified until he has seen several consecutive complete runs in Activity. Setting this to True makes it
+# snapshot-based: Wave 1's closing guard (two consecutive complete misses, `board_evidence`) then applies to it unchanged.
+SNAPSHOT_AFTER_PROOF = False
+SOURCE_CLASS = {
+    "greenhouse": "snapshot", "lever": "snapshot", "ashby": "snapshot",
+    "infostud": "snapshot" if SNAPSHOT_AFTER_PROOF else "unclassified",
+}
 CLOSURE_PROVIDERS = {name for name, kind in SOURCE_CLASS.items() if kind == "snapshot"}
 MISSES_TO_CLOSE = 2  # consecutive complete fetches of the board that do not list the ad
 

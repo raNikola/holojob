@@ -5,6 +5,7 @@
   metaVersion  2
   kind         "full": only a complete-plan import writes `lastImport`; a cancelled run writes `lastPartial` instead
   sources      one row per source of the run: name, state, readClass, read, kept, reportedTotal, proven, why
+               (+ completeRead {complete, why} for a source that records a complete-read proof: Infostud)
   filterReasons  per source, how many ads its filters dropped by reason (`title_not_matched`, ...). Counts only.
 
 A v1 meta (no `metaVersion`) stays valid and is read as it is; nothing is migrated. Nothing here makes a lifecycle decision.
@@ -19,11 +20,11 @@ KIND_FULL = "full"
 REQUIRED_KEYS = ("searchTerms", "locations", "remoteFilters", "country", "providers", "providerCounts", "rawCount", "dedupedCount", "history", "sourceRunId")
 
 
-def source_row(name: str, state: str, footer: dict | None, proof_row: dict | None) -> dict:
+def source_row(name: str, state: str, footer: dict | None, proof_row: dict | None, complete_read: dict | None = None) -> dict:
     """One source of the run, as `meta.sources` keeps it. Reads the staging footer and the importer's proof; decides nothing."""
     footer = footer or {}
     why = list((proof_row or {}).get("why") or [])
-    return {
+    row = {
         "name": name,
         "state": state,
         "readClass": footer.get("readClass"),
@@ -33,6 +34,9 @@ def source_row(name: str, state: str, footer: dict | None, proof_row: dict | Non
         "proven": bool((proof_row or {}).get("proven")),
         "why": why[:5],
     }
+    if complete_read is not None:  # only a source whose listing read is checked for completeness without being snapshot-based (Infostud)
+        row["completeRead"] = {"complete": bool(complete_read.get("complete")), "why": list(complete_read.get("why") or [])[:5]}
+    return row
 
 
 def build_import_meta(

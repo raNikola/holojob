@@ -101,6 +101,14 @@ export function proofView(proof) {
   return { state: 'not_proven', label: 'Not proven', tone: 'medium', lines: lines.length ? lines : ['Not proven (the reason was not recorded)'] }
 }
 
+/** The complete-read line of a source whose listing read is checked without being used to close ads. Null when nothing was recorded. */
+export function completeReadText(read) {
+  if (!read || typeof read !== 'object') return null
+  if (read.complete === true) return 'Listing read in full (the number of ads read equals the total the site reports). Not used to close ads yet.'
+  const why = (read.codes ?? []).map(reasonText).join('; ')
+  return `Listing not proven complete${why ? `: ${why}` : ''}. Not used to close ads yet.`
+}
+
 const FILTER_LABELS = {
   title_not_matched: "Title didn't match", search_terms_not_matched: "Search terms didn't match", location_not_matched: "Location didn't match",
   country_not_matched: "Country didn't match", not_listed: "Not listed on the company's board", no_detail_text: 'Full ad text could not be read',

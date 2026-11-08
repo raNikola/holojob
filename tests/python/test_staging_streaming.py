@@ -219,7 +219,7 @@ def infostud_row(n, title="Product Manager"):
 
 def test_infostud_stages_each_ad_when_its_description_is_complete(run, monkeypatch, tmp_path):
     rows = [infostud_row(1), infostud_row(2), infostud_row(3, "Chef"), infostud_row(4)]
-    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None: (rows, 321))
+    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None, **_: (rows, 321))
     seen_at_enrich = []
 
     def enrich(job, delay=1.0):
@@ -245,7 +245,7 @@ def test_infostud_stages_each_ad_when_its_description_is_complete(run, monkeypat
 
 
 def test_infostud_a_listing_that_fails_stages_nothing_and_says_failed(run, monkeypatch, tmp_path):
-    def broken(categories=None):
+    def broken(categories=None, **_):
         raise RuntimeError("Infostud unreachable")
 
     monkeypatch.setattr(infostud_client, "fetch_raw", broken)

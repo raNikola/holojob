@@ -177,6 +177,16 @@ describe('proof has three states', () => {
     for (const run of list().body.runs) expect(run.sources.every((s) => s.proof.state === 'not_recorded' && s.proof.codes.length === 0)).toBe(true)
   })
 
+  it('passes the complete-read proof of a source through as a state and known codes only', () => {
+    plant(1, { sources: [{ name: 'infostud', status: 'ok', read: 3, kept: 1, new: 0 }, { name: 'jobspy', status: 'ok', read: 1, kept: 1, new: 0 }], import: imp([
+      { name: 'infostud', proof: { proven: true, why: ['proven'], boards: [] }, filterReasons: {}, completeRead: { complete: false, why: ['board_not_complete', 'made up <script>'], extra: 1 } },
+      { name: 'jobspy', proof: { proven: true, why: ['proven'], boards: [] }, filterReasons: {} },
+    ]) })
+    const [infostud, jobspy] = list().body.runs[0].sources
+    expect(infostud.completeRead).toEqual({ complete: false, codes: ['board_not_complete'] })
+    expect(jobspy.completeRead).toBeNull()
+  })
+
   it('boards carry their own state and reasons', () => {
     plant(1, { sources: [{ name: 'greenhouse', status: 'ok', read: 2, kept: 2, new: 0 }], import: imp([
       { name: 'greenhouse', proof: { proven: false, why: ['boards_not_proven'], boards: [
@@ -281,7 +291,7 @@ describe('the allow-list', () => {
     const [run] = list().body.runs
     expect(Object.keys(run).sort()).toEqual(['canCancel', 'cancel', 'cancelRequested', 'counts', 'durationSeconds', 'finishedAt', 'import', 'incompleteCommit', 'inferred', 'issues', 'issuesCount',
       'recorded', 'runId', 'sources', 'staging', 'startedAt', 'status', 'steps', 'trigger'])
-    expect(Object.keys(run.sources[0]).sort()).toEqual(['boardsFailed', 'collected', 'durationSeconds', 'error', 'filterReasons', 'filteredOut', 'finishedAt', 'name', 'new', 'proof', 'readClass', 'returned', 'skipReason', 'startedAt', 'status'])
+    expect(Object.keys(run.sources[0]).sort()).toEqual(['boardsFailed', 'collected', 'completeRead', 'durationSeconds', 'error', 'filterReasons', 'filteredOut', 'finishedAt', 'name', 'new', 'proof', 'readClass', 'returned', 'skipReason', 'startedAt', 'status'])
     expect(Object.keys(run.issues[0]).sort()).toEqual(['level', 'message', 'source'])
     expect(Object.keys(run.steps[0]).sort()).toEqual(['exitCode', 'name', 'status'])
     expect(Object.keys(run.sources[0].proof).sort()).toEqual(['boards', 'codes', 'state'])

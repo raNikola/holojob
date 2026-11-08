@@ -205,6 +205,13 @@ function projectFilterReasons(entry) {
   return out
 }
 
+// Wave 4 (c): the complete-read proof of a source that is not snapshot-based yet (Infostud). Report only: nothing closes on it.
+function projectCompleteRead(entry) {
+  const read = entry?.completeRead
+  if (!read || typeof read !== 'object') return null
+  return { complete: read.complete === true, codes: codes(read.why) }
+}
+
 // Wave 1: how the read went (status and counts only). Only a complete read of a board can support closing.
 const READ_CLASSES = ['ok', 'confirmed_empty', 'incomplete', 'failed', 'skipped']
 
@@ -230,6 +237,7 @@ function projectSource(source, imported) {
     durationSeconds: seconds(started, finished),
     proof: imported ? projectProof(entry) : { state: 'not_recorded', codes: [], boards: [] },
     filterReasons: imported ? projectFilterReasons(entry) : null,
+    completeRead: imported ? projectCompleteRead(entry) : null,
   }
 }
 

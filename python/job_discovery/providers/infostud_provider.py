@@ -16,8 +16,10 @@ import logging
 
 from providers import infostud_client
 from providers.base_provider import (
+    READ_INCOMPLETE,
     JobProvider,
     ProviderOutcome,
+    board_read,
     build_canonical_job,
     dropped_ad,
     place_drop_reason,
@@ -26,6 +28,36 @@ from providers.base_provider import (
 logger = logging.getLogger(__name__)
 
 SUPPORTED_COUNTRIES = {"serbia", "srbija"}
+
+
+BOARD = "infostud"  # the whole six-category listing is one board: it has one reported total
+
+# Reasons a listing read is not proof that it was whole (Wave 4, c). They end up as the board's `reason` in the staging footer.
+CAP_HIT = "the page cap stopped the read before the reported total"
+CLAMP_HIT = "a page held no new ad before the reported total was reached"
+EMPTY_BEFORE_TOTAL = "an empty page ended the read before the reported total"
+NO_TOTAL = "the site reported no total, so the read cannot be checked"
+TOTAL_MISMATCH = "the ads read differ in number from the reported total"
+
+
+def completeness(read: int, reported: int | None, facts: dict | None) -> tuple[bool, str | None]:
+    """(complete, reason): was the listing read whole? True only when the read ended by reaching the reported total, the ads read
+    are exactly that many, and neither the page cap, the clamp guard nor an empty page stopped it. Nothing else is proof; a
+    missing `facts` (an old caller) is never proof."""
+    facts = facts or {}
+    if not reported:
+        return False, NO_TOTAL
+    if facts.get("capHit"):
+        return False, CAP_HIT
+    if facts.get("clampHit"):
+        return False, CLAMP_HIT
+    if facts.get("emptyEnd") and read < reported:
+        return False, EMPTY_BEFORE_TOTAL
+    if read != reported:
+        return False, TOTAL_MISMATCH
+    if not facts.get("reachedTotal"):
+        return False, EMPTY_BEFORE_TOTAL
+    return True, None
 
 
 class InfostudProvider(JobProvider):
@@ -86,8 +118,18 @@ class InfostudProvider(JobProvider):
             if place_drop_reason(job, locations, remote_filters, country) is None
         ]
         logger.info("Infostud: %d jobs after geo filtering", len(kept))
+        read = counts.get("read", len(raw_jobs))
+        complete, why = completeness(read, counts.get("reported"), counts.get("facts"))
+        facts = counts.get("facts") or {}
+        # Wave 4 (c): the proof is recorded on every run, but Infostud stays search-based until job_history.SNAPSHOT_AFTER_PROOF is set,
+        # so nothing is closed by it. An incomplete read is also called incomplete, as for the other sources.
         self.last_outcome = ProviderOutcome(
-            read=counts.get("read", len(raw_jobs)), kept=len(kept), total_reported=counts.get("reported")
+            read=read, kept=len(kept), total_reported=counts.get("reported"),
+            read_class=None if complete or not read else READ_INCOMPLETE,
+            boards_read=[board_read(
+                BOARD, read=read, postings=read, complete=complete, reason=why, reportedTotal=counts.get("reported"),
+                pages=facts.get("pages"), capHit=bool(facts.get("capHit")), clampHit=bool(facts.get("clampHit")),
+            )],
         )
         return kept
 

@@ -98,18 +98,25 @@ def _iso_date(value: str | None) -> str | None:
         return None
 
 
-def fetch_raw(categories=DEFAULT_CATEGORIES, max_pages: int = 40, delay: float = 1.5):
-    """Page through the given categories. Returns (raw rows, reported total)."""
+def fetch_raw(categories=DEFAULT_CATEGORIES, max_pages: int = 40, delay: float = 1.5, facts: dict | None = None):
+    """Page through the given categories. Returns (raw rows, reported total).
+
+    `facts`, when given, receives how the read ended (Wave 4, c), for the completeness proof: `pages` read, `capHit` (the page cap
+    stopped it before the reported total), `clampHit` (a page held no new id), `emptyEnd` (an empty page ended it) and `reachedTotal`.
+    """
     seen: dict[int, dict] = {}
     page = 1
     total = None
+    end = {"pages": 0, "capHit": False, "clampHit": False, "emptyEnd": False, "reachedTotal": False}
 
     while page <= max_pages:
         results = _search_results(_get(_page_url(categories, page)))
+        end["pages"] = page
         if total is None:
             total = results.get("totalPrimaryItems") or 0
         rows = (results.get("jobs") or {}).get("primary") or []
         if not rows:
+            end["emptyEnd"] = True
             break
 
         fresh = 0
@@ -122,13 +129,19 @@ def fetch_raw(categories=DEFAULT_CATEGORIES, max_pages: int = 40, delay: float =
         # Guard: if the server clamps back to the same page, stop rather
         # than loop until max_pages.
         if fresh == 0:
+            end["clampHit"] = True
             break
         if len(seen) >= total:
+            end["reachedTotal"] = True
             break
 
         page += 1
         time.sleep(delay)
+    else:
+        end["capHit"] = True
 
+    if facts is not None:
+        facts.update(end)
     return list(seen.values()), total or 0
 
 def _tag_names(raw_tags) -> list[str]:
@@ -248,11 +261,13 @@ def fetch_jobs(
     so a caller can keep it before the next, slow request.
     `on_drop`, when given, is called once with [(ad, reason)] for the ads the role filter dropped (see role_drop_reason),
     before any description is read."""
-    raw, reported = fetch_raw(categories)
+    facts: dict = {}
+    raw, reported = fetch_raw(categories, facts=facts)
     jobs = [normalize(row) for row in raw]
     if counts is not None:
         counts["read"] = len(jobs)
         counts["reported"] = reported
+        counts["facts"] = facts
     matches = []
     dropped = []
     for job in jobs:

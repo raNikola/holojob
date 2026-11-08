@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { NOT_RECORDED, NUMBER_HELP, SOURCE_STATUS_TONES, SOURCE_NEW_NOTE, filterReasonText, formatDuration, heldText, ledgerText, proofView, reasonText, savedShort, savedText, scoringText, show, sourceStatusLabel, stagingText, statusLabel, statusSentence } from '../../src/modules/activity/runView.js'
+import { NOT_RECORDED, NUMBER_HELP, SOURCE_STATUS_TONES, SOURCE_NEW_NOTE, filterReasonText, formatDuration, completeReadText, heldText, ledgerText, proofView, reasonText, savedShort, savedText, scoringText, show, sourceStatusLabel, stagingText, statusLabel, statusSentence } from '../../src/modules/activity/runView.js'
 import { answer, importBlock, record } from './setup/activityFixtures.js'
 
 const run = (extra, n = 1) => answer([record(n, extra)]).runs[0]
@@ -70,6 +70,13 @@ describe('what a run says in words', () => {
     expect(ledgerText(run({ import: base }))).toBe('0 closed, 0 marked absent, 0 reopened')
     expect(heldText(null)).toBe('')
     expect(heldText({ keptFailedBoard: null })).toBe('')
+  })
+
+  it('says whether a listing was read in full, without claiming it closes anything', () => {
+    expect(completeReadText(null)).toBeNull()
+    expect(completeReadText({ complete: true, codes: ['board_complete'] })).toMatch(/read in full.*Not used to close ads yet/)
+    expect(completeReadText({ complete: false, codes: ['board_not_complete'] })).toMatch(/^Listing not proven complete: .*Not used to close ads yet\.$/)
+    expect(completeReadText({ complete: false, codes: [] })).toBe('Listing not proven complete. Not used to close ads yet.')
   })
 
   it('cancelled, interrupted and skipped each have a sentence', () => {
