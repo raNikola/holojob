@@ -1320,3 +1320,11 @@ Owner decisions after a calibration on a copy of the data (2,537 ads). Code chec
 8. **Apply by is separate from Closed.** `applyDeadline` comes from the board's expiry, else from an unmistakable sentence in the ad; an ambiguous date is unknown. Expiry closes nothing and moves no score. Warnings: 0 to 1 days critical, 2 to 3 warning, 4 to 7 upcoming, past Expired, unknown Not specified. Sortable; the default sort stays the Fit Score. [`deadline.py`, `jobDeadline.js`]
 
 **Left out on purpose:** the "Urgent only" filter (deadlines on 7 of 379 ads), stricter discovery filtering, keyword-bank changes (removing role names took P1 from 434 to 30 without recalibrating `TARGET_COVERAGE`; Wave 3, a2), and Greenhouse per-job fetching.
+
+## Private files are inspected by shape only (2026-11-08)
+
+During the job-relevance analysis a read-only Python one-off printed entries of `atsKeywordBank` filtered by a role-word pattern, to see how role names sat in the bank. Four entries are whole CV paragraphs, so work history (employers, roles, dates, responsibilities, figures) was printed as tool output, reached the model provider as conversation context and was forwarded with later advisor calls. No name, e-mail, phone or link was in them (checked by count). The session transcript under `~/.claude/` holds a local copy; it is outside the repo and was not inspected.
+
+**Checked with 8-word fingerprints, counts and paths only:** nothing in the container log, `data/analytics`, `data/ai`, `data/jobs`, `data/applications`, `data/outreach`, `graphify-out` or `dist`. No file under `data/` is tracked other than the examples. Two tracked test files share short phrases (longest 9 words, no employer named): ordinary CV wording. No code path prints these values and no test reads the real files. `data/cache` holds CV-derived text in files of mode 644, inside `data/` at 700, so other users cannot reach them.
+
+**Decision:** a rule in `CLAUDE.md` against printing values from these files, and `scripts/inspect-private-data.py`, which reports shape, counts and hashes. [`tests/python/test_inspect_private_data.py` plants a canary in values and keys.] A hook blocking such commands was not added: a pattern cannot reliably recognise a one-off script. The CV paragraphs in the bank are a generator problem left to Wave 3, a2.

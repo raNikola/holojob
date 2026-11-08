@@ -24,6 +24,7 @@ Area rules load only when matching files are touched: `.claude/rules/scoring.md`
 ## Conventions
 
 - Work only inside /srv/holojob. Do not read other projects under /srv (e.g. applypack, jobapply). Never print secret values (passwords, keys, tokens) from any file; refer to them by name only.
+- Never `cat`, dump, grep out or print values from the owner's private files under `data/` (profile, intelligence including `atsKeywordBank`, CVs, resumes, applications, `data/cache`), not even filtered or truncated: tool output goes to the model provider. Use `.venv/bin/python scripts/inspect-private-data.py FILE` (shape, counts, hashes). Analysis scripts print counts, ids and public ad titles only.
 - All code and comments in English.
 - After finishing a feature, update docs/ROADMAP.md and docs/DECISIONS.md: mark what is built and record new decisions.
 - The repo lives at `/srv/holojob`. The container is `holojob`.

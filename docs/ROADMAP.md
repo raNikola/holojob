@@ -262,6 +262,10 @@ Also later: the Continue / Save wizard flow fix, the score 60/58 fix, and a Link
 
 Known and left open on purpose. Checked against the code on 2026-11-02.
 
+**Tests:**
+
+- Flaky run-lock test in `tests/js/rescrape.test.js` ("a dead running record becomes interrupted at the first status; a live one does not"): `withRunLock` sometimes answers busy (seen 1 of 3 runs alone, and once in a full run). Deferred, not fixed.
+
 **Step 5 (server master), [STEP5_SERVER_MASTER_PLAN.md](redesign/STEP5_SERVER_MASTER_PLAN.md):**
 
 - `applied_manually` vs the tracker: "Mark as applied" still sets the old job status beside the application store's record.
