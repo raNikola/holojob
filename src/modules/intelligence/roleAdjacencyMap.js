@@ -108,11 +108,7 @@ export function getStretchRoles(primaryRoles) {
 
 export function expandRoleVariants(roles) {
   const variants = new Set(roles)
-  for (const role of roles) {
-    getAdjacentRoles(role).forEach((v) => variants.add(v))
-    const words = role.split(/\s+/)
-    if (words.length > 2) variants.add(words.slice(0, 2).join(' '))
-  }
+  for (const role of roles) getAdjacentRoles(role).forEach((v) => variants.add(v))
   return [...variants]
 }
 
