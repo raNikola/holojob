@@ -339,7 +339,7 @@ class SourceWriter(_AppendFile):
 
 def _read_class(outcome) -> str:
     """The Wave 1 read class of a source (ok, confirmed_empty, incomplete, failed, skipped). Imported late: staging stays importable alone."""
-    from providers.base_provider import classify_read
+    from read_class import classify_read
     return classify_read(outcome)
 
 

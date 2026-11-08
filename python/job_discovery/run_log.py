@@ -120,7 +120,7 @@ def add_issue(record: dict, level: str, message: str, source: str | None = None)
 
 def _read_class(outcome) -> str:
     """ok, confirmed_empty, incomplete, failed or skipped: status and counts only. Only a complete read of a board can support closing."""
-    from providers.base_provider import classify_read
+    from read_class import classify_read
     return classify_read(outcome)
 
 
