@@ -111,9 +111,7 @@ written. One file per run, not one shared file. The reason given then, that a Re
   the browser: see [offList](#offlist-rows-keep-the-owners-data-2026-11-03).
 - **Scoring:** `scored_jobs.json` meta gains `discoveryRunId`; `sourceRunId` stays scoring's own. No scored counts are attached: a
   Re-score runs on its own, several times per discovery run, so it would overwrite an older record's counts.
-- **Backups:** `data/analytics/` is not in `DATA_DIRS` in `scripts/backup-handler.js`, so run history is not backed up (nor is
-  `skill_gap.json`, already there), though `PRIVATE_RESTORE` accepts the folder. Left as it is: a 90-day report is not clearly worth
-  backing up.
+- **Backups:** `data/analytics/` was left out of `DATA_DIRS` here; Wave 0 (2026-11-08) put it in, see "Wave 0: verified backup and restore check".
 
 **Known limitations (none of these closes an ad):**
 
@@ -1362,3 +1360,16 @@ Recorded in `CLAUDE.md` ("Workflow sizes", "UI skills"). Docs only; no code chan
 - **Workflow sizes.** S (columns, UI fixes): implement, test, commit. M (role scoring, filters, ad statuses): short self-directed analysis, implement, test, commit, no separate analysis round. L (discovery pipeline, importer, migrations, AI scoring architecture): Plan Mode, one approval, then autonomous implementation; stop only for a blocking product decision or significant risk; one final report. The owner decides product behavior, Code decides the technical approach. Skills and plugins add no ceremony to S and M.
 - **UI skills.** `docs/design-system` has priority over any UI plugin guidance (UI UX Pro Max). No external image-generation or logo / icon services from plugins, since they send prompts off the server (principle: personal data and prompts stay on the home server).
 - **Code check:** none; these are working rules for the agent, nothing in the code enforces them.
+
+## Wave 0: verified backup and restore check (2026-11-08)
+
+Minimal change in `scripts/backup-handler.js`, `scripts/backup-check.js`, `python/match_engine/competency_backup.py`. Tests: `tests/js/backupIntegrity.test.js`, `tests/python/test_competency_backup.py`.
+
+- **What is reconstructable (technical decision).** In the backup now: everything already there, plus `data/analytics/` (run records, event logs, `skill_gap.json`: nothing else holds them, 168 KB, so the 2026-11-03 "not worth backing up" is reversed; the commit marker stays out). Not in it, on purpose: `data/secrets`, `.env`, `claude-config` (credentials); `data/jobs/staging` and the lock files (working state of one run); `data/ai` (budget ledger and settings) and `data/config` (provider choice): small and not reconstructable, but they hold budget accounting and machine settings, not job-hunt work, and restoring a ledger would hide spending: **owner to decide** whether they join. Reconstructable, so not a reason to add: `data/cache` (included anyway), `data/audits`.
+- **Browser state.** Keep, statuses and the hand-entered jobs live only in the browser's job list. The export already replaces the server's `data/jobs/scored_jobs.json` with the list the browser sends (kept as it was, so a restore brings Keep and statuses back); profile and intelligence likewise. Applications are server files (`data/applications`). The manifest now records `browserState: {profile, intelligence, jobs}`: `jobs: false` means the browser sent nothing and Keep and statuses are NOT in that archive.
+- **Integrity.** Manifest version 2.0: `files: { name: { sha256, bytes } }` for every file in the zip (each file is read once, so the hash is of the zipped bytes). `importBackupZip` verifies the whole archive first and refuses it, writing nothing, on a changed file, a file the manifest lists but the zip lacks, a file the manifest does not list, a duplicate entry or an unreadable manifest. An archive from before manifests (no `files`) still restores, and the answer says `verified: false`.
+- **Restore check.** `checkBackupRestore(zipBuffer)` / `node scripts/backup-check.js <zip>`: verify, restore into a fresh `mkdtemp` directory (never `./data`), compare the sha256 of each restored file with the manifest, delete the directory, print PASS or FAIL with counts and file names only. Application files are merged by the store, not copied, so they are checked in the archive and counted as `merged`. It also FAILS an archive without hashes. Run it outside the server's data: `podman cp` the zip into a throwaway container, or `podman exec holojob node scripts/backup-check.js /tmp/x.zip` (it reads only the zip and `/tmp`).
+- **Lock.** The web restore already holds the pipeline lock (`withRunLock`, no run under it or during it). The Python restore had none: `competency_backup.restore` now takes `data/jobs/.pipeline.lock` under its root without waiting and refuses ("nothing restored") while a run holds it. Not covered: a tracker edit in the Node server during a restore; application entries are merged through the store's own lock, and every other restored file is written atomically.
+- **Not verified.** No browser was used: the Settings buttons were not clicked, and the download of a real archive from the running server was not made (the server was up and the host must not run jobs against `./data`). The check ran on fictional trees only. The owner should make one real backup and run `backup-check.js` on it.
+- **Code check:** `tests/js/backupIntegrity.test.js` (manifest, tamper detection, restore into a temp directory), `test_restore_refuses_while_a_run_holds_the_pipeline_lock_and_works_after`.
+

@@ -62,9 +62,10 @@ def _handed_down(path: Path) -> Lock | None:
     return Lock(fd)
 
 
-def acquire(wait: bool = False) -> Lock | None:
-    """The lock, or None when another process holds it. With `wait`, blocks until that process lets go, which can be a whole run."""
-    path = lock_path()
+def acquire(wait: bool = False, path: Path | None = None) -> Lock | None:
+    """The lock, or None when another process holds it. With `wait`, blocks until that process lets go, which can be a whole run.
+    `path` names another lock file (a restore under a different root, tests); default is lock_path()."""
+    path = path or lock_path()
     handed = _handed_down(path)
     if handed:
         return handed

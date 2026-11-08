@@ -7,6 +7,8 @@ import subprocess
 
 import pytest
 
+import pipeline_lock
+
 from conftest import fail_replacing
 from match_engine import competency_backup as cb
 from requirement_frames import frame_key
@@ -38,7 +40,7 @@ def tree(tmp_path):
 
 def snapshot(root):
     return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*"))
-            if p.is_file() and ".git" not in p.parts and "backups" not in p.parts}
+            if p.is_file() and ".git" not in p.parts and "backups" not in p.parts and p.name != ".pipeline.lock"}
 
 
 def test_old_ids_maps_each_ad_and_text_to_its_id_and_counts_provisional():
@@ -140,3 +142,22 @@ def test_the_cli_restores_to_the_given_root_only(tree, capsys):
     assert (tree / "data/profile/confirmed-facts.json").read_text() == "[]"
     assert (live.read_bytes() if live.exists() else None) == live_before
     assert "restored 6 files" in capsys.readouterr().out
+
+
+def test_restore_refuses_while_a_run_holds_the_pipeline_lock_and_works_after(tree):
+    target = cb.backup(tree, "t1")
+    live = tree / "data/profile/confirmed-facts.json"
+    live.write_text("[1]")
+    held = pipeline_lock.acquire(path=tree / "data/jobs/.pipeline.lock")
+    assert held is not None
+    try:
+        with pytest.raises(SystemExit, match="nothing restored"):
+            cb.restore(target, tree)
+        assert live.read_text() == "[1]"
+    finally:
+        held.release()
+    cb.restore(target, tree)
+    assert live.read_text() == "[]"
+    again = pipeline_lock.acquire(path=tree / "data/jobs/.pipeline.lock")  # restore let go of the lock
+    assert again is not None
+    again.release()

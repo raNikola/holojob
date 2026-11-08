@@ -1626,7 +1626,8 @@ describe('backup of the stage settings', () => {
     }
     const third = fs.mkdtempSync(path.join(os.tmpdir(), 'apps-restore-'))
     try {
-      const tampered = Object.fromEntries(new AdmZip(zip).getEntries().filter((e) => !e.isDirectory).map((e) => [
+      // Without its manifest, so this reaches the store's own check of the frozen file (the manifest hash refuses it earlier).
+      const tampered = Object.fromEntries(new AdmZip(zip).getEntries().filter((e) => !e.isDirectory && e.entryName !== 'backup-manifest.json').map((e) => [
         e.entryName,
         e.entryName.endsWith('Later.pdf') ? Buffer.from('tampered') : e.getData(),
       ]))

@@ -35,6 +35,7 @@ if str(ROOT / "python") not in sys.path:
     sys.path.insert(0, str(ROOT / "python"))
 
 from match_engine import competency_report  # noqa: E402 (puts job_scoring on the path)
+import pipeline_lock  # noqa: E402
 from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic  # noqa: E402
 from requirement_frames import frame_key  # noqa: E402
 from requirement_ids import PROVISIONAL_PREFIX  # noqa: E402
@@ -137,8 +138,21 @@ def _copy_atomic(src: Path, dest: Path, mode: int | None = None) -> None:
 
 
 def restore(source: Path, root: Path = ROOT) -> list[str]:
-    """Copy every backed-up file back under `root`; a file the backup lacked (it did not exist) is removed."""
+    """Copy every backed-up file back under `root`; a file the backup lacked (it did not exist) is removed.
+
+    Holds the pipeline lock (data/jobs/.pipeline.lock under `root`) for the whole copy, like the web restore: while a
+    discovery, scoring or Re-scrape run holds it, nothing is restored (no waiting), so a restore never overlaps a write."""
     manifest = verify(source)
+    lock = pipeline_lock.acquire(path=root / "data" / "jobs" / ".pipeline.lock")
+    if lock is None:
+        raise SystemExit(pipeline_lock.BUSY_MESSAGE.replace("nothing started", "nothing restored"))
+    try:
+        return _restore_files(source, root, manifest)
+    finally:
+        lock.release()
+
+
+def _restore_files(source: Path, root: Path, manifest: dict) -> list[str]:
     for rel, meta in manifest["files"].items():
         dest = root / rel
         make_private_dirs(dest.parent)

@@ -117,7 +117,7 @@ describe('backup restore: same result as a plain write', () => {
       expect(tempFiles(rel)).toEqual([])
     }
     expect(result).toEqual({
-      ok: true, restored: Object.keys(entries), count: 3, refused: [], applications: null,
+      ok: true, restored: Object.keys(entries), count: 3, refused: [], applications: null, verified: false,
     })
   })
 
