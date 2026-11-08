@@ -86,6 +86,29 @@ def test_active_ads_score_byte_identical_with_and_without_rows_not_found(extra):
     assert all(isinstance(r["matchScore"], (int, float)) for r in mixed), "the extra rows are scored too"
 
 
+CLOSED = row("c1", "Senior Product Manager Kubernetes", RARE + " closed", seen=OLD, isClosed=True, closedAt=NOW)
+
+
+def test_a_closed_ad_is_out_of_the_corpus_but_scored():
+    alone = score_jobs([dict(j) for j in ACTIVE], INTEL)
+    mixed = score_jobs([dict(j) for j in ACTIVE] + [dict(CLOSED)], INTEL)
+    assert [json.dumps(r, sort_keys=True) for r in mixed[: len(ACTIVE)]] == [json.dumps(r, sort_keys=True) for r in alone]
+    assert isinstance(mixed[-1]["matchScore"], (int, float))
+
+
+def test_closed_rows_would_move_scores_if_they_were_in_the_corpus():
+    """Guards the test above."""
+    alone = score_jobs([dict(j) for j in ACTIVE], INTEL)
+    open_row = {k: v for k, v in CLOSED.items() if k not in ("isClosed", "closedAt")}
+    mixed = score_jobs([dict(j) for j in ACTIVE] + [open_row], INTEL)
+    assert any(json.dumps(a, sort_keys=True) != json.dumps(b, sort_keys=True) for a, b in zip(alone, mixed))
+
+
+def test_a_hand_entered_row_is_always_in_the_corpus():
+    assert row_state.in_idf_corpus({**CLOSED, "manualEntry": True})
+    assert not row_state.in_idf_corpus(CLOSED)
+
+
 def test_a_corpus_of_nothing_but_rows_not_found_still_scores():
     assert score_jobs([dict(HELD)], INTEL)[0]["matchScore"] >= 0
 

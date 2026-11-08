@@ -197,8 +197,8 @@ def score_jobs(
 ) -> list[dict]:
     # Term rarity is measured over this run's corpus, so it is built once and
     # shared by every job rather than recomputed per call. Rows this run did not
-    # find are scored with it but are no part of it: keeping them can move no other ad's score.
-    idf = build_idf([job for job in jobs if not row_state.not_found(job)])
+    # find, and closed ads, are scored with it but are no part of it: keeping them can move no other ad's score.
+    idf = build_idf([job for job in jobs if row_state.in_idf_corpus(job)])
     if enhancer is None or isinstance(enhancer, NoOpEnhancer):
         return [score_job(j, intelligence, enhancer, idf) for j in jobs]
 

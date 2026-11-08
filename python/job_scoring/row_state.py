@@ -21,6 +21,15 @@ def not_found(row: dict) -> bool:
     return bool(row.get(MARK) or row.get("isAbsent") or row.get("isStale"))
 
 
+def in_idf_corpus(row: dict) -> bool:
+    """Whether a row counts toward term rarity (IDF). A closed ad is a finished listing and a row a run
+    did not find is unproven, so neither moves another ad's score; both are still scored. A hand-entered job is
+    always in."""
+    if row.get("manualEntry"):
+        return True
+    return not row.get("isClosed") and not not_found(row)
+
+
 def counts(rows: list[dict]) -> dict:
     """How many rows of a view are found, absent, held and closed."""
     out = {"found": 0, "absent": 0, "held": 0, "closed": 0}
