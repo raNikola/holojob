@@ -19,6 +19,7 @@ from corpus import build_idf
 import row_state
 import work_authorization as wa
 from salary import salary_metadata
+from role_tier import ROLE_FAMILIES
 
 # The one set of default weights, shared with the UI's settings panel and the
 # intelligence generator (src/modules/intelligence/candidateIntelligenceEngine.js).
@@ -42,8 +43,6 @@ def resolve_weights(saved: dict | None) -> dict:
 # Which tracks count as the right job comes from the candidate's role family
 # (src/data/roleFamilies.json); tests/python/test_role_families.py keeps the
 # families in step with ROLE_TRACKS in enrich_jobs.py.
-ROLE_FAMILIES_FILE = Path(__file__).resolve().parents[2] / "src" / "data" / "roleFamilies.json"
-ROLE_FAMILIES = json.loads(ROLE_FAMILIES_FILE.read_text(encoding="utf-8"))
 # The family is the candidate's choice (basicProfile.roleFamily, copied onto the
 # intelligence); nothing is assumed without one. Unknown never caps: with no
 # family no job is off track.

@@ -14,7 +14,16 @@
       "VP of Product",
       "Chief Product Officer"
     ],
-    "acceptedRoleTracks": ["product_management", "product_ownership"]
+    "acceptedRoleTracks": ["product_management", "product_ownership"],
+    "titleRules": {
+      "notTargetPhrases": [
+        "head of product marketing",
+        "head of product design",
+        "head of product engineering",
+        "product lead designer",
+        "product lead engineer"
+      ]
+    }
   },
   "engineering": {
     "titleSynonyms": [
