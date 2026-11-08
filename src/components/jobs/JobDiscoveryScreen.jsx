@@ -18,6 +18,7 @@ import JobTable from './JobTable'
 import JobListControls from './JobListControls'
 import { useDemoBootstrapContext } from '../demo/DemoBootstrapGate'
 import { composeJobList, stripDisplayFields } from '../../modules/jobs/allAds'
+import { isClosedAd } from '../../modules/jobs/jobHistory'
 import { useAllAds } from '../../modules/jobs/useAllAds'
 import { ALL_SEARCH_NOTE, EXPORT_NOTE, OFF_LIST_NOTE, applyAllControls, classOptions, filterComposed, listNotices, selectableIds } from '../../modules/jobs/jobListView'
 import JobDetailDrawer from './JobDetailDrawer'
@@ -179,8 +180,9 @@ export default function JobDiscoveryScreen() {
   const effectiveFilters = useMemo(() => withProfileSalaryDefaults(state.filters, profile?.basicProfile), [state.filters, profile?.basicProfile])
   const filteredJobs = useMemo(() => {
     if (useComposed) return filterComposed(shownRows, effectiveFilters, { appliedJobIds: appliedIds })
-    return filterJobs(viewJobs, effectiveFilters, { appliedJobIds: appliedIds })
-  }, [useComposed, shownRows, viewJobs, effectiveFilters, appliedIds])
+    // Until the route answers, Active still leaves closed ads out. Demo mode and no API have no All list to find them in.
+    return filterJobs(routeEnabled ? viewJobs.filter((job) => !isClosedAd(job)) : viewJobs, effectiveFilters, { appliedJobIds: appliedIds })
+  }, [useComposed, shownRows, viewJobs, effectiveFilters, appliedIds, routeEnabled])
   // Changing a filter starts the selection and the paging again; a sort, Show more or a row's new status do not.
   const filterKey = useMemo(
     () => JSON.stringify([effectiveFilters, listMode, [...listClasses].sort(), seenRecentlyOnly]),

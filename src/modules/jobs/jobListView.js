@@ -60,6 +60,7 @@ export const selectableIds = (rows) => rows.filter((row) => rowKind(row) === 'st
 export function classBadges(row) {
   const label = classLabel(row)
   const badges = label ? [{ label, variant: 'low', reason: row.reason ?? '' }] : []
+  if (row.appliedOtherCopy) badges.push({ label: 'Applied to another copy', variant: 'medium', reason: 'You have an application on another listing of this ad.' })
   const seenNow = row.class === 'found' || row.class === 'held' || !row.class
   return seenNow ? [...badges, ...historyBadges({ isNew: row.isNew, firstSeen: row.firstSeen })] : badges
 }

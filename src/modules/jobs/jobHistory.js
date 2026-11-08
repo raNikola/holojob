@@ -23,6 +23,11 @@ export function isActionable(job) {
   return !job?.isClosed && !job?.isStale && job?.class !== 'stale' && job?.class !== 'closed'
 }
 
+/** The ad itself is closed. Nothing about the application: an application keeps its own status. The route's class wins over a stored mark that may be older. */
+export function isClosedAd(row) {
+  return row?.class ? row.class === 'closed' : row?.isClosed === true
+}
+
 export function formatSeen(value) {
   return value ? String(value).slice(0, 10) : ''
 }

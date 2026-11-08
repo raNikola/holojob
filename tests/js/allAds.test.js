@@ -129,23 +129,58 @@ describe('Active: each class', () => {
     expect(ids(compose({ stored, server }).active)).toEqual(['m', 'n'])
   })
 
-  it.each(['closed', 'older_key', 'stale', 'filtered', 'filtered_incomplete', 'unclassified'])('%s with a status from the owner is in Active', (cls) => {
+  it.each(['older_key', 'stale', 'filtered', 'filtered_incomplete', 'unclassified'])('%s with a status from the owner is in Active', (cls) => {
     expect(ids(compose({ stored: [local(cls, { status: 'saved' })], server: [route(cls, cls)] }).active)).toEqual([cls])
   })
 
-  it.each(['closed', 'older_key', 'stale', 'filtered', 'filtered_incomplete', 'unclassified'])('%s with an application is in Active', (cls) => {
+  it.each(['older_key', 'stale', 'filtered', 'filtered_incomplete', 'unclassified'])('%s with an application is in Active', (cls) => {
     expect(ids(compose({ server: [route(cls, cls)], applications: withApplications(cls) }).active)).toEqual([cls])
   })
 
   it('a voided application is still work on that job', () => {
-    const applications = { status: 'ready', store: { applications: { x: { id: 'x', voided: true, posting: { jobId: 'c' } } } } }
-    expect(ids(compose({ server: [route('c', 'closed')], applications }).active)).toEqual(['c'])
+    const applications = { status: 'ready', store: { applications: { x: { id: 'x', voided: true, posting: { jobId: 's' } } } } }
+    expect(ids(compose({ server: [route('s', 'stale')], applications }).active)).toEqual(['s'])
+  })
+
+  it.each([
+    ['a status', { status: 'saved' }], ['a rejected triage', { status: 'rejected' }], ['Keep this ad', { keptByUser: true }], ['AI insights', { aiInsights: { summary: 'x' } }],
+  ])('a closed ad leaves Active with %s, and stays in All', (_name, work) => {
+    const { active, all } = compose({ stored: [local('c', work)], server: [route('c', 'closed')] })
+    expect(active).toEqual([])
+    expect(ids(all)).toEqual(['c'])
+    expect(all[0]).toMatchObject(work)
+  })
+
+  it('a closed ad with an application leaves Active and stays in All', () => {
+    const { active, all } = compose({ server: [route('c', 'closed')], applications: withApplications('c') })
+    expect(active).toEqual([])
+    expect(ids(all)).toEqual(['c'])
+  })
+
+  it('a stored row marked closed that the route does not hold leaves Active', () => {
+    expect(compose({ stored: [local('c', { isClosed: true, status: 'saved' })] }).active).toEqual([])
+  })
+
+  it('a stale ad with the owner\'s work stays in Active', () => {
+    expect(ids(compose({ stored: [local('s', { keptByUser: true })], server: [route('s', 'stale')] }).active)).toEqual(['s'])
+  })
+
+  it('the live copy of an ad applied to under a closed copy is marked, and shown', () => {
+    const server = [route('old', 'closed', { copyGroup: 'g' }), route('new', 'found', { copyGroup: 'g' })]
+    const { active } = compose({ server, applications: withApplications('old') })
+    expect(ids(active)).toEqual(['new'])
+    expect(active[0].appliedOtherCopy).toBe(true)
+  })
+
+  it('the applied copy itself is not marked', () => {
+    const { active } = compose({ server: [route('a', 'found', { copyGroup: 'g' })], applications: withApplications('a') })
+    expect(active[0].appliedOtherCopy).toBeUndefined()
   })
 
   it.each([
     [{ aiInsights: { summary: 'x' } }], [{ tailoredAssets: { cv: 'x' } }], [{ outreach: { contacts: [{ name: 'x' }] } }],
   ])('other work counts: %j', (work) => {
-    expect(ids(compose({ stored: [local('c', work)], server: [route('c', 'closed')] }).active)).toEqual(['c'])
+    expect(ids(compose({ stored: [local('c', work)], server: [route('c', 'stale')] }).active)).toEqual(['c'])
   })
 
   it('a closed row with no work is only in All, stored or not', () => {
@@ -156,7 +191,7 @@ describe('Active: each class', () => {
 
   it('an application on the route id counts when the row is stored under another id', () => {
     const stored = [local('old', { jobUrl: 'https://x.example/same' })]
-    const { active } = compose({ stored, server: [route('new', 'closed', { jobUrl: 'https://x.example/same' })], applications: withApplications('new') })
+    const { active } = compose({ stored, server: [route('new', 'stale', { jobUrl: 'https://x.example/same' })], applications: withApplications('new') })
     expect(ids(active)).toEqual(['old'])
   })
 
@@ -259,8 +294,13 @@ describe('cross-post copies', () => {
   })
 
   it('a worked copy out of Active\'s classes stays, and does not hide the live ad', () => {
+    const server = [group('stale', 'stale'), group('found', 'found'), group('other', 'absent')]
+    expect(activeIds({ stored: [local('stale', { status: 'saved' })], server })).toEqual(['found', 'stale'])
+  })
+
+  it('a worked closed copy leaves Active and does not hide the live ad', () => {
     const server = [group('closed', 'closed'), group('found', 'found'), group('other', 'absent')]
-    expect(activeIds({ stored: [local('closed', { status: 'saved' })], server })).toEqual(['closed', 'found'])
+    expect(activeIds({ stored: [local('closed', { status: 'saved' })], server })).toEqual(['found'])
   })
 
   it('a worked copy past the window does not hide the live ad either', () => {
@@ -268,8 +308,8 @@ describe('cross-post copies', () => {
     expect(activeIds({ server, applications: withApplications('old') })).toEqual(['live', 'old'])
   })
 
-  it('a worked closed copy alone is shown alone', () => {
-    expect(activeIds({ server: [group('closed', 'closed'), group('older', 'older_key')], applications: withApplications('closed') })).toEqual(['closed'])
+  it('a worked stale copy alone is shown alone', () => {
+    expect(activeIds({ server: [group('stale', 'stale'), group('older', 'older_key')], applications: withApplications('stale') })).toEqual(['stale'])
   })
 
   it.each([[{ status: 'loading', store: null }], [{ status: 'idle', store: null }], [null]])('store loading (%j): copies are not collapsed', (applications) => {
@@ -290,7 +330,7 @@ describe('cross-post copies', () => {
   })
 
   it('work in the browser counts while the store loads', () => {
-    expect(ids(compose({ stored: [local('c', { status: 'saved' })], server: [route('c', 'closed')], applications: { status: 'loading' } }).active)).toEqual(['c'])
+    expect(ids(compose({ stored: [local('c', { status: 'saved' })], server: [route('c', 'stale')], applications: { status: 'loading' } }).active)).toEqual(['c'])
   })
 
   it('when the store arrives the list is worked out again from the same inputs, and nothing stored changes', () => {
@@ -333,7 +373,8 @@ describe('the route\'s order plays no part', () => {
     for (let seed = 0; seed < 200; seed += 1) {
       expect(JSON.stringify(composeJobList({ ...input, server: shuffled(server, seed) }))).toBe(expected)
     }
-    expect(ids(JSON.parse(expected).active)).toEqual(expect.arrayContaining(['g1a', 'g2b', 'g3live', 'g3worked']))
+    expect(ids(JSON.parse(expected).active)).toEqual(expect.arrayContaining(['g1a', 'g2b', 'g3live']))
+    expect(ids(JSON.parse(expected).active)).not.toContain('g3worked')
   })
 
   it('the shuffle does change the order it was given', () => {
@@ -528,7 +569,7 @@ describe('server-only rows cannot reach the stored list', () => {
 
   it.each(sources)('%s imports only what it may', (file, source) => {
     const imports = [...source.matchAll(/^import\s+(.*?)\s+from\s+'([^']+)'/gm)].map((m) => `${m[1]} from ${m[2]}`)
-    const allowed = ["{ hasUserData, jobMatchKey } from ./jobStorage.js", '{ identityJobUrl } from ./manualJob.js', '{ useEffect, useSyncExternalStore } from react']
+    const allowed = ["{ hasUserData, jobMatchKey } from ./jobStorage.js", '{ isClosedAd } from ./jobHistory.js', '{ identityJobUrl } from ./manualJob.js', '{ useEffect, useSyncExternalStore } from react']
     for (const line of imports) expect(allowed).toContain(line)
     expect(source).not.toMatch(/import\s*\(/)
     expect(source).not.toMatch(/require\s*\(/)

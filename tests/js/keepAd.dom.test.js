@@ -179,9 +179,9 @@ describe('a kept row lasts', () => {
 
   it('past the 14 days and under a class Active leaves out', async () => {
     stubServer({ route: good, ledger: ledgerRow(), scored })
-    await keepThenReload(() => stubServer({ route: () => routeAnswer([routeRow('s1'), routeRow('abs', 'closed', { title: 'The absent ad', lastSeen: ago(90) })]), scored }))
+    await keepThenReload(() => stubServer({ route: () => routeAnswer([routeRow('s1'), routeRow('abs', 'stale', { title: 'The absent ad', lastSeen: ago(90) })]), scored }))
     expect(absentRow()).toBeTruthy()
-    expect(screen.text()).toContain('Closed')
+    expect(screen.text()).toContain('Stale')
   })
 
   it('in today\'s list too, when the route fails', async () => {

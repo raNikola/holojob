@@ -5,6 +5,7 @@
 // date moves). Classes are the route's (python/job_discovery/all_ads.py); this file never works one out. It only decides which rows
 // a class lets into Active, because the owner's work on a row is known only here.
 import { hasUserData, jobMatchKey } from './jobStorage.js'
+import { isClosedAd } from './jobHistory.js'
 import { identityJobUrl } from './manualJob.js'
 
 /** How long an absent row stays in Active after it was last seen. A visibility rule, not proof the ad is still open. */
@@ -16,7 +17,7 @@ export const ROUTE_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup
 export const AD_FIELDS = ['title', 'company', 'location', 'jobUrl', 'provider', 'site', 'isRemote', 'datePosted']
 
 /** On a composed row for display, and never on a stored one. */
-export const DISPLAY_ONLY_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'serverOnly']
+export const DISPLAY_ONLY_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'serverOnly', 'appliedOtherCopy']
 
 /** A composed row without what must not be stored or sent on. */
 export function stripDisplayFields(row) {
@@ -114,7 +115,7 @@ function pairRows(stored, server) {
 
 function isEligible({ row, local }, now) {
   if (row.manualEntry) return true
-  if (!row.class) return !local?.offList // the route says nothing about this stored row: the rule it has always had
+  if (!row.class) return !local?.offList && !isClosedAd(row) // the route says nothing about this stored row
   if (row.class === 'found' || row.class === 'held') return true
   return row.class === 'absent' && seenRecently(row.lastSeen, now)
 }
@@ -142,7 +143,7 @@ function copiesToShow(copies) {
  * the date moves, with no new import.
  *
  * `all` is every row. `active` is found, held, hand-entered and absent seen within the window, plus any row with the owner's work
- * on it whatever its class, with one row per ad. While the application store is loading, or if it failed, its work is not known, so
+ * on it unless the ad is closed (a closed ad stays in All and in the Application Tracker, work or no work), with one row per ad. While the application store is loading, or if it failed, its work is not known, so
  * copies are not collapsed (`copies.state` says which). A stored row is in the result whatever the route answers.
  * @returns {{ active: object[], all: object[], copies: { state: 'collapsed'|'waiting'|'failed', hidden: number } }}
  */
@@ -154,12 +155,15 @@ export function composeJobList({ stored = [], server = null, applications = null
 
   const entries = pairRows(stored, server).map(({ local, route }) => {
     const entry = { local, row: mergeRow(local, route) }
-    entry.worked = hasUserData(local) || applied.has(entry.row.jobId) || applied.has(route?.jobId)
+    entry.applied = applied.has(entry.row.jobId) || applied.has(route?.jobId)
+    entry.worked = hasUserData(local) || entry.applied
     entry.eligible = isEligible(entry, now)
     return entry
   })
 
-  const candidates = entries.filter((entry) => entry.eligible || entry.worked)
+  const candidates = entries.filter((entry) => entry.eligible || (entry.worked && !isClosedAd(entry.row)))
+  const appliedGroups = new Set(entries.filter((entry) => entry.applied && entry.row.copyGroup).map((entry) => entry.row.copyGroup))
+  const marked = (entry) => (!entry.applied && appliedGroups.has(entry.row.copyGroup) ? { ...entry.row, appliedOtherCopy: true } : entry.row)
   let shown = candidates
   if (state === 'ready') {
     const groups = new Map()
@@ -175,7 +179,7 @@ export function composeJobList({ stored = [], server = null, applications = null
     shown = candidates.filter((entry) => !hidden.has(entry))
   }
   return {
-    active: shown.map((entry) => entry.row),
+    active: shown.map(marked),
     all: entries.map((entry) => entry.row),
     copies: { state: state === 'ready' ? 'collapsed' : state === 'failed' ? 'failed' : 'waiting', hidden: candidates.length - shown.length },
   }
