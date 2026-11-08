@@ -11,7 +11,7 @@ import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
 import { displayLocation } from '../../modules/jobs/locationDisplay'
 import { historyBadges } from '../../modules/jobs/jobHistory'
-import { salaryBadges } from '../../modules/jobs/jobSalary'
+import { APPROXIMATE_SALARY_NOTE, approximateMonthlyEur, salaryBadges, statedSalary } from '../../modules/jobs/jobSalary'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
 import { ApplyBadge, PriorityBadge } from './JobScoreBadge'
 import FitScore from './FitScore'
@@ -28,6 +28,7 @@ const COLUMNS = {
   title: { type: 'text', value: (j) => j.title },
   company: { type: 'text', value: (j) => j.company },
   location: { type: 'text', value: (j) => j.location },
+  salary: { type: 'number', value: (j) => j.salaryMonthlyEur?.max },
   provider: { type: 'text', value: (j) => getJobProvider(j) },
   priority: { type: 'rank', order: PRIORITIES, value: (j) => j.priority },
   status: { type: 'text', value: (j) => j.status || 'new' },
@@ -88,6 +89,20 @@ function FilteredRowActions({ job, onAddFromRow }) {
 function LocationText({ job }) {
   if (!job.location) return <span>—</span>
   return <span className="line-clamp-2" title={job.location}>{displayLocation(job.location) || job.location}</span>
+}
+
+const NOT_SPECIFIED = <span className="text-stone-400 dark:text-stone-500">Not specified</span>
+
+function SalaryText({ job }) {
+  const stated = statedSalary(job.salary)
+  if (!stated) return NOT_SPECIFIED
+  const approximate = approximateMonthlyEur(job)
+  return (
+    <>
+      <span className="line-clamp-2" title={stated}>{stated}</span>
+      {approximate && <span className="block text-xs text-stone-500 dark:text-stone-500" title={APPROXIMATE_SALARY_NOTE}>{approximate}</span>}
+    </>
+  )
 }
 
 function ProviderBadge({ job }) {
@@ -182,6 +197,7 @@ function JobCard({
       <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-stone-600 dark:text-stone-400">
         <div><dt className="font-medium text-stone-500">Location</dt><dd><LocationText job={job} /><AuthorizationBadge job={job} /></dd></div>
         <div><dt className="font-medium text-stone-500">Provider</dt><dd><ProviderBadge job={job} /></dd></div>
+        <div><dt className="font-medium text-stone-500">Salary</dt><dd><SalaryText job={job} /></dd></div>
       </dl>
       <div className="mt-3 flex items-start justify-between gap-2" onClick={(e) => e.stopPropagation()}>
         {kind === 'filtered' ? <FilteredRowActions job={job} onAddFromRow={onAddFromRow} /> : (
@@ -267,7 +283,7 @@ export default function JobTable({
       </div>
       {isDesktop ? (
       <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-stone-800">
-        <table className="w-full min-w-[960px] text-left text-sm">
+        <table className="w-full min-w-[1080px] text-left text-sm">
           <thead className="border-b border-stone-200 bg-stone-50 text-xs uppercase tracking-wide text-stone-500 dark:border-stone-800 dark:bg-stone-900">
             <tr>
               <th className="px-3 py-2">
@@ -277,6 +293,7 @@ export default function JobTable({
               <SortableTh label="Title" sortKey="title" sort={sort} onSort={onSort} className="px-3 py-2" />
               <SortableTh label="Company" sortKey="company" sort={sort} onSort={onSort} className="px-3 py-2" />
               <SortableTh label="Location" sortKey="location" sort={sort} onSort={onSort} className="px-3 py-2" />
+              <SortableTh label="Salary" sortKey="salary" sort={sort} onSort={onSort} className="px-3 py-2" />
               {showProvider && <SortableTh label="Provider" sortKey="provider" sort={sort} onSort={onSort} className="px-3 py-2" />}
               {showScores && <SortableTh label="Priority" sortKey="priority" sort={sort} onSort={onSort} className="px-3 py-2" />}
               <SortableTh label="Status" sortKey="status" sort={sort} onSort={onSort} className="px-3 py-2" />
@@ -318,6 +335,7 @@ export default function JobTable({
                   <LocationText job={job} />
                   <AuthorizationBadge job={job} />
                 </td>
+                <td className="max-w-[11rem] px-3 py-2 align-top text-stone-600 dark:text-stone-400"><SalaryText job={job} /></td>
                 {showProvider && <td className="px-3 py-2 align-top"><ProviderBadge job={job} /></td>}
                 {showScores && <td className="px-3 py-2 align-top"><PriorityBadge priority={job.priority} /></td>}
                 <td className="px-3 py-2 align-top"><StatusBadge status={job.status} /></td>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { filterJobs } from '../../src/modules/jobs/jobFilters.js'
-import { passesSalaryFilters, salaryBadges, withProfileSalaryDefaults, formatMonthlyEur } from '../../src/modules/jobs/jobSalary.js'
+import { approximateMonthlyEur, statedSalary, passesSalaryFilters, salaryBadges, withProfileSalaryDefaults, formatMonthlyEur } from '../../src/modules/jobs/jobSalary.js'
 import { normalizeSalaryEur, salaryPreferences } from '../../src/utils/salary.js'
 
 const job = (id, pay, extra = {}) => ({ jobId: id, salaryMonthlyEur: pay, matchScore: 60, ...extra })
@@ -89,5 +89,43 @@ describe('pre-fill notice', () => {
     expect(withProfileSalaryDefaults({ minSalary: '', desiredSalaryMin: 3000 }, bp).salaryFromProfile).toBe(false)
     expect(withProfileSalaryDefaults({ salaryFrom: '', salaryTo: '' }, bp).salaryFromProfile).toBe(false)
     expect(withProfileSalaryDefaults({ minSalary: null }, {}).salaryFromProfile).toBe(false)
+  })
+})
+
+describe('the salary as stated', () => {
+  it.each([
+    ['142500 - 237500 yearly', '$142,500–237,500/year'],
+    ['60000 - 72000 yearly EUR', '€60,000–72,000/year'],
+    ['5000 monthly EUR', '€5,000/month'],
+    ['50 - 60 hourly GBP', '£50–60/hour'],
+    ['100000 - 120000 yearly CHF', 'CHF 100,000–120,000/year'],
+    ['€2,500–3,000 net/month', '€2,500–3,000 net/month'],
+    ['80000-100000', '80000-100000'],
+  ])('%s reads %s', (text, shown) => {
+    expect(statedSalary(text)).toBe(shown)
+  })
+
+  it.each([undefined, null, '', '   '])('%j is nothing', (text) => {
+    expect(statedSalary(text)).toBeNull()
+  })
+})
+
+describe('the approximate monthly figure', () => {
+  const range = (extra) => ({ min: 7000, max: 16000, currency: 'USD', converted: true, ...extra })
+
+  it('a converted figure is marked approximate', () => {
+    expect(approximateMonthlyEur({ salary: '92900 - 209500 yearly', salaryMonthlyEur: range() })).toBe('≈ €7,000–16,000/mo')
+  })
+
+  it('a yearly EUR figure divided by twelve is approximate too', () => {
+    expect(approximateMonthlyEur({ salary: '60000 yearly EUR', salaryMonthlyEur: range({ min: 5000, max: 5000, currency: 'EUR', converted: false }) })).toBe('≈ €5,000/mo')
+  })
+
+  it('an ad already stating EUR per month needs no second figure', () => {
+    expect(approximateMonthlyEur({ salary: '5000 monthly EUR', salaryMonthlyEur: range({ currency: 'EUR', converted: false }) })).toBeNull()
+  })
+
+  it('no reading, no figure', () => {
+    expect(approximateMonthlyEur({ salary: '50 hourly' })).toBeNull()
   })
 })

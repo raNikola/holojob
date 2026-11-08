@@ -15,6 +15,34 @@ export function formatMonthlyEur(range) {
   return `${approx}€${amount}/month${range.converted && range.currency ? ` (from ${range.currency})` : ''}`
 }
 
+const SYMBOL = { USD: '$', EUR: '€', GBP: '£' }
+const PERIOD = { yearly: 'year', monthly: 'month', weekly: 'week', daily: 'day', hourly: 'hour' }
+// The one shape the providers write (normalize_jobs.py, format_pay_range). No currency there means USD, as in salary.py.
+const PROVIDER_SHAPE = /^([\d.]+)(?:\s*-\s*([\d.]+))?\s+(yearly|monthly|weekly|daily|hourly)(?:\s+([A-Z]{3}))?$/
+
+/** The pay as the ad states it, for display: the provider's own shape made readable, any other text as it is. Null when there is none. */
+export function statedSalary(text) {
+  const trimmed = String(text ?? '').trim()
+  if (!trimmed) return null
+  const match = PROVIDER_SHAPE.exec(trimmed)
+  if (!match) return trimmed
+  const [, low, high, interval, currency = 'USD'] = match
+  const amount = [low, high].filter(Boolean).map((n) => Number(n).toLocaleString('en-US')).join('–')
+  const symbol = SYMBOL[currency]
+  return `${symbol ?? `${currency} `}${amount}/${PERIOD[interval]}`
+}
+
+/** The secondary figure beside a stated salary, always marked approximate. Null when there is no reading, or the ad already states EUR per month. */
+export function approximateMonthlyEur(job) {
+  const range = job?.salaryMonthlyEur
+  if (!range) return null
+  if (range.currency === 'EUR' && !range.converted && /\bmonth/i.test(String(job.salary ?? ''))) return null
+  const fmt = (n) => n.toLocaleString('en-US')
+  return `≈ €${range.min === range.max ? fmt(range.min) : `${fmt(range.min)}–${fmt(range.max)}`}/mo`
+}
+
+export const APPROXIMATE_SALARY_NOTE = 'Approximate, worked out from the stated figure at a fixed exchange rate. Not an offered salary; gross or net is not known.'
+
 export function salaryBadges(job) {
   if (job?.belowMinSalary !== true) return []
   return [{ label: 'Below min salary', variant: 'medium', reason: `${formatMonthlyEur(job.salaryMonthlyEur)} is under your minimum` }]

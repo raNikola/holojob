@@ -354,3 +354,20 @@ describe('closed ads and the sort', () => {
     expect(html.indexOf('Open one')).toBeLessThan(html.indexOf('Closed one'))
   })
 })
+
+describe('the Salary column', () => {
+  it('shows the stated pay first and the EUR figure only as approximate', () => {
+    viewport(true)
+    const html = render([job(1, { salary: '92900 - 209500 yearly', salaryMonthlyEur: { min: 7123, max: 16062, currency: 'USD', converted: true } })])
+    expect(html).toContain('$92,900–209,500/year')
+    expect(html).toContain('≈ €7,123–16,062/mo')
+    expect(html.indexOf('$92,900')).toBeLessThan(html.indexOf('≈ €7,123'))
+  })
+
+  it('says so when the ad states none, in both layouts', () => {
+    viewport(true)
+    expect(render([job(1)])).toContain('Not specified')
+    viewport(false)
+    expect(render([job(1)])).toContain('Not specified')
+  })
+})
