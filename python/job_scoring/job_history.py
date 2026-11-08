@@ -177,11 +177,16 @@ def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datet
     job_id = job["jobId"]
     entry = entries.get(job_id)
     stored_description = ((entry or {}).get("job") or {}).get("description") or ""
-    if (
+    stored_job = (entry or {}).get("job") or {}
+    # An Infostud teaser is ~500 characters, so the length rule alone would let a failed detail fetch overwrite a full text (Wave 5).
+    degraded = stored_job.get("descriptionStatus") == "complete" and (job.get("descriptionStatus") or "") in ("teaser", "failed", "source_truncated")
+    if degraded or (
         len((job.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS
         and len(stored_description.strip()) >= THIN_DESCRIPTION_CHARS
     ):
         job = {**job, "description": stored_description}
+        if degraded:
+            job.update(descriptionStatus="complete", descriptionSource=stored_job.get("descriptionSource"))
         stats["keptFullerDescription"] += 1
     fingerprint = job_fingerprint(job)
 

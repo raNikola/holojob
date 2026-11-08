@@ -96,3 +96,11 @@ def test_enrich_records_status_and_survives_fetch_failure(monkeypatch):
 
 def test_normalize_marks_teaser():
     assert infostud_client.normalize({"id": 1, "url": "u", "title": "t"})["descriptionStatus"] == "teaser"
+
+
+def test_provider_canonical_job_carries_status_and_source():
+    from providers.infostud_provider import InfostudProvider
+
+    raw = {**infostud_client.normalize({"id": 1, "url": "u", "title": "t"}), "descriptionStatus": "complete", "descriptionSource": "next_data"}
+    job = InfostudProvider._to_canonical(raw)
+    assert job["descriptionStatus"] == "complete" and job["descriptionSource"] == "next_data"
