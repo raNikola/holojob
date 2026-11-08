@@ -147,6 +147,12 @@ Browser keys (the list is `src/modules/browserStorage/allowlist.js`): `localStor
       "<string>"
     ]
   },
+  "historySkills?": [
+    { "term": "<string, a keyword>", "entries": "<number, history entries that state it>", "listed": "<boolean, a CV lists it as a skill>" }
+  ],
+  "historyEntries?": [
+    { "role": "<string>", "period": "<string>", "domains": ["<id of src/data/domainAdjacency.json>"], "capabilities": ["<id>"] }
+  ],
   "searchStrategy": {
     "recommendedSearchQueries": [
       "<string>"
@@ -750,6 +756,7 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
       "experienceMatch": "<number>",
       "locationMatch": "<number>",
       "cultureMatch": "<number>",
+      "transferability": "<null>|{ applied: <boolean>, bonus: <number, 0, 8 or 16>, proven: [{ domain, role, period }], bridges: [{ from, to, capability, why, role, period }], skipped: <null>|\"title_unrelated\" }",
       "matchedSkills": [
         "<string>"
       ],

@@ -85,6 +85,13 @@ Copilot's top jobs all skip them. A job picked by id is still tailored.
     roleMatch 25, skillMatch 25, locationMatch 20,
     experienceMatch 15, industryMatch 10, cultureMatch 5
 
+Industry points (`dimensions/industry_match.py`, `domain_transfer.py`): the preference match as before, plus a bonus that
+keeps proven and assumed experience apart. Proven: a history entry of the candidate (`historyEntries`) is in the ad's
+industry, +16. Transferable (assumed): an entry in an adjacent industry (`src/data/domainAdjacency.json`, every edge with
+a `why`) states a capability the ad also asks for, +8 per bridge, at most +16. Never for an Unrelated title, never when
+an avoided industry matched; every reason names the entry and says "assumed". Skill points use the keyword bank, which
+holds keywords only (`keyword_shape.py`) and the skills of the whole history (`historySkills`).
+
 These defaults live in one file, `src/data/scoringWeights.json`, read by the
 intelligence generator, the Settings weights panel and `scorer.py`. Weights saved
 in Settings are stored on the intelligence (`scoringWeights`) and win over the
