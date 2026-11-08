@@ -324,6 +324,7 @@ class SourceWriter(_AppendFile):
                 error=(str(outcome.error)[:300] if outcome.error else None),
                 boardsFailed=list(outcome.boards_failed),
                 boardsEmpty=list(outcome.boards_empty),
+                readClass=_read_class(outcome),
                 boardsRead=[dict(row) for row in getattr(outcome, "boards_read", None) or []],
                 skipReason=outcome.skip_reason,
                 mismatch=(accounted != len(jobs)) if self.failed is None else None,
@@ -334,6 +335,12 @@ class SourceWriter(_AppendFile):
             )
         except Exception as exc:  # staging never stops a run
             self._fail(exc)
+
+
+def _read_class(outcome) -> str:
+    """The Wave 1 read class of a source (ok, confirmed_empty, incomplete, failed, skipped). Imported late: staging stays importable alone."""
+    from providers.base_provider import classify_read
+    return classify_read(outcome)
 
 
 def _external(value) -> str | None:

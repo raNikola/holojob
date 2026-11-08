@@ -44,6 +44,33 @@ class ProviderOutcome:
     total_reported: int | None = None  # the total the source itself reports for its search (Infostud), for the staging footer
     # Per board of a snapshot source (S5b): {"board", "read", "postings", "complete", "reason", ...}. Staged in the footer; nothing reads it yet.
     boards_read: list[dict] = field(default_factory=list)
+    # How the read went, apart from `status` (Wave 1 safety rule): see `classify_read`. None = derive from the fields above.
+    read_class: str | None = None
+
+
+# The read vocabulary. Only "ok" (ads were read) and, per board, a complete read can support closing; nothing here closes an ad by itself.
+READ_OK = "ok"  # ads were read
+READ_CONFIRMED_EMPTY = "confirmed_empty"  # every part answered successfully and held no ads; held, never a reason to close
+READ_INCOMPLETE = "incomplete"  # throttled, partial, timeout, blocked, or "ok with 0 read" that nothing confirms
+READ_FAILED = "failed"  # nothing could be read
+READ_SKIPPED = "skipped"
+READ_CLASSES = (READ_OK, READ_CONFIRMED_EMPTY, READ_INCOMPLETE, READ_FAILED, READ_SKIPPED)
+
+
+def classify_read(outcome) -> str:
+    """The read class of an outcome. A provider that knows better sets `read_class`; otherwise it is derived, and a plain
+    `ok` with nothing read is INCOMPLETE, not empty: a soft block looks exactly like that."""
+    declared = getattr(outcome, "read_class", None)
+    if declared in READ_CLASSES:
+        return declared
+    status = outcome.status
+    if status == "skipped":
+        return READ_SKIPPED
+    if status == "failed":
+        return READ_FAILED
+    if status == "partial":
+        return READ_INCOMPLETE
+    return READ_OK if outcome.read > 0 else READ_INCOMPLETE
 
 
 def board_read(board: str, *, read: int, postings: int, complete: bool, reason: str | None, **facts) -> dict:
@@ -55,10 +82,12 @@ def _settled_boards(boards_read: list[dict], failures: dict[str, str], empty: li
     """The one place that says a failed or empty board is not complete, whatever its provider's proof said. Every such board gets a line."""
     settled = {row["board"]: dict(row) for row in boards_read}
     for board in failures:
-        settled[board] = board_read(board, read=0, postings=0, complete=False, reason="the board could not be read")
+        settled[board] = {**board_read(board, read=0, postings=0, complete=False, reason="the board could not be read"), "readClass": READ_FAILED}
     for board in empty:
         settled[board] = {**settled.get(board, board_read(board, read=0, postings=0, complete=False, reason=None)),
-                          "complete": False, "reason": "the board answered with no ads"}
+                          "complete": False, "reason": "the board answered with no ads", "readClass": READ_CONFIRMED_EMPTY}
+    for row in settled.values():
+        row.setdefault("readClass", READ_OK if row.get("complete") else READ_INCOMPLETE)
     return list(settled.values())
 
 
@@ -72,8 +101,14 @@ def parts_outcome(
     status = "ok"
     if failures:
         status = "failed" if len(failures) >= total else "partial"
+    # Every part answered and none held an ad: confirmed empty. Some parts failed: incomplete. All failed: failed.
+    read_class = (
+        READ_FAILED if status == "failed" else READ_INCOMPLETE if status == "partial"
+        else READ_CONFIRMED_EMPTY if read == 0 and total > 0 else READ_OK
+    )
     return ProviderOutcome(
         status=status,
+        read_class=read_class,
         read=read,
         kept=kept,
         error="; ".join(f"{part}: {error}" for part, error in failures.items()) or None,

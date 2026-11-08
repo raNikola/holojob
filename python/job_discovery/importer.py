@@ -183,6 +183,15 @@ def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bo
             why.append(proof.BOARD_UNREADABLE)
         if board in empty:
             why.append(proof.BOARD_EMPTY)
+        # Wave 1: a board's own read class must say the read was whole. A class other than "ok" (a staged line from a
+        # provider that classified it) is never proof, whatever `complete` says.
+        board_class = row.get("readClass")
+        if board_class == "failed":
+            why.append(proof.BOARD_UNREADABLE)
+        elif board_class == "confirmed_empty":
+            why.append(proof.BOARD_EMPTY)
+        elif board_class is not None and board_class != "ok":
+            why.append(proof.BOARD_NOT_COMPLETE)
         if not accounted:
             why.append(proof.FILES_DONT_ADD_UP)
         if in_doubt:
