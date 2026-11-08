@@ -979,6 +979,111 @@ def remove_proven_wrong(work: Work, resolver: Resolver, remove: bool) -> tuple[l
     return lines, counts, {"removed": removals, "guarded": guarded}
 
 
+# ------------------------------------------------------------- S4: views
+#
+# Graphify has no filtered views, but its query, path, explain and affected
+# commands take --graph <file>. Two filtered copies of the index, same schema,
+# same community ids (nothing is re-clustered or re-labelled, so no model runs).
+
+PRODUCTION_PREFIXES = ("python/", "src/", "scripts/")
+EXCLUDED_PREFIXES = ("docs/design-system/preset/", "tools/", "fixtures/", "data/", "tests/fixtures/",
+                     "tests/python/fixtures/", ".claude/skills/graphify/", "graphify-out/")
+CODE_SUFFIXES = (".py", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx")
+
+
+def area(path: str) -> str:
+    if not path:
+        return "none"
+    if path.startswith(EXCLUDED_PREFIXES):
+        return "excluded"
+    if path.startswith("tests/"):
+        return "test"
+    if path.startswith(PRODUCTION_PREFIXES) or ("/" not in path and not path.endswith(".md")):
+        return "production"
+    if path.endswith(".md"):
+        return "doc"
+    return "other"
+
+
+def make_view(index: dict, name: str, keep_node, keep_edge, keep_hyperedges: bool) -> dict:
+    nodes = [n for n in index["nodes"] if keep_node(n)]
+    ids = {n["id"] for n in nodes}
+    links = [e for e in index["links"] if e["source"] in ids and e["target"] in ids and keep_edge(e)]
+    hyper = [h for h in index["hyperedges"] if keep_hyperedges and all(n in ids for n in h.get("nodes", []))]
+    meta = {**index["graph"], "hyperedges": hyper, "holojob_view": name}
+    return {"directed": index["directed"], "multigraph": index["multigraph"], "graph": meta,
+            "nodes": nodes, "links": links, "hyperedges": hyper, "built_at_commit": index["built_at_commit"]}
+
+
+def build_views(index: dict) -> dict[str, dict]:
+    def architecture_node(n):
+        return area(n.get("source_file") or "") in ("production", "doc")  # stubs have no file: area "none"
+
+    def test_node(n):
+        return area(n.get("source_file") or "") in ("production", "test") and n.get("file_type") == "code"
+
+    def code_edge(e):
+        return e.get("_origin") in ("ast", "adapter") and e.get("provenance") != "doc-path"
+
+    return {
+        "architecture.json": make_view(index, "architecture", architecture_node, lambda e: True, True),
+        "test-deps.json": make_view(index, "test-deps", test_node, code_edge, False),
+    }
+
+
+def test_reference_summary(index: dict, root: Path) -> list[str]:
+    """Which production modules tests reach through imports, by path string, or not at all (static only)."""
+    nodes = {n["id"]: n for n in index["nodes"]}
+    module_files = sorted({n["source_file"] for n in index["nodes"]
+                           if area(n.get("source_file") or "") == "production" and n["source_file"].endswith(CODE_SUFFIXES)})
+    imports: dict[str, set[str]] = {}
+    for e in index["links"]:
+        if e["relation"] in CLOSURE_RELATIONS:
+            target = (nodes.get(e["target"]) or {}).get("source_file") or ""
+            source = e.get("source_file") or ""
+            if target and target != source:
+                imports.setdefault(source, set()).add(target)
+    test_files = sorted({f for f in imports if f.startswith("tests/")} |
+                        {n["source_file"] for n in index["nodes"] if area(n.get("source_file") or "") == "test"
+                         and n["source_file"].endswith(CODE_SUFFIXES)})
+    direct = {t for f in test_files for t in imports.get(f, ()) if area(t) == "production"}
+    reached, frontier = set(direct), list(direct)
+    while frontier:
+        for t in imports.get(frontier.pop(), ()):
+            if area(t) == "production" and t not in reached:
+                reached.add(t)
+                frontier.append(t)
+    by_base: dict[str, list[str]] = {}
+    for f in module_files:
+        by_base.setdefault(f.rsplit("/", 1)[-1], []).append(f)
+    by_path: set[str] = set()
+    literal = re.compile(r"""["']([\w./-]*?([\w-]+\.(?:py|js|mjs|cjs)))["']""")
+    for f in test_files:
+        try:
+            text = (root / f).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for _, base in literal.findall(text):
+            if len(by_base.get(base, [])) == 1:
+                by_path.add(by_base[base][0])
+    modules = set(module_files)
+    path_only = sorted((by_path & modules) - reached)
+    none = sorted(modules - reached - by_path)
+    lines = ["## Static test references (S4)", "",
+             "From `test-deps.json`. Static references only: this is not runtime coverage. A test that runs a "
+             "script through a subprocess shows up only under \"by path\".", "",
+             f"- production modules: {len(modules)}",
+             f"- imported directly by a test: {len(direct & modules)}",
+             f"- reached through imports (direct or via other modules): {len(reached & modules)}",
+             f"- referenced by a test only as a path string (e.g. a subprocess): {len(path_only)}",
+             f"- no static test reference: {len(none)}", ""]
+    if path_only:
+        lines += ["Referenced only by path:", ""] + _list(path_only, 60) + [""]
+    if none:
+        lines += ["No static test reference:", ""] + _list(none, 200)
+    return lines
+
+
 # ------------------------------------------------------------------ report
 
 
@@ -1087,12 +1192,20 @@ def build(root: Path, graph_path: Path, out_dir: Path | None, remove: bool = Tru
         "nodes_in": len(graph["nodes"]),
         "nodes_out": len(index["nodes"]),
     }
-    outputs = {"index.json": json.dumps(index, ensure_ascii=False) + "\n", "report.md": render_report(summary)}
+    views = build_views(index)
+    summary["sections"].append(["## Views (S4)", "",
+                                "Query them with `--graph graphify-out/holojob/<file>`.", ""] +
+                               [f"- `{name}`: {len(v['nodes'])} nodes, {len(v['links'])} edges" for name, v in views.items()])
+    summary["sections"].append(test_reference_summary(views["test-deps.json"], root))
+    outputs = {"index.json": json.dumps(index, ensure_ascii=False) + "\n"}
+    outputs.update({name: json.dumps(v, ensure_ascii=False) + "\n" for name, v in views.items()})
+    outputs["report.md"] = render_report(summary)
     if sha256_bytes(graph_path.read_bytes()) != input_sha:
         raise AdapterError("graph.json changed while the adapter ran; nothing written")
     for name, text in outputs.items() if out_dir is not None else ():
         write_atomic(out_dir / name, text)
-    return {"summary": summary, "index": index, "counts": counts, "details": details, "resolver": resolver}
+    return {"summary": summary, "index": index, "views": views, "counts": counts, "details": details,
+            "resolver": resolver}
 
 
 def main(argv=None) -> int:
