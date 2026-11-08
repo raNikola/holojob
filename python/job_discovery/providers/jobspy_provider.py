@@ -56,6 +56,7 @@ class JobSpyProvider(JobProvider):
         relevant: list[dict] = []
         frames: list[pd.DataFrame] = []
         failures: dict[str, str] = {}
+        site_warnings: list[str] = []
 
         for term in search_terms:
             for location in locations:
@@ -71,6 +72,14 @@ class JobSpyProvider(JobProvider):
                     failures[f"{term} @ {location}"] = str(exc)
                     continue
 
+                sites_failed = list((getattr(df, "attrs", None) or {}).get("sitesFailed") or [])
+                if sites_failed and (df is None or df.empty):
+                    # Every site that could answer raised (429, block, timeout): an empty frame here is not "0 ads".
+                    failures[f"{term} @ {location}"] = f"{', '.join(sites_failed)} could not be read"
+                    continue
+                if sites_failed:
+                    # Some sites failed, others answered: keep what was read, say what was missing.
+                    site_warnings.append(f"{term} @ {location}: {', '.join(sites_failed)} could not be read; ads from the other sites were kept")
                 normalized: list[dict] = []
                 external: list[str | None] = []
                 dropped: list[dict] = []
@@ -114,6 +123,7 @@ class JobSpyProvider(JobProvider):
             failures=failures,
             named=False,  # searches, not boards
         )
+        self.last_outcome.warnings.extend(site_warnings)
         return relevant
 
     @property
