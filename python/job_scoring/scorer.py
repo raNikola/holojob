@@ -12,7 +12,8 @@ from dimensions.industry_match import score_industry_match
 from dimensions.location_match import score_location_match
 from dimensions.role_match import score_role_match
 from dimensions.skill_match import score_skill_match
-from labels import apply_recommendation, match_label, priority
+from labels import INSUFFICIENT_APPLY, INSUFFICIENT_LABEL, INSUFFICIENT_PRIORITY, apply_recommendation, match_label, priority
+import data_sufficiency
 from llm_enhancer import NoOpEnhancer
 from red_flags import detect_red_flags
 from corpus import build_idf
@@ -134,6 +135,12 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     if authorization_cap is not None:
         match_score = min(match_score, authorization_cap)
 
+    insufficient_reasons = data_sufficiency.assess(job)
+    insufficient = bool(insufficient_reasons)
+    if insufficient:
+        # Last, after every cap: nothing the ad states supports a Fit Score, so it gets a state, not a band.
+        match_score = min(match_score, data_sufficiency.SCORE_CEILING)
+
     breakdown = {
         k: {
             "raw": dimensions[k],
@@ -160,13 +167,29 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     elif authorization["status"] in (wa.SPONSORED, wa.UNKNOWN):
         reasons.append(f"Work authorization: {authorization['reason']}")
 
-    apply_rec = apply_recommendation(match_score, red_flags)
+    if insufficient:
+        reasons = [f"Insufficient data: {r}" for r in insufficient_reasons] + reasons
+        confidence = {"level": "none", "reasons": insufficient_reasons}
+        apply_rec, label, prio = INSUFFICIENT_APPLY, INSUFFICIENT_LABEL, INSUFFICIENT_PRIORITY
+    else:
+        low = data_sufficiency.low_confidence(
+            job,
+            location_stated="Location not stated" not in loc_reasons,
+            seniority_stated="Seniority not stated" not in exp_reasons,
+            has_keyword_bank="No keyword bank in intelligence" not in skill_reasons,
+        )
+        confidence = {"level": "low" if low else "normal", "reasons": low}
+        apply_rec = apply_recommendation(match_score, red_flags)
+        label, prio = match_label(match_score), priority(match_score, apply_rec, red_flags)
     result = {
         **job,
         "matchScore": match_score,
-        "matchLabel": match_label(match_score),
+        "matchLabel": label,
         "applyRecommendation": apply_rec,
-        "priority": priority(match_score, apply_rec, red_flags),
+        "priority": prio,
+        "dataStatus": data_sufficiency.STATE if insufficient else "sufficient",
+        "insufficientReasons": insufficient_reasons,
+        "confidence": confidence,
         "roleMatch": role_score,
         "skillMatch": skill_score,
         "industryMatch": industry_score,
@@ -187,7 +210,7 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         # True when a hard rule applies to the job, whether or not it lowered
         # this particular score. The enhancer never lifts such a job, so caps
         # stay decided here.
-        "hardCapped": bool(red_flags) or off_track or title_capped or authorization_cap is not None,
+        "hardCapped": insufficient or bool(red_flags) or off_track or title_capped or authorization_cap is not None,
     }
     return enhancer.enhance(job, result, intelligence)
 

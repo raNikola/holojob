@@ -13,6 +13,13 @@ APPLY_MIN_SCORE = 70
 P1_MIN_SCORE = 76
 
 
+# The state of an ad that says too little to score (data_sufficiency.py). It is not a band: none of the three
+# values below is ever produced from a number, and no number is ever read back as one of them.
+INSUFFICIENT_LABEL = "Insufficient data"
+INSUFFICIENT_PRIORITY = "Unrated"
+INSUFFICIENT_APPLY = "Not assessed"
+
+
 def match_label(score: int) -> str:
     if score >= 85:
         return "Excellent"

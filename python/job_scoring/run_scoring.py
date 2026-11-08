@@ -292,6 +292,7 @@ def score(args: argparse.Namespace) -> int:
                 "good": labels.get("Good", 0),
                 "weak": labels.get("Weak", 0),
                 "reject": labels.get("Reject", 0),
+                "insufficient": sum(1 for j in scored if j.get("dataStatus") == "insufficient"),
             },
         },
         "jobs": scored,
