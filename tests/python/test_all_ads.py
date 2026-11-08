@@ -407,7 +407,7 @@ def test_no_description_and_nothing_else_from_the_entry_is_in_the_answer():
     answer = all_ads.build(ledger_of(*ALL_KINDS), text_store)
     text = json.dumps(answer)
     assert "AD TEXT" not in text and "description" not in set(all_keys(answer))
-    assert not {"llmFacts", "salary", "roleKey", "seenUnder", "description", "externalId"} & set(all_keys(answer))
+    assert not {"llmFacts", "roleKey", "seenUnder", "description", "externalId"} & set(all_keys(answer))
 
 
 def test_every_row_has_the_same_fields_and_no_score():
@@ -490,3 +490,12 @@ def test_scoring_and_the_job_list_are_the_same_with_it_or_without_it(tmp_path, m
 def test_it_needs_only_the_standard_library():
     source = Path(all_ads.__file__).read_text(encoding="utf-8")
     assert set(re.findall(r"^(?:from|import) (\w+)", source, re.M)) <= {"__future__", "argparse", "importlib", "json", "re", "sys", "pathlib"}
+
+
+def test_a_ledger_row_carries_the_ads_pay_and_expiry_and_a_filtered_row_none():
+    ledger = ledger_of(entry(1, lastRunId=RUN))
+    ledger["jobs"]["j1"]["job"]["expiresAt"] = "2026-11-20"
+    answer = all_ads.build(ledger, store_of(a={**record(1), "salary": "9"}))
+    rows = {row["jobId"]: row for row in answer["rows"]}
+    assert (rows["j1"]["salary"], rows["j1"]["expiresAt"]) == ("1000", "2026-11-20")
+    assert all(row["salary"] is None for row in answer["rows"] if row["from"] == "filtered")

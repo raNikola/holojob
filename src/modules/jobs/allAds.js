@@ -14,7 +14,7 @@ export const ACTIVE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000
 /** From the route whatever it says, null included. Display only: never stored on a job. */
 export const ROUTE_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'firstSeen', 'lastSeen', 'closedAt', 'absentSince']
 /** From the route when it has a value, else the stored one. */
-export const AD_FIELDS = ['title', 'company', 'location', 'jobUrl', 'provider', 'site', 'isRemote', 'datePosted']
+export const AD_FIELDS = ['title', 'company', 'location', 'jobUrl', 'provider', 'site', 'isRemote', 'datePosted', 'salary', 'expiresAt']
 
 /** On a composed row for display, and never on a stored one. */
 export const DISPLAY_ONLY_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'serverOnly', 'appliedOtherCopy']

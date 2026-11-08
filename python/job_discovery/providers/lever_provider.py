@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-from providers.base_provider import JobProvider, board_read, build_canonical_job, dropped_ad, filter_jobs, parts_outcome, split_by_filter
+from providers.base_provider import JobProvider, board_read, build_canonical_job, dropped_ad, filter_jobs, format_pay_range, parts_outcome, split_by_filter
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ API_URL = "https://api.lever.co/v0/postings/{company}"
 # A company on Lever's EU-hosted instance 404s on the main API; its own
 # hosted board (jobs.eu.lever.co) names api.eu.lever.co as the primary and
 # api.lever.co as the fallback, so this provider tries both, in that order.
+LEVER_INTERVALS = {"per-year-salary": "yearly", "per-month-salary": "monthly", "per-hour-wage": "hourly"}
 EU_API_URL = "https://api.eu.lever.co/v0/postings/{company}"
 
 
@@ -68,6 +69,13 @@ class LeverProvider(JobProvider):
                 last_error = exc
         raise last_error
 
+    @staticmethod
+    def _format_salary(salary_range: dict | None) -> str:
+        if not isinstance(salary_range, dict):
+            return ""
+        interval = LEVER_INTERVALS.get(salary_range.get("interval"), "")
+        return format_pay_range(salary_range.get("min"), salary_range.get("max"), interval, salary_range.get("currency"))
+
     def _normalize_posting(
         self,
         posting: dict,
@@ -95,6 +103,7 @@ class LeverProvider(JobProvider):
             job_url=posting.get("hostedUrl") or posting.get("applyUrl") or "",
             description=posting.get("descriptionPlain") or posting.get("description") or "",
             employment_type=str(commitment),
+            salary=self._format_salary(posting.get("salaryRange")),
             is_remote=is_remote,
             date_posted=str(posting.get("createdAt") or ""),
             search_term=search_term,

@@ -9,11 +9,12 @@ from pathlib import Path
 
 import requests
 
-from providers.base_provider import JobProvider, board_read, build_canonical_job, dropped_ad, filter_jobs, parts_outcome, split_by_filter
+from providers.base_provider import JobProvider, board_read, build_canonical_job, dropped_ad, filter_jobs, format_pay_range, parts_outcome, split_by_filter
 
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path(__file__).resolve().parents[3] / "companies" / "ashby.json"
+ASHBY_INTERVALS = {"YEAR": "yearly", "MONTH": "monthly", "WEEK": "weekly", "DAY": "daily", "HOUR": "hourly"}
 API_URL = "https://api.ashbyhq.com/posting-api/job-board/{slug}"
 
 
@@ -50,9 +51,24 @@ class AshbyProvider(JobProvider):
         self._paging_fields[slug] = paging_fields(data)
         return jobs
 
+    @staticmethod
+    def _stated_salary(compensation: dict) -> str:
+        """The salary component with its currency and period, as structured data, when the posting has one."""
+        for component in compensation.get("summaryComponents") or []:
+            if isinstance(component, dict) and str(component.get("compensationType") or "").lower() == "salary":
+                unit = str(component.get("interval") or "").split()[-1:]
+                interval = ASHBY_INTERVALS.get(unit[0].upper(), "") if unit else ""
+                stated = format_pay_range(component.get("minValue"), component.get("maxValue"), interval, component.get("currencyCode"))
+                if stated:
+                    return stated
+        return ""
+
     def _format_salary(self, compensation: dict | None) -> str:
         if not compensation:
             return ""
+        stated = self._stated_salary(compensation)
+        if stated:
+            return stated
         summary = compensation.get("compensationTierSummary") or compensation.get("scrapeableCompensationSalarySummary")
         if summary:
             return str(summary)

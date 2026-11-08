@@ -54,7 +54,7 @@ describe('mergeRow: one test per row of the merge table', () => {
 
   it('the route fields are the agreed ones', () => {
     expect(ROUTE_FIELDS).toEqual(['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'firstSeen', 'lastSeen', 'closedAt', 'absentSince'])
-    expect(AD_FIELDS).toEqual(['title', 'company', 'location', 'jobUrl', 'provider', 'site', 'isRemote', 'datePosted'])
+    expect(AD_FIELDS).toEqual(['title', 'company', 'location', 'jobUrl', 'provider', 'site', 'isRemote', 'datePosted', 'salary', 'expiresAt'])
   })
 
   it.each(AD_FIELDS)('%s: from the route when it has a value', (field) => {

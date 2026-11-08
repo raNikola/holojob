@@ -123,6 +123,23 @@ class JobProvider(ABC):
         raise NotImplementedError
 
 
+def format_pay_range(low, high, interval: str, currency) -> str:
+    """A provider's structured pay as "120000 - 150000 yearly EUR", the shape job_scoring/salary.py reads.
+
+    Empty with no amount or no currency: a bare "N - N yearly" is read as USD, and that must stay JobSpy's own shape.
+    """
+    amounts = []
+    for value in (low, high):
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+            amounts.append(str(int(value)) if float(value).is_integer() else str(value))
+    currency = str(currency or "").strip().upper()
+    if not amounts or not currency:
+        return ""
+    if len(amounts) == 2 and amounts[0] == amounts[1]:
+        amounts = amounts[:1]
+    return " ".join(part for part in (" - ".join(amounts), interval, currency) if part)
+
+
 def build_canonical_job(
     *,
     provider: str,

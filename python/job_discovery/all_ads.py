@@ -168,10 +168,10 @@ def filtered_reason(kind: str, code) -> str:
     return f"Incomplete: {text}" if kind == "filtered_incomplete" else f"Filtered out: {text}"
 
 
-def _row(job_id, kind, reason, reason_code, origin, title, company, location, url, provider, site, is_remote, posted, first, last, closed, absent, copy_group=None) -> dict:
+def _row(job_id, kind, reason, reason_code, origin, title, company, location, url, provider, site, is_remote, posted, first, last, closed, absent, copy_group=None, salary=None, expires=None) -> dict:
     return {
         "jobId": job_id, "title": title, "company": company, "location": location, "jobUrl": url, "provider": provider, "site": site,
-        "isRemote": is_remote, "datePosted": posted, "firstSeen": first, "lastSeen": last, "closedAt": closed, "absentSince": absent,
+        "isRemote": is_remote, "datePosted": posted, "salary": salary, "expiresAt": expires, "firstSeen": first, "lastSeen": last, "closedAt": closed, "absentSince": absent,
         "class": kind, "reason": reason, "reasonCode": reason_code, "from": origin, "copyGroup": copy_group, "matchScore": None,
     }
 
@@ -200,7 +200,8 @@ def build(ledger: dict | None, store: dict | None, filtered_state: str = "ok") -
         left_out += source_left_out
         rows.append(_row(job_id, kind, ledger_reason(kind, entry, listed_elsewhere, source_left_out, source_runs), None, "ledger", job.get("title"), job.get("company"), job.get("location"), job.get("jobUrl"),
                          entry.get("provider") or job.get("provider"), job.get("site"), job.get("isRemote"), job.get("datePosted"),
-                         entry.get("firstSeen"), entry.get("lastSeen"), entry.get("closedAt"), entry.get("absentSince"), entry.get("roleKey") or None))
+                         entry.get("firstSeen"), entry.get("lastSeen"), entry.get("closedAt"), entry.get("absentSince"), entry.get("roleKey") or None,
+                         job.get("salary") or None, job.get("expiresAt") or None))
     also_in_ledger = not_shown = 0
     for job_id, record in ((store or {}).get("ads") or {}).items():
         if job_id in ledger["jobs"]:
