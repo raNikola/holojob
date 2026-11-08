@@ -87,8 +87,9 @@ def test_greenhouse_failed_and_empty_boards_are_not_complete(tmp_path, monkeypat
         "empty": {"jobs": [], "meta": {"total": 0}},
     })
     assert rows["good"]["complete"] is True
-    assert rows["down"] == {"board": "down", "read": 0, "postings": 0, "complete": False, "reason": "the board could not be read"}
+    assert rows["down"] == {"board": "down", "read": 0, "postings": 0, "complete": False, "reason": "the board could not be read", "readClass": "failed"}
     assert rows["empty"]["complete"] is False and rows["empty"]["reason"] == "the board answered with no ads"
+    assert rows["empty"]["readClass"] == "confirmed_empty" and rows["good"]["readClass"] == "ok"  # Wave 1
 
 
 def test_a_posting_with_no_title_counts_against_the_total_not_as_read(tmp_path, monkeypatch):

@@ -108,7 +108,7 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 | 8 | P3 | Step 5 server master ([TRACKER_PLAN.md](redesign/TRACKER_PLAN.md)). A verified backup (Wave 0) is mandatory before bigger changes. |
 | 9 | P3 | **(f)** ledger growth; **(m)** hand-edited `appliedRuns` double-count; **(o)** truncated ledger with an unchanged generation; **(p)** never run the old `import_run --backfill-filtered` below S6; Step 6; tech debt. |
 
-**The single discovery safety rule (Wave 1).** A throttled source never proves an ad disappeared. A source that is `ok` with zero ads read is not automatically proof of closure: a confirmed-empty source is distinguished from an incomplete or failed read. Successful sources import independently, so a `partial` source does not block the import of the ads it did read. A failed source never affects closing. Status today: **not built**; the S5c/S5f proof code and the S8b `require_usable` flag still behave as described in their sections until Wave 1 ships.
+**The single discovery safety rule (Wave 1).** A throttled source never proves an ad disappeared. A source that is `ok` with zero ads read is not automatically proof of closure: a confirmed-empty source is distinguished from an incomplete or failed read. Successful sources import independently, so a `partial` source does not block the import of the ads it did read. A failed source never affects closing. Status: **built on branch `wave1-discovery-safety` (local, not merged)**: read classes, JobSpy error signalling and the partial-source gate (DECISIONS.md, "Wave 1 discovery safety built").
 
 **Added to the backlog (2026-11-04):**
 
@@ -369,10 +369,10 @@ Functional gap (must be fixed, not just noted):
 
 Deferred items (known, not scheduled):
 - [ ] Runs with every source skipped used to hold rows of any search key (design 2026-11-02); with `require_usable` they no longer import. A caller that does not pass it (the plain importer) still holds them.
-- [ ] **Discovery safety rule (Wave 1, replaces the two items previously here):** see [Roadmap v2](#roadmap-v2-recorded-2026-11-04). A source that is `ok` with zero reads is not automatically usable and is not proof of closure, and a `partial` source's real ads are imported without waiting for another source. Not built.
+- [x] **Discovery safety rule (Wave 1, replaces the two items previously here; built, local branch):** see [Roadmap v2](#roadmap-v2-recorded-2026-11-04). A source that is `ok` with zero reads is not automatically usable and is not proof of closure, and a `partial` source's real ads are imported without waiting for another source.
 - [ ] Text search covers only the rows that have text in the browser; ads whose text could not be reloaded are not found by it (the notice names how many).
 - [ ] No bulk restore of kept-ad text from the ledger beyond the start-up reload of the rows stored without it.
 - [ ] The 5,242,880-character localStorage limit is an assumption, not measured per browser.
 - [ ] Hand-entered jobs have no flag saying whether the server has them.
 - [ ] Direct `setItem` writers (the demo loader) bypass the storage budget in `saveJobs`.
-- [ ] A throttled source (`jobspy` read 4) can count as proven (Wave 1, rule in Roadmap v2); about 1,934 `older_key` rows never go away; `scoringBehind` is false after a cancel; the hand-edited `appliedRuns` xfail; no `init` in compose; pre-S6 backfill double-count; `lastImport.meta` is stale after a partial import; a truncated ledger with a matching generation.
+- [ ] A throttled source (`jobspy` read 4) can count as proven (Wave 1 now flags a search whose sites all raised as failed; a partly read search keeps its ads); about 1,934 `older_key` rows never go away; `scoringBehind` is false after a cancel; the hand-edited `appliedRuns` xfail; no `init` in compose; pre-S6 backfill double-count; `lastImport.meta` is stale after a partial import; a truncated ledger with a matching generation.
