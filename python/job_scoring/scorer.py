@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dimensions.culture_match import score_culture_match
 from dimensions.experience_match import score_experience_match
-from dimensions.industry_match import score_industry_match
+from dimensions.industry_match import score_industry_match_detail
 from dimensions.location_match import score_location_match
 from dimensions.role_match import score_role_match
 from dimensions.skill_match import score_skill_match
@@ -99,7 +99,12 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
 
     role_score, role_reasons = score_role_match(job, intelligence)
     skill_score, skill_reasons, matched, missing = score_skill_match(job, intelligence, idf)
-    industry_score, industry_reasons = score_industry_match(job, intelligence)
+    # The title tier is read first: an ad whose title is outside the target roles gets no industry transfer (and is capped below).
+    facts = job.get("llmFacts") or {}
+    family, family_tracks = accepted_tracks(intelligence)
+    title_capped = title_tier(job.get("title") or "", role_score, family, facts) == UNRELATED
+    industry_score, industry_reasons, transferability = score_industry_match_detail(
+        job, intelligence, transfer_allowed=not title_capped)
     exp_score, exp_reasons = score_experience_match(job, intelligence)
     loc_score, loc_reasons = score_location_match(job, intelligence)
     cult_score, cult_reasons = score_culture_match(job, intelligence)
@@ -119,14 +124,11 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     if red_flags and match_score > 55:
         match_score = min(match_score, 54)
 
-    facts = job.get("llmFacts") or {}
     track = facts.get("roleTrack")
-    family, family_tracks = accepted_tracks(intelligence)
     off_track = (bool(track) and track_has_evidence(facts)
                  and family_tracks is not None and track not in family_tracks)
     if off_track:
         match_score = min(match_score, OFF_TRACK_CAP)
-    title_capped = title_tier(job.get("title") or "", role_score, family, facts) == UNRELATED
     if title_capped:
         match_score = min(match_score, UNRELATED_TITLE_CAP)
 
@@ -196,6 +198,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         "experienceMatch": exp_score,
         "locationMatch": loc_score,
         "cultureMatch": cult_score,
+        # Proven industry experience and assumed transfer behind the industry points (domain_transfer.py); null = none found.
+        "transferability": transferability,
         "matchedSkills": matched,
         "missingSkills": missing,
         "redFlags": red_flags,

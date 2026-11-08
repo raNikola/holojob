@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveHistorySkills, vocabularyCategory } from '../../src/modules/intelligence/historySkills.js'
+import { deriveHistoryEntries, deriveHistorySkills, vocabularyCategory } from '../../src/modules/intelligence/historySkills.js'
 import { generateCandidateIntelligence } from '../../src/modules/intelligence/candidateIntelligenceEngine.js'
 import { isKeywordShaped } from '../../src/modules/intelligence/keywordShape.js'
 
@@ -85,5 +85,26 @@ describe('intelligence built from the whole history', () => {
 
   it('every bank entry is a keyword', () => {
     for (const value of Object.values(bank).flat()) expect(isKeywordShaped(value)).toBe(true)
+  })
+})
+
+describe('historyEntries (the proof behind a domain transfer)', () => {
+  const p = profile()
+  p.resume.parsedData.experienceDetail = [
+    { title: 'Program Manager', company: 'Telekom Example', start: '2018', end: '2022', bullets: ['Vendor management and regulatory reporting for a mobile operator network rollout'] },
+    { title: 'Analyst', company: 'Plain Co', start: '2012', end: '2014', bullets: ['Reporting'] },
+  ]
+
+  it('keeps role, period, industry ids and capability ids, and no text', () => {
+    const entries = deriveHistoryEntries({ profile: p })
+    expect(entries).toEqual([
+      { role: 'Program Manager', period: '2018–2022', domains: ['telecom'], capabilities: ['program_delivery', 'vendor_management', 'regulatory'] },
+    ])
+    expect(JSON.stringify(entries)).not.toMatch(/rollout|Telekom Example/)
+  })
+
+  it('is part of the generated intelligence', () => {
+    const intelligence = generateCandidateIntelligence(p, { validateMapping: false, qualityChecks: false })
+    expect(intelligence.historyEntries[0].domains).toEqual(['telecom'])
   })
 })

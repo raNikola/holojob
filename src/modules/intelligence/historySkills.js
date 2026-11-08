@@ -7,6 +7,7 @@
 
 import { SKILLS_DICTIONARY } from '../../data/skillsDictionary.js'
 import vocabulary from '../../data/skillsVocabulary.json'
+import domainAdjacency from '../../data/domainAdjacency.json'
 import { containsTerm } from '../../utils/termMatch.js'
 import { isKeywordShaped } from './keywordShape.js'
 
@@ -76,4 +77,49 @@ export function deriveHistorySkills(ctx) {
   }
   result.sort((a, b) => b.entries - a.entries || Number(b.listed) - Number(a.listed) || a.term.localeCompare(b.term))
   return result.slice(0, MAX_HISTORY_SKILLS)
+}
+
+// --- Which industry each history entry is in, and which capabilities it states -------------------------------------
+// Read by python/job_scoring/domain_transfer.py: a bridge from one industry to another needs an entry (role and period) that
+// is in the first industry AND states the capability. Only the role title, the period and ids are kept, never the entry text.
+
+export const MAX_HISTORY_ENTRIES = 12
+
+function periodOf(entry) {
+  const start = String(entry?.start ?? '').trim()
+  const end = String(entry?.end ?? '').trim()
+  const period = start && end ? `${start}–${end}` : start || end
+  return period.length <= 24 ? period : ''
+}
+
+function idsFound(text, table) {
+  return Object.entries(table)
+    .filter(([, item]) => item.markers.some((marker) => containsTerm(text, marker)))
+    .map(([id]) => id)
+}
+
+/**
+ * @param {{ profile: object }} ctx
+ * @returns {{ role: string, period: string, domains: string[], capabilities: string[] }[]} the entries that sit in a known
+ *   industry or state a known capability, newest first as the CV lists them; duplicates across CVs are kept once.
+ */
+export function deriveHistoryEntries(ctx) {
+  const seen = new Set()
+  const result = []
+  for (const pd of parsedDataOf(ctx?.profile)) {
+    for (const entry of pd.experienceDetail || []) {
+      if (!entry || typeof entry !== 'object') continue
+      const text = [entry.title, entry.company, entry.description, ...(Array.isArray(entry.bullets) ? entry.bullets : [])]
+        .filter(Boolean).join(' ').trim()
+      const role = isKeywordShaped(entry.title) ? entry.title.trim() : ''
+      const period = periodOf(entry)
+      const key = `${role}|${period}|${text.length}`
+      if (!text || seen.has(key)) continue
+      seen.add(key)
+      const domains = idsFound(text, domainAdjacency.domains)
+      const capabilities = idsFound(text, domainAdjacency.capabilities)
+      if (domains.length || capabilities.length) result.push({ role, period, domains, capabilities })
+    }
+  }
+  return result.slice(0, MAX_HISTORY_ENTRIES)
 }
