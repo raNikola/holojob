@@ -9,6 +9,7 @@ import {
   resumeDownloadUrl,
   runTailor,
 } from '../../modules/jobs/pipelineRunner'
+import { tailoringBlocked } from '../../modules/jobs/keptRescore'
 import { useProfile } from '../../context/ProfileContext'
 import { runAiFeature } from '../../modules/ai/aiClient'
 
@@ -27,7 +28,7 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
   const handleGenerate = async () => {
     setError(null)
     // Tailoring reads the latest scored list on the server. A kept ad, or one no longer listed, is not in it, whatever text the browser holds.
-    if (job.keptByUser || job.offList) {
+    if (tailoringBlocked(job)) {
       setError(NOT_IN_SCORED_LIST)
       log.append(`Not started: ${NOT_IN_SCORED_LIST}`)
       return
@@ -86,7 +87,7 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
 
   if (!apiAvailable) {
     if (compact) return null
-    if (job.keptByUser || job.offList) return <p className="text-xs text-stone-500">{NOT_IN_SCORED_LIST}</p>
+    if (tailoringBlocked(job)) return <p className="text-xs text-stone-500">{NOT_IN_SCORED_LIST}</p>
     return (
       <p className="text-xs text-stone-500">
         Run: <code className="text-[length:calc(var(--text-xs)-0.125rem)]">{buildTailorCommand({ jobId: job.jobId })}</code>

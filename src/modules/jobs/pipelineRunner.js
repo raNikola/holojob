@@ -1,6 +1,7 @@
 import { consumeSsePost } from '../operations/streamClient.js'
 import { ensureApiAvailable, isApiAvailable } from '../../utils/apiAvailability.js'
 import { syncManualJobs } from './manualScoring.js'
+import { syncKeptIds } from './keptRescore.js'
 
 export function buildScoringCommand() {
   return 'source .venv/bin/activate && python python/job_scoring/run_scoring.py'
@@ -47,6 +48,7 @@ export async function probePipelineApi() {
  */
 export async function runFullPipeline({ providers, country, intelligence, profile }) {
   await syncManualJobs()
+  await syncKeptIds().catch(() => false) // forget re-scored ads whose Keep was removed
   const res = await fetch('/api/pipeline/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -76,6 +78,7 @@ export async function runDiscovery({ providers, country, locations, intelligence
 export async function runScoring() {
   // Hand-entered jobs saved while the server was away are handed over first, so this re-score includes them.
   await syncManualJobs()
+  await syncKeptIds().catch(() => false) // forget re-scored ads whose Keep was removed
   const res = await fetch('/api/scoring/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -102,6 +105,7 @@ export async function previewJudge() {
  */
 export async function runJudgedScoring() {
   await syncManualJobs()
+  await syncKeptIds().catch(() => false) // forget re-scored ads whose Keep was removed
   const res = await fetch('/api/scoring/judge', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

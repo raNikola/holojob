@@ -1,6 +1,7 @@
 import { ExternalLink } from 'lucide-react'
 import Badge from '../ui/Badge'
 import FitScore from './FitScore'
+import KeptRescoreButton from './KeptRescoreButton'
 import { scoreRowChips } from '../../modules/jobs/fitScore'
 import JobTailorActions from './JobTailorActions'
 import ApplicationTrackerPanel from './ApplicationTrackerPanel'
@@ -169,6 +170,8 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
           {includeTailor && <JobTailorActions job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} />}
         </>
       )}
+
+      {job.keptByUser === true && <KeptRescoreButton job={job} onJobUpdated={onJobUpdated} disabled={!apiAvailable} />}
 
       {(showScores || job.keptByUser === true) && includeAiTools && (
         <JobAIToolsPanel job={job} onJobUpdated={onJobUpdated} />

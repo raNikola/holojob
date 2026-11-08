@@ -209,7 +209,7 @@ export function mergeStatusOnImport(existingJobs, incomingJobs) {
       tailoredAssets: job.tailoredAssets,
       aiInsights: job.aiInsights,
       outreach: job.outreach,
-      kept: job.keptByUser === true ? { keptByUser: true, keptAt: job.keptAt } : null,
+      kept: job.keptByUser === true ? { keptByUser: true, keptAt: job.keptAt, ...(job.keptRescoredAt ? { keptRescoredAt: job.keptRescoredAt } : {}) } : null,
       manual: Object.fromEntries([...MANUAL_FIELDS, ...(job.manualEntry ? MANUAL_ONLY_FIELDS : [])].filter((f) => f in job).map((f) => [f, job[f]])),
     }
     preservedByKey.set(jobMatchKey(job), entry)
