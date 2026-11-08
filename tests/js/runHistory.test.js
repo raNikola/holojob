@@ -275,7 +275,7 @@ describe('the allow-list', () => {
     const [run] = list().body.runs
     expect(Object.keys(run).sort()).toEqual(['canCancel', 'cancel', 'cancelRequested', 'counts', 'durationSeconds', 'finishedAt', 'import', 'incompleteCommit', 'inferred', 'issues', 'issuesCount',
       'recorded', 'runId', 'sources', 'staging', 'startedAt', 'status', 'steps', 'trigger'])
-    expect(Object.keys(run.sources[0]).sort()).toEqual(['boardsFailed', 'collected', 'durationSeconds', 'error', 'filterReasons', 'filteredOut', 'finishedAt', 'name', 'new', 'proof', 'returned', 'skipReason', 'startedAt', 'status'])
+    expect(Object.keys(run.sources[0]).sort()).toEqual(['boardsFailed', 'collected', 'durationSeconds', 'error', 'filterReasons', 'filteredOut', 'finishedAt', 'name', 'new', 'proof', 'readClass', 'returned', 'skipReason', 'startedAt', 'status'])
     expect(Object.keys(run.issues[0]).sort()).toEqual(['level', 'message', 'source'])
     expect(Object.keys(run.steps[0]).sort()).toEqual(['exitCode', 'name', 'status'])
     expect(Object.keys(run.sources[0].proof).sort()).toEqual(['boards', 'codes', 'state'])
@@ -285,6 +285,7 @@ describe('the allow-list', () => {
     expect(run.issues[1]).toEqual({ level: 'warning', source: null, message: 'Message details withheld' })
     expect(run.sources[0].filterReasons).toEqual({ title_not_matched: 2 })
     expect(run.sources[0].boardsFailed).toEqual(['[board]', 'acme'])
+    expect(run.sources[0].readClass).toBe('unknown') // a record without one (older, or hand-edited) is unknown, never ok
   })
 
   it('caps what could be large', () => {

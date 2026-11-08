@@ -205,6 +205,9 @@ function projectFilterReasons(entry) {
   return out
 }
 
+// Wave 1: how the read went (status and counts only). Only a complete read of a board can support closing.
+const READ_CLASSES = ['ok', 'confirmed_empty', 'incomplete', 'failed', 'skipped']
+
 function projectSource(source, imported) {
   const entry = (imported?.sources ?? []).find((one) => one && one.name === source.name)
   const returned = count(source.read)
@@ -220,6 +223,7 @@ function projectSource(source, imported) {
     new: count(source.new),
     error: errorSummary(source.error),
     skipReason: source.skipReason === null || source.skipReason === undefined ? null : message(source.skipReason),
+    readClass: pick(source.readClass, READ_CLASSES, 'unknown'),
     boardsFailed: (Array.isArray(source.boardsFailed) ? source.boardsFailed : []).slice(0, 20).map((b) => (typeof b === 'string' && BOARD.test(b) ? b : '[board]')),
     startedAt: started,
     finishedAt: finished,
