@@ -446,3 +446,22 @@ ships, the profile, intelligence and job list live in the browser's
 the disk file is overwritten at the next sync. Fix profile data in the
 profile form. Applications (tracker) are already on the server:
 `data/applications/` is the master and the browser keeps a read cache.
+
+
+## Tests and pre-push hook (moved from CLAUDE.md)
+
+The commands stay in CLAUDE.md. Detail, moved verbatim:
+
+- pytest runs directly against the host `.venv` (Python 3.12: `uv venv -p 3.12 .venv`, `uv pip install -r requirements.txt`), never inside the image. The container's `python` is its own venv; `.venv/bin/python` does not resolve in the container (it links to a Python outside the repo).
+
+`npm test` and `npm run test:python` work on neither side: the host has no npm, and `.venv/bin/python` does not resolve
+in the container (it links to a Python outside the repo).
+
+`pytest.ini` limits collection to `tests/python`. Two `network` tests hit live
+Infostud and Workable and skip when unreachable; `-m "not network"` runs offline.
+Do not build `.venv` with Python 3.15 (pinned pandas 2.3.3 has no wheel).
+
+Pre-push hook: `sh scripts/install-git-hooks.sh` (once; sets `core.hooksPath`) enables `scripts/git-hooks/pre-push`, which runs lint, JS tests, pytest
+`-m "not network"` and build, in that order, stopping at the first failure. It checks an export of the pushed commit, not the working tree, using the repo's
+`node_modules` and `.venv`. It skips branch deletions and tag-only pushes. It first refuses every remote except `origin` at its pinned URL, deletions and tags included (`core.hooksPath` turns off `.git/hooks/pre-push`, which is no longer used).
+`git push --no-verify` bypasses all of it, the remote refusal included (only upstream's `no-push` push URL still holds then).
