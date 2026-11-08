@@ -156,10 +156,19 @@ A minimal, removable, stdlib-only adapter over the local Graphify graph (no serv
 |---|---|
 | B0. Restorable backup of `graphify-out/` and the Graphify config outside the repo | Done (2026-11-06) |
 | S0. `graphify-out/` git- and docker-ignored; CLAUDE.md Graphify section committed without the committed-graph line | Done |
-| S1. Adapter skeleton: identity pass, invariants, `report.md` with separate code, doc-link and semantic freshness | To Do |
-| S2. Python import resolution, only where every run context proves the same file without executing project modules | To Do |
+| S1. Adapter skeleton: identity pass, invariants, `report.md` with separate code, doc-link and semantic freshness | Done |
+| S2. Python import resolution, only where every run context proves the same file without executing project modules | Done |
 
-**Gated, each needs separate approval:** S3 (proven false-positive call edges only), S4 (architecture and test-dependency views), S5 (doc-to-code links), S6 (zero-token cycle check in an isolated copy).
+**Then (authorized 2026-11-08):**
+
+| Slice | Status |
+|---|---|
+| S3. Remove inferred call edges proven wrong at the call site | Done |
+| S4. `architecture.json` and `test-deps.json` views | Done |
+| S5. Doc-to-code links from exact backticked paths | Done |
+| S6. Zero-token cycle check in a throwaway copy (`zero_token_check.sh`) | Done |
+
+As built: [DECISIONS.md](DECISIONS.md#graph-tooling-the-graphify-adapter-as-built-2026-11-08). Open: run the cycle on the real repo; file the upstream Graphify issue (owner).
 
 ## Activity screen - planned
 
