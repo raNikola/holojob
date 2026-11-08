@@ -26,6 +26,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import filtered_ads
+import import_meta
 import proof_reasons as proof
 import staging
 from dedupe_jobs import _collapse, _crosspost_key, _exact_key
@@ -338,6 +339,9 @@ def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, m
             result.new_by_provider[job.get("provider")] = result.new_by_provider.get(job.get("provider"), 0) + 1
     stats = job_history.apply_partial(ledger, deduped, now=moment, key=key, role_key=_crosspost_key, list_run_id=info["runId"])
     ledger["partialRuns"] = ((ledger.get("partialRuns") or []) + [run.run_id])[-PARTIAL_RUNS_KEPT:]
+    # Wave 4 (n): `lastImport` keeps describing the last COMPLETE import. The latest cancelled run that saved ads is recorded beside it,
+    # where no lifecycle code reads it, so Activity can say the newest attempt is later than the list's.
+    ledger["lastPartial"] = import_meta.build_last_partial(run.run_id, moment, "cancelled", len(deduped))
     ledger["generation"] = (ledger.get("generation") or 0) + 1
     ledger["updatedAt"] = moment
     result.stats = stats
@@ -438,6 +442,7 @@ def plan_import(
     evidence: dict[str, dict] = {}
     proven_searches: list[str] = []
     rejected_total = 0
+    meta_sources: list[dict] = []
 
     for name in providers:
         stage = run.sources.get(name)
@@ -496,6 +501,7 @@ def plan_import(
             manifest.get("searchKey") or "",
         )
         report.setdefault("filterReasons", {})[name] = _filter_reasons(run, name)
+        meta_sources.append(import_meta.source_row(name, state, footer, report["proof"][name]))
         report["sources"].append({
             "name": name, "state": state, "staged": len(stage.jobs) if stage and stage.usable else 0,
             "imported": len(valid), "rejected": len(rejected), "heldAsNotRun": name in not_run, "anomalies": anomalies,
@@ -545,12 +551,9 @@ def plan_import(
     )
     result.stats = stats
     report["provenRuns"] = _record_stale_evidence(result.ledger, run, moment, manifest.get("searchKey") or "", proven_searches, evidence)
-    meta = {
-        "searchTerms": manifest.get("terms") or [], "locations": manifest.get("locations") or [],
-        "remoteFilters": manifest.get("remoteFilters") or [], "country": manifest.get("country") or "",
-        "providers": providers, "providerCounts": provider_counts, "rawCount": len(all_jobs),
-        "dedupedCount": len(deduped), "history": stats, "sourceRunId": run.run_id,
-    }
+    meta = import_meta.build_import_meta(
+        manifest, providers, provider_counts, len(all_jobs), len(deduped), stats, run.run_id, meta_sources, report.get("filterReasons") or {},
+    )
     generation = (result.ledger.get("generation") or 0) + 1
     result.ledger["generation"] = generation
     result.ledger["lastImport"] = {"runId": run.run_id, "at": moment, "startedAt": manifest.get("startedAt"), "meta": meta, "marksNotFound": True}
