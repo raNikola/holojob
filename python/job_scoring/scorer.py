@@ -19,6 +19,7 @@ from corpus import build_idf
 import row_state
 import work_authorization as wa
 from salary import salary_metadata
+from deadline import deadline_metadata
 from role_tier import ROLE_FAMILIES, UNRELATED, title_tier
 
 # The one set of default weights, shared with the UI's settings panel and the
@@ -181,6 +182,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         # Display metadata only (salary.py): computed from the ad and the
         # profile's minimum, and read by nothing above.
         **salary_metadata(job, intelligence),
+        # Display metadata too (deadline.py): read by nothing above, and it does not close an ad.
+        **deadline_metadata(job),
         # True when a hard rule applies to the job, whether or not it lowered
         # this particular score. The enhancer never lifts such a job, so caps
         # stay decided here.
