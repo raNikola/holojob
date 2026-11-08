@@ -1,4 +1,4 @@
-export const MATCH_LABELS = ['Excellent', 'Strong', 'Good', 'Weak', 'Reject']
+export const MATCH_LABELS = ['Excellent', 'Strong', 'Good', 'Weak', 'Reject', 'Insufficient data']
 export const PRIORITIES = ['P1', 'P2', 'P3', 'Reject']
 export const APPLY_RECOMMENDATIONS = ['Apply', 'Maybe', 'Skip']
 
@@ -8,6 +8,7 @@ export const MATCH_LABEL_VARIANT = {
   Good: 'medium',
   Weak: 'low',
   Reject: 'default',
+  'Insufficient data': 'medium',
 }
 
 export const PRIORITY_VARIANT = {
@@ -23,11 +24,28 @@ export const APPLY_VARIANT = {
   Skip: 'low',
 }
 
+/**
+ * "Insufficient data" is a state, not a band (python/job_scoring/data_sufficiency.py): the ad says too little to score.
+ * The record still carries a number (at most 5) for older readers, which must never be read as a Fit Score.
+ */
+export const INSUFFICIENT_LABEL = 'Insufficient data'
+export const INSUFFICIENT_PRIORITY = 'Unrated'
+export const INSUFFICIENT_APPLY = 'Not assessed'
+
+export function isInsufficientData(job) {
+  return job?.dataStatus === 'insufficient' || job?.matchLabel === INSUFFICIENT_LABEL
+}
+
+/** The Fit Score as a number, or null when there is none (unscored, or insufficient data). Sort, filter and averages read this. */
+export function fitScoreOf(job) {
+  if (isInsufficientData(job) || typeof job?.matchScore !== 'number') return null
+  return job.matchScore
+}
+
 export function hasMatchScores(jobs) {
-  return (jobs || []).some((j) => typeof j.matchScore === 'number')
+  return (jobs || []).some((j) => typeof j.matchScore === 'number' || isInsufficientData(j))
 }
 
 export function formatMatchScore(job) {
-  if (typeof job?.matchScore !== 'number') return null
-  return job.matchScore
+  return fitScoreOf(job)
 }

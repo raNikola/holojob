@@ -6,7 +6,7 @@ import JobTailorActions from './JobTailorActions'
 import ApplicationTrackerPanel from './ApplicationTrackerPanel'
 import JobAIToolsPanel from '../ai/JobAIToolsPanel'
 import RelatedContactsPanel from '../outreach/RelatedContactsPanel'
-import { hasMatchScores } from '../../modules/jobs/matchScore'
+import { hasMatchScores, isInsufficientData } from '../../modules/jobs/matchScore'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { isCapReason } from '../../modules/jobs/workAuthorization'
 import AuthorizationBadge from './AuthorizationBadge'
@@ -62,6 +62,19 @@ export function SkillChips({ skills, variant }) {
 }
 
 /** The job's facts, scores, fit, AI tools and contacts. The drawer turns the last two off; the full-details page keeps them, unless the job has no stored row to write to. */
+/** Why a score deserves less trust, or why there is none. Shown beside the score; it never changes it. */
+export function ConfidenceNote({ job }) {
+  const insufficient = isInsufficientData(job)
+  const reasons = insufficient ? job.insufficientReasons : job.confidence?.level === 'low' ? job.confidence.reasons : []
+  if (!reasons?.length) return null
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50/60 p-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-200">
+      <p className="font-medium">{insufficient ? 'Insufficient data: no Fit Score. Paste more of the ad and score again.' : 'Low confidence in this score'}</p>
+      <ul className="ml-4 list-disc">{reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+    </div>
+  )
+}
+
 export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatusChange, includeTracker = true, includeAiTools = true, includeContacts = true, includeTailor = true }) {
   const showScores = hasMatchScores([job])
   const limits = (job.reasons || []).filter(isCapReason)
@@ -113,10 +126,11 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
       {showScores && (
         <>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <FitScore score={job.matchScore} label={job.matchLabel} size="lg" />
+            <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} size="lg" />
             {scoreRowChips(job).map((c) => <Badge key={c.kind} variant={c.variant}>{c.text}</Badge>)}
             <EngineShadowBadge shadow={job.engineShadow} />
           </div>
+          <ConfidenceNote job={job} />
           <ScoreBreakdown breakdown={job.scoreBreakdown} />
           <div>
             <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">Matched skills</h4>
