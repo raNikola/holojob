@@ -101,7 +101,7 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 | 1 | P0 | **(k) + (q) discovery safety**, one rule (below): a throttled source never proves an ad disappeared; "ok with 0 read" is not automatically proof of closure; a confirmed-empty source is told apart from an incomplete or failed read; successful sources import independently (a partial source must not block the import); failed sources never affect closing. |
 | 2 | P0 | **Built on branch `wave2-scoring-correctness` (local, not merged)** ([as built](DECISIONS.md#wave-2-scoring-correctness-built-2026-11-08)). **(a1) scoring correctness:** junk baseline of at most about 5 plus a distinct Insufficient Data state, hard/soft requirement handling, low-confidence reasons. **(e)** manual Re-score and tailoring for kept ads. **(g)** exclude closed ads from the IDF corpus (approved; measured effect at most 1 point). **(i)** `scoringBehind` after a cancel. |
 | 3 | P0 | **Built on branch `wave3-scoring-quality` (local, not merged)** ([as built](DECISIONS.md#wave-3-scoring-quality-and-the-three-level-role-filter-built-2026-11-08)). **(a2)** skills from the whole history, domain transferability (proven vs assumed), the keyword bank holds keywords only, `TARGET_COVERAGE` recalibrated. **(b)** the three-level role filter (Target / Near / Excluded). Owner steps: regenerate the intelligence, then Re-score. |
-| 4 | P1 | **(h)** `older_key` policy; **(c)** Infostud coverage; **(n)** `lastImport.meta` for partial imports. |
+| 4 | P1 | **Built on branch `wave4-coverage-retention` (local, not merged)** ([as built](DECISIONS.md#wave-4-coverage-retention-and-import-meta-built-2026-11-09)). **(h)** `older_key` retention rule and guarded prune script (window 180 days chosen; the owner runs the report and `--apply`, nothing is automatic); **(c)** Infostud: why it returns irrelevant ads explained, per-category probe, complete-read proof recorded report-only (`SNAPSHOT_AFTER_PROOF` off until several complete runs are seen); **(n)** `lastImport.meta` v2, `lastPartial`, held counts in Activity. |
 | 5 | P1 | **(j) Application Tracking:** all records including history-only and voided, snapshots, applied sync, the Applied button opens the tracker, fix history-only showing "Unreviewed", remove the shadow badge. |
 | 6 | P2, release blockers | Profile import slices. Phase 4 protections (fact gate, identifier redaction, confirm) are release blockers for AI and application workflows. Review the 11 of 17 resume docs with stale unverified-degree findings before they are used for applications. |
 | 7 | P2 | UX, Settings, **(d)**. (d) is probably not a bug: the toggle exists only for Joberty and the other boards follow group `serbia`. Treat it as a missing feature and confirm the UX first. |
@@ -118,8 +118,8 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 **Open decisions:**
 
 1. Whether the four items under [Fix scoring](#fix-scoring-skill-extraction-scope-requirement-weighting-domain-transferability---todo) split as proposed: hard/soft requirements and low-confidence reasons to a1 (Wave 2); whole-history skills and domain transferability to a2 (Wave 3).
-2. The `older_key` retention window (Wave 4, h).
-3. The Infostud coverage check (Wave 4, c).
+2. ~~The `older_key` retention window~~ decided: 180 days (Wave 4, h); the owner still runs the report and `--apply`.
+3. The Infostud snapshot switch (Wave 4, c): off until several consecutive complete runs are seen in Activity; then set `SNAPSHOT_AFTER_PROOF` in `job_history.py`. Any category change waits for several probes.
 
 ## Job relevance, lifecycle, salary, deadline - built (2026-11-08), owner visual check pending
 
@@ -375,4 +375,4 @@ Deferred items (known, not scheduled):
 - [ ] The 5,242,880-character localStorage limit is an assumption, not measured per browser.
 - [ ] Hand-entered jobs have no flag saying whether the server has them.
 - [ ] Direct `setItem` writers (the demo loader) bypass the storage budget in `saveJobs`.
-- [ ] A throttled source (`jobspy` read 4) can count as proven (Wave 1 now flags a search whose sites all raised as failed; a partly read search keeps its ads); about 1,934 `older_key` rows never go away; `scoringBehind` is false after a cancel; the hand-edited `appliedRuns` xfail; no `init` in compose; pre-S6 backfill double-count; `lastImport.meta` is stale after a partial import; a truncated ledger with a matching generation.
+- [ ] A throttled source (`jobspy` read 4) can count as proven (Wave 1 now flags a search whose sites all raised as failed; a partly read search keeps its ads); about 1,934 `older_key` rows never go away (rule and prune script built in Wave 4; the owner runs it); `scoringBehind` is false after a cancel; the hand-edited `appliedRuns` xfail; no `init` in compose; pre-S6 backfill double-count; `lastImport.meta` is stale after a partial import (Wave 4: `lastPartial` records the attempt; `lastImport` stays the last complete import); a truncated ledger with a matching generation.
