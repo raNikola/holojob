@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import builtins
 import hashlib
 import json
 import os
@@ -718,6 +719,266 @@ def check_import_state(index: PythonIndex, review_path: Path) -> set[str]:
     return blocked
 
 
+# ----------------------------------------- S3: proven-wrong inferred edges
+#
+# Graphify links a name at a call site to a same-named function in another file
+# when it cannot see an import (confidence INFERRED). An edge is removed only when
+# (a) the source file has no import edge to the target file, (b) the target
+# file's name appears nowhere in the source text (no load-by-path), and (c) at
+# that line every bare occurrence of the name is bound, by Python's scoping
+# rules, to something else: a parameter, a local variable, a definition in the
+# source file, a standard-library import, or a builtin. Attribute calls, star
+# imports, nonlocal/global, aliases and anything not provable are kept. Only
+# Python is analysed; JavaScript edges are never removed.
+
+SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef,
+          ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+BUILTIN_NAMES = frozenset(dir(builtins))
+CALL_RELATIONS = frozenset({"calls", "indirect_call"})
+CLOSURE_RELATIONS = frozenset({"imports", "imports_from", "dynamic_import", "re_exports"})
+
+
+def _parents(tree: ast.AST) -> dict:
+    parents = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+    return parents
+
+
+def _evaluated_in(scope, node, parents) -> bool:
+    """True when `node` is evaluated inside `scope`, not in its defaults, decorators or first iterable."""
+    path = [node]
+    while parents.get(path[-1]) is not scope:
+        path.append(parents[path[-1]])
+    child = path[-1]
+    if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return child in scope.body
+    if isinstance(scope, ast.Lambda):
+        return child is scope.body
+    if scope.generators and child is scope.generators[0]:
+        return len(path) < 2 or path[-2] is not scope.generators[0].iter
+    return True
+
+
+def _bindings(scope, name: str) -> list[tuple]:
+    """How `name` is bound directly in `scope` (nested functions and classes excluded)."""
+    found: list[tuple] = []
+    if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        args = scope.args
+        for arg in args.posonlyargs + args.args + args.kwonlyargs + [a for a in (args.vararg, args.kwarg) if a]:
+            if arg.arg == name:
+                found.append(("param", arg))
+    if isinstance(scope, COMPREHENSIONS):
+        body = [g.target for g in scope.generators]
+    elif isinstance(scope, ast.Lambda):
+        body = [scope.body]
+    else:
+        body = scope.body
+    stack = [(node, node) for node in body]
+    while stack:
+        node, stmt = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == name:
+                found.append(("class" if isinstance(node, ast.ClassDef) else "def", node))
+            continue
+        if isinstance(node, ast.Lambda):
+            continue
+        if isinstance(node, COMPREHENSIONS):
+            for sub in ast.walk(node):  # a walrus inside a comprehension binds in this scope
+                if isinstance(sub, ast.NamedExpr) and sub.target.id == name:
+                    found.append(("assign", sub))
+            continue
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store) and node.id == name:
+            found.append(("assign", stmt))
+        elif isinstance(node, ast.ExceptHandler) and node.name == name:
+            found.append(("assign", node))
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == name:
+            found.append(("assign", stmt))
+        elif isinstance(node, ast.MatchMapping) and node.rest == name:
+            found.append(("assign", stmt))
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                if alias.name == "*":
+                    found.append(("star", node))
+                elif (alias.asname or (alias.name.split(".")[0] if isinstance(node, ast.Import) else alias.name)) == name:
+                    found.append(("import", node, alias))
+        elif isinstance(node, (ast.Global, ast.Nonlocal)) and name in node.names:
+            found.append(("global" if isinstance(node, ast.Global) else "nonlocal", node))
+        for child in ast.iter_child_nodes(node):
+            stack.append((child, child if isinstance(child, ast.stmt) else stmt))
+    return found
+
+
+def _binding_at(tree, parents, occurrence: ast.Name, name: str):
+    """("local"|"module", bindings) | ("builtin", []) | ("unknown", reason)."""
+    chain, node = [], occurrence
+    while node in parents:
+        parent = parents[node]
+        if isinstance(parent, SCOPES) and _evaluated_in(parent, occurrence, parents):
+            chain.append(parent)
+        node = parent
+    for depth, scope in enumerate(chain):
+        if isinstance(scope, ast.ClassDef) and depth > 0:
+            continue  # a class body's names are not visible inside its methods
+        found = _bindings(scope, name)
+        kinds = {b[0] for b in found}
+        if "nonlocal" in kinds:
+            return "unknown", "nonlocal"
+        if "global" in kinds:
+            break
+        if found:
+            return "local", found
+    found = _bindings(tree, name)  # includes any star import, which _verdict never treats as proof
+    if found:
+        return "module", found
+    if name in BUILTIN_NAMES:
+        return "builtin", []
+    return "unknown", "not bound in the file"
+
+
+def _mentions(node, name: str) -> bool:
+    for sub in ast.walk(node):
+        if (isinstance(sub, ast.Name) and sub.id == name) or (isinstance(sub, ast.Attribute) and sub.attr == name):
+            return True
+    return False
+
+
+def _verdict(resolver: Resolver, scope_kind: str, found: list, name: str, target_file: str):
+    """(True, reason) when the binding provably is not the target's definition."""
+    if scope_kind == "builtin":
+        return True, "the name is a Python builtin here"
+    reasons = set()
+    for binding in found:
+        kind = binding[0]
+        if kind in ("def", "class"):
+            reasons.add(f"a {kind} of that name in this file")
+        elif kind == "param":
+            reasons.add("a parameter (whatever is passed in, this site does not name the target)")
+        elif kind == "assign":
+            stmt = binding[1]
+            value = getattr(stmt, "value", None)
+            if value is not None and _mentions(value, name):
+                return False, "assigned from a value that names it"
+            reasons.add(f"a {'local' if scope_kind == 'local' else 'module'} variable")
+        elif kind == "import":
+            node, alias = binding[1], binding[2]
+            if isinstance(node, ast.ImportFrom) and node.level:
+                return False, "relative import"
+            module = node.module if isinstance(node, ast.ImportFrom) else alias.name
+            status, value = resolver.resolve(module)
+            if status == "external":
+                if module.split(".")[0] not in STDLIB:
+                    return False, f"imported from '{module}', which is not in the repo or the standard library"
+                reasons.add(f"imported from the standard library ('{module}')")
+            elif status == "resolved" and isinstance(node, ast.ImportFrom):
+                source = value[1]
+                if source == target_file:
+                    return False, "imported from the target file"
+                tree = resolver.index.tree(source)
+                defs = [b for b in _bindings(tree, alias.name)] if tree is not None else []
+                if defs and all(b[0] in ("def", "class") for b in defs):
+                    reasons.add(f"imported from {source}, which defines it")
+                else:
+                    return False, f"imported from {source}, which may re-export it"
+            elif status == "resolved":
+                if value[1] == target_file:
+                    return False, "the name is the target file's own module"
+                reasons.add("a module object")
+            else:
+                return False, f"imported from '{module}', which is unresolved"
+        else:
+            return False, kind
+    return (True, "; ".join(sorted(reasons))) if reasons else (False, "no binding")
+
+
+def binding_verdict(resolver: Resolver, source: str, line: int, name: str, target_file: str):
+    """(True, reason) if every bare `name` at `line` is bound to something other than the target;
+    (False, reason) if not proven; (None, reason) if the line has no bare occurrence."""
+    tree = resolver.index.tree(source)
+    occurrences = [n for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id == name
+                   and isinstance(n.ctx, ast.Load) and n.lineno == line] if tree is not None else []
+    if not occurrences:
+        return None, "no bare name at the line"
+    parents = _parents(tree)
+    for occurrence in occurrences:
+        parent = parents.get(occurrence)
+        if isinstance(parent, ast.Attribute) and parent.attr == name:
+            return False, "used as `name.name`, which may call the target through its module"
+    verdicts = []
+    for occurrence in occurrences:
+        scope_kind, found = _binding_at(tree, parents, occurrence, name)
+        verdicts.append((False, str(found)) if scope_kind == "unknown" else
+                        _verdict(resolver, scope_kind, found, name, target_file))
+    reason = "; ".join(sorted({why for _, why in verdicts}))
+    return all(wrong for wrong, _ in verdicts), reason
+
+
+def remove_proven_wrong(work: Work, resolver: Resolver, remove: bool) -> tuple[list[str], Counter, list]:
+    counts: Counter = Counter()
+    closure: dict[str, set[str]] = {}
+    for entry in work.live_edges():
+        edge = entry["e"]
+        if edge["relation"] in CLOSURE_RELATIONS:
+            target = work.node(edge["target"])
+            if target and target.get("source_file"):
+                closure.setdefault(edge.get("source_file") or "", set()).add(target["source_file"])
+    removals, guarded = [], []
+    for entry in work.live_edges():
+        edge = entry["e"]
+        if edge.get("confidence") != "INFERRED" or edge.get("_origin") != "ast" or edge["relation"] not in CALL_RELATIONS:
+            continue
+        source = edge.get("source_file") or ""
+        target_node = work.node(edge["target"]) or {}
+        target_file = target_node.get("source_file") or ""
+        if not source.endswith(".py") or not target_file.endswith(".py") or source == target_file:
+            continue
+        counts["in scope (Python, cross-file, inferred)"] += 1
+        match = re.fullmatch(r"\.?([A-Za-z_]\w*)(?:\(\))?", target_node.get("label") or "")
+        if not match:
+            counts["kept: label is not a plain name"] += 1
+            continue
+        name = match.group(1)
+        line = int(str(edge.get("source_location", "L0")).lstrip("L") or 0)
+        if target_file in closure.get(source, set()):
+            counts["kept: the source imports the target file"] += 1
+            guarded.append(("imports the target", source, line, name, target_file))
+            continue
+        text = resolver.index.source(source)
+        tree = resolver.index.tree(source)
+        if text is None or tree is None:
+            counts["kept: source not parsable"] += 1
+            continue
+        if Path(target_file).stem in text:
+            counts["kept: the target file is named in the source"] += 1
+            guarded.append(("names the target file", source, line, name, target_file))
+            continue
+        wrong, reason = binding_verdict(resolver, source, line, name, target_file)
+        if wrong is None:
+            counts["kept: no bare name at the line (attribute or dynamic use)"] += 1
+            continue
+        if not wrong:
+            counts["kept: binding not proven to be something else"] += 1
+            continue
+        removals.append({"where": f"{source}:{line}", "relation": edge["relation"], "name": name,
+                         "target_file": target_file, "reason": reason})
+        if remove:
+            work.kill(entry, f"S3 proven wrong: {reason}")
+            counts["removed"] += 1
+        else:
+            counts["would be removed (--no-remove)"] += 1
+    work.compact()
+    lines = ["## Proven-wrong inferred edges (S3)", "",
+             "Removed only when the source file has no import of the target file, never names it, and binds the "
+             "name at that line to something else. Python only; JavaScript and attribute calls are never removed.", ""]
+    lines += [f"- {k}: {v}" for k, v in sorted(counts.items())]
+    if removals:
+        lines += ["", "Removed edges:" if remove else "Edges that would be removed:", ""]
+        lines += [f"- `{r['where']}` `{r['name']}` -> `{r['target_file']}` ({r['relation']}): {r['reason']}" for r in removals]
+    return lines, counts, {"removed": removals, "guarded": guarded}
+
+
 # ------------------------------------------------------------------ report
 
 
@@ -809,6 +1070,9 @@ def build(root: Path, graph_path: Path, out_dir: Path | None, remove: bool = Tru
     lines, s2, details["imports"] = resolve_python_imports(work, resolver)
     sections.append(lines)
     counts.update({f"S2 {k}": v for k, v in s2.items()})
+    lines, s3, details["removals"] = remove_proven_wrong(work, resolver, remove)
+    sections.append(lines)
+    counts.update({f"S3 {k}": v for k, v in s3.items()})
 
     verify_invariant(raw, work)
     index = work.result({"version": 1, "removals": remove, "counts": dict(sorted(counts.items()))})

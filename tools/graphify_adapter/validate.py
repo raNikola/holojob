@@ -120,9 +120,47 @@ def check_imports(root: Path, python: str) -> int:
     return 1 if failures else 0
 
 
+def check_calls(root: Path) -> int:
+    """Every S3 removal must be hand-labelled; also measure what each guard protects."""
+    adapter = load_adapter()
+    result = adapter.build(root, root / "graphify-out" / "graph.json", None)
+    found = result["details"]["removals"]
+    labels = json.loads((HERE / "validation" / "s3_removals.json").read_text(encoding="utf-8"))["labels"]
+    by_key = {(x["where"], x["name"], x["target_file"]): x for x in labels}
+    removed = {(x["where"], x["name"], x["target_file"]): x for x in found["removed"]}
+    unlabelled = sorted(set(removed) - set(by_key))
+    false_negatives = sorted(k for k in removed if k in by_key and by_key[k]["verdict"] != "wrong")
+    stale = sorted(set(by_key) - set(removed))
+    reasons = {}
+    for item in found["removed"]:
+        rule = item["reason"].split(" (")[0].split(",")[0]
+        rule = "imported from a file that defines it" if rule.startswith("imported from python/") else rule
+        reasons[rule] = reasons.get(rule, 0) + 1
+    print(f"calls: {len(removed)} removed, {len(removed) - len(unlabelled) - len(false_negatives)} labelled wrong, "
+          f"{len(false_negatives)} labelled correct (false negatives), {len(unlabelled)} unlabelled, {len(stale)} stale labels")
+    for rule, n in sorted(reasons.items(), key=lambda kv: -kv[1]):
+        print(f"  rule '{rule}': {n} removed")
+    # Guard sensitivity: what the binding rule alone would remove from edges a guard keeps.
+    resolver = result["resolver"]
+    sensitivity: dict[str, list] = {}
+    for guard, source, line, name, target in found["guarded"]:
+        wrong, why = adapter.binding_verdict(resolver, source, line, name, target)
+        if wrong:
+            sensitivity.setdefault(guard, []).append(f"{source}:{line} {name} -> {target}: {why}")
+    for guard, items in sorted(sensitivity.items()):
+        print(f"  guard '{guard}' protects {len(items)} edge(s) the binding rule alone would remove:")
+        for line in items:
+            print("    ", line)
+    for key in unlabelled:
+        print("  UNLABELLED:", key)
+    for key in false_negatives:
+        print("  FALSE NEGATIVE:", key)
+    return 1 if unlabelled or false_negatives else 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("check", choices=["imports"])
+    parser.add_argument("check", choices=["imports", "calls"])
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--python", default=None, help="interpreter for the isolated lookups (default .venv/bin/python)")
     args = parser.parse_args(argv)
@@ -130,6 +168,8 @@ def main(argv=None) -> int:
     python = args.python or str(root / ".venv" / "bin" / "python")
     if args.check == "imports":
         return check_imports(root, python)
+    if args.check == "calls":
+        return check_calls(root)
     return 2
 
 
