@@ -9,7 +9,8 @@ subprocess, no model call, and no project module is imported or executed.
 Every edge the adapter changes or adds carries `_origin: "adapter"` and a
 `provenance`; every other edge and node is checked to be unchanged (fail closed).
 
-Usage:  python3 tools/graphify_adapter/adapter.py build [--no-remove]
+Usage:  .venv/bin/python tools/graphify_adapter/adapter.py build [--no-remove]
+(the .venv interpreter: standard-library names and module suffixes come from it)
 """
 
 from __future__ import annotations

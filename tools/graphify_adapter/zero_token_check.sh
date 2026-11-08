@@ -2,9 +2,10 @@
 # S6: prove that a normal cycle (`graphify update` + adapter build) spends no LLM tokens.
 #
 # Runs in a throwaway copy (the tracked files plus a copy of graphify-out/); the real
-# repo is only read. The cycle runs with no network (unshare -rn), an empty
-# environment (no API keys) and a PATH that holds only `graphify` (no `claude`).
-# Passes when Graphify's token counter (cost.json) and the semantic layer are
+# repo is only read. An LLM is made *available* but unreachable: dummy API keys are
+# set, a fake `claude` on PATH leaves a marker if anything runs it, and there is no
+# network (unshare -rn). Passes when nothing tried a model (no marker, no traceback or
+# connection error), Graphify's token counter (cost.json) and the semantic layer are
 # unchanged, the AST layer and the doc links did update, and the real repo is
 # byte-identical afterwards.  Usage (bash or fish):  bash tools/graphify_adapter/zero_token_check.sh
 set -euo pipefail
@@ -17,6 +18,8 @@ trap 'rm -rf "$WORK"' EXIT
 COPY="$WORK/repo"
 mkdir -p "$COPY" "$WORK/bin" "$WORK/home"
 ln -s "$GRAPHIFY" "$WORK/bin/graphify"
+printf '#!/bin/sh\ntouch "%s/claude-was-called"\nexit 1\n' "$WORK" > "$WORK/bin/claude"
+chmod 755 "$WORK/bin/claude"
 
 fingerprint() { (cd "$ROOT" && find graphify-out docs CLAUDE.md -type f -print0 | sort -z | xargs -0 sha256sum); }
 fingerprint > "$WORK/real-before"
@@ -46,19 +49,29 @@ snapshot > "$WORK/before.json"
 printf '\nZero-token probe: `python/job_scoring/salary.py`.\n' >> "$COPY/docs/ROADMAP.md"
 printf '\n\ndef _zero_token_probe():\n    return 1\n' >> "$COPY/python/job_scoring/salary.py"
 
-isolated() { (cd "$COPY" && unshare -rn env -i HOME="$WORK/home" PATH="$WORK/bin" LANG=C.UTF-8 GRAPHIFY_NO_TIPS=1 "$@"); }
+DUMMY_KEYS=(ANTHROPIC_API_KEY=dummy-not-a-key OPENAI_API_KEY=dummy-not-a-key GEMINI_API_KEY=dummy-not-a-key
+            GOOGLE_API_KEY=dummy-not-a-key DEEPSEEK_API_KEY=dummy-not-a-key MOONSHOT_API_KEY=dummy-not-a-key)
+isolated() { (cd "$COPY" && unshare -rn env -i HOME="$WORK/home" PATH="$WORK/bin:/usr/bin:/bin" LANG=C.UTF-8 \
+              "${DUMMY_KEYS[@]}" "$@"); }
 isolated graphify update "$COPY" > "$WORK/update.log" 2>&1 || { cat "$WORK/update.log"; echo "FAIL: graphify update"; exit 1; }
-isolated "$COPY/.venv/bin/python" "$COPY/tools/graphify_adapter/adapter.py" build --root "$COPY"
+isolated "$COPY/.venv/bin/python" "$COPY/tools/graphify_adapter/adapter.py" build --root "$COPY" > "$WORK/adapter.log" 2>&1 \
+  || { cat "$WORK/adapter.log"; echo "FAIL: adapter build"; exit 1; }
+cat "$WORK/adapter.log"
 snapshot > "$WORK/after.json"
 
 "$PY" - "$WORK" "$COPY" <<'EOF'
-import json, sys
+import json, os, sys
 work, copy = sys.argv[1:]
 before, after = (json.load(open(f"{work}/{n}.json")) for n in ("before", "after"))
 index = json.load(open(f"{copy}/graphify-out/holojob/index.json"))
 linked = any(e.get("provenance") == "doc-path" and e["source_file"] == "docs/ROADMAP.md"
              and "salary" in e["target"] for e in index["links"])
+logs = open(f"{work}/update.log").read() + open(f"{work}/adapter.log").read()
+attempt_signs = ("Traceback", "ConnectionError", "ConnectError", "Name or service not known",
+                 "Network is unreachable", "Temporary failure in name resolution", "APIError")
 checks = {
+    "no model was run (fake claude never called)": not os.path.exists(f"{work}/claude-was-called"),
+    "no traceback or connection attempt in the logs": not any(s in logs for s in attempt_signs),
     "LLM token counter unchanged": all(before[k] == after[k] for k in ("input_tokens", "output_tokens", "llm_runs")),
     "semantic layer unchanged": before["semantic_nodes"] == after["semantic_nodes"]
                                 and before["semantic_roadmap"] == after["semantic_roadmap"],
