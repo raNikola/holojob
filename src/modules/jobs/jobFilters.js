@@ -1,3 +1,4 @@
+import { fitScoreOf } from './matchScore.js'
 import { NEEDS_VISA_STATUSES } from './workAuthorization.js'
 import { describeRange, matchesSalary, salaryRangeOf } from './salaryFilter.js'
 import geography from '../../data/geography.json'
@@ -118,7 +119,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     if (priorities.length && !priorities.includes(job.priority)) return false
     if (minScore !== '' && minScore != null) {
       const floor = Number(minScore)
-      if (!Number.isNaN(floor) && (job.matchScore ?? 0) < floor) return false
+      if (!Number.isNaN(floor) && (fitScoreOf(job) ?? 0) < floor) return false
     }
     if (!matchesSalary(job.salaryMonthlyEur, salaryRange, salaryIncludeUnknown !== false)) return false
     if (remoteOnly && !job.isRemote) return false

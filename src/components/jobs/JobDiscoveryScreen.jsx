@@ -250,8 +250,10 @@ export default function JobDiscoveryScreen() {
       setRerunMsg(`Error: ${e.message}`)
     } finally {
       setRerunning(false)
+      // A finished scoring run settles "scoring behind"; without this the banner stays after a cancelled Re-scrape.
+      rescrape.refresh()
     }
-  }, [])
+  }, [rescrape])
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)

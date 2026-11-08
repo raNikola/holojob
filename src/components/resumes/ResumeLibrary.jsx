@@ -73,7 +73,7 @@ export default function ResumeLibrary({ onNavigate }) {
                 <p className="font-medium text-stone-900 dark:text-stone-100">{job.company}</p>
                 <p className="text-sm text-stone-600 dark:text-stone-400">{job.title}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {typeof job.matchScore === 'number' && <FitScore score={job.matchScore} label={job.matchLabel} />}
+                  {typeof job.matchScore === 'number' && <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} />}
                   <span className="text-xs text-stone-500">Generated {formatDate(generatedAt)}</span>
                 </div>
               </div>

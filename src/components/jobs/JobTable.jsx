@@ -8,7 +8,7 @@ import { SERVER_ONLY_NOTE, classBadges, rowKind, selectableIds } from '../../mod
 import KeepAdButton from './KeepAdButton'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
-import { hasMatchScores } from '../../modules/jobs/matchScore'
+import { fitScoreOf, hasMatchScores } from '../../modules/jobs/matchScore'
 import { displayLocation } from '../../modules/jobs/locationDisplay'
 import { historyBadges } from '../../modules/jobs/jobHistory'
 import { APPROXIMATE_SALARY_NOTE, approximateMonthlyEur, salaryBadges, statedSalary } from '../../modules/jobs/jobSalary'
@@ -25,7 +25,7 @@ import { dayOf, deadlineSortValue, deadlineStatus } from '../../modules/jobs/job
 import { jobStatusLabel } from '../../modules/jobs/manualJob'
 
 const COLUMNS = {
-  score: { type: 'number', value: (j) => j.matchScore },
+  score: { type: 'number', value: (j) => fitScoreOf(j) }, // insufficient data has no score: it sorts with the unscored, last either way
   title: { type: 'text', value: (j) => j.title },
   company: { type: 'text', value: (j) => j.company },
   location: { type: 'text', value: (j) => j.location },
@@ -191,7 +191,7 @@ function JobCard({
             <ReasonLine job={job} classView={classView} />
           </div>
           <div className="flex flex-col items-end gap-1">
-            {showScores && <FitScore score={job.matchScore} label={job.matchLabel} emptyLabel="Not scored" />}
+            {showScores && <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} emptyLabel="Not scored" />}
             {showScores && <EngineShadowBadge shadow={job.engineShadow} />}
             <StatusBadge status={job.status} />
             <HistoryBadges job={job} classView={classView} />
@@ -337,7 +337,7 @@ export default function JobTable({
                 </td>
                 {showScores && (
                   <td className="px-3 py-2 align-top">
-                    <FitScore score={job.matchScore} label={job.matchLabel} emptyLabel="Not scored" />
+                    <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} emptyLabel="Not scored" />
                     {job.engineShadow && <div className="mt-1"><EngineShadowBadge shadow={job.engineShadow} /></div>}
                   </td>
                 )}

@@ -28,6 +28,7 @@ from llm_enhancer import (  # noqa: E402
     NEVER_SENT,
     LlmFitEnhancer,
 )
+import kept_ads  # noqa: E402
 import manual_jobs  # noqa: E402
 import pipeline_lock  # noqa: E402
 import view_guard  # noqa: E402
@@ -75,6 +76,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--jobs", type=Path, default=JOBS_PATH)
     p.add_argument("--manual", type=Path, default=manual_jobs.MANUAL_PATH,
                    help="jobs typed in by hand; scored with the discovered ones, never rewritten here")
+    p.add_argument("--kept", type=Path, default=kept_ads.KEPT_PATH,
+                   help="ids of kept ads re-scored by hand; their ad text comes from the job history ledger")
     p.add_argument("--output", type=Path, default=OUTPUT_PATH)
     p.add_argument("--min-score", type=int, default=0)
     p.add_argument(
@@ -145,6 +148,8 @@ def score(args: argparse.Namespace) -> int:
     # A hand-entered job is scored with every run and wins over a discovered row with the same URL.
     discovered_rows = len(jobs)
     jobs = manual_jobs.with_manual(jobs, manual)
+    # Kept ads the owner re-scored by hand stay in the scoring set while they are kept (kept_ads.prune drops the rest).
+    jobs = kept_ads.with_kept(jobs, job_history.ledger_path(args.jobs), args.kept)
     replaced_rows = discovered_rows + len(manual) - len(jobs)
     if manual:
         # Counts only: nothing of a job's text is printed.
@@ -292,6 +297,7 @@ def score(args: argparse.Namespace) -> int:
                 "good": labels.get("Good", 0),
                 "weak": labels.get("Weak", 0),
                 "reject": labels.get("Reject", 0),
+                "insufficient": sum(1 for j in scored if j.get("dataStatus") == "insufficient"),
             },
         },
         "jobs": scored,

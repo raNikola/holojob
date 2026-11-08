@@ -598,10 +598,21 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
 { "jobs": [ { "jobId": "manual-<uuid>", "title": "...", "company": "...", "description": "...", "jobUrl": "...", "provider": "manual", "manualEntry": true } ] }
 ```
 
+## Re-scored kept ads
+
+- **Path:** `data/jobs/rescored_kept.json` (mode 600)
+- **Purpose:** The ids of kept ads the owner re-scored by hand. `run_scoring.py` adds their rows (read from the job-history ledger) to every run; the row is marked `keptRescore: true` and is no part of the IDF corpus. Pruned to the ids still kept or with an application (`kept_ads.prune`).
+- **Written by:** `rescore_kept.py` (add, prune). Never holds ad text.
+
+```json
+{ "version": 1, "ids": { "<jobId>": { "rescoredAt": "<iso>" } } }
+```
+
 ## Scored jobs
 
 - **Path:** `data/jobs/scored_jobs.json`
 - **Purpose:** Everything in discovered jobs plus scores, label, priority, reasons, work-authorization status, salary parse. What the UI job list loads (copy in browser key `job-dashboard-discovered-jobs`). The browser copy can also hold rows the file lacks, marked `offList: true`, kept only for the owner's data ([decision](../DECISIONS.md#offlist-rows-keep-the-owners-data-2026-11-03)); that mark is never in this file.
+- **Data status (Wave 2):** every row has `dataStatus` (`sufficient` | `insufficient`), `insufficientReasons` (list), and `confidence` (`{level: normal | low | none, reasons}`). `insufficient` means the ad says too little to score: `matchLabel` is `Insufficient data`, `priority` `Unrated`, `applyRecommendation` `Not assessed`, `matchScore` at most 5 (kept for older readers, never a Fit Score). `meta.summary.insufficient` counts them.
 - **Written by:** `run_scoring.py` (`--judge` adds `llmFit`; with `HOLOJOB_ENGINE_SHADOW` on, every job with an
   engine output gets `engineShadow` and `meta.engineShadow` counts them, see "Engine shadow output").
 

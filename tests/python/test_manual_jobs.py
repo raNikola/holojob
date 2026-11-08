@@ -181,6 +181,13 @@ def test_the_row_equals_the_one_a_full_rescore_writes(env, monkeypatch, capsys):
     assert env.full_rescore()[MANUAL_ID] == env.rows()[MANUAL_ID]
 
 
+def test_a_junk_description_is_insufficient_data_not_a_middling_score(env, monkeypatch, capsys):
+    assert env.add(_manual(description="asdf qwerty lorem"), monkeypatch, capsys)[0] == 0
+    row = env.rows()[MANUAL_ID]
+    assert row["dataStatus"] == "insufficient" and row["matchScore"] <= 5
+    assert row["matchLabel"] == "Insufficient data" and row["insufficientReasons"]
+
+
 def test_missing_location_stays_unknown_and_is_never_capped_as_outside(env, monkeypatch, capsys):
     """With a location gate set (allowed: Serbia), a place the owner left empty is unknown; a stated Berlin is outside."""
     intel = json.loads(env.intelligence.read_text())

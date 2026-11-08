@@ -1,4 +1,4 @@
-import { APPLY_VARIANT, MATCH_LABEL_VARIANT, PRIORITY_VARIANT } from './matchScore'
+import { APPLY_VARIANT, INSUFFICIENT_APPLY, INSUFFICIENT_PRIORITY, MATCH_LABEL_VARIANT, PRIORITY_VARIANT } from './matchScore'
 
 /**
  * Band to style for the Fit Score display. The bands themselves (names and thresholds) are decided by
@@ -21,7 +21,7 @@ export function fitScoreStyle(label) {
 /** The chips that follow the score on one row, in order: priority (never `Reject`), then the apply recommendation. */
 export function scoreRowChips(job) {
   const chips = []
-  if (job?.priority && job.priority !== 'Reject') chips.push({ kind: 'priority', text: job.priority, variant: PRIORITY_VARIANT[job.priority] || 'default' })
-  if (job?.applyRecommendation) chips.push({ kind: 'apply', text: job.applyRecommendation, variant: APPLY_VARIANT[job.applyRecommendation] || 'default' })
+  if (job?.priority && job.priority !== 'Reject' && job.priority !== INSUFFICIENT_PRIORITY) chips.push({ kind: 'priority', text: job.priority, variant: PRIORITY_VARIANT[job.priority] || 'default' })
+  if (job?.applyRecommendation && job.applyRecommendation !== INSUFFICIENT_APPLY) chips.push({ kind: 'apply', text: job.applyRecommendation, variant: APPLY_VARIANT[job.applyRecommendation] || 'default' })
   return chips
 }

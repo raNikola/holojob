@@ -212,7 +212,7 @@ def test_score_job_marks_hard_cap(intelligence):
     job = {
         "title": "Product Manager",
         "company": "Acme",
-        "description": "Own the roadmap and discovery. " * 10,
+        "description": "Own the product roadmap and discovery for a payments platform. You will work with engineering, design and stakeholders, define strategy and deliver measurable outcomes. Requirements: five years of product experience.",
         "jobUrl": "https://example.com/2",
         "llmFacts": {"roleTrack": "product_management"},
     }

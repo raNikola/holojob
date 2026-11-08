@@ -82,7 +82,7 @@ INTELLIGENCE = {
 
 
 def _job(title):
-    return {"jobId": "t", "title": title, "company": "Acme", "description": "Senior product roadmap work", "location": "Remote", "isRemote": True}
+    return {"jobId": "t", "title": title, "company": "Acme", "description": "Own the product roadmap and discovery for a payments platform. You will work with engineering, design and stakeholders, define strategy, analyse usage data and deliver measurable outcomes. Requirements: five years of product experience, strong communication skills.", "location": "Remote", "isRemote": True}
 
 
 def test_an_unrelated_title_is_capped_held_and_explained():

@@ -358,7 +358,7 @@ class LlmFitEnhancer:
         eligible = [
             (-r["matchScore"], index, self._key(r))
             for index, r in enumerate(results)
-            if r["matchScore"] >= self.threshold and not r.get("isClosed") and not row_state.not_found(r)
+            if r["matchScore"] >= self.threshold and r.get("dataStatus") != "insufficient" and not r.get("isClosed") and not row_state.not_found(r)
         ]
         eligible.sort()
         self._selected = {key for _, _, key in eligible[: max(0, self.limit)]}
@@ -413,6 +413,10 @@ class LlmFitEnhancer:
 
     def enhance(self, job: dict, base_result: dict, intelligence: dict) -> dict:
         base = base_result["matchScore"]
+        if base_result.get("dataStatus") == "insufficient":
+            # Nothing to judge: the ad states too little, and a model must not invent a fit for it.
+            self._count("skipped")
+            return base_result
         if base < self.threshold:
             self._count("skipped")
             return base_result

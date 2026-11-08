@@ -24,7 +24,7 @@ def sample_job():
         "title": "Full Stack Developer",
         "company": "Example Corp",
         "location": "San Francisco, CA",
-        "description": "React, Node.js, PostgreSQL, AWS. Full stack role.",
+        "description": "React, Node.js, PostgreSQL, AWS. Full stack role. You will build and design web services, own delivery with stakeholders, and collaborate across teams. Requirements: three years of experience.",
         "remote": "hybrid",
         "url": "https://example.com/jobs/1",
     }

@@ -1,3 +1,4 @@
+import { fitScoreOf } from './matchScore.js'
 import { isFollowUpDue } from './followUps'
 import { TERMINAL_STAGES } from './applicationTracking'
 import { isActionable } from './jobHistory'
@@ -53,7 +54,7 @@ export function computeJobStats(jobs) {
     const status = job.status || 'new'
     if (status in stats) stats[status] += 1
 
-    if (typeof job.matchScore === 'number') {
+    if (fitScoreOf(job) !== null) {
       stats.scored += 1
       scoreSum += job.matchScore
       scoreCount += 1

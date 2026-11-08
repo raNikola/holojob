@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { buildDiscoveryCommand, getDiscoveryStatus, runDiscovery } from './run-discovery.js'
 import { runPipeline } from './run-pipeline.js'
 import { runManualJobs } from './run-manual-job.js'
+import { pruneKeptRescored, runKeptRescore } from './run-kept-rescore.js'
 import { extractAdAi, fetchAd, previewAdAi } from './run-ad-fill.js'
 import { buildScoringCommand, getScoringStatus, previewJudge, runJudgedScoring, runScoring } from './run-scoring.js'
 import { buildTailorCommand, getTailorStatus, runTailor, runTailorStream } from './run-tailor.js'
@@ -509,6 +510,18 @@ export async function handleApiRequest(req, res) {
       const single = !url.endsWith('/sync')
       const mode = url.endsWith('/score') ? 'score' : url.endsWith('/check') ? 'check' : 'store'
       const result = await runManualJobs(single ? (body.job ? [body.job] : []) : body.jobs, { mode })
+      sendJson(res, result.status, result.body)
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'invalid', field: 'json' })
+    }
+    return true
+  }
+
+  // Kept ads: `rescore` scores one by hand (local, no model); `sync` sends the ids the browser keeps so the set of re-scored ids forgets the rest.
+  if ((url === '/api/jobs/kept/rescore' || url === '/api/jobs/kept/sync') && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req, res, url.endsWith('/sync') ? { limit: MAX_LARGE_BODY_BYTES } : undefined)
+      const result = url.endsWith('/sync') ? await pruneKeptRescored(body.keptIds) : await runKeptRescore(body.jobId)
       sendJson(res, result.status, result.body)
     } catch {
       sendJson(res, 400, { ok: false, error: 'invalid', field: 'json' })

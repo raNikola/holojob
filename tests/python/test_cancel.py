@@ -47,8 +47,8 @@ def view_rows(root):
 
 
 def corpus(rows):
-    """What the IDF corpus is built from: every row that is not a row a run did not find."""
-    return [r["jobId"] for r in rows if not row_state.not_found(r)]
+    """What the IDF corpus is built from: every open row that is not a row a run did not find."""
+    return [r["jobId"] for r in rows if row_state.in_idf_corpus(r)]
 
 
 NEW = canon(3, provider="jobspy")

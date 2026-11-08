@@ -66,5 +66,9 @@ export function useRescrapeRun({ enabled, onFinished }) {
     pollNow.current()
   }, [])
 
-  return { view, start }
+  // Asks the server again now. A scoring run that finishes outside a Re-scrape (Re-score, a judged run) can
+  // clear "scoring behind", and nothing else polls while no run is active.
+  const refresh = useCallback(() => pollNow.current(), [])
+
+  return { view, start, refresh }
 }
