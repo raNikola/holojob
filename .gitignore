@@ -76,3 +76,6 @@ claude-config/
 
 # Third-party peer chat data (not ours)
 data/chat/
+
+# Graphify knowledge graph: local only, never committed (DECISIONS.md, "Graph tooling")
+graphify-out/
