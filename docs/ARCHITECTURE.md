@@ -102,7 +102,7 @@ It returns no number. The code decides what the answer costs:
 
 Only jobs scoring 65 or more are sent: the largest raise is +5 and Apply
 starts at 70 (labels.py `APPLY_MIN_SCORE`), so a job below 65 cannot change decision, and 65 is above both
-hard caps (red flag 54, off-track 50), so capped jobs are never sent. A job a
+hard caps (red flag 54, off-track 50, unrelated title 40), so capped jobs are never sent. A job a
 hard rule applies to (`hardCapped` on the result) can be lowered by the judge
 but never raised. At most 50 jobs are sent per run (`--judge-limit`, 0 for no
 limit): the highest local scores at or above the threshold, equal scores in input
@@ -127,6 +127,14 @@ field list `DIGEST_FIELDS` and `NEVER_SENT`), and only its confirm button
 calls `POST /api/scoring/judge`, which refuses a body without
 `"confirm": true`. `/api/scoring/run`, Re-score and Run Full Pipeline never
 judge; `tests/js/judgeBoundary.test.js` pins both routes.
+
+**Apply by** (`job_scoring/deadline.py`). Display metadata like the salary flag: `applyDeadline` is the board's
+`expiresAt`, else a date right after a phrase announcing a deadline, only when it cannot be misread; anything else is
+unknown. It moves no score and does not close an ad. The Jobs table buckets it in `modules/jobs/jobDeadline.js`.
+
+**Salary column.** The table shows the pay as the ad states it (`statedSalary`); `salaryMonthlyEur` appears only as a
+second line marked approximate. Lever `salaryRange` and Ashby salary components are written as `N - N yearly EUR` by
+`format_pay_range`, which leaves out a figure with no currency.
 
 **Salary flag** (`job_scoring/salary.py`). Display metadata only: it never reaches
 `matchScore`, `matchLabel`, `priority`, `applyRecommendation` or the red flags
@@ -226,9 +234,14 @@ do not state.
   current run's corpus (`corpus.py`, run-local IDF). "Product Management" is
   in every ad and earns nothing; a rare term separates jobs. `TARGET_COVERAGE`
   is the one number to calibrate.
-- **scorer.py** caps a job at 50 when `llmFacts.roleTrack` is neither
-  `product_management` nor `product_ownership` — delivery or programme work
-  wearing a product title.
+- **scorer.py** caps a job at 50 when `llmFacts.roleTrack` is not one its role family
+  accepts (for product: `product_management`, `product_ownership`, `program_management`)
+  — delivery work wearing a product title.
+- **role_tier.py** sorts a title into target, near or unrelated from the family's
+  `titleRules` in `src/data/roleFamilies.json`; only an unrelated title is capped, at 40,
+  in `scorer.py` (`hardCapped`, a reason line). Most ads have no `llmFacts`, so this is
+  what holds without enrichment. A project or delivery title is near only with
+  evidenced product responsibility. No family or no vocabulary means no cap.
 - **work_authorization.py** gives each job one status, and scorer.py caps it
   the same way: `needs_visa_refused` 25 (the ad will not sponsor),
   `outside_allowed` 40 (a location the candidate excluded), `needs_visa_silent`

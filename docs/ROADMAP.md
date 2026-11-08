@@ -121,6 +121,18 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 2. The `older_key` retention window (Wave 4, h).
 3. The Infostud coverage check (Wave 4, c).
 
+## Job relevance, lifecycle, salary, deadline - built (2026-11-08), owner visual check pending
+
+- [x] Three title tiers, cap 40 for an unrelated title, program work accepted for the product family.
+- [x] Fragment role variants no longer match; `stretchRoles` and "product management" are read.
+- [x] A closed ad leaves Active and stays in All Jobs and the Application Tracker ("Ad closed").
+- [x] Open before closed on the default sort only.
+- [x] Salary column (stated pay; EUR monthly only as an approximate second line); Lever and Ashby structured pay.
+- [x] Apply by column with warnings and sort.
+- [ ] Not started on purpose: "Urgent only" filter, Greenhouse per-job pay and deadline, keyword-bank recalibration (Wave 3, a2).
+
+Decisions: [DECISIONS.md](DECISIONS.md#job-relevance-lifecycle-salary-and-deadline-2026-11-08).
+
 ## Epic: UI Redesign & Design System - deferred / To Do
 
 **Status: POSTPONED. The Epic and all its work are To Do.** Nothing is built or authorized. All colours are provisional. This Epic does not reorder scoring, matching, discovery or application tracking; the wave order above stands. Backlog with Sub-tasks, dependencies and acceptance criteria: [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md). Decisions: [DECISIONS.md](DECISIONS.md#design-system-final-planning-decisions-epic-postponed-2026-11-04).
