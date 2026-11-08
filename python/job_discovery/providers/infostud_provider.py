@@ -156,4 +156,6 @@ class InfostudProvider(JobProvider):
         canonical["category"] = job.get("category")
         canonical["standardizedPosition"] = job.get("standardizedPosition")
         canonical["tags"] = job.get("tags") or []
+        canonical["descriptionStatus"] = job.get("descriptionStatus")
+        canonical["descriptionSource"] = job.get("descriptionSource")
         return canonical

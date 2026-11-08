@@ -26,6 +26,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from providers import infostud_description
 from providers.role_filter import is_relevant_role, role_drop_reason
 
 BASE = "https://poslovi.infostud.com/oglasi-za-posao"
@@ -196,6 +197,7 @@ def normalize(row: dict) -> dict:
         "location": location,
         "jobUrl": url,
         "description": description,
+        "descriptionStatus": infostud_description.TEASER,  # until the detail page is read (enrich)
         "datePosted": _iso_date(row.get("onlineViewDate")),
         "expiresAt": _iso_date(row.get("expirationDate")),
         "isRemote": is_remote,
@@ -209,10 +211,11 @@ def normalize(row: dict) -> dict:
 
 
 def enrich(job: dict, delay: float = 1.0) -> dict:
-    """Replace the summary with the full JobPosting JSON-LD description.
+    """Read the ad's full text from its detail page and record whether it is whole (`descriptionStatus`).
 
-    Costs one request per job, so this runs only for jobs that already
-    passed is_relevant_role().
+    The full text is `__NEXT_DATA__ -> job.textAd`; the JSON-LD description is only an SEO blurb (see infostud_description).
+    A text is taken only if it is real ad content, never just because it is longer. A failed fetch keeps the listing teaser and
+    says `failed`. Costs one request per job, so this runs only for jobs that already passed the role filter.
     """
     url = job.get("jobUrl")
     if not url:
@@ -221,28 +224,16 @@ def enrich(job: dict, delay: float = 1.0) -> dict:
     try:
         html = _get(url)
     except RuntimeError:
+        job["descriptionStatus"] = infostud_description.FAILED
         return job
 
-    position = 0
-    while True:
-        marker = html.find("application/ld+json", position)
-        if marker < 0:
-            break
-        start = html.find(">", marker) + 1
-        end = html.find("</script>", start)
-        position = end + 1
-        try:
-            parsed = json.loads(html[start:end])
-        except json.JSONDecodeError:
-            continue
-        for item in parsed if isinstance(parsed, list) else [parsed]:
-            if not isinstance(item, dict) or item.get("@type") != "JobPosting":
-                continue
-            full = (item.get("description") or "").strip()
-            if len(full) > len(job.get("description") or ""):
-                job["description"] = full
-            job["employmentType"] = item.get("employmentType")
-            job["benefits"] = item.get("jobBenefits") or []
+    read = infostud_description.read_detail(html, job.get("description") or "")
+    job["description"] = read["description"]
+    job["descriptionStatus"] = read["status"]
+    job["descriptionSource"] = read["source"]
+    for item in infostud_description._json_ld_postings(html):
+        job["employmentType"] = item.get("employmentType")
+        job["benefits"] = item.get("jobBenefits") or []
 
     time.sleep(delay)
     return job
