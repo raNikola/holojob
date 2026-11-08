@@ -69,8 +69,17 @@ class ViewRecoveryError(Exception):
 # --- the view, from the ledger alone ----------------------------------------------------------------------------------
 
 
+# Keys `lastImport.meta` must carry (v1 and v2 alike); see python/job_discovery/import_meta.py, which lists the same keys.
+_META_REQUIRED = (
+    "searchTerms", "locations", "remoteFilters", "country", "providers", "providerCounts", "rawCount", "dedupedCount", "history", "sourceRunId",
+)
+
+
 def view_payload(jobs: list[dict], meta: dict, generated_at: str, generation: int | None) -> dict:
     """What discovered_jobs.json holds. Same fields as export_jobs.discovered_payload, plus the ledger generation first."""
+    absent = [key for key in _META_REQUIRED if not isinstance(meta, dict) or key not in meta]
+    if absent:
+        raise ViewError("lastImport.meta lacks " + ", ".join(absent) + ": no view can be built from it")
     raw_count = meta["rawCount"]
     deduped = meta["dedupedCount"]
     head = {"ledgerGeneration": generation} if generation is not None else {}

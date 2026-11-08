@@ -436,7 +436,7 @@ def test_the_run_keeps_the_ledger_it_started_from(tmp_path, monkeypatch):
 def test_infostud_reports_its_total_to_the_footer(tmp_path, monkeypatch):
     row = {"jobId": "i1", "provider": "infostud", "source": "infostud", "site": "infostud", "title": "Product Manager",
            "company": "A", "location": "Beograd, Serbia", "jobUrl": "https://i.example/1", "description": "d", "isRemote": False}
-    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None: ([{"id": 1}] * 1, 250))
+    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None, **_: ([{"id": 1}] * 1, 250))
     monkeypatch.setattr(infostud_client, "normalize", lambda r: dict(row))
     monkeypatch.setattr(infostud_client, "enrich", lambda job, delay=1.0: job)
     monkeypatch.setattr(infostud_client, "is_relevant_role", lambda *a: True)

@@ -26,6 +26,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import filtered_ads
+import import_meta
 import proof_reasons as proof
 import staging
 from dedupe_jobs import _collapse, _crosspost_key, _exact_key
@@ -141,7 +142,12 @@ def _previous(previous) -> tuple[dict, dict]:
     return facts, seen
 
 
-def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bool) -> dict:
+# Sources whose single board is staged in many parts (Infostud: a listing part and one part per ad). Their parts are one board.
+MERGED_PARTS = {"infostud"}
+_MERGED = "*"
+
+
+def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bool, merge_parts: bool = False) -> dict:
     """{board: {"complete", "listed"}} for one snapshot source: what `job_history.apply_run` may close on (S5c). A run staged before
     S5b has no `boardsRead`, so it gives none.
 
@@ -160,6 +166,10 @@ def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bo
     dropped: dict[str, list] = {}
     for record in (run.discards.by_source(name) if run.discards else []):
         dropped.setdefault(record.get("part"), []).append(record)
+    if merge_parts:  # one board read in several parts: add them up, under one key
+        kept = {_MERGED: [job for jobs in kept.values() for job in jobs]}
+        read = {_MERGED: sum(read.values())}
+        dropped = {_MERGED: [r for records in dropped.values() for r in records]}
     damaged = bool(run.discards is None or run.discards.torn or run.discards.unreadable_lines or run.discards.rejected)
     failed = set(footer.get("boardsFailed") or [])
     empty = set(footer.get("boardsEmpty") or [])
@@ -168,10 +178,11 @@ def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bo
         if not isinstance(row, dict) or not isinstance(row.get("board"), str):
             continue
         board = row["board"]
-        records = dropped.get(board, [])
+        part = _MERGED if merge_parts else board
+        records = dropped.get(part, [])
         counted = [r for r in records if r.get("counted")]
         accounted = (
-            read.get(board) == row.get("read") == len(kept.get(board, [])) + len(counted)
+            read.get(part) == row.get("read") == len(kept.get(part, [])) + len(counted)
             and all(r.get("jobId") for r in counted)
         )
         why = []
@@ -202,7 +213,7 @@ def board_evidence(run: staging.RunStage, name: str, stage, footer, in_doubt: bo
             "complete": not why,  # each condition above is one clause of the rule as it always was; `why` only names the ones that failed
             "why": proof.once(why) or [proof.BOARD_COMPLETE],
             "detail": row.get("reason") if isinstance(row.get("reason"), str) else None,
-            "listed": {job.get("jobId") for job in kept.get(board, []) if isinstance(job, dict)} | {r["jobId"] for r in records if r.get("jobId")},
+            "listed": {job.get("jobId") for job in kept.get(part, []) if isinstance(job, dict)} | {r["jobId"] for r in records if r.get("jobId")},
         }
     return found
 
@@ -273,6 +284,14 @@ def _source_proof(name: str, state: str, anomaly_codes: list[str], evidence_for_
     return {"proven": not why and bool(boards), "why": proof.once(why) or [proof.BOARD_COMPLETE], "boards": rows}
 
 
+def _complete_read(boards: dict, state: str) -> dict:
+    """{"complete": bool, "why": [codes]} of a one-board source's listing read, from `board_evidence`. Names the answer, makes none."""
+    if not boards:
+        return {"complete": False, "why": [proof.NOT_FINISHED if state == "unfinished" else proof.NO_BOARD_EVIDENCE]}
+    one = next(iter(boards.values()))
+    return {"complete": bool(one["complete"]), "why": list(one["why"])[:5], "detail": one.get("detail")}
+
+
 MAX_FILTER_REASONS = 12
 MAX_BOARDS_KEPT = 60
 
@@ -338,12 +357,18 @@ def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, m
             result.new_by_provider[job.get("provider")] = result.new_by_provider.get(job.get("provider"), 0) + 1
     stats = job_history.apply_partial(ledger, deduped, now=moment, key=key, role_key=_crosspost_key, list_run_id=info["runId"])
     ledger["partialRuns"] = ((ledger.get("partialRuns") or []) + [run.run_id])[-PARTIAL_RUNS_KEPT:]
+    # Wave 4 (n): `lastImport` keeps describing the last COMPLETE import. The latest cancelled run that saved ads is recorded beside it,
+    # where no lifecycle code reads it, so Activity can say the newest attempt is later than the list's.
+    ledger["lastPartial"] = import_meta.build_last_partial(run.run_id, moment, "cancelled", len(deduped))
     ledger["generation"] = (ledger.get("generation") or 0) + 1
     ledger["updatedAt"] = moment
     result.stats = stats
     result.view = view_guard.derive_view(ledger)
     report.update(saved=len(deduped), ledgerChanges={k: stats[k] for k in ("new", "known", "reopened", "changed", "carriedFacts")})
     return result
+
+
+HELD_KEYS = ("keptFailedBoard", "keptEmptyBoard", "keptSourceNotRun", "keptUnproven", "keptBoardNotRead", "listedButFiltered")
 
 
 def evidence_block(report: dict, stats: dict) -> dict:
@@ -362,12 +387,15 @@ def evidence_block(report: dict, stats: dict) -> dict:
         "duplicatesRemoved": int(report.get("duplicatesRemoved") or 0), "crosspostsMerged": int(report.get("crosspostsMerged") or 0),
         "rejected": int(report.get("rejected") or 0),
         "sources": [
-            {"name": name, "proof": one, "filterReasons": (report.get("filterReasons") or {}).get(name, {})}
+            {"name": name, "proof": one, "filterReasons": (report.get("filterReasons") or {}).get(name, {}),
+             **({"completeRead": report["completeRead"][name]} if name in (report.get("completeRead") or {}) else {})}
             for name, one in (report.get("proof") or {}).items()
         ],
     }
     if kind == "complete":
         block["ledger"] = {key: int(stats.get(key) or 0) for key in ("closed", "absent", "reopened", "changed", "known")}
+        # Wave 4 (n): why ads stayed open. Counts only; the Activity view shows them so "0 closed" can be told from "held".
+        block["held"] = {key: int(stats.get(key) or 0) for key in HELD_KEYS}
     if report.get("nothingSaved"):
         block["nothingSaved"] = str(report["nothingSaved"])
     return block
@@ -438,6 +466,8 @@ def plan_import(
     evidence: dict[str, dict] = {}
     proven_searches: list[str] = []
     rejected_total = 0
+    shadow_evidence: dict = {}
+    meta_sources: list[dict] = []
 
     for name in providers:
         stage = run.sources.get(name)
@@ -477,11 +507,17 @@ def plan_import(
             not_run.add(name)
         if name in job_history.CLOSURE_PROVIDERS:
             in_doubt = name in not_run or bool(stage and stage.torn) or bool(footer and footer.get("discardMismatch"))
-            evidence[name] = board_evidence(run, name, stage, footer, in_doubt)
+            evidence[name] = board_evidence(run, name, stage, footer, in_doubt, merge_parts=name in MERGED_PARTS)
         else:
             search_reasons = _search_proof_reasons(run, stage, footer, state, anomaly_codes)
             if not search_reasons:
                 proven_searches.append(name)
+            if name in MERGED_PARTS:
+                # Report only (Wave 4, c): the complete-read proof of a source that is not snapshot-based yet. Nothing here closes an ad.
+                in_doubt = name in not_run or bool(stage and stage.torn) or bool(footer and footer.get("discardMismatch"))
+                shadow_evidence = board_evidence(run, name, stage, footer, in_doubt, merge_parts=True)
+        if name in MERGED_PARTS:
+            report.setdefault("completeRead", {})[name] = _complete_read(evidence.get(name) or shadow_evidence, state)
         if footer:
             if footer.get("boardsFailed"):
                 failed_boards[name] = set(footer["boardsFailed"])
@@ -496,6 +532,7 @@ def plan_import(
             manifest.get("searchKey") or "",
         )
         report.setdefault("filterReasons", {})[name] = _filter_reasons(run, name)
+        meta_sources.append(import_meta.source_row(name, state, footer, report["proof"][name], (report.get("completeRead") or {}).get(name)))
         report["sources"].append({
             "name": name, "state": state, "staged": len(stage.jobs) if stage and stage.usable else 0,
             "imported": len(valid), "rejected": len(rejected), "heldAsNotRun": name in not_run, "anomalies": anomalies,
@@ -545,12 +582,9 @@ def plan_import(
     )
     result.stats = stats
     report["provenRuns"] = _record_stale_evidence(result.ledger, run, moment, manifest.get("searchKey") or "", proven_searches, evidence)
-    meta = {
-        "searchTerms": manifest.get("terms") or [], "locations": manifest.get("locations") or [],
-        "remoteFilters": manifest.get("remoteFilters") or [], "country": manifest.get("country") or "",
-        "providers": providers, "providerCounts": provider_counts, "rawCount": len(all_jobs),
-        "dedupedCount": len(deduped), "history": stats, "sourceRunId": run.run_id,
-    }
+    meta = import_meta.build_import_meta(
+        manifest, providers, provider_counts, len(all_jobs), len(deduped), stats, run.run_id, meta_sources, report.get("filterReasons") or {},
+    )
     generation = (result.ledger.get("generation") or 0) + 1
     result.ledger["generation"] = generation
     result.ledger["lastImport"] = {"runId": run.run_id, "at": moment, "startedAt": manifest.get("startedAt"), "meta": meta, "marksNotFound": True}

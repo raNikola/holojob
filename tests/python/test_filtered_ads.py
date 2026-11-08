@@ -597,7 +597,7 @@ def _jobspy(title, monkeypatch):
 
 
 def _infostud(title, monkeypatch):
-    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None: ([infostud_row(1001, title, "Zxqville")], 1))
+    monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None, **_: ([infostud_row(1001, title, "Zxqville")], 1))
     monkeypatch.setattr(infostud_client, "enrich", lambda job, delay=1.0: job)
     return infostud_provider.InfostudProvider(), "infostud", PLACE
 
@@ -680,7 +680,7 @@ def test_infostud_on_its_second_drop_path_and_never_its_raw_rows_sha1(tmp_path, 
     the address. A record must never carry that one: the ledger would then not match it."""
     def at(city):
         def make(title, patch):
-            patch.setattr(infostud_client, "fetch_raw", lambda categories=None: ([infostud_row(1001, title, city)], 1))
+            patch.setattr(infostud_client, "fetch_raw", lambda categories=None, **_: ([infostud_row(1001, title, city)], 1))
             patch.setattr(infostud_client, "enrich", lambda job, delay=1.0: job)
             return infostud_provider.InfostudProvider(), "infostud", PLACE
         return make

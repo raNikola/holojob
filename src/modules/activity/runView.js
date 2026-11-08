@@ -101,6 +101,14 @@ export function proofView(proof) {
   return { state: 'not_proven', label: 'Not proven', tone: 'medium', lines: lines.length ? lines : ['Not proven (the reason was not recorded)'] }
 }
 
+/** The complete-read line of a source whose listing read is checked without being used to close ads. Null when nothing was recorded. */
+export function completeReadText(read) {
+  if (!read || typeof read !== 'object') return null
+  if (read.complete === true) return 'Listing read in full (the number of ads read equals the total the site reports). Not used to close ads yet.'
+  const why = (read.codes ?? []).map(reasonText).join('; ')
+  return `Listing not proven complete${why ? `: ${why}` : ''}. Not used to close ads yet.`
+}
+
 const FILTER_LABELS = {
   title_not_matched: "Title didn't match", search_terms_not_matched: "Search terms didn't match", location_not_matched: "Location didn't match",
   country_not_matched: "Country didn't match", not_listed: "Not listed on the company's board", no_detail_text: 'Full ad text could not be read',
@@ -150,5 +158,22 @@ export function ledgerText(run) {
   const closed = Number.isFinite(ledger.closed) ? ledger.closed : null
   const absent = Number.isFinite(ledger.absent) ? ledger.absent : null
   const reopened = Number.isFinite(ledger.reopened) ? ledger.reopened : null
-  return [['closed', closed], ['marked absent', absent], ['reopened', reopened]].map(([word, number]) => `${number === null ? NOT_RECORDED : number.toLocaleString()} ${word}`).join(', ')
+  const base = [['closed', closed], ['marked absent', absent], ['reopened', reopened]].map(([word, number]) => `${number === null ? NOT_RECORDED : number.toLocaleString()} ${word}`).join(', ')
+  const held = heldText(run.import.held)
+  return held ? `${base}. ${held}` : base
+}
+
+const HELD_LABELS = [
+  ['keptFailedBoard', 'kept open because its board failed'],
+  ['keptEmptyBoard', 'kept open because its board answered empty'],
+  ['keptSourceNotRun', 'kept open because its source did not run'],
+  ['keptUnproven', 'kept open because the read was not proven complete'],
+  ['keptBoardNotRead', 'kept open because its board was not read'],
+  ['listedButFiltered', 'still listed but dropped by a filter'],
+]
+
+/** Why ads were not closed, in words. Empty when the run recorded nothing or every count is zero. */
+export function heldText(held) {
+  if (!held) return ''
+  return HELD_LABELS.filter(([key]) => Number.isFinite(held[key]) && held[key] > 0).map(([key, label]) => `${held[key].toLocaleString()} ${label}`).join(', ')
 }

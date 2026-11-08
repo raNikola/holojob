@@ -108,6 +108,12 @@ describe('what a run shows', () => {
     expect(run.sources.map((s) => [s.returned, s.collected, s.filteredOut])).toEqual([[100, 40, 60], [50, 10, 40]])
   })
 
+  it('passes the held counts of an import through, and drops anything else in the block', () => {
+    plant(1, { sources: [], import: { kind: 'complete', complete: true, saved: 1, new: 0, refreshed: 1, ledger: { closed: 0, absent: 0, reopened: 0, changed: 0, known: 1 }, held: { keptFailedBoard: 3, keptUnproven: 'x', listedButFiltered: 4, extra: 9 }, sources: [] } })
+    const [run] = list().body.runs
+    expect(run.import.held).toEqual({ keptFailedBoard: 3, keptEmptyBoard: null, keptSourceNotRun: null, keptUnproven: null, keptBoardNotRead: null, listedButFiltered: 4 })
+  })
+
   it('for a cancelled run, saved includes refreshed ads and the cancel outcome is shown', () => {
     plant(1, { status: 'cancelled', cancel: { requestedAt: start(1), outcome: 'collected_ads_saved', saved: 455 },
       import: { kind: 'partial', complete: false, saved: 455, new: 3, refreshed: 452, sources: [] } })
@@ -169,6 +175,16 @@ describe('proof has three states', () => {
     plant(1)
     plant(2, { import: undefined })
     for (const run of list().body.runs) expect(run.sources.every((s) => s.proof.state === 'not_recorded' && s.proof.codes.length === 0)).toBe(true)
+  })
+
+  it('passes the complete-read proof of a source through as a state and known codes only', () => {
+    plant(1, { sources: [{ name: 'infostud', status: 'ok', read: 3, kept: 1, new: 0 }, { name: 'jobspy', status: 'ok', read: 1, kept: 1, new: 0 }], import: imp([
+      { name: 'infostud', proof: { proven: true, why: ['proven'], boards: [] }, filterReasons: {}, completeRead: { complete: false, why: ['board_not_complete', 'made up <script>'], extra: 1 } },
+      { name: 'jobspy', proof: { proven: true, why: ['proven'], boards: [] }, filterReasons: {} },
+    ]) })
+    const [infostud, jobspy] = list().body.runs[0].sources
+    expect(infostud.completeRead).toEqual({ complete: false, codes: ['board_not_complete'] })
+    expect(jobspy.completeRead).toBeNull()
   })
 
   it('boards carry their own state and reasons', () => {
@@ -275,12 +291,12 @@ describe('the allow-list', () => {
     const [run] = list().body.runs
     expect(Object.keys(run).sort()).toEqual(['canCancel', 'cancel', 'cancelRequested', 'counts', 'durationSeconds', 'finishedAt', 'import', 'incompleteCommit', 'inferred', 'issues', 'issuesCount',
       'recorded', 'runId', 'sources', 'staging', 'startedAt', 'status', 'steps', 'trigger'])
-    expect(Object.keys(run.sources[0]).sort()).toEqual(['boardsFailed', 'collected', 'durationSeconds', 'error', 'filterReasons', 'filteredOut', 'finishedAt', 'name', 'new', 'proof', 'readClass', 'returned', 'skipReason', 'startedAt', 'status'])
+    expect(Object.keys(run.sources[0]).sort()).toEqual(['boardsFailed', 'collected', 'completeRead', 'durationSeconds', 'error', 'filterReasons', 'filteredOut', 'finishedAt', 'name', 'new', 'proof', 'readClass', 'returned', 'skipReason', 'startedAt', 'status'])
     expect(Object.keys(run.issues[0]).sort()).toEqual(['level', 'message', 'source'])
     expect(Object.keys(run.steps[0]).sort()).toEqual(['exitCode', 'name', 'status'])
     expect(Object.keys(run.sources[0].proof).sort()).toEqual(['boards', 'codes', 'state'])
     expect(Object.keys(run.sources[0].proof.boards[0]).sort()).toEqual(['board', 'codes', 'detail', 'state'])
-    expect(Object.keys(run.import).sort()).toEqual(['complete', 'crosspostsMerged', 'duplicatesRemoved', 'kind', 'ledger', 'new', 'nothingSaved', 'refreshed', 'rejected', 'saved'])
+    expect(Object.keys(run.import).sort()).toEqual(['complete', 'crosspostsMerged', 'duplicatesRemoved', 'held', 'kind', 'ledger', 'new', 'nothingSaved', 'refreshed', 'rejected', 'saved'])
     expect(run.issues[0].message).toBe('Message details withheld')
     expect(run.issues[1]).toEqual({ level: 'warning', source: null, message: 'Message details withheld' })
     expect(run.sources[0].filterReasons).toEqual({ title_not_matched: 2 })

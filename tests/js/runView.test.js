@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { NOT_RECORDED, NUMBER_HELP, SOURCE_STATUS_TONES, SOURCE_NEW_NOTE, filterReasonText, formatDuration, ledgerText, proofView, reasonText, savedShort, savedText, scoringText, show, sourceStatusLabel, stagingText, statusLabel, statusSentence } from '../../src/modules/activity/runView.js'
+import { NOT_RECORDED, NUMBER_HELP, SOURCE_STATUS_TONES, SOURCE_NEW_NOTE, filterReasonText, formatDuration, completeReadText, heldText, ledgerText, proofView, reasonText, savedShort, savedText, scoringText, show, sourceStatusLabel, stagingText, statusLabel, statusSentence } from '../../src/modules/activity/runView.js'
 import { answer, importBlock, record } from './setup/activityFixtures.js'
 
 const run = (extra, n = 1) => answer([record(n, extra)]).runs[0]
@@ -60,6 +60,23 @@ describe('what a run says in words', () => {
     expect(statusSentence(run({ status: 'skipped', import: nothing }))).toBe('Every source was skipped, so nothing was searched.')
     expect(ledgerText(run({ status: 'skipped', import: nothing }))).toBe(said)
     expect(statusSentence(run({ status: 'failed' }))).toBe('This run failed. The issues below say where.')
+  })
+
+  it('says why ads stayed open next to the ledger effect, and nothing extra when no count is above zero', () => {
+    const base = { kind: 'complete', complete: true, saved: 1, new: 0, refreshed: 1, sources: [], ledger: { closed: 0, absent: 0, reopened: 0, changed: 0, known: 1 } }
+    const held = { keptFailedBoard: 2, keptEmptyBoard: 0, keptSourceNotRun: 0, keptUnproven: 5, keptBoardNotRead: 0, listedButFiltered: 0 }
+    expect(ledgerText(run({ import: { ...base, held } }))).toBe('0 closed, 0 marked absent, 0 reopened. 2 kept open because its board failed, 5 kept open because the read was not proven complete')
+    expect(ledgerText(run({ import: { ...base, held: { ...held, keptFailedBoard: 0, keptUnproven: 0 } } }))).toBe('0 closed, 0 marked absent, 0 reopened')
+    expect(ledgerText(run({ import: base }))).toBe('0 closed, 0 marked absent, 0 reopened')
+    expect(heldText(null)).toBe('')
+    expect(heldText({ keptFailedBoard: null })).toBe('')
+  })
+
+  it('says whether a listing was read in full, without claiming it closes anything', () => {
+    expect(completeReadText(null)).toBeNull()
+    expect(completeReadText({ complete: true, codes: ['board_complete'] })).toMatch(/read in full.*Not used to close ads yet/)
+    expect(completeReadText({ complete: false, codes: ['board_not_complete'] })).toMatch(/^Listing not proven complete: .*Not used to close ads yet\.$/)
+    expect(completeReadText({ complete: false, codes: [] })).toBe('Listing not proven complete. Not used to close ads yet.')
   })
 
   it('cancelled, interrupted and skipped each have a sentence', () => {
