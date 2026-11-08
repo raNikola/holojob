@@ -979,6 +979,110 @@ def remove_proven_wrong(work: Work, resolver: Resolver, remove: bool) -> tuple[l
     return lines, counts, {"removed": removals, "guarded": guarded}
 
 
+# ---------------------------------------------------- S5: doc -> code links
+#
+# Only an inline backticked token (outside fenced code blocks) that, after
+# dropping a `:line` or `#anchor` suffix and trailing punctuation, is exactly a
+# repo-relative path, or a path relative to the doc's own folder, of one code
+# file node in the graph. Bare names, suffix matches, globs, folders and data/
+# paths are never linked. Rebuilt from the working tree on every run, no model.
+
+FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)")
+REJECT_IN_TOKEN = set("*?[]{}<>$|\\ \t()=,'\"")
+
+
+def doc_tokens(text: str):
+    """(line, token) for each inline code span outside fenced blocks."""
+    fence = None
+    for lineno, line in enumerate(text.splitlines(), 1):
+        opening = FENCE.match(line)
+        if fence:
+            if opening and opening.group(1)[0] == fence[0] and len(opening.group(1)) >= len(fence):
+                fence = None
+            continue
+        if opening:
+            fence = opening.group(1)
+            continue
+        for match in INLINE_CODE.finditer(line):
+            yield lineno, match.group(2).strip()
+
+
+def path_token(token: str):
+    if not token or "://" in token or token.startswith(("/", "~", "-")) or token.endswith("/"):
+        return None
+    token = re.sub(r"#.*$", "", token)
+    token = re.sub(r":L?\d+(?:-L?\d+)?$", "", token)
+    token = token.rstrip(".,;:")
+    if token.startswith("./"):
+        token = token[2:]
+    if not token or any(c in REJECT_IN_TOKEN for c in token) or token.startswith("data/"):
+        return None
+    return token
+
+
+def link_docs(work: Work, files: list[str], root: Path) -> tuple[list[str], Counter, list]:
+    counts: Counter = Counter()
+    code_files = {path: nid for path, nid in work.file_nodes.items()
+                  if not path.endswith(".md") and (work.node(nid) or {}).get("file_type") == "code"}
+    existing = {(e["e"]["source"], e["e"]["target"], e["e"]["relation"]) for e in work.live_edges()}
+    mentions = []
+    for doc in sorted(p for p in files if p.endswith(".md") and area(p) not in ("excluded",)):
+        try:
+            text = (root / doc).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            counts["docs unreadable"] += 1
+            continue
+        counts["docs scanned"] += 1
+        doc_dir = doc.rpartition("/")[0]
+        for line, raw in doc_tokens(text):
+            counts["inline code spans"] += 1
+            token = path_token(raw)
+            if token is None:
+                continue
+            exact = token if token in code_files else None
+            joined = os.path.normpath(f"{doc_dir}/{token}") if doc_dir else token
+            relative = joined if not joined.startswith("..") and joined in code_files else None
+            if exact and relative and exact != relative:
+                counts["skipped: repo- and doc-relative readings differ"] += 1
+                continue
+            target = exact or relative
+            if target is None:
+                continue
+            counts["linked mentions"] += 1
+            mentions.append({"doc": doc, "line": line, "token": raw, "target": target})
+    links: dict[tuple[str, str], list[dict]] = {}
+    for m in mentions:
+        links.setdefault((m["doc"], m["target"]), []).append(m)
+    for (doc, target), found in sorted(links.items()):
+        doc_node = work.file_nodes.get(doc)
+        if doc_node is None:
+            doc_node = "holojob_doc_" + norm_module_id(doc)
+            if work.node(doc_node) is None:
+                work.add_node({"id": doc_node, "label": doc.rsplit("/", 1)[-1], "file_type": "document",
+                               "source_file": doc, "source_location": "L1", "_origin": "adapter",
+                               "provenance": "doc-file", "norm_label": doc.rsplit("/", 1)[-1].lower()})
+                counts["doc file nodes added"] += 1
+        key = (doc_node, code_files[target], "references")
+        if key in existing:
+            counts["links already present"] += 1
+            continue
+        existing.add(key)
+        work.add_edge({"source": doc_node, "target": code_files[target], "relation": "references",
+                       "confidence": "EXTRACTED", "confidence_score": 1.0, "context": "doc_path",
+                       "source_file": doc, "source_location": f"L{found[0]['line']}", "weight": 1.0,
+                       "_origin": "adapter", "provenance": "doc-path", "mentions": len(found)}, "doc-path")
+        counts["doc -> code edges added"] += 1
+    per_doc = Counter(doc for doc, _ in links)
+    lines = ["## Doc-to-code links (S5)", "",
+             "Only backticked tokens that are exactly the repo-relative (or doc-relative) path of one code file "
+             "in the graph. Rebuilt from the working tree on every run.", ""]
+    lines += [f"- {k}: {v}" for k, v in sorted(counts.items())]
+    if per_doc:
+        lines += ["", "Links per doc:", ""] + [f"- `{d}`: {n}" for d, n in sorted(per_doc.items())]
+    return lines, counts, mentions
+
+
 # ------------------------------------------------------------- S4: views
 #
 # Graphify has no filtered views, but its query, path, explain and affected
@@ -1178,6 +1282,9 @@ def build(root: Path, graph_path: Path, out_dir: Path | None, remove: bool = Tru
     lines, s3, details["removals"] = remove_proven_wrong(work, resolver, remove)
     sections.append(lines)
     counts.update({f"S3 {k}": v for k, v in s3.items()})
+    lines, s5, details["doc_links"] = link_docs(work, files, root)
+    sections.append(lines)
+    counts.update({f"S5 {k}": v for k, v in s5.items()})
 
     verify_invariant(raw, work)
     index = work.result({"version": 1, "removals": remove, "counts": dict(sorted(counts.items()))})
@@ -1185,7 +1292,7 @@ def build(root: Path, graph_path: Path, out_dir: Path | None, remove: bool = Tru
         "input_sha256": input_sha,
         "graphify_version": graph["graph"].get("graphify_version"),
         "freshness": freshness(root, graph, manifest),
-        "doc_links_status": "not built",
+        "doc_links_status": "current (rebuilt from the working tree by this run)",
         "sections": sections,
         "edges_in": len(graph["links"]),
         "edges_out": len(index["links"]),

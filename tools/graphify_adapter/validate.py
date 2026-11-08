@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Manual acceptance checks for the Graphify adapter, run against the real repo.
 
-    .venv/bin/python tools/graphify_adapter/validate.py imports
+    .venv/bin/python tools/graphify_adapter/validate.py imports|calls|doclinks
 
 `imports` re-checks every import the adapter re-pointed or added, in separate
 `python -I -S` processes that only call importlib.machinery.PathFinder.find_spec.
@@ -158,9 +158,37 @@ def check_calls(root: Path) -> int:
     return 1 if unlabelled or false_negatives else 0
 
 
+def wilson_lower(correct: int, total: int, z: float = 1.96) -> float:
+    if total == 0:
+        return 0.0
+    p = correct / total
+    centre = p + z * z / (2 * total)
+    margin = z * ((p * (1 - p) + z * z / (4 * total)) / total) ** 0.5
+    return (centre - margin) / (1 + z * z / total)
+
+
+def check_doclinks(root: Path, minimum: int = 200, bar: float = 0.98) -> int:
+    """Precision of S5 links over the hand-labelled sample: pass at >= 200 labels and a Wilson bound >= 98%."""
+    adapter = load_adapter()
+    result = adapter.build(root, root / "graphify-out" / "graph.json", None)
+    current = {(m["doc"], m["token"], m["target"]) for m in result["details"]["doc_links"]}
+    labels = json.loads((HERE / "validation" / "doclink_labels.json").read_text(encoding="utf-8"))["labels"]
+    labelled = {(x["doc"], x["token"], x["target"]): x["verdict"] for x in labels}
+    sample = {k: v for k, v in labelled.items() if k in current}
+    correct = sum(1 for v in sample.values() if v == "correct")
+    lower = wilson_lower(correct, len(sample))
+    print(f"doclinks: {len(current)} current unique mentions, {len(sample)} labelled ({len(labelled) - len(sample)} labels "
+          f"stale, {len(current - set(labelled))} mentions unlabelled); precision {correct}/{len(sample)}, "
+          f"95% Wilson lower bound {lower:.4f} (bar {bar})")
+    for key, verdict in sorted(sample.items()):
+        if verdict != "correct":
+            print("  WRONG:", key)
+    return 0 if len(sample) >= minimum and lower >= bar else 1
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("check", choices=["imports", "calls"])
+    parser.add_argument("check", choices=["imports", "calls", "doclinks"])
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--python", default=None, help="interpreter for the isolated lookups (default .venv/bin/python)")
     args = parser.parse_args(argv)
@@ -170,6 +198,8 @@ def main(argv=None) -> int:
         return check_imports(root, python)
     if args.check == "calls":
         return check_calls(root)
+    if args.check == "doclinks":
+        return check_doclinks(root)
     return 2
 
 
