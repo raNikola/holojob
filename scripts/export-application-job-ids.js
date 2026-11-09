@@ -9,10 +9,11 @@
  * The output file is private (mode 600) and lives under data/, which git ignores. Feed it to scripts/older-key-report.py and
  * scripts/prune-older-key.py with --application-job-ids.
  */
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { loadStore } from './application-store.js'
+import { loadStore, storePaths } from './application-store.js'
 
 /** The distinct job ids of the applications in `store`, sorted. Applications entered by hand have none. */
 export function applicationJobIds(store) {
@@ -24,10 +25,18 @@ export function applicationJobIds(store) {
   return [...ids].sort()
 }
 
+/** Hash of the store file's bytes, `none` when there is no file: the header Python compares with the live file before any prune. */
+export function storeSha256(root) {
+  const file = storePaths(root).store
+  return fs.existsSync(file) ? crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') : 'none'
+}
+
 export function exportApplicationJobIds(root, outFile) {
+  const sha = storeSha256(root)
   const ids = applicationJobIds(loadStore(root))
+  if (storeSha256(root) !== sha) throw new Error('applications.json changed during the export; run it again')
   fs.mkdirSync(path.dirname(outFile), { recursive: true, mode: 0o700 })
-  fs.writeFileSync(outFile, ids.length ? `${ids.join('\n')}\n` : '', { mode: 0o600 })
+  fs.writeFileSync(outFile, `# store-sha256 ${sha}\n${ids.length ? `${ids.join('\n')}\n` : ''}`, { mode: 0o600 })
   fs.chmodSync(outFile, 0o600)
   return ids.length
 }

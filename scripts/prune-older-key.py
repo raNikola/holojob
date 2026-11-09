@@ -9,7 +9,8 @@
     .venv/bin/python scripts/prune-older-key.py --days 180 --application-job-ids data/backups/application-job-ids.txt --protect-ids data/backups/protect-ids.txt
     # 4. only after reading it:  the same command plus --apply
 
---days has no default: the window is the owner's decision (180 days recommended). --apply needs both id files, takes the pipeline
+--days has no default: the window is the owner's decision (180 days recommended). --apply needs both id files, and the application ids must have been exported from the applications.json that is on disk at apply time
+(the `# store-sha256` header is compared with the live file; any mismatch, a missing header or a missing file refuses), takes the pipeline
 lock, backs the ledger up to data/backups/older-key-<time>/ (git-ignored, 700 / 600) with the removed ids and a manifest, and refuses
 to write if removing the rows would change the derived view. To undo, copy the backed-up job_history.json back while no run is active.
 The browser's Keep, statuses and hand-entered jobs are invisible to the server: ids not exported are not protected.
@@ -42,6 +43,7 @@ def main(argv=None, root: Path = ROOT) -> int:
     result = retention.prune(
         root, days=args.days, now=datetime.now(timezone.utc), application_ids=retention.parse_ids(args.application_job_ids),
         protect_ids=retention.parse_ids(args.protect_ids), apply=args.apply,
+        store_sha=retention.parse_store_sha(args.application_job_ids),
     )
     shown = {k: v for k, v in result.items() if k != "candidates"}
     shown["wouldRemove"] = len(result["candidates"])

@@ -113,8 +113,9 @@ def test_the_report_prints_no_title(world, capsys):
 # --- the guarded write ------------------------------------------------------------------------------------------------------
 
 
-def run_prune(root, apply, days=180, app=frozenset(), protect=frozenset()):
-    return retention.prune(root, days=days, now=NOW, application_ids=set(app), protect_ids=set(protect), apply=apply, stamp="t1")
+def run_prune(root, apply, days=180, app=frozenset(), protect=frozenset(), store_sha="current"):
+    sha = retention.live_store_sha(root) if store_sha == "current" else store_sha
+    return retention.prune(root, days=days, now=NOW, application_ids=set(app), protect_ids=set(protect), apply=apply, stamp="t1", store_sha=sha)
 
 
 def test_a_dry_run_changes_nothing(world):
@@ -183,3 +184,65 @@ def test_the_cli_requires_days_and_prints_no_titles(world, capsys):
     assert module.main(["--days", "180"], root=root) == 0
     captured = capsys.readouterr()
     assert "Product Manager" not in captured.out and "DRY RUN" in captured.err and len(load(root)["jobs"]) == 5
+
+
+# --- the application export must match the live store (Wave 6) -------------------------------------------------------------
+
+
+def _store(root, text='{"version":1,"applications":{}}'):
+    file = root / "data/applications/applications.json"
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(text)
+    return file
+
+
+def test_apply_refuses_when_the_export_hash_differs_from_the_live_store(world):
+    root, _ = world
+    _store(root)
+    exported = retention.live_store_sha(root)
+    _store(root, '{"version":1,"applications":{"app-x":{}}}')  # an application was added after the export
+    ledger_before = (root / "data/jobs/job_history.json").read_bytes()
+    with pytest.raises(SystemExit, match="different applications.json"):
+        run_prune(root, apply=True, store_sha=exported)
+    assert (root / "data/jobs/job_history.json").read_bytes() == ledger_before and not (root / "data/backups").exists()
+
+
+def test_apply_refuses_a_missing_header_a_store_that_appeared_and_one_that_vanished(world):
+    root, _ = world
+    with pytest.raises(SystemExit, match="no `# store-sha256` header"):
+        run_prune(root, apply=True, store_sha=None)
+    _store(root)
+    with pytest.raises(SystemExit, match="different applications.json"):
+        run_prune(root, apply=True, store_sha="none")  # exported when there was no store
+    exported = retention.live_store_sha(root)
+    (root / "data/applications/applications.json").unlink()
+    with pytest.raises(SystemExit, match="different applications.json"):
+        run_prune(root, apply=True, store_sha=exported)
+
+
+def test_apply_with_a_matching_hash_leaves_the_application_store_byte_identical(world):
+    root, _ = world
+    file = _store(root)
+    before = file.read_bytes()
+    out = run_prune(root, apply=True)
+    assert out["applied"] is True and out["applicationsExportCurrent"] is True
+    assert file.read_bytes() == before
+
+
+def test_the_header_is_read_from_the_ids_file_and_ids_still_parse(tmp_path):
+    f = tmp_path / "ids.txt"
+    f.write_text("# store-sha256 " + "a" * 64 + "\njob-1\n")
+    assert retention.parse_store_sha(f) == "a" * 64 and retention.parse_ids(f) == {"job-1"}
+    f.write_text("job-1\n")
+    assert retention.parse_store_sha(f) is None
+    f.write_text("# store-sha256 none\n")
+    assert retention.parse_store_sha(f) == "none"
+
+
+def test_no_retention_code_writes_under_data_applications():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    for file in (root / "python/job_discovery/older_key_retention.py", root / "scripts/prune-older-key.py", root / "scripts/older-key-report.py"):
+        for line in file.read_text().splitlines():
+            if "applications" in line and any(w in line for w in ("write_", "unlink", "rmtree", "shutil.", "open(")):
+                raise AssertionError(f"{file.name} may write near the application store: {line.strip()}")

@@ -68,6 +68,28 @@ def parse_ids(path: Path | None) -> set[str] | None:
     return ids
 
 
+STORE_SHA_HEADER = re.compile(r"^#\s*store-sha256\s+(none|[0-9a-f]{64})\s*$")
+STORE_FILE = ("data", "applications", "applications.json")
+
+
+def parse_store_sha(path: Path | None) -> str | None:
+    """The `# store-sha256 <hex|none>` header the id exporter writes: the hash of applications.json when the ids were exported."""
+    if path is None:
+        return None
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        match = STORE_SHA_HEADER.match(line.strip())
+        if match:
+            return match.group(1)
+    return None
+
+
+def live_store_sha(root: Path) -> str:
+    """Hash of the bytes of the CURRENT application store, `none` when there is no file. Only a hash is computed: the file is never parsed
+    and nothing is written (TRACKER_PLAN 6a: Python does not read application data)."""
+    file = Path(root).joinpath(*STORE_FILE)
+    return hashlib.sha256(file.read_bytes()).hexdigest() if file.exists() else "none"
+
+
 def _parse(value) -> datetime | None:
     try:
         moment = datetime.fromisoformat(value) if value else None
@@ -170,13 +192,21 @@ def _view_text(ledger: dict) -> str:
     return json.dumps(view_guard.derive_view(ledger), sort_keys=True)
 
 
-def prune(root: Path, *, days: int, now: datetime, application_ids, protect_ids, apply: bool, stamp: str | None = None) -> dict:
+def prune(root: Path, *, days: int, now: datetime, application_ids, protect_ids, apply: bool, stamp: str | None = None,
+          store_sha: str | None = None) -> dict:
     """Plan, and with `apply` make, the removal. Refuses `apply` without both id lists (an empty list is a list), the pipeline lock,
     a git-ignored backup of the ledger, and an unchanged view. Returns the plan plus what was done."""
     root = Path(root)
     ledger_file = root / "data" / "jobs" / job_history.LEDGER_FILE
     if apply and (application_ids is None or protect_ids is None):
         raise SystemExit("refusing --apply: pass --application-job-ids FILE and --protect-ids FILE (an empty file is fine). " + BROWSER_NOTE)
+    live = live_store_sha(root)
+    if apply and store_sha is None:
+        raise SystemExit("refusing --apply: the application ids file has no `# store-sha256` header (it is missing or from an older exporter). "
+                         "Re-run scripts/export-application-job-ids.js.")
+    if apply and store_sha != live:
+        raise SystemExit("refusing --apply: the application ids were exported from a different applications.json than the one on disk now "
+                         "(the file changed, or the export is stale). Re-run scripts/export-application-job-ids.js and the dry run.")
     lock = pipeline_lock.acquire(path=root / "data" / "jobs" / ".pipeline.lock")
     if lock is None:
         raise SystemExit(pipeline_lock.BUSY_MESSAGE.replace("nothing started", "nothing pruned"))
@@ -184,6 +214,7 @@ def prune(root: Path, *, days: int, now: datetime, application_ids, protect_ids,
         ledger = job_history.load(ledger_file, read_only=True)
         result = plan(ledger, root, days=days, now=now, application_ids=application_ids, protect_ids=protect_ids)
         result["applied"] = False
+        result["applicationsExportCurrent"] = store_sha is not None and store_sha == live
         if not apply or not result["candidates"]:
             return result
         target = _backup(root, ledger_file, result, stamp or now.strftime("%Y%m%d-%H%M%S"))
