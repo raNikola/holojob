@@ -1072,7 +1072,7 @@ Earlier related decision: top 50 per run ([redesign/DECISIONS.md](redesign/DECIS
 ## Import redesign (Wave 7)
 
 **Approved sources:** PDF, DOCX, TXT / MD, pasted text, LinkedIn data ZIP, JSON Resume, LinkedIn PDF, manual form.
-**Rejected:** PDF URL, LinkedIn profile URL. (2026-11-09: a browser-extension read of the user's own opened profile, TASK-01, is planned and blocked; see [the extension Epic decision](#browser-extension-epic-and-company-information-standardization-planning-only-2026-11-09). The rejection stands for any server-side or URL fetch.)
+**Rejected:** PDF URL, LinkedIn profile URL. (2026-11-09: the rejection applies to automatic server-side fetching only; a browser extension is a parked idea, see [the notes](#idea-browser-extension-parked-notes-2026-11-09).)
 
 **Design:**
 
@@ -1572,54 +1572,22 @@ when the owner next saves that source) and drops a bad history or migrations val
 **UI:** an inline confirmation that names the job title; on refusal the reason is shown, with "Open in Tracker" (`OPEN_TRACKER_EVENT`, opens the Applications view) and a pointer to Void on the job's page.
 **Not done, deliberately:** no Delete in the Jobs list row actions. That row holds status toggles (Save, Reject, Apply); a destructive, confirmed action does not fit it, and the owner can open the job. **Stale tabs:** `manual_jobs.json` keeps the deleted ids (ids only, `deleted: [...]`); sync and score answer 410 `deleted` / skip them, so a tab with an older list cannot store the job on the server again, and `useJobsSync` drops a hand-entered row another tab's write no longer holds. **One critical section:** the tracker check, the Python delete and the job-state cleanup run inside the application store's own lock (`withApplicationLock`, the lock every application write takes), and Python takes the pipeline lock inside it; nothing takes them in the other order, so there is no deadlock. A concurrent create either finishes first (delete refused, 409) or waits, and then `createApplication` refuses a `jobId` remembered as deleted (410). `applicationStore.test.js` pins the module's export list; `withApplicationLock` was added to it on purpose (it is a lock, not an update or delete path). Tests: `tests/js/manualJobDeleteServer.test.js` (create first, delete first, create during the delete). Re-score and the `older_key` prune are unaffected (Re-score reads the manual file, which no longer has the job; the prune works on the ledger, which never held it).
 
-## Browser extension Epic and company information standardization (planning only, 2026-11-09)
+## Idea: browser extension, parked notes (2026-11-09)
 
-Owner request, recorded on the docs-only branch `extension-epic-plan`. **Nothing is implemented, no dependency is installed, and every item is Planned / To Do.** Plan and acceptance criteria: [ROADMAP.md](ROADMAP.md#epic-holyjobs-browser-extension-linkedin-job-and-profile-import---planned--to-do).
+Owner correction: the browser extension was meant as a **business idea**, not a set of defined tasks. It is **Idea / Not planned for implementation**, parked until the owner decides to plan it. Nothing here is a decision to build. Description: [ROADMAP.md](ROADMAP.md#idea-holyjobs-browser-extension-linkedin-job-and-profile-import---idea--not-planned-for-implementation).
 
-**Owner decisions recorded**
+Notes kept for when it is considered again:
 
-- One Epic, "HolyJobs Browser Extension", with TASK-03 foundations (P0, prerequisite), TASK-02 LinkedIn job import and enrichment (P0 for the extension, **the first useful slice**), and TASK-01 LinkedIn profile import (P1, **the riskiest**, blocked).
-- Core principles for every Task: user-initiated only; no LinkedIn credentials or session cookies stored or sent; no background crawling, automatic navigation or continuous scraping; no AI call for extraction; preview and confirm before any change; reuse existing records; no duplicates, silent overwrites or change to user-owned state; only what the opened page shows; terms-of-service and account risk assessed before implementation.
-- The extension is **Find or Import**: match by LinkedIn job id, then normalised canonical URL, then provider id, then company / title / location as candidates only. A possible match is never merged automatically; closed and history-only jobs are searched too.
-- Import never creates a job by itself. True source (`LinkedIn`) and import origin (`browser_extension`) are separate concepts.
-- **LinkedIn Recommended** is a per-user signal (`unknown` when absent, never `false`), never written onto a future shared job, and it does not change the Fit Score.
-- Easy Apply / External Apply is a property of the posting, not of the user's application; an apply click never marks a job Applied; application records are untouched by import.
-- Job Poster only when visibly shown; not assumed to be the hiring manager; no other profile visited; no outreach action.
-- Enrichment of an existing job never replaces a description blindly, never touches Saved / Rejected / Keep / Applied / notes / history / snapshots, and never scores by itself (Re-score is offered).
-- Company information standardization is a **Discovery** improvement, not an extension feature: company facts live apart from jobs, distinguish missing from unverified, and are not re-extracted when unchanged.
-- Order: foundations, matching, import and enrichment, Recommended and application method, Job Poster, profile import, later multi-job and other sites.
+- **Data classification.** *Recommended by LinkedIn* is per-user data. The application method (Easy Apply or external), the external apply URL and a Job Poster are job-level shared data, each stored with its source and last-checked time, and kept apart from the private outreach and application records. The existing owner overlay (`job-state.json`) is the likely home for the per-user part, as Step 5 section 2.3 already plans; nothing is decided.
+- **The LinkedIn rejection.** "LinkedIn profile URL" was rejected in the Wave 7 import decision because server-side access would use the owner's account session, which conflicts with LinkedIn's terms. That rejection applies **only to automatic server-side fetching**. An extension import, where the user's own browser reads a page the user opened, is **not pre-rejected**; it is also not approved.
+- **Before any planning:** an account-risk and terms-of-service assessment (it should also look at the existing JobSpy LinkedIn discovery and the `li_at` use in the contact scraper). If that is unfavourable the idea stays parked.
+- **Browser:** Chrome first, if it ever happens.
+- **Fits with what exists (reuse, not a plan):** the Wave 7 `ImportDraft` and guarded apply for any profile data (the profile master is still the browser), and the manual-job model and clash check for jobs. The request guard is not authentication and the app has no login (2026-10-29), so any extension would need an answer to that; "shared job database" and multi-user appear in no current plan (principle 15 says single user).
 
-**Conflict 1: TASK-01 against "LinkedIn profile URL import: rejected"** ([Import redesign (Wave 7)](#import-redesign-wave-7), approved sources and rejected sources)
+**Questions for later** (none answered here): where it would fit; how the extension identifies itself; how its data reaches the app screen; the real source stored next to the import route; where per-user and job-level data live; how a job poster is kept; the outcome of the assessment.
 
-- *The earlier decision:* the Wave 7 record lists "LinkedIn profile URL" under Rejected (with "PDF URL"). The reason is not written down there. Related facts that are recorded: Fill from ad refuses LinkedIn pages and login walls (`safe_fetch.py`), and the existing LinkedIn session value `li_at` is already an owner risk item. The owner should confirm the reason when approving the reconciliation.
-- *What TASK-01 changes:* it does not fetch a URL on the server; the user's own browser reads the page the user opened. That removes the server-side fetch and the stored session, but it does **not** remove the terms-of-service and account-restriction risk, and it reads the same personal data. It is therefore not automatically allowed by the earlier decision, and not automatically a reversal of it.
-- *Proposed reconciliation (owner to approve):*
-  1. The rejection stays in force, unchanged, for any server-side or URL-based fetch of LinkedIn (profile or job). No code path may fetch LinkedIn from the server.
-  2. TASK-01 stays **Planned and BLOCKED**. It starts only when (a) the TASK-03 terms and account-risk assessment is written and shows the browser-side read is acceptable to the owner, and (b) the owner approves explicitly. If the assessment is unfavourable, TASK-01 is dropped, not softened.
-  3. **LinkedIn PDF and the LinkedIn data ZIP (Wave 7 S5) remain supported import sources** whatever happens to TASK-01; the Epic never replaces or blocks them. The ZIP also waits only for the owner's real file headers.
-  4. TASK-01 would add a new `ImportDraft` source through the existing Wave 7 pipeline; it is not a second writer and not a URL source. When (and if) it is approved, the "Rejected" line in the Wave 7 record gets a pointer to the new decision rather than being rewritten.
-- *Not a conflict:* TASK-02 (job import) reads a job page in the user's browser and does not touch the profile, but it carries the same LinkedIn terms and account risk, so it also starts only after the TASK-03 assessment. It was never covered by the "URL import rejected" line, which concerns the profile.
+## Company information standardization (Discovery improvement, 2026-11-09)
 
-**Other overlaps and contradictions found**
-
-- **No login (2026-10-29) against "authentication and authorization for import actions".** The request guard is not authentication and the owner accepted no application login. An extension talks to the server from another origin, so it needs a scoped credential and an Origin / Host rule that does not loosen the guard for the app. This is open decision 2; the no-login decision stays for the app itself.
-- **Shared Job Database, Company entity and multi-user.** They appear nowhere in the existing plans: GOALS lists multi-user accounts as out of scope, principle 15 says single user (server master), and the Step 5 plan says "No multi-user model". This Epic treats them as **design constraints only** (per-user signals in the owner overlay `job-state.json`, stable identity keys, company facts apart from jobs). It does not add them to the plan and does not change principle 15.
-- **Profile master is the browser.** An extension cannot apply a profile on the server. TASK-01 would hand an `ImportDraft` to the app, and only the app's guarded apply writes (the draft is transient and never persisted under `data/`).
-- **Manual-job model.** A hand-entered job is `provider: 'manual'` and `manualEntry: true`, and a manual row wins over a discovered row with the same normalised URL. An extension-created job needs the true source kept as a separate field (open decision 5); new owner-only fields go in `MANUAL_FIELDS` and out of `SCORING_FIELDS`, so a Recommended signal can never reach scoring.
-- **`externalId`** is optional in the job shapes; whether a JobSpy LinkedIn id survives into the ledger and the scored file has to be verified in TASK-02.1 before "match by LinkedIn job id" is promised.
-- **Existing LinkedIn use.** JobSpy discovers LinkedIn jobs and the LinkedIn contact scraper (`python/outreach_scraper/scrape_linkedin_contacts.py`, via `scripts/linkedin-scraper-bridge.js`) uses `li_at`. The TASK-03 assessment covers these too (the owner already has the open action to rotate `li_at`).
-- **Company data.** The canonical job has only a `company` string; the Infostud list client keeps `companyName` only. The statement that Infostud already gives a useful reference is unverified until the provider audit.
-- **Wave order.** Roadmap v2 has no extension wave; Application Tracking (Wave 5) and Wave 7 import are merged into `main` (checked with `git branch --merged main`; the ROADMAP rows for Waves 4 and 5 still say "local, not merged" and are stale), and 02.4 / 02.6 / TASK-01 build on them. The Epic stays outside the wave order until the owner places it.
-
-**Open decisions (owner approval needed)**
-
-1. Where the Epic sits in the wave order (Wave 5 and Wave 7 are already merged).
-2. The extension's credential and how it passes the request guard (scoped token held in extension storage, revocable; or none, with the loopback-only trust model; allowed origin format for the extension).
-3. How the extension's data reaches the app UI: a short-lived in-memory token like Fill from ad's `cachedPage`, or the extension opening an app page that receives the data. Recommended: the in-memory token; nothing is written to `data/`.
-4. Supported browsers (Chromium first, Firefox later, or both).
-5. How the true source is stored for an extension-created job (`source` plus `importOrigin` fields next to `provider`).
-6. Per-user job signals (Recommended, the observed application method, poster) are added as fields of the planned owner overlay `job-state.json` (Step 5 section 2.3, joined by `joinJobs`), not a parallel store. Needs the owner's confirmation of field names and a store version bump; poster identity reuses the Step 5 `contact` key scheme (section 2.8).
-7. Where a Job Poster is kept (on the job overlay, or offered as a contact on the application).
-8. The outcome of the terms and account-risk assessment, and the go / no-go per Task.
+Owner request, separate from the extension idea.
 
 **Company information standardization:** P1, Discovery roadmap. First step is the provider audit; the target record is one company record per normalised key, apart from jobs, with per-field source and observed time and a `known` / `unverified` / `missing` state. No private data and no personal contacts. Details: [ROADMAP.md](ROADMAP.md#discovery-improvement-company-information-standardization---planned--to-do).
