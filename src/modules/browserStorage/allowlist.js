@@ -14,6 +14,8 @@ export const BROWSER_STORAGE_ALLOWLIST = [
   { key: 'job-dashboard-settings-category', store: 'session', maxBytes: 32, reason: 'Which Settings category is open; no content.' },
   { key: 'job-dashboard-sidebar-collapsed', store: 'local', maxBytes: 8, reason: 'Layout preference, true or false.' },
   { key: 'job-dashboard-theme', store: 'local', maxBytes: 16, reason: 'Light or dark choice (not persisted yet).' },
+  { key: 'job-dashboard-profile-sync-pending', store: 'local', maxBytes: 8, reason: 'True while the server copy of the profile is behind after an import ("not synced yet"); a flag, no content.' },
+  { key: 'job-dashboard-intelligence-stale', store: 'local', maxBytes: 8, reason: 'True after an import until the owner regenerates the intelligence ("profile changed"); a flag, no content.' },
   { key: 'holojob-demo-bootstrap-done', store: 'session', maxBytes: 8, reason: 'Demo-mode flag; exists only in demo mode.' },
 ]
 
@@ -48,6 +50,7 @@ export const STORAGE_API_USERS = [
   'src/modules/intelligence/intelligenceExport.js',
   'src/modules/jobs/jobStorage.js',
   'src/modules/jobs/pipelineState.js',
+  'src/modules/profile/importDeps.js',
   'src/modules/outreach/linkedinCookie.js',
   'src/modules/sidebarState.js',
   'src/modules/sources/sourcesClient.js',
