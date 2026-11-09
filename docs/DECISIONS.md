@@ -1618,3 +1618,7 @@ Planning only: no code, test or data changed, and nothing is scheduled. Plan: [r
 **Conflicts with earlier decisions, left for the owner (plan section 0.1):** `matchKey` versus a global `jobId` (STEP5 2.3); no login (Q3, request-guard) versus several users; principle 16 (sources are the user's configuration) versus a global scheduler; no `userId` on the Step 5 stores.
 
 **Not verified:** the terms of Infostud, Joberty and the board vendors, and the LinkedIn terms and account risk; the contents of `competency-aliases.json` and `requirement-remap.json` (not opened); how closing evidence is scoped in code beyond the board lines (to trace before the scheduler slice). Open owner questions Q1 to Q14 are in the plan.
+
+**Owner decision, same day (status of the entry above):** `SHARED_JOB_DB_PLAN.md` is accepted as a **draft reference only** for a future multi-user HolyJobs, not an approved architecture, and is not to be extended. Its slices S1-S12, risks and open questions Q1-Q14 are not an approved implementation plan. The six conflicts in its section 0.1 and the open questions stay open. The provider-terms checks (Infostud, Joberty, board vendors, LinkedIn) and the closing-evidence scope check stay marked open. Where the entry above says "binding for the plan", read it as binding only for that draft.
+
+**Note:** before Step 5, review only the decisions that could cause an expensive data migration later: `userId` on private records, a global `jobId` for ads, and separate shared and per-user storage paths. Nothing else in the draft is acted on.

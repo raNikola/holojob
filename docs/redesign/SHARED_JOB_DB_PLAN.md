@@ -1,5 +1,7 @@
 # Shared job database for several users: plan
 
+**Draft reference, not approved. Slices S1-S12, risks and open questions are NOT an approved implementation plan.**
+
 Status: PLAN, 2026-11-09. Docs only: no code, no `data/` change, no AI call, no migration. **Not built and not scheduled.** It guides Step 5 and later work so that nothing built now has to be torn up when a second user arrives.
 
 Principle 15 (single user for now) stays in force. Nothing in this plan changes today's behaviour.

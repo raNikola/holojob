@@ -402,14 +402,11 @@ Known and left open on purpose. Checked against the code on 2026-11-02.
 - `chmod 600` the top-level files of `data/` (`competency-*`, `competencies-review.md`, `discovery-test.log`, `engine-snapshot.json`, `requirement-remap.json`). `scripts/tighten-data-permissions.sh` covers folders only, not these. Command: `find data -maxdepth 1 -type f -perm /077 -exec chmod 600 {} +`.
 - `chmod 700` the `audits`, `chat` and `data` folders. Already 700 on DS9 on 2026-11-02, with nothing inside `audits` or `chat` open to group or other; nothing is left to run.
 
-## Shared job database for several users - plan only (2026-11-09)
+## Shared job database for several users - goal only (2026-11-09)
 
-Plan: [redesign/SHARED_JOB_DB_PLAN.md](redesign/SHARED_JOB_DB_PLAN.md). Docs only; nothing is built or scheduled, and principle 15 (single user) stands. It guides Step 5 and later work: three layers (Job Catalog, Discovery, User Workspace), role families as tags on one shared catalog, a global scheduler, two status axes, a shared extraction cache keyed by the ad and never by a profile.
+Goal: one shared job database, private per-user data, shared discovery. A draft reference, not an approved plan, with no priority or wave: [redesign/SHARED_JOB_DB_PLAN.md](redesign/SHARED_JOB_DB_PLAN.md). Principle 15 (single user) stands.
 
-- [ ] **Step 5 rule (the only part that touches current work):** new stores take `userId` through one resolver (a constant `owner` today), reference ads by the global `jobId`, and keep shared and per-user paths in separate modules. No multi-user behaviour is built.
-- [ ] Slices S1 to S12 and the open owner questions Q1 to Q14 are in the plan (identity keys, content versions, extraction key with model and parser, family tags, scoped closing evidence, scheduler, per-user IDF corpus, gate scopes, provider policy, auth, owner-run migration).
-- [ ] Legal: the terms of Infostud, Joberty and the board vendors are **not verified**; LinkedIn defaults to reference or metadata only, no shared scrape under a personal `li_at`.
-- Notes only (P1/P2, not part of the data plan): family subscriptions; new-ad notifications; canonical company dedupe (see [Company information standardization](#discovery-improvement-company-information-standardization---planned--to-do)); source coverage analytics.
+- Notes only (P1/P2): family subscriptions; new-ad notifications; canonical company dedupe (see [Company information standardization](#discovery-improvement-company-information-standardization---planned--to-do)); source coverage analytics.
 
 ## Later
 
