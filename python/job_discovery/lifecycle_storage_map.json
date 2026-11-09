@@ -14,7 +14,7 @@
     "protect": "Yes."
   },
   {
-    "what": "Tailored documents",
+    "what": "Generated documents",
     "where": "backend",
     "file": "data/resumes/<jobId>/",
     "code": "python/resume_generator/run_tailor.py",

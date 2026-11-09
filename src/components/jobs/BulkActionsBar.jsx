@@ -26,10 +26,10 @@ export default function BulkActionsBar({
       <span className="text-sm font-medium text-stone-700 dark:text-stone-300">{selectedCount} selected</span>
       <Button variant="secondary" className="!text-xs" onClick={onTailorApply} disabled={running}>
         {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-        Tailor Apply jobs
+        Generate documents: Apply jobs
       </Button>
       <Button variant="secondary" className="!text-xs" onClick={onTailorP1} disabled={running}>
-        Tailor P1 jobs
+        Generate documents: P1 jobs
       </Button>
       <Button variant="secondary" className="!text-xs" onClick={onMarkSaved} disabled={running}>Mark saved</Button>
       <Button variant="secondary" className="!text-xs" onClick={onMarkRejected} disabled={running}>Mark rejected</Button>

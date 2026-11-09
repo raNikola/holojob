@@ -46,7 +46,7 @@ export const EXTERNAL_CV = { key: 'external', kind: 'external', label: 'A CV out
 export function cvOptions(job, profile) {
   const options = []
   const tailored = job?.tailoredAssets?.resumePdf ? baseName(job.tailoredAssets.resumePdf) : null
-  if (tailored) options.push({ key: 'tailored', kind: 'tailored', fileName: tailored, label: 'Tailored for this job' })
+  if (tailored) options.push({ key: 'tailored', kind: 'tailored', fileName: tailored, label: 'Made for this job' })
   for (const cv of profile?.cvLibrary ?? []) {
     if (!cv.filePath || !CV_FILE_ID.test(cv.id)) continue
     options.push({

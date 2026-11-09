@@ -55,7 +55,7 @@ export default function JobUrlImport({ onImported, compact = false }) {
       </div>
       <p className="mb-3 text-xs text-stone-500">
         Paste job posting links (one per line). The JD is scraped, scored against your profile,
-        and you can generate the tailored resume + cover letter in one go.
+        and you can generate the resume and the cover letter at the same time.
       </p>
       <textarea
         value={input}

@@ -1,8 +1,8 @@
 // What the storage notice says (S8a). One place, so the wording is checked once against what `saveJobs` really keeps and drops.
-// Kept in the browser, in every shape: notes, statuses, outreach, tracking, tailored assets and AI insights (the `aiInsights` field).
+// Kept in the browser, in every shape: notes, statuses, outreach, tracking, generated documents and AI insights (the `aiInsights` field).
 // Reloaded from the server when dropped: the ad text, the extracted facts (`llmFacts`) and the engine details (`engineShadow`).
 
-const KEPT = 'notes, statuses, outreach, tracking, tailored assets and AI insights'
+const KEPT = 'notes, statuses, outreach, tracking, generated documents and AI insights'
 
 export const NEAR_NOTICE = (percent) =>
   `Your job list uses about ${percent}% of this browser's storage limit. Nothing has been dropped yet. If it grows past the limit, the browser will keep a shorter copy and load the ad text from the server.`

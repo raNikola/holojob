@@ -43,7 +43,7 @@ def audit_cover_letter(
             "coverLetterExists": False,
             "coverLetterScore": 0,
             "coverLetterIssues": ["cover_letter_missing"],
-            "coverLetterSuggestions": ["Generate a tailored cover letter"],
+            "coverLetterSuggestions": ["Generate a cover letter for this job"],
             "qualityStatus": "needs_review",
         }
 

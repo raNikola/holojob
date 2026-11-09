@@ -83,11 +83,11 @@ def parse_args(argv=None) -> argparse.Namespace:
                    help="score without reading the ads; the result is labelled reduced quality")
     p.add_argument("--min-enriched", type=float, default=DEFAULT_MIN_ENRICHED,
                    help="stop before scoring if fewer than this share of jobs has facts (default 0.8)")
-    p.add_argument("--tailor", action="store_true", help="tailor documents for Apply jobs after scoring")
+    p.add_argument("--tailor", action="store_true", help="generate documents for Apply jobs after scoring")
     p.add_argument("--tailor-limit", type=int, default=10)
     p.add_argument("--tailor-confirm", action="store_true",
                    help="with --tailor: the redacted text may be sent to Claude Code (run_tailor.py --preview shows it); "
-                        "without it tailoring is rule-based and sends nothing")
+                        "without it the documents are rule-based and nothing is sent")
     p.add_argument("--json", action="store_true", help="print the summary as JSON on the last line")
     return p.parse_args(argv)
 
@@ -318,7 +318,7 @@ def main(argv=None) -> int:
         code = 0
     except StepFailed as exc:
         record.update(failedStep=exc.step, reason=exc.reason, steps=steps)
-        later = {"discovery": "enrichment, scoring", "enrichment": "scoring", "scoring": "tailoring"}.get(exc.step, "")
+        later = {"discovery": "enrichment, scoring", "enrichment": "scoring", "scoring": "document generation"}.get(exc.step, "")
         print(f"\nPIPELINE STOPPED at {exc.step}: {exc.reason}", file=sys.stderr)
         if later:
             print(f"Not run: {later}. The previous results on disk are unchanged by the steps that did not run.", file=sys.stderr)

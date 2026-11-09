@@ -75,12 +75,12 @@ describe('Keep this ad', () => {
     screen = await mountScreen({ stored: STORED })
     await screen.click(absentRow())
     await settle()
-    expect(screen.text()).toContain('AI tools, outreach, tailoring and status changes need it saved')
+    expect(screen.text()).toContain('AI tools, outreach, document generation and status changes need it saved')
     const drawer = screen.container.querySelector('aside')
     await screen.click(screen.button(/Keep this ad/, drawer))
     await settle()
     expect(kept().keptByUser).toBe(true)
-    expect(screen.container.querySelector('aside')?.textContent).not.toContain('AI tools, outreach, tailoring and status changes need it saved')
+    expect(screen.container.querySelector('aside')?.textContent).not.toContain('AI tools, outreach, document generation and status changes need it saved')
   })
 
   it('from Job Details', async () => {
@@ -277,7 +277,7 @@ describe('what needs a stored ad waits for Keep, and says why', () => {
   it('Job Details hides AI tools and contacts until Keep, and then offers them', async () => {
     stubServer({ ledger: ledgerRow() })
     screen = await mountScreen({ stored: STORED, file: PAGE, props: { jobId: 'abs' } })
-    expect(screen.text()).toContain('AI tools, outreach, tailoring and status changes need it saved: press Keep this ad first')
+    expect(screen.text()).toContain('AI tools, outreach, document generation and status changes need it saved: press Keep this ad first')
     expect(screen.text()).not.toContain(AI_PANEL_TEXT)
     expect(screen.text()).not.toMatch(/Related contacts/i)
     await screen.click(screen.button(/Keep this ad/))

@@ -63,7 +63,7 @@ const MOCK_RESPONSES = {
   },
   applicationStrategy: {
     patterns: ['Strong response on P1 roles', 'Lower conversion on stretch roles'],
-    resumeIssues: ['Ensure tailored resume highlights role-specific keywords'],
+    resumeIssues: ['Make sure the resume shows the keywords of this role'],
     targetingIssues: ['Focus on roles matching primary target titles'],
     industryInsights: ['Tech hiring active in your target locations'],
     recommendedChanges: ['Prioritize P1 apply recommendations', 'Follow up within 5 days'],

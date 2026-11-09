@@ -236,6 +236,7 @@ function JobCard({
       </div>
       {showScores && kind === 'stored' && (
         <div className="mt-3 border-t border-stone-100 pt-3 dark:border-stone-800" onClick={(e) => e.stopPropagation()}>
+          <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-stone-500">AI Tools</h4>
           <JobTailorActions job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} />
         </div>
       )}

@@ -147,7 +147,7 @@ export async function loadJobHistory(jobId) {
 }
 
 /**
- * What a tailoring run would send for these jobs (redacted, exactly), and what the AI gate says. Calls no model.
+ * What a document run would send for these jobs (redacted, exactly), and what the AI gate says. Calls no model.
  * Only the confirm dialog calls this.
  */
 export async function previewTailor({ jobId, jobIds, priority, limit, applyOnly, profile }) {
@@ -181,7 +181,7 @@ export async function runTailor({ jobId, jobIds, priority, limit, applyOnly, pro
   })
   const data = await res.json()
   if (!res.ok) {
-    throw new Error(data.stderr || data.error || 'Tailoring failed')
+    throw new Error(data.stderr || data.error || 'Generating documents failed')
   }
   return data
 }

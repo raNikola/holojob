@@ -5,7 +5,7 @@ import KeptRescoreButton from './KeptRescoreButton'
 import { scoreRowChips } from '../../modules/jobs/fitScore'
 import JobTailorActions from './JobTailorActions'
 import ApplicationTrackerPanel from './ApplicationTrackerPanel'
-import JobAIToolsPanel from '../ai/JobAIToolsPanel'
+import JobAIToolsPanel, { AiToolsSection } from '../ai/JobAIToolsPanel'
 import RelatedContactsPanel from '../outreach/RelatedContactsPanel'
 import { hasMatchScores, isInsufficientData } from '../../modules/jobs/matchScore'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
@@ -81,6 +81,10 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
   const limits = (job.reasons || []).filter(isCapReason)
   const positiveReasons = (job.reasons || []).filter((r) => !r.startsWith('Red flag:') && !isCapReason(r) && !isFitReason(r))
   const provider = getJobProvider(job)
+  const showAiTabs = (showScores || job.keptByUser === true) && includeAiTools
+  const documents = showScores && includeTailor
+    ? <JobTailorActions job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} />
+    : null
 
   return (
     <div className="space-y-5">
@@ -167,15 +171,15 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
               </ul>
             </div>
           )}
-          {includeTailor && <JobTailorActions job={job} apiAvailable={apiAvailable} onJobUpdated={onJobUpdated} />}
         </>
       )}
 
       {job.keptByUser === true && <KeptRescoreButton job={job} onJobUpdated={onJobUpdated} disabled={!apiAvailable} />}
 
-      {(showScores || job.keptByUser === true) && includeAiTools && (
-        <JobAIToolsPanel job={job} onJobUpdated={onJobUpdated} />
-      )}
+      {/* One "AI Tools" section: the document actions on top, the AI tabs below. Where the tabs are not offered (the drawer) the
+          section holds the document actions alone, so nothing is lost and the heading is the same. */}
+      {showAiTabs && <JobAIToolsPanel job={job} onJobUpdated={onJobUpdated} documents={documents} />}
+      {!showAiTabs && documents && <AiToolsSection documents={documents} />}
 
       {includeContacts && <RelatedContactsPanel job={job} onJobUpdated={onJobUpdated} />}
       {includeTracker && <ApplicationTrackerPanel job={job} onStatusChange={onStatusChange} />}

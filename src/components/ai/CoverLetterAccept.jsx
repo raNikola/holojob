@@ -29,7 +29,7 @@ export default function CoverLetterAccept({ jobId }) {
         >
           <ShieldCheck className="h-3.5 w-3.5" />{CHECKS_PASSED}. Download ai_cover_letter.md
         </a>
-        <p data-testid="cover-letter-limits" className="text-xs text-stone-500">{CHECK_LIMITS}</p>
+        <p data-testid="cover-letter-limits" className="text-[13px] leading-5 text-stone-800 dark:text-stone-200">{CHECK_LIMITS}</p>
       </div>
     )
   }

@@ -33,7 +33,7 @@ describe('StorageNotice', () => {
       document.body.innerHTML = ''
       await mount()
       expect(container.textContent).toContain(text)
-      expect(text).toContain('notes, statuses, outreach, tracking, tailored assets and AI insights')
+      expect(text).toContain('notes, statuses, outreach, tracking, generated documents and AI insights')
       expect(text).toMatch(/Loaded from the server instead:.*extracted facts and engine details/)
       expect(text).not.toMatch(/all (your )?AI results/i)
     }

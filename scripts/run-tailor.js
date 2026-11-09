@@ -42,7 +42,7 @@ export function getTailorStatus() {
 export const CONFIRM_REQUIRED = {
   ok: false,
   error: 'confirm_required',
-  message: 'Tailoring sends redacted CV text to Claude Code. Review what is sent and confirm first.',
+  message: 'Generating documents with AI sends redacted CV text to Claude Code. Review what is sent and confirm first.',
 }
 
 /** The one place the tailoring routes decide whether a request may send anything: only an explicit `confirm: true`. */
@@ -207,7 +207,7 @@ if (isMain) {
   runTailor(opts).then((result) => {
     if (result.stdout) process.stdout.write(result.stdout)
     if (result.stderr) process.stderr.write(result.stderr)
-    console.log(result.ok ? '\nTailoring OK' : '\nTailoring failed')
+    console.log(result.ok ? '\nDocuments generated' : '\nGenerating documents failed')
     process.exit(result.ok ? 0 : 1)
   })
 }

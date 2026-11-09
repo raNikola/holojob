@@ -146,6 +146,10 @@ function PricingTable({ usage, reload }) {
   )
 }
 
+// The usage table shows the feature ids of the ledger; this is how an id is worded for the reader (the ids themselves do not change).
+const FEATURE_LABELS = { tailoring: 'documents', 'job-import': 'job import', 'project-scan': 'project scan' }
+const featureLabel = (id) => FEATURE_LABELS[id] || id
+
 export default function AIBudgetPanel() {
   const [usage, setUsage] = useState(null)
   const [loadError, setLoadError] = useState(null)
@@ -249,7 +253,7 @@ export default function AIBudgetPanel() {
               <tbody>
                 {usage.recent.map((r) => (
                   <tr key={r.id} title={r.reason || r.error || ''}>
-                    <td>{r.ts?.slice(0, 19).replace('T', ' ')}</td><td>{r.feature}</td>
+                    <td>{r.ts?.slice(0, 19).replace('T', ' ')}</td><td>{featureLabel(r.feature)}</td>
                     <td>{r.provider}/{r.model || '-'}</td><td>{r.class}</td>
                     <td>{r.decision}{r.decision === 'refused' && r.reason ? `: ${r.reason}` : ''}</td>
                     <td>{r.cost == null ? '—' : Number(r.cost).toFixed(4)}</td>

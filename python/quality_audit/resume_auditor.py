@@ -37,7 +37,7 @@ def audit_resume(
             "resumeExists": False,
             "resumeQualityScore": 0,
             "resumeIssues": ["resume_file_missing"],
-            "resumeSuggestions": ["Generate tailored resume for this job"],
+            "resumeSuggestions": ["Generate a resume for this job"],
             "qualityStatus": "needs_review",
         }
 

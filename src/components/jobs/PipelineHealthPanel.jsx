@@ -44,7 +44,7 @@ export default function PipelineHealthPanel({ health, pipelineState }) {
           count={health?.scoring?.jobCount ? `${health.scoring.jobCount} scored` : null}
         />
         <StageStatus
-          label="Tailoring"
+          label="Documents"
           ready={Boolean(health?.tailoring?.tailoredCount)}
           running={running === 'tailoring' || running === 'full'}
           count={health?.tailoring?.tailoredCount ? `${health.tailoring.tailoredCount} resumes` : null}

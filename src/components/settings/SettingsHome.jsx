@@ -332,7 +332,7 @@ const RENDERERS = {
         Advanced — CLI commands
       </summary>
       <div className="space-y-3 border-t border-stone-200 px-4 py-4 dark:border-stone-800">
-        {[['d', c.discoverCmd, 'discover'], ['s', c.scoreCmd, 'score'], ['t', c.tailorCmd, 'tailor']].map(([key, cmd, label]) => (
+        {[['d', c.discoverCmd, 'discover'], ['s', c.scoreCmd, 'score'], ['t', c.tailorCmd, 'documents']].map(([key, cmd, label]) => (
           <div key={key}>
             <pre className="overflow-x-auto rounded bg-stone-100 p-2 text-xs dark:bg-stone-800">{cmd}</pre>
             <Button variant="secondary" className="mt-1 !text-xs" onClick={() => c.handleCopy(cmd, key)}>

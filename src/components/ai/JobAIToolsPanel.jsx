@@ -54,7 +54,34 @@ function InsightBlock({ data, fields }) {
   )
 }
 
-export default function JobAIToolsPanel({ job, onJobUpdated }) {
+/**
+ * The one "AI Tools" section of a job. `documents` (the document actions: generate, download, evaluate) sits at the top,
+ * above whatever else the section holds. Used with the AI tabs on the details page, and on its own where the tabs are not
+ * offered (the side drawer), so the heading is the same everywhere.
+ */
+export function AiToolsSection({ documents = null, children = null }) {
+  return (
+    <details className="rounded-xl border border-stone-200 dark:border-stone-800" open data-testid="ai-tools-section">
+      <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-stone-800 dark:text-stone-200">
+        <span className="inline-flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-teal-600" />
+          AI Tools
+        </span>
+      </summary>
+      <div className="space-y-4 border-t border-stone-200 px-4 py-4 dark:border-stone-800">
+        {documents && (
+          <section aria-label="Documents" data-testid="ai-tools-documents" className={children ? 'border-b border-stone-200 pb-4 dark:border-stone-800' : undefined}>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Documents</h4>
+            {documents}
+          </section>
+        )}
+        {children}
+      </div>
+    </details>
+  )
+}
+
+export default function JobAIToolsPanel({ job, onJobUpdated, documents = null }) {
   const [tab, setTab] = useState('analysis')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -222,14 +249,8 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
     : { disabled: loading, title: '' }
 
   return (
-    <details className="rounded-xl border border-stone-200 dark:border-stone-800" open>
-      <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-stone-800 dark:text-stone-200">
-        <span className="inline-flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-teal-600" />
-          AI Tools
-        </span>
-      </summary>
-      <div className="space-y-4 border-t border-stone-200 px-4 py-4 dark:border-stone-800">
+    <AiToolsSection documents={documents}>
+      <div className="space-y-4">
         <Tabs tabs={TABS} active={tab} onChange={setTab} />
         {error && <Alert variant="error" title="AI error">{error}</Alert>}
         <div className="flex gap-2">
@@ -237,7 +258,7 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {labels[tab]}
           </Button>
-          <Button variant="ghost" onClick={onRegenerate} disabled={regenerate.disabled} title="Regenerate: ask the AI again even if nothing changed (counts against the budget)" aria-label="Regenerate">
+          <Button variant="ghost" onClick={onRegenerate} disabled={regenerate.disabled} title="Ask the AI again, even if nothing changed (this counts against the budget)" aria-label="Ask the AI again">
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
@@ -249,6 +270,6 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
         <p className="text-xs text-stone-500">AI suggestions only — verify against your profile. No auto-send.</p>
         {renderContent()}
       </div>
-    </details>
+    </AiToolsSection>
   )
 }

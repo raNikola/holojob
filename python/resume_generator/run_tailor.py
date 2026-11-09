@@ -44,15 +44,15 @@ RESUMES_ROOT = ROOT / "data/resumes"
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Generate tailored resumes for jobs.")
-    p.add_argument("--job-id", help="Single job ID to tailor")
-    p.add_argument("--job-ids", help="Comma-separated job IDs to tailor")
+    p = argparse.ArgumentParser(description="Generate resumes and cover letters for jobs.")
+    p.add_argument("--job-id", help="Single job ID to generate documents for")
+    p.add_argument("--job-ids", help="Comma-separated job IDs to generate documents for")
     p.add_argument("--priority", help="Filter by priority P1/P2/P3")
     p.add_argument("--apply-recommendation", help="Filter Apply/Maybe/Skip")
-    p.add_argument("--apply-only", action="store_true", help="Tailor jobs with applyRecommendation=Apply")
+    p.add_argument("--apply-only", action="store_true", help="Generate documents for jobs with applyRecommendation=Apply")
     p.add_argument("--limit", type=int, default=10)
     p.add_argument("--no-llm", action="store_true",
-                   help="Skip Claude Code content generation, use rule-based tailoring")
+                   help="Skip Claude Code content generation, use rule-based content")
     p.add_argument("--confirm", action="store_true",
                    help="The redacted text may be sent to Claude Code (see --preview). Without it nothing is sent "
                         "and the content is rule-based.")
@@ -162,16 +162,16 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
 
     title = job.get("title") or "role"
     company = job.get("company") or "company"
-    print(f"-> Tailoring: {title} @ {company}", flush=True)
+    print(f"-> Generating documents: {title} @ {company}", flush=True)
     for warning in warnings:
         print(f"  ! {warning}", flush=True)
 
     if use_llm:
-        print("  · Claude Code: drafting summary, bullets, cover letter…", flush=True)
+        print("  · Claude Code: writing the summary, the bullets and the cover letter…", flush=True)
         parsed = parse_resume_from_profile(profile)
         llm, reason = generate_llm_content(parsed, intelligence, job, confirmed=confirmed)
         if llm is None:
-            llm_issues.append(f"llm skipped: {reason}")
+            llm_issues.append(f"The AI was not used: {reason}")
         else:
             try:
                 candidate_ctx = _apply_llm_content(ctx, llm, intelligence)
@@ -187,17 +187,17 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
             except (AttributeError, KeyError, TypeError, ValueError) as exc:
                 # A shape _validate did not foresee must cost this draft only, not the whole run.
                 llm_issues.append(
-                    f"llm output rejected, fell back to rule-based: malformed draft ({type(exc).__name__}: {exc})"
+                    f"The AI text was rejected and rule-based text was used: the answer had the wrong shape ({type(exc).__name__}: {exc})"
                 )
             else:
                 if prov_ok and not lint and not cliches:
                     ctx = candidate_ctx
                     llm_paragraphs = paragraphs
                     content_engine = "claude-code"
-                    print("  · Claude Code content accepted", flush=True)
+                    print("  · The text from Claude Code passed the checks and is used", flush=True)
                 else:
                     llm_issues.append(
-                        "llm output rejected, fell back to rule-based: "
+                        "The AI text was rejected and rule-based text was used: "
                         + "; ".join(prov_issues + lint + [f"cliché '{c}'" for c in cliches])
                     )
 
@@ -205,8 +205,8 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     for issue in llm_issues:
         print(f"  ! {issue}", flush=True)
     if not use_llm or content_engine == "rule-based":
-        print("  · Using rule-based content", flush=True)
-    print("  · Rendering HTML templates…", flush=True)
+        print("  · Using rule-based text (no AI)", flush=True)
+    print("  · Creating the HTML pages…", flush=True)
     md = render_resume_md(ctx)
     html = render_resume_html({**ctx, "fit": {}})
     cl_ctx = build_cover_letter_context(profile, intelligence, job, ctx, paragraphs_override=llm_paragraphs)
@@ -248,7 +248,7 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
             stale.unlink(missing_ok=True)
             verdict_path(out_dir, stale.name).unlink(missing_ok=True)
 
-    print("  · Generating PDFs (Playwright)…", flush=True)
+    print("  · Creating the PDF files…", flush=True)
     pdf_ok, resume_pages = render_single_page_pdf(
         lambda fit: render_resume_html({**ctx, "fit": fit}), pdf_path, footer=True)
     if pdf_ok and resume_pages > 1 and ctx.get("projects"):
@@ -278,7 +278,7 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
 
     rel = lambda p: str(p.relative_to(ROOT))
     print(
-        f"  [OK] Done [{content_engine}] - resume {resume_pages}p, cover {cover_pages}p",
+        f"  [OK] Documents generated [{content_engine}] - resume {resume_pages} page(s), cover letter {cover_pages} page(s)",
         flush=True,
     )
     job["tailoredAssets"] = {
@@ -374,7 +374,7 @@ def main() -> int:
         return 0
 
     if not args.no_llm and not args.confirm:
-        print("Not confirmed: nothing is sent to Claude Code and the content is rule-based. "
+        print("Not confirmed: nothing is sent to Claude Code and the text is rule-based. "
               "Use --preview to see exactly what would be sent, then --confirm.", flush=True)
 
     assets_by_id = {}
@@ -382,7 +382,7 @@ def main() -> int:
         updated = tailor_job(job, profile, intelligence, use_llm=not args.no_llm, confirmed=args.confirm)
         assets_by_id[updated["jobId"]] = updated["tailoredAssets"]
         engine = updated.get("tailoredAssets", {}).get("contentEngine", "?")
-        print(f"Tailored [{engine}]: {updated.get('title')} @ {updated.get('company')} -> data/resumes/{updated['jobId']}/")
+        print(f"Documents generated [{engine}]: {updated.get('title')} @ {updated.get('company')} -> data/resumes/{updated['jobId']}/")
 
     return save_tailored(args.scored, assets_by_id)
 

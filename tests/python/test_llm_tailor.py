@@ -616,7 +616,7 @@ def test_a_shape_the_checks_did_not_foresee_still_costs_only_the_draft(allowed, 
     monkeypatch.setattr(run_tailor, "_apply_llm_content", unforeseen)
     assets, written = tailor(tmp_path)
     assert assets["contentEngine"] == "rule-based"
-    assert any("malformed draft" in issue and "unforeseen shape" in issue for issue in assets["llmIssues"])
+    assert any("wrong shape" in issue and "unforeseen shape" in issue for issue in assets["llmIssues"])
     assert SUMMARY_TEXT in written["tailored_resume.md"]
 
 
@@ -685,7 +685,7 @@ def test_a_refusal_is_recorded_on_the_job_and_rule_based_documents_are_still_mad
     assets, written = tailor(tmp_path)
     assert assets["contentEngine"] == "rule-based"
     [issue] = assets["llmIssues"]
-    assert issue.startswith("llm skipped:") and "AI budget is 0" in issue
+    assert issue.startswith("The AI was not used:") and "AI budget is 0" in issue
     assert cli.prompts == []
     assert SUMMARY_TEXT in written["tailored_resume.md"]
 

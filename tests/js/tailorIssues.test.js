@@ -14,7 +14,7 @@ const render = (tailoredAssets) => renderToStaticMarkup(
 
 describe('tailoring reasons are shown', () => {
   it('lists why the AI draft was rejected', () => {
-    const html = render({ llmIssues: ['llm output rejected, fell back to rule-based: Unverified number: 47'], provenancePassed: true })
+    const html = render({ llmIssues: ['The AI text was rejected and rule-based text was used: Unverified number: 47'], provenancePassed: true })
     expect(html).toContain('tailor-llm-issues')
     expect(html).toContain('Unverified number: 47')
     expect(html).not.toContain('tailor-provenance-issues')

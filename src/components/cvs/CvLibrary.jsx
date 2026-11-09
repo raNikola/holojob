@@ -226,7 +226,7 @@ export default function CvLibrary() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-stone-600 dark:text-stone-400">
           The CVs you uploaded. The default one is what the app reads for your skills, projects and experience.
-          Tailored per-job résumés are under Resumes.
+          Resumes made for one job are under Resumes.
         </p>
         <label className={`inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-teal-700 ${uploading ? 'pointer-events-none opacity-60' : ''}`}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}

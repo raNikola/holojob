@@ -44,7 +44,7 @@ export default function WelcomeStep({ onNext, onDemoComplete }) {
         </h1>
         <p className="mx-auto mt-3 max-w-lg text-stone-600 dark:text-stone-400">
           {demoMode
-            ? 'Explore the full job hunt pipeline with demo data — onboarding, scoring, tailoring, and outreach in one app.'
+            ? 'Explore the full job hunt pipeline with demo data — onboarding, scoring, resume generation and outreach in one app.'
             : 'Build your candidate profile in guided steps. Bring in your resume or LinkedIn data, review what was found, and export a structured JSON profile. Your data stays on your own server.'}
         </p>
       </div>

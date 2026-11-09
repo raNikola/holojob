@@ -390,7 +390,7 @@ function cvSource(root, cv, jobId) {
     if (!fs.existsSync(file)) throw new StoreError(400, 'The library CV file does not exist')
     return { file, fileName: safeFileName(cv.fileName, `cv-${cv.cvLibraryId}.pdf`) }
   }
-  if (cv.kind === 'tailored') return tailoredSource(paths, jobId, cv.fileName, 'tailored CV')
+  if (cv.kind === 'tailored') return tailoredSource(paths, jobId, cv.fileName, 'generated CV')
   return null
 }
 

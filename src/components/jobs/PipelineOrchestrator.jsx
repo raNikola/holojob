@@ -65,7 +65,7 @@ function ManualFallback({ providers, country, tailorMode }) {
         </Button>
         <pre className="overflow-x-auto rounded bg-stone-100 p-2 dark:bg-stone-800">{tailorCmd}</pre>
         <Button variant="secondary" className="!text-xs" onClick={() => handleCopy(tailorCmd, 't')}>
-          <Copy className="h-3 w-3" />{copied === 't' ? 'Copied' : 'Copy tailor'}
+          <Copy className="h-3 w-3" />{copied === 't' ? 'Copied' : 'Copy documents command'}
         </Button>
       </div>
     </Alert>
@@ -203,7 +203,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
 
       setStepLabel('Generating resumes…')
       const tailored = await runTailorStep()
-      if (!tailored.payload) throw new Error(tailored.stderr || 'Tailoring failed')
+      if (!tailored.payload) throw new Error(tailored.stderr || 'Generating documents failed')
       importPayload(tailored.payload)
 
       updatePipelineState({
@@ -283,7 +283,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
                 <SelectField label="Providers" value={providers} onChange={setProviders} options={PROVIDER_OPTIONS} />
                 <Input label="Country" value={country} onChange={(e) => setCountry(e.target.value)} />
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300">Tailor mode</label>
+                  <label className="mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300">Documents for</label>
                   <select
                     value={tailorMode}
                     onChange={(e) => setTailorMode(e.target.value)}

@@ -8,7 +8,7 @@ import { CHECK_LIMITS } from '../../modules/jobs/factCheckNote'
 const NEVER_SENT = 'name, e-mail, phone, links, salary, questionnaire answers, notes, recruiter contacts'
 
 /**
- * The only way CV text goes to an AI provider for tailoring. It shows exactly what would be sent (already redacted by the
+ * The only way CV text goes to an AI provider to generate documents. It shows exactly what would be sent (already redacted by the
  * server), to whom, and what the AI gate says, and sends nothing until the confirm button is pressed. The alternative
  * button makes rule-based documents, which send nothing.
  */
@@ -46,7 +46,7 @@ export default function TailorConfirmDialog({ opts, onClose, onConfirm, onRuleBa
           <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-stone-100 dark:hover:bg-stone-800" aria-label="Close"><X className="h-5 w-5" /></button>
         </div>
 
-        {error && <Alert variant="error" title="Tailoring">{error}</Alert>}
+        {error && <Alert variant="error" title="Documents">{error}</Alert>}
         {!preview && !error && <Loader2 className="h-6 w-6 animate-spin text-teal-600" />}
 
         {preview && (
