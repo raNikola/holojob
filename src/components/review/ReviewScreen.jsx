@@ -5,11 +5,10 @@ import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
 import { downloadCandidateProfile } from '../../utils/exportJson'
-import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
+import { saveProfileToDataDir, syncMessages, syncProfileWithStatus } from '../../modules/jobs/profileSync'
 import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
 import { validateProfileForIntelligence } from '../../modules/intelligence/intelligenceValidators'
 import { regenerateIntelligence, saveIntelligence } from '../../modules/intelligence/intelligenceExport'
-import { isApiAvailable } from '../../utils/apiAvailability'
 import { parseAnswerList } from '../../utils/answerList'
 
 function Section({ title, onEdit, children }) {
@@ -54,21 +53,26 @@ function Field({ label, value }) {
   )
 }
 
+const SYNC_TONE = {
+  ok: 'text-teal-700 dark:text-teal-300',
+  warn: 'text-amber-700 dark:text-amber-300',
+  error: 'text-red-700 dark:text-red-300',
+}
+
 export default function ReviewScreen({ mode = 'onboarding', onEditStep, onComplete }) {
   const { profile, resetProfile, markOnboardingComplete } = useProfile()
   const isEdit = mode === 'edit'
   const { basicProfile: bp, resume, repositories, questionnaire } = profile
   const pd = resume.parsedData
-  const [diskSaveNote, setDiskSaveNote] = useState(null)
+  const [syncLines, setSyncLines] = useState([])
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
-    saveProfileToDataDir(profile).then((result) => {
-      if (!cancelled && result.ok) {
-        setDiskSaveNote(`Synced to data/profile/candidate-profile.json`)
-      }
+    // Two independent calls, each failure shown on its own line (never silent, never any content).
+    syncProfileWithStatus(profile).then((result) => {
+      if (!cancelled) setSyncLines(syncMessages(result))
     })
     return () => { cancelled = true }
   }, [profile])
@@ -76,11 +80,14 @@ export default function ReviewScreen({ mode = 'onboarding', onEditStep, onComple
   const handleExport = async () => {
     const result = await downloadCandidateProfile(profile)
     if (result.ok) {
-      setDiskSaveNote('Downloaded and synced to data/profile/candidate-profile.json')
+      setSyncLines([{ tone: 'ok', text: 'Downloaded and synced to data/profile/candidate-profile.json' }])
       if (!isEdit) {
         markOnboardingComplete()
         onComplete?.({ profileExported: true })
       }
+    } else {
+      // The file was downloaded but the server copy was not written: say why, on its own lines, instead of nothing.
+      syncProfileWithStatus(profile).then((outcome) => setSyncLines(syncMessages(outcome)))
     }
   }
 
@@ -120,8 +127,12 @@ export default function ReviewScreen({ mode = 'onboarding', onEditStep, onComple
       <Alert variant="info" title="Ready to export">
         Review everything below. Download your candidate-profile.json file. When the local API is running (<code>npm run dev</code> or <code>npm run start</code>), your profile auto-syncs to <code>data/profile/candidate-profile.json</code> for scoring and tailoring.
       </Alert>
-      {diskSaveNote && isApiAvailable() && (
-        <p className="text-xs text-teal-700 dark:text-teal-300">{diskSaveNote}</p>
+      {syncLines.length > 0 && (
+        <div className="space-y-1" role="status">
+          {syncLines.map((line) => (
+            <p key={line.text} className={`text-xs ${SYNC_TONE[line.tone]}`}>{line.text}</p>
+          ))}
+        </div>
       )}
 
       <Section title="Basic profile" onEdit={() => onEditStep(2)}>

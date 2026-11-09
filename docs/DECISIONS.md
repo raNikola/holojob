@@ -1123,6 +1123,8 @@ Slices in order: S0 safe writes, S1 draft contract + guarded apply, S2 TXT/MD, S
 
 **Rule going forward:** a test never uses a real `data/` path, and mocking one `fs` call is not a way to keep it from writing. `data/ai/usage-ledger.jsonl` changed during the same window; its last row is a manual `jobAnalysis` call from the owner's use of the app (feature and time only were read), not from a test.
 
+**Profile sync is no longer silent (2026-11-09):** Profile > Edit Profile > Review & export used to show "Synced to ..." only when the save returned 200 and a cached health probe said available; any failure showed nothing. The probe is cached for the page's life and `saveProfileToDataDir` skips the save when it failed, so an address the server refuses (403 from the request guard) hid both. The screen now makes the two calls independently every time (`syncProfileWithStatus`) and reports each on its own line (`syncMessages`): saved + status ok (success), saved + status failed ("Saved ...", plus an amber "Server status could not be confirmed"; it never says the profile was not saved), save failed (red "Not synced ..." with the HTTP status or "no answer" and a fixed hint chosen from the status), and both failed (two red lines). Nothing the server sends and nothing from the profile is shown. `tests/js/profileSyncStatus.test.js` covers the four combinations.
+
 **S0 built:** `writeProfileFile` (every Node write of `data/profile/candidate-profile.json`: save, pipeline, rescrape, discovery, tailor) is now temp file + fsync + rename (`replaceFileAtomic`); it was a plain `writeFileSync`. Two tests that mocked `writeFileSync` now write a temp file and check the result.
 
 ## Product principles
