@@ -192,6 +192,31 @@ export function draftParsedData(draft) {
   }
 }
 
+// A fast 53-bit string hash (cyrb53), twice with different seeds: a key for "the same reviewed draft", not a security hash.
+function hash53(str, seed) {
+  let h1 = 0xdeadbeef ^ seed
+  let h2 = 0x41c6ce57 ^ seed
+  for (let i = 0; i < str.length; i += 1) {
+    const ch = str.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(14, '0')
+}
+
+/**
+ * A key for the reviewed content of a draft: the same text, fields and edits give the same key. It names the My CVs entry an
+ * apply adds, so applying the same draft twice cannot add a second entry. It is not what makes apply idempotent: that is the merge
+ * itself (tests/js/importApply.test.js repeats Merge and Replace and compares the whole profile).
+ */
+export function draftKey(draft) {
+  const basics = Object.fromEntries(BASIC_FIELDS.map((f) => [f, text(draft?.basicProfile?.[f])]))
+  const canonical = JSON.stringify([draft?.source ?? '', basics, text(draft?.summary), list(draft?.languages), list(draft?.links), draftParsedData(draft || {}), draft?.rawText ?? ''])
+  return `dk-${hash53(canonical, 0)}${hash53(canonical, 1)}`
+}
+
 /** True when saving would make the new My CVs entry the active CV: the profile has no CV yet. */
 export function willBeActive(profile) {
   return !ensureCvLibrary(profile).defaultCvId
@@ -267,10 +292,13 @@ export function applyImportDraft(profile, draft, choices, { now = new Date(), ma
     uploadedAt: now.toISOString(),
     rawText: draft.rawText || '',
     importSource: source.importSource,
+    importDraftKey: draftKey(draft),
     parsedData: incoming,
   }
 
   const merged = { ...profile, basicProfile, repositories, _confidence: confidence, resume: { ...profile.resume, parsedData } }
+  // The same reviewed draft never adds a second My CVs entry.
+  if (list(profile.cvLibrary).some((c) => c.importDraftKey === entry.importDraftKey)) return merged
   const next = addCv(merged, entry, { makeDefault: false })
   // addCv makes the entry active when the profile had no CV; keep the merged fields in that case too.
   return next.defaultCvId === entry.id ? { ...next, resume: { ...next.resume, parsedData } } : next
