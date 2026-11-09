@@ -18,8 +18,8 @@ export function useStoredJob(jobId) {
  * write from another tab, take the stored fields in. The screen's own saves are ignored.
  */
 export function useJobsSync(setState) {
-  useEffect(() => subscribe(({ source }) => {
+  useEffect(() => subscribe(({ source, removedId }) => {
     if (source === 'save') return
-    setState((prev) => ({ ...prev, jobs: adoptStored(prev.jobs, getJobsSnapshot().jobs) }))
+    setState((prev) => ({ ...prev, jobs: adoptStored(removedId ? prev.jobs.filter((job) => job.jobId !== removedId) : prev.jobs, getJobsSnapshot().jobs) }))
   }), [setState])
 }

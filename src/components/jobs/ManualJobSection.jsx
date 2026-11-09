@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ExternalLink, Pencil } from 'lucide-react'
+import { ExternalLink, Pencil, Trash2 } from 'lucide-react'
 import Alert from '../ui/Alert'
 import Button from '../ui/Button'
 import Textarea from '../ui/Textarea'
 import AddJobDialog from './AddJobDialog'
-import { NO_DESCRIPTION, scoreStoredJob } from '../../modules/jobs/manualScoring'
+import { NO_DESCRIPTION, deleteConfirmMessage, deleteManualJob, scoreStoredJob } from '../../modules/jobs/manualScoring'
 import { patchJob } from '../../modules/jobs/jobsStore'
 import { normalizeJobUrl } from '../../modules/jobs/manualJob'
+import { OPEN_TRACKER_EVENT } from '../../modules/appNavigation'
 
 /**
  * The extra links and the owner's notes of a hand-entered job. Both stay in this browser's job record: no AI
@@ -22,6 +23,9 @@ export default function ManualJobSection({ job, onJobUpdated, apiAvailable = tru
   const [pasted, setPasted] = useState('')
   const [editing, setEditing] = useState(false)
   const [editMessage, setEditMessage] = useState('')
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteRefusal, setDeleteRefusal] = useState(null)
 
   const sourceUrl = normalizeJobUrl(job.sourceUrl) ? job.sourceUrl : ''
   if (!job.manualEntry && !links.length && !job.notes && !sourceUrl) return null
@@ -42,13 +46,47 @@ export default function ManualJobSection({ job, onJobUpdated, apiAvailable = tru
     setScoring(false)
   }
 
+  const confirmDelete = async () => {
+    setDeleting(true)
+    const result = await deleteManualJob(job.jobId)
+    setDeleting(false)
+    setConfirmingDelete(false)
+    // On success the job leaves the stored list and this view unmounts with it.
+    if (!result.ok) setDeleteRefusal(result)
+  }
+
   return (
     <div className="space-y-3">
       {job.manualEntry && (
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" onClick={() => { setEditMessage(''); setEditing(true) }}><Pencil className="mr-1 inline h-4 w-4" />Edit</Button>
+          <Button variant="secondary" onClick={() => { setDeleteRefusal(null); setConfirmingDelete(true) }}><Trash2 className="mr-1 inline h-4 w-4" />Delete job</Button>
           {editMessage && <p role="status" className="text-sm text-stone-700 dark:text-stone-300">{editMessage}</p>}
         </div>
+      )}
+      {job.manualEntry && confirmingDelete && (
+        <Alert variant="info">
+          <div className="space-y-2" role="alertdialog" aria-label="Confirm delete">
+            <p>{deleteConfirmMessage(job)}</p>
+            <div className="flex gap-2">
+              <Button variant="secondary" disabled={deleting} onClick={confirmDelete}>{deleting ? 'Deleting…' : 'Delete this job'}</Button>
+              <Button variant="secondary" disabled={deleting} onClick={() => setConfirmingDelete(false)}>Cancel</Button>
+            </div>
+          </div>
+        </Alert>
+      )}
+      {deleteRefusal && (
+        <Alert variant="error">
+          <div className="space-y-2" role="alert">
+            <p>{deleteRefusal.message}</p>
+            {deleteRefusal.reason === 'has_application' && (
+              <div className="space-y-1">
+                <p>To stop tracking it, void the application on this job&apos;s page; the job itself stays.</p>
+                <Button variant="secondary" onClick={() => window.dispatchEvent(new CustomEvent(OPEN_TRACKER_EVENT))}>Open in Tracker</Button>
+              </div>
+            )}
+          </div>
+        </Alert>
       )}
       {editing && createPortal(
         <AddJobDialog

@@ -21,13 +21,15 @@ const jobCache = new Map()
 
 const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
-function emit(source) {
+function emit(source, extra = {}) {
   snapshot = null
-  listeners.forEach((listener) => listener({ source }))
+  listeners.forEach((listener) => listener({ source, ...extra }))
 }
 
+let removing = null
+
 // A save by a screen's own effect (`source: 'save'`) is told apart from a patch so a screen ignores its own echo.
-onJobsSaved(() => emit(patching ? 'patch' : 'save'))
+onJobsSaved(() => emit(patching ? 'patch' : 'save', removing ? { removedId: removing } : {}))
 
 /** The stored list, parsed once until the next write. */
 export function getJobsSnapshot() {
@@ -123,6 +125,24 @@ export function patchJob(jobId, patch, { baseUpdatedAt } = {}) {
 /** `patchJob` with the patch worked out from the copy the caller rendered (`base`) and the object it built (`next`). */
 export function patchJobFromCopy(jobId, base, next, options) {
   return patchJob(jobId, diffPatch(base, next), options)
+}
+
+/**
+ * Removes one job from the stored list and touches no other record. The event carries `removedId`, so a screen that keeps its own
+ * copy of the list drops the row instead of saving it back (`useJobsSync`). Callers must have deleted it on the server first.
+ * @returns {boolean} whether the job was in the list
+ */
+export function removeJob(jobId) {
+  const state = loadJobs()
+  if (!state.jobs.some((j) => j.jobId === jobId)) return false
+  removing = jobId
+  try {
+    withPatching(() => saveJobs({ ...state, jobs: state.jobs.filter((j) => j.jobId !== jobId) }))
+  } finally {
+    removing = null
+  }
+  jobCache.delete(jobId)
+  return true
 }
 
 /** Adds a job the stored list does not hold yet; an existing record is never replaced. */

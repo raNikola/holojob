@@ -131,6 +131,10 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 - [ ] Follow-up: the Graphify adapter build exited non-zero in Wave 4 (cause not investigated).
 - [ ] Not started on purpose: Infostud snapshot switch (Wave 4) stays off.
 
+## Delete job for hand-entered jobs - built on branch `delete-manual-jobs` (2026-11-09), owner check pending
+
+Details Delete for manual jobs only; the server re-checks the application store (voided records included) and removes the job from `manual_jobs.json`, `scored_jobs.json`, `job-state.json` and the browser. Decisions: `docs/DECISIONS.md` "Delete job for hand-entered jobs". Not built: Delete in the list row actions.
+
 ## Per-source switches and one-off Re-scrape skip - built (2026-11-09), owner check pending
 
 Settings > Sources: every source can be switched off and on (server-side, `data/config/sources.json`); discovery and Re-scrape skip a

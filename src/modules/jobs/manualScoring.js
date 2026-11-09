@@ -1,6 +1,6 @@
 // Adding a hand-entered job and scoring it on the server. The server file is the master for the scored fields; this
 // browser keeps its own copy of them and the owner's fields (notes, extra links, status, tracking), which never go over.
-import { createJob, getJobsSnapshot, getStoredJob, patchJob } from './jobsStore.js'
+import { createJob, getJobsSnapshot, getStoredJob, patchJob, removeJob } from './jobsStore.js'
 import { buildManualJob, editChanges, findDuplicateByUrl, scoringPayload } from './manualJob.js'
 
 /** What the owner keeps: a scored record from the server never overwrites these. */
@@ -101,6 +101,30 @@ export async function scoreStoredJob(jobId, { fetchFn = globalThis.fetch } = {})
     return { ok: false, reason: 'duplicate', existing: result.existing, message: `This link is already in your jobs as “${result.existing.title || result.existing.jobId}”, so it was not scored again.` }
   }
   return result
+}
+
+/** The confirmation text; it names the job by its title. */
+export const deleteConfirmMessage = (job) => `Delete “${job.title || job.jobId}”? It is removed from this browser and from the server's files, and does not come back. This cannot be undone.`
+
+/**
+ * Delete job (hand-entered jobs only). The server decides first: it removes the job from its files and refuses when the application
+ * store holds any record for it (voided ones included). Only after the server agrees is the browser's copy removed, so no copy comes back
+ * on reload or re-import. With the server unreachable nothing is deleted: the tracker cannot be checked.
+ * @returns {Promise<{ ok: true } | { ok: false, reason: 'has_application', applicationIds: string[], message: string } | { ok: false, reason: string, message: string }>}
+ */
+export async function deleteManualJob(jobId, { fetchFn = globalThis.fetch } = {}) {
+  const stored = getStoredJob(jobId)
+  if (!stored?.manualEntry) return { ok: false, reason: 'not_manual', message: 'Only hand-entered jobs can be deleted.' }
+  const { status, data } = await post('/api/jobs/manual/delete', { jobId, jobUrl: stored.jobUrl || undefined }, fetchFn)
+  if (status === 200 && data.ok) {
+    removeJob(jobId)
+    return { ok: true }
+  }
+  if (status === 409 && data.error === 'has_application') {
+    return { ok: false, reason: 'has_application', applicationIds: data.applicationIds ?? [], message: data.message }
+  }
+  if (status === 0) return { ok: false, reason: 'unreachable', message: 'The server cannot be reached, so the tracker could not be checked. Nothing was deleted.' }
+  return { ok: false, reason: data.error || 'failed', message: data.message || 'The job could not be deleted. Nothing was changed.' }
 }
 
 /**

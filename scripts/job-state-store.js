@@ -121,6 +121,22 @@ export function patchState(root, body, { now = () => new Date() } = {}) {
   })
 }
 
+/**
+ * Removes every entry of one job. Used only when a hand-entered job is deleted: this is the one place the "entries are only
+ * added" rule does not apply, and it touches only entries whose jobId is the deleted job's. A missing file writes nothing.
+ */
+export function removeJobStateEntries(root, jobId) {
+  return withLock(root, () => {
+    const { doc } = loadState(root)
+    const keys = Object.keys(doc.jobs).filter((k) => doc.jobs[k]?.jobId === jobId)
+    if (!keys.length) return { removed: 0 }
+    const jobs = { ...doc.jobs }
+    for (const k of keys) delete jobs[k]
+    writeState(root, { ...doc, updatedAt: new Date().toISOString(), jobs })
+    return { removed: keys.length }
+  })
+}
+
 // --- the browser's state: export, preview, import ----------------------------------------------
 
 /** The rows a browser sends, reduced to ids and flags. Invalid ones are counted, never stored. */

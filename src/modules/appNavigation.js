@@ -25,6 +25,7 @@ export const OPEN_SETTINGS_EVENT = 'holojob:open-settings'
 export const OPEN_QUESTIONNAIRE_EVENT = 'holojob:open-questionnaire'
 export const OPEN_ONBOARDING_EVENT = 'holojob:open-onboarding'
 export const OPEN_ACTIVITY_EVENT = 'holojob:open-activity'
+export const OPEN_TRACKER_EVENT = 'holojob:open-tracker'
 
 const SHELL_VIEWS = new Set([
   VIEWS.DASHBOARD,

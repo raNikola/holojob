@@ -263,6 +263,29 @@ def _check_only(items, args) -> int:
     return _ok(checked=len(items))
 
 
+def delete_manual_job(args) -> int:
+    """Remove one hand-entered job from manual_jobs.json and scored_jobs.json. Exit 0 ok, 6 not a hand-entered job.
+
+    Only the row with this id goes; every other row is written back as read. A scored row that is not a hand-entered job
+    (no manual flag, not in manual_jobs.json) is refused, so a discovered ad can never be deleted through here.
+    The caller has already checked the application store; this only edits the two job files.
+    """
+    job_id = args.delete_job
+    stored = manual_jobs.load(args.manual)
+    scored_doc = _load_doc(args.scored)
+    in_manual = any(j.get("jobId") == job_id for j in stored)
+    scored_rows = [j for j in scored_doc["jobs"] if j.get("jobId") == job_id]
+    if not in_manual and any(not (j.get("manualEntry") or j.get("provider") == "manual") for j in scored_rows):
+        return _fail(6, error="not_manual")
+    if in_manual:
+        manual_jobs.save(manual_jobs.remove(stored, job_id), args.manual)
+    if scored_rows:
+        scored_doc["jobs"] = [j for j in scored_doc["jobs"] if j.get("jobId") != job_id]
+        scored_doc.setdefault("meta", {})["jobCount"] = len(scored_doc["jobs"])
+        write_text_atomic(args.scored, json.dumps(scored_doc, indent=2))
+    return _ok(removed={"manual": int(in_manual), "scored": len(scored_rows)})
+
+
 def run_job_json(args) -> int:
     """Store, score and merge hand-entered jobs. Exit 0 ok, 2 invalid, 3 duplicate URL, 4 no intelligence, 5 scoring failed.
 
@@ -338,6 +361,8 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="with --job-json: only report whether the address is already in your jobs; nothing is written")
     parser.add_argument("--store-only", action="store_true",
                         help="with --job-json: store the jobs in manual_jobs.json and stop; the next scoring run scores them")
+    parser.add_argument("--delete-job", metavar="JOB_ID",
+                        help="remove this hand-entered job from manual_jobs.json and scored_jobs.json (the caller checks the tracker)")
     parser.add_argument("--discovered", type=Path, default=DISCOVERED_PATH)
     parser.add_argument("--scored", type=Path, default=SCORED_PATH)
     parser.add_argument("--manual", type=Path, default=manual_jobs.MANUAL_PATH)
@@ -356,6 +381,8 @@ def main(argv=None) -> int:
         print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
         return pipeline_lock.EXIT_LOCKED
     try:
+        if args.delete_job:
+            return delete_manual_job(args)
         return import_locked(args)
     finally:
         lock.release()

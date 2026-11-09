@@ -172,6 +172,11 @@ def upsert(jobs: list[dict], stored: list[dict]) -> list[dict]:
     return list(by_id.values())
 
 
+def remove(stored: list[dict], job_id: str) -> list[dict]:
+    """`stored` without the row with this id. Other rows are returned untouched."""
+    return [j for j in stored if j.get("jobId") != job_id]
+
+
 def find_clash(job_id: str, url: str, *lists: list[dict]) -> dict | None:
     """A job in any of the lists with the same identity URL and another id, or None. The same id is a retry, not a clash.
 

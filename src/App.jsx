@@ -27,6 +27,7 @@ import {
   OPEN_SETTINGS_EVENT,
   OPEN_ONBOARDING_EVENT,
   OPEN_ACTIVITY_EVENT,
+  OPEN_TRACKER_EVENT,
   OPEN_QUESTIONNAIRE_EVENT,
   loadDemoInitialView,
   persistView,
@@ -61,6 +62,12 @@ function AppContent() {
     const open = () => navigate(VIEWS.ACTIVITY)
     window.addEventListener(OPEN_ACTIVITY_EVENT, open)
     return () => window.removeEventListener(OPEN_ACTIVITY_EVENT, open)
+  }, [navigate])
+
+  useEffect(() => {
+    const open = () => navigate(VIEWS.APPLICATIONS)
+    window.addEventListener(OPEN_TRACKER_EVENT, open)
+    return () => window.removeEventListener(OPEN_TRACKER_EVENT, open)
   }, [navigate])
 
   useEffect(() => {

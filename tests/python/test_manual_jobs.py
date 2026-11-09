@@ -467,3 +467,47 @@ def test_a_failed_url_import_keeps_the_previous_discovered_file_and_leaves_no_te
     assert temps and temps[0].endswith(".tmp")
     assert discovered.read_text(encoding="utf-8") == '{"meta": {}, "jobs": []}'
     assert [p.name for p in jobs.iterdir()] == ["discovered_jobs.json"]
+
+
+# --- delete (Delete job) -------------------------------------------------------------------------------------
+
+def _delete(env, job_id, capsys):
+    code = importer.main(["--delete-job", job_id, *env.paths()])
+    out, _ = capsys.readouterr()
+    return code, json.loads(out.strip().splitlines()[-1])
+
+
+def test_delete_removes_the_job_from_both_files_and_touches_no_other_row(env, monkeypatch, capsys):
+    assert env.add(_manual(), monkeypatch, capsys)[0] == 0
+    assert env.add(_manual(OTHER_ID, url="https://acme.example/jobs/10"), monkeypatch, capsys)[0] == 0
+    before = env.rows()[OTHER_ID]
+    code, result = _delete(env, MANUAL_ID, capsys)
+    assert code == 0 and result["removed"] == {"manual": 1, "scored": 1}
+    assert MANUAL_ID not in env.rows() and OTHER_ID in env.rows()
+    assert env.rows()[OTHER_ID] == before
+    assert [j["jobId"] for j in manual_jobs.load(env.manual)] == [OTHER_ID]
+    assert json.loads(env.scored.read_text())["meta"]["jobCount"] == len(env.rows())
+
+
+def test_a_deleted_job_does_not_return_on_a_full_rescore(env, monkeypatch, capsys):
+    assert env.add(_manual(), monkeypatch, capsys)[0] == 0
+    assert _delete(env, MANUAL_ID, capsys)[0] == 0
+    rescored = env.full_rescore()
+    assert MANUAL_ID not in rescored and {"d-1", "d-2"} <= set(rescored)
+
+
+def test_delete_refuses_a_discovered_ad_and_changes_nothing(env, monkeypatch, capsys):
+    assert env.add(_manual(), monkeypatch, capsys)[0] == 0
+    doc = json.loads(env.scored.read_text())
+    doc["jobs"].append({**_discovered("d-1", "https://jobs.example/1"), "matchScore": 50})
+    env.scored.write_text(json.dumps(doc))
+    before = env.scored.read_bytes()
+    code, result = _delete(env, "d-1", capsys)
+    assert code == 6 and result["error"] == "not_manual"
+    assert env.scored.read_bytes() == before
+
+
+def test_delete_of_an_unknown_id_is_a_clean_no_op(env, capsys):
+    code, result = _delete(env, MANUAL_ID, capsys)
+    assert code == 0 and result["removed"] == {"manual": 0, "scored": 0}
+    assert not env.manual.exists() and not env.scored.exists()

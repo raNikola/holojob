@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { buildDiscoveryCommand, getDiscoveryStatus, runDiscovery } from './run-discovery.js'
 import { runPipeline } from './run-pipeline.js'
 import { runManualJobs } from './run-manual-job.js'
+import { deleteManualJob } from './manual-job-delete.js'
 import { pruneKeptRescored, runKeptRescore } from './run-kept-rescore.js'
 import { extractAdAi, fetchAd, previewAdAi } from './run-ad-fill.js'
 import { buildScoringCommand, getScoringStatus, previewJudge, runJudgedScoring, runScoring } from './run-scoring.js'
@@ -511,6 +512,18 @@ export async function handleApiRequest(req, res) {
       const single = !url.endsWith('/sync')
       const mode = url.endsWith('/score') ? 'score' : url.endsWith('/check') ? 'check' : 'store'
       const result = await runManualJobs(single ? (body.job ? [body.job] : []) : body.jobs, { mode })
+      sendJson(res, result.status, result.body)
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'invalid', field: 'json' })
+    }
+    return true
+  }
+
+  // Delete a hand-entered job: refused when the application store names it (voided ones included), or when it is not hand-entered.
+  if (url === '/api/jobs/manual/delete' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req, res)
+      const result = await deleteManualJob(ROOT, body)
       sendJson(res, result.status, result.body)
     } catch {
       sendJson(res, 400, { ok: false, error: 'invalid', field: 'json' })
