@@ -111,6 +111,11 @@ def parse_args() -> argparse.Namespace:
         help="What started this run, for the run log. run_pipeline.py passes pipeline.",
     )
     parser.add_argument(
+        "--exclude",
+        default="",
+        help="Comma-separated sources to skip in this run only (the saved switches are not changed).",
+    )
+    parser.add_argument(
         "--run-id",
         help="run_rescrape.py: fill this run's record and leave finishing it to the orchestrator.",
     )
@@ -132,6 +137,16 @@ def effective_provider_names(spec: str | None) -> list[str]:
     for name in dropped:
         logger.warning("Skipping %s: an opt-in source that is off; %s", name, source_settings.OFF_HINT)
     return names
+
+
+def apply_owner_skips(names: list[str], exclude: list[str] | None) -> tuple[list[str], list[tuple[str, str]]]:
+    """Takes out the sources the owner switched off in Settings > Sources and the one-off `--exclude` names.
+    Unreadable settings switch nothing off here (effective_provider_names already keeps the opt-in sources off)."""
+    try:
+        settings = source_settings.read()
+    except source_settings.SourcesError:
+        settings = None
+    return source_settings.owner_skips(names, settings, exclude)
 
 
 def main() -> int:
@@ -249,6 +264,16 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
     provider_names = effective_provider_names(args.providers)
     if not provider_names:
         return stop(record, f"No valid providers resolved from: {args.providers}")
+    provider_names, owner_skipped = apply_owner_skips(provider_names, [p for p in (args.exclude or "").split(",")])
+    for name, reason in owner_skipped:
+        # Not staged and not in the manifest: the importer sees a source that did not run and keeps its ads as they are.
+        logger.info("Not running %s: %s", name, reason)
+        run_log.add_source(record, name, ProviderOutcome(status="skipped", skip_reason=reason))
+        run_log.event(record, "source_end", source=name, status="skipped", read=0, kept=0, readClass="skipped", error=None, skipReason=reason)
+    if owner_skipped:
+        run_log.save(record)
+    if not provider_names:
+        return stop(record, "Every requested source is switched off, so nothing ran. Switch one on in Settings > Sources.")
 
     # A view left behind by a stopped commit is rebuilt first, so the discovered file the run keeps beside its staging (and
     # takes facts from) is the one the ledger says it is.

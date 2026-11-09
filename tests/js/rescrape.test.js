@@ -145,6 +145,17 @@ describe('starting a run', () => {
     expect(args.slice(1)).toEqual(['start', '--run-id', answer.runId, '--providers', 'serbia', '--country', 'Serbia'])
   })
 
+  it('passes the one-off excluded sources to this run only, and refuses a malformed list', async () => {
+    const { spawnFn, calls } = fakeSpawn()
+    const ok = await startRescrape({ ...body, excludeProviders: ['jobspy'] }, { spawnFn, ...idle, ...noMirrors })
+    expect(ok.status).toBe(202)
+    expect(calls[0].args.slice(1)).toEqual(['start', '--run-id', ok.body.runId, '--providers', 'serbia', '--country', 'Serbia', '--exclude', 'jobspy'])
+    for (const excludeProviders of ['jobspy', ['--judge'], ['a,b'], [7], new Array(21).fill('a')]) {
+      expect((await startRescrape({ ...body, excludeProviders }, { spawnFn, ...idle, ...noMirrors })).status).toBe(422)
+    }
+    expect(calls).toHaveLength(1)
+  })
+
   it('does not touch the mirrors or start anything when a run is active', async () => {
     const { spawnFn, calls } = fakeSpawn()
     let wrote = false

@@ -1484,3 +1484,25 @@ Branch `wave6-application-tracking` (local, not merged, not deployed). Owner-app
 - **A failed status write changes nothing, API unreachable included.** The earlier "status 0 keeps the change local" fallback (and its mention in the not-on-the-server-yet notice logic) is removed: `handleStatusChange` shows `The status was not saved: <reason>` and leaves the stored status as it was. No local-only write, no second source of truth. The pending notice stays only for rows that already existed in the browser before the server held them (the export / import path); nothing new is written there.
 - **Applications without a job id are protected by posting key.** Hand-entered, history-only, voided and ad-less applications may have `jobId` null or missing. `scripts/export-application-job-ids.js --check` (read-only, counts only) reports how many such applications exist and how many ledger rows they match by the store's own `postingKeyFor` (normalised URL, else title|company|location). The normal export adds those matched ledger ids to the ids file (Python never parses the store or ports the normaliser) and writes `# jobid-less-applications N` and `# ledger-sha256` headers. `prune-older-key.py --apply` refuses without the `jobid-less-applications` header, and, when N > 0, refuses unless the recorded ledger hash equals the live `job_history.json` (the matches were computed against another ledger otherwise). Not run: `--apply`.
 
+
+## Per-source switches and one-off "Skip LinkedIn" (2026-11-09)
+
+**Why the controls were disabled:** `JobBoardChips` set `disabled` on every source that was not opt-in, and the server's
+`source_settings.save()` refused them ("switching comes with board switching, Phase 3b"). Only Joberty was switchable.
+There was no browser or consent gate beyond that.
+
+**Decisions:**
+- The server stays the master: every source has a switch in `data/config/sources.json` (atomic write under a lock, as before).
+  A source that follows the provider groups is **on unless its entry says `active: false`**; no entry means on, so an
+  absent or unreadable file changes nothing for them. Switching one off or on needs no consent and is recorded in its history.
+  Joberty keeps its rule: off by default, on only with consent.
+- A switched-off source is **skipped entirely**, before staging: it is not in the staging manifest, so the importer sees a
+  source that did not run and keeps its ads as they are (Wave 1 safety: no snapshot closing, no absent count). It is never a
+  0-ad read or a failure. The run record gets a `skipped` source row with the reason "skipped by owner (switched off in
+  Settings > Sources)", which Activity shows under the source; a skipped row does not make the run partial or failed.
+- If every requested source is off, discovery stops with a clear message and changes nothing.
+- **One-off skip:** `POST /api/rescrape` takes `excludeProviders: ["jobspy"]` -> `run_rescrape.py --exclude` ->
+  `run_discovery.py --exclude`. It is for that run only, saves nothing, and is recorded as "skipped by owner for this run".
+  The Re-scrape row has a "Skip LinkedIn this time" checkbox that clears after the run starts. The saved switch is not touched.
+- Discovery in a pipeline run reads the same switches (one gate: `run_discovery.apply_owner_skips`).
+- Not done: Wellfound, RemoteOK, YC and WWR have switches but are outside the standard run, so they only matter for a custom provider list.

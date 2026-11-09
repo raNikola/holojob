@@ -20,20 +20,19 @@ export function JobBoardChips({ boards, draft, consent, onToggle, onConsent, dis
     <div className="space-y-3">
       <ul className="flex flex-wrap gap-2">
         {boards.map((board) => {
-          const on = board.optIn ? draft[board.name] === true : board.inStandardRun
+          const on = draft[board.name] === true
           const sub = board.optIn
             ? BOARD_SUBTEXT[board.name] || 'Opt-in'
-            : board.inStandardRun ? 'In the standard run' : 'Not in the standard run'
+            : !on ? 'Skipped by you' : board.inStandardRun ? 'In the standard run' : 'Not in the standard run'
           return (
             <li key={board.name} className="flex items-start gap-1">
               <button
                 type="button"
                 role="switch"
                 aria-checked={on}
-                disabled={disabled || !board.optIn}
+                disabled={disabled}
                 onClick={() => onToggle(board.name, !on)}
-                title={board.optIn ? undefined : 'Follows the provider group until board switching ships'}
-                className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF} ${board.optIn ? 'hover:border-teal-400' : 'cursor-default opacity-80'}`}
+                className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF} hover:border-teal-400`}
               >
                 <span className="font-medium">{boardLabel(board.name)}</span>
                 <span className="text-xs text-stone-500 dark:text-stone-400">{sub}</span>
@@ -108,7 +107,7 @@ export default function JobBoardsPanel() {
   }
 
   return (
-    <Card title="Job boards" description="Where discovery looks. Opt-in boards run only while switched on here; the others follow the standard run.">
+    <Card title="Job boards" description="Where discovery looks. A board switched off here is skipped by every run; its ads stay as they are. Opt-in boards also need your consent.">
       {boards === null && !error && <p className="text-sm text-stone-500"><Loader2 className="mr-1 inline h-4 w-4 animate-spin" />Loading…</p>}
       {boards && (
         <JobBoardChips

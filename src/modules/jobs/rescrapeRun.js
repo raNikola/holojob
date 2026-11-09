@@ -2,12 +2,12 @@
 import { syncManualJobs } from './manualScoring.js'
 
 /** Starts a run on the server. Hand-entered jobs go over first, so this run scores them. Throws with the server's reason. */
-export async function startRescrapeRun({ providers, country, intelligence, profile }, { fetchFn = globalThis.fetch, sync = syncManualJobs } = {}) {
+export async function startRescrapeRun({ providers, country, intelligence, profile, excludeProviders }, { fetchFn = globalThis.fetch, sync = syncManualJobs } = {}) {
   await sync()
   const res = await fetchFn('/api/rescrape', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ providers, country, intelligence, profile }),
+    body: JSON.stringify({ providers, country, intelligence, profile, ...(excludeProviders?.length ? { excludeProviders } : {}) }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.message || data.error || 'Re-scrape did not start')
