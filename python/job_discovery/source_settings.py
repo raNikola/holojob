@@ -83,7 +83,14 @@ def read() -> dict:
         raise SourcesError(f"{path.name} has an unexpected shape")
     if not isinstance(data.get("version"), int) or data["version"] > VERSION:
         raise SourcesError(f"{path.name} has version {data.get('version')!r}; this build reads {VERSION}")
-    return {**empty(), **data}
+    merged = {**empty(), **data}
+    # Tolerate hand-edited or damaged values inside a readable file: an entry that is not an object counts as "not saved" (and is
+    # replaced when the owner next saves that source); a bad history or migrations value is dropped. Valid entries, unknown keys included, are kept as they are.
+    merged["boards"] = {k: ({**v, "history": v["history"] if isinstance(v.get("history"), list) else []} if "history" in v else v)
+                        for k, v in merged["boards"].items() if isinstance(v, dict)}
+    if not isinstance(merged["migrations"], dict):
+        merged["migrations"] = {}
+    return merged
 
 
 def is_enabled(name: str, data: dict) -> bool:

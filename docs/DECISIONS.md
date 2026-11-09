@@ -1506,3 +1506,14 @@ There was no browser or consent gate beyond that.
   The Re-scrape row has a "Skip LinkedIn this time" checkbox that clears after the run starts. The saved switch is not touched.
 - Discovery in a pipeline run reads the same switches (one gate: `run_discovery.apply_owner_skips`).
 - Not done: Wellfound, RemoteOK, YC and WWR have switches but are outside the standard run, so they only matter for a custom provider list.
+
+### Follow-up (2026-11-09): sources.json written by older code (migration check)
+
+Verified with fixtures shaped like the old file (partial keys, an explicit `active: false`, an opt-in entry with consent, an
+unknown key): loading never rewrites the file; a missing key is on for that source only; saving one source leaves every
+other entry, unknown keys and `migrations` byte-for-byte as saved. A missing, empty, corrupt, wrong-shape, wrong-version,
+non-UTF-8 or directory-in-place-of-file settings file falls back to defaults (group sources on, opt-in off) and discovery runs;
+the file is left as it is and a save is refused until it is fixed.
+**Bug found and fixed:** a readable file with a damaged value inside (an entry that is not an object, `history` not a list,
+`migrations` not an object) crashed `save()` / `migrate_legacy()`. `read()` now treats such an entry as "not saved" (replaced
+when the owner next saves that source) and drops a bad history or migrations value; valid entries are kept untouched.

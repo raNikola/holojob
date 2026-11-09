@@ -145,3 +145,102 @@ def test_every_source_switched_off_stops_with_a_clear_message_and_changes_nothin
     code, record, _ = run(root, monkeypatch)
     assert code == 1 and "switched off" in json.dumps(record["issues"])
     assert (root / "data/jobs/job_history.json").read_text() == before
+
+
+# --- files saved by older code: nothing the owner saved is reset, a missing key is on for that source only ----------
+
+OLD_FILE = {
+    "version": 1, "updatedAt": "2026-10-30T12:00:00+00:00",
+    "boards": {
+        "joberty": {"active": True, "consentAcceptedAt": "2026-10-30T12:00:00+00:00", "disabledAt": None,
+                    "history": [{"at": "2026-10-30T12:00:00+00:00", "event": "enabled"}]},
+        "infostud": {"active": False, "disabledAt": "2026-11-01T08:00:00+00:00"},  # an explicit owner switch
+        "somefuturesource": {"active": False},                                      # an unknown key
+    },
+    "migrations": {"job-dashboard-discovery-options": "2026-10-30T12:00:00+00:00"},
+}
+
+
+def write_old(data=None):
+    path = source_settings.sources_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(OLD_FILE if data is None else data))
+
+
+def test_a_partial_old_file_turns_only_the_missing_sources_on():
+    write_old()
+    result = source_settings.get()
+    assert row(result, "infostud")["active"] is False
+    assert row(result, "joberty")["active"] is True
+    assert all(row(result, n)["active"] for n in GROUP_SOURCES if n != "infostud")
+    assert "somefuturesource" not in [b["name"] for b in result["boards"]]
+    kept, skipped = run_discovery.apply_owner_skips(list(SERBIA), [])
+    assert [n for n, _ in skipped] == ["infostud"] and "jobspy" in kept
+
+
+def test_reading_and_discovery_never_rewrite_the_file():
+    write_old()
+    before = source_settings.sources_path().read_bytes()
+    source_settings.get()
+    run_discovery.effective_provider_names("serbia")
+    run_discovery.apply_owner_skips(list(SERBIA), ["jobspy"])
+    assert source_settings.sources_path().read_bytes() == before
+
+
+def test_saving_one_source_keeps_every_other_saved_value_unknown_keys_included():
+    write_old()
+    assert source_settings.save({"jobspy": {"active": False}}, now=T2)["ok"]
+    after = on_disk()
+    assert after["boards"]["infostud"] == OLD_FILE["boards"]["infostud"]
+    assert after["boards"]["joberty"] == OLD_FILE["boards"]["joberty"]
+    assert after["boards"]["somefuturesource"] == {"active": False}
+    assert after["migrations"] == OLD_FILE["migrations"]
+    assert after["boards"]["jobspy"]["active"] is False
+
+
+def test_saving_a_source_that_is_already_in_the_saved_state_changes_no_other_entry():
+    write_old()
+    assert source_settings.save({"infostud": {"active": False}, "workable": {"active": True}}, now=T2)["ok"]
+    after = on_disk()
+    assert after["boards"]["infostud"] == OLD_FILE["boards"]["infostud"] and "workable" not in after["boards"]
+
+
+@pytest.mark.parametrize("content", ["", "{not json", "[]", "null", '{"version": 1, "boards": []}', '{"version": 99, "boards": {}}',
+                                     '{"boards": {}}', b"\xff\xfe\x00bad"])
+def test_a_corrupt_file_falls_back_to_defaults_without_crashing_discovery(content):
+    path = source_settings.sources_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    (path.write_bytes if isinstance(content, bytes) else path.write_text)(content)
+    kept, skipped = run_discovery.apply_owner_skips(list(SERBIA), [])
+    assert kept == SERBIA and skipped == []
+    assert run_discovery.effective_provider_names("serbia") == SERBIA
+    result = source_settings.get()
+    assert result.get("error") and all(row(result, n)["active"] for n in GROUP_SOURCES)
+    assert source_settings.save({"jobspy": {"active": False}})["ok"] is False, "a corrupt file is left as it is"
+
+
+def test_a_directory_in_place_of_the_file_does_not_crash_discovery():
+    source_settings.sources_path().mkdir(parents=True)
+    assert run_discovery.apply_owner_skips(list(SERBIA), []) == (SERBIA, [])
+
+
+@pytest.mark.parametrize("entry", [None, True, "off", [], 0])
+def test_a_malformed_entry_counts_as_not_saved_and_saving_repairs_it_without_a_crash(entry):
+    write_old({**OLD_FILE, "boards": {**OLD_FILE["boards"], "jobspy": entry}})
+    assert row(source_settings.get(), "jobspy")["active"] is True
+    assert run_discovery.apply_owner_skips(list(SERBIA), [])[1] == [("infostud", source_settings.SKIP_SWITCH)]
+    assert source_settings.save({"jobspy": {"active": False}}, now=T2)["ok"]
+    assert on_disk()["boards"]["jobspy"]["active"] is False
+
+
+@pytest.mark.parametrize("bad", [{"history": 5}, {"history": {"a": 1}}, {"history": None}])
+def test_a_malformed_history_does_not_stop_a_switch(bad):
+    write_old({**OLD_FILE, "boards": {**OLD_FILE["boards"], "infostud": {"active": False, **bad}}})
+    assert source_settings.save({"infostud": {"active": True}}, now=T2)["ok"]
+    assert on_disk()["boards"]["infostud"]["active"] is True
+
+
+@pytest.mark.parametrize("migrations", [None, [], "x"])
+def test_a_malformed_migrations_value_does_not_crash_the_legacy_move(migrations):
+    write_old({**OLD_FILE, "migrations": migrations})
+    assert source_settings.migrate_legacy({"includeJoberty": True}, now=T2)["ok"] is True
