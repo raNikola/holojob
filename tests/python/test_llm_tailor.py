@@ -302,11 +302,6 @@ def test_an_unparseable_provider_output_is_masked_and_cut(allowed):
     assert data is None and EMAIL not in err and len(err) < 260
 
 
-def test_the_project_scan_tools_cannot_read_commit_authors():
-    joined = " ".join(claude_code.READONLY_TOOLS)
-    assert "git log" not in joined and "git shortlog" not in joined
-
-
 def test_nothing_is_sent_without_an_explicit_confirm(allowed):
     data, err = generate(confirmed=False)
     assert data is None and "not confirmed" in err

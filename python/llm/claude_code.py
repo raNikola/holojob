@@ -30,13 +30,17 @@ import redact  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
+# What a repo analysis may use. Only tools that read files or list names: no `git` command at all (log, shortlog, show and
+# `branch --format` print commit authors' names and e-mail addresses), and no `cat` or `find` (`find -exec` runs anything, and
+# `Read` already reads files). The commit count and dates the analysis needs are computed by code and handed in the prompt.
 READONLY_TOOLS = [
     "Read", "Grep", "Glob", "LS",
-    # No git log or git shortlog: they print the commit authors' names and e-mail addresses, which would go to the provider.
-    "Bash(git diff:*)",
-    "Bash(git show:*)", "Bash(git branch:*)", "Bash(ls:*)", "Bash(wc:*)",
-    "Bash(find:*)", "Bash(cat:*)",
+    "Bash(ls:*)", "Bash(wc:*)",
 ]
+
+# Git's own files keep the authors' names and e-mail addresses (logs, config, objects). Denied by path for every file tool, as a
+# second line behind the allowlist above.
+DISALLOWED_TOOLS = ["Read(.git/**)", "Read(**/.git/**)", "Read(./.git/**)"]
 
 _availability: dict | None = None
 
@@ -162,7 +166,7 @@ def analyze_repo(repo_path: str, prompt: str, *, timeout: int = 600) -> tuple[di
     """
     if not is_available():
         return None, availability()["reason"]
-    args = ["--allowed-tools", ",".join(READONLY_TOOLS)]
+    args = ["--allowed-tools", ",".join(READONLY_TOOLS), "--disallowed-tools", ",".join(DISALLOWED_TOOLS)]
     text, err = _run(args, prompt, timeout, cwd=repo_path)
     if text is None:
         return None, err

@@ -42,8 +42,9 @@ EXT_LANG = {
 }
 
 ANALYSIS_PROMPT = """You are analyzing a software project repository to build a factual \
-candidate intelligence report. Explore the codebase and the git history (git log, \
-git shortlog -sn, file structure, READMEs, manifests like package.json/requirements.txt).
+candidate intelligence report. Explore the codebase (file structure, \
+READMEs, manifests like package.json/requirements.txt). You have no access to the git history; the facts computed from it are \
+given below.
 
 Extract ONLY what you can verify in this repo. Never guess or inflate.
 
@@ -57,6 +58,15 @@ Return ONLY a JSON object (no prose) with this exact shape:
   "quantifiables": ["<metric-bearing facts: e.g. '120 commits over 14 months', '40+ API endpoints', '12 database models'>"],
   "highlights": ["<1-3 strongest resume-worthy accomplishment lines, factual, with numbers where the repo supports them>"]
 }"""
+
+
+def stats_block(stats: dict) -> str:
+    """Facts counted by code from the git history (no author names or e-mails), for the prompt: the model quotes them, never recounts."""
+    return (
+        "\n\nFacts computed by code from the repository (use them verbatim for any commit count, date or file count; "
+        "do not estimate your own):\n" + json.dumps(
+            {k: stats.get(k) for k in ("commits", "firstCommit", "lastCommit", "fileCount", "languages")}, ensure_ascii=False)
+    )
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -113,7 +123,7 @@ def scan_repo(repo: Path, source: str, use_llm: bool) -> dict:
     }
     if use_llm:
         with claude_code.ai_gate.context(feature="project-scan"):
-            analysis, err = claude_code.analyze_repo(str(repo), ANALYSIS_PROMPT)
+            analysis, err = claude_code.analyze_repo(str(repo), ANALYSIS_PROMPT + stats_block(stats))
         if analysis:
             entry.update({k: v for k, v in analysis.items() if k != "name"})
             entry["name"] = analysis.get("name") or repo.name
