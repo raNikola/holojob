@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { cvEntryParsedData, readPdfDraft } from '../../src/modules/profile/importFlow.js'
+import { cvEntryParsedData, readPdfDraft, readTextFileDraft, sourceForFile } from '../../src/modules/profile/importFlow.js'
 import { applyReviewedImport } from '../../src/modules/profile/importApply.js'
 import { defaultChoices } from '../../src/modules/profile/importDraft.js'
 import { ensureCvLibrary } from '../../src/utils/cvLibrary.js'
@@ -173,5 +173,39 @@ describe('cvEntryParsedData (My CVs > Add)', () => {
     const fallback = vi.fn().mockReturnValue({ skills: ['Go'] })
     expect(await cvEntryParsedData('cv text', { parse, fallback })).toEqual({ parsedData: { skills: ['Go'] }, usedFallback: true })
     expect(fallback).toHaveBeenCalledWith('cv text')
+  })
+})
+
+describe('reading a text or Markdown file', () => {
+  const md = (name = 'cv.md', size = 100) => ({ name, type: '', size })
+  const parse = vi.fn(async (source, text) => ({ source, rawText: text, parsedData: {} }))
+
+  it('maps file names and types to import sources', () => {
+    expect(sourceForFile({ name: 'CV.PDF', type: '' })).toBe('resume_pdf')
+    expect(sourceForFile({ name: 'cv.txt', type: '' })).toBe('text_file')
+    expect(sourceForFile({ name: 'cv.MD', type: '' })).toBe('text_file')
+    expect(sourceForFile({ name: 'cv.markdown', type: 'text/markdown' })).toBe('text_file')
+    expect(sourceForFile({ name: 'noext', type: 'text/plain' })).toBe('text_file')
+    expect(sourceForFile({ name: 'cv.docx', type: '' })).toBeNull()
+    expect(sourceForFile({ name: 'cv.exe', type: 'application/octet-stream' })).toBeNull()
+  })
+
+  it('reads the text in the browser, parses it as a text file, keeps the file name and writes nothing', async () => {
+    const draft = await readTextFileDraft(md('jane.md'), { parse, read: async () => '# Jane\nSQL' })
+    expect(parse).toHaveBeenCalledWith('text_file', '# Jane\nSQL')
+    expect(draft).toMatchObject({ source: 'text_file', fileName: 'jane.md' })
+  })
+
+  it('refuses a binary, a non-UTF-8 or an oversized file before anything is sent', async () => {
+    const send = vi.fn(async () => ({}))
+    await expect(readTextFileDraft(md(), { parse: send, read: async () => 'ab\u0000cd' })).rejects.toThrow(/not UTF-8 text/)
+    await expect(readTextFileDraft(md(), { parse: send, read: async () => '�'.repeat(50) + 'x'.repeat(100) })).rejects.toThrow(/not UTF-8 text/)
+    await expect(readTextFileDraft(md('big.txt', 300 * 1024), { parse: send, read: async () => 'x' })).rejects.toThrow(/too large/)
+    await expect(readTextFileDraft({ name: 'a.pdf', type: 'application/pdf', size: 5 }, { parse: send, read: async () => 'x' })).rejects.toThrow(/not a text file/)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('a few stray replacement characters do not make a file "not text"', async () => {
+    await expect(readTextFileDraft(md(), { parse, read: async () => `Name ��\n${'text '.repeat(200)}` })).resolves.toBeTruthy()
   })
 })

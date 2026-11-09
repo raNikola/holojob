@@ -293,8 +293,8 @@ export function applyImportDraft(profile, draft, choices, { now = new Date(), ma
 
   const source = IMPORT_SOURCES[draft.source] || { importSource: 'imported', name: 'Imported text' }
   const day = now.toISOString().slice(0, 10)
-  // A PDF source keeps its own file name; `file` carries the stored copy's id and path when the upload worked.
-  const named = source.pdf && text(draft.fileName)
+  // A file source keeps its own file name; `file` carries the stored copy's id and path when the upload worked.
+  const named = (source.pdf || source.file) && text(draft.fileName)
   const entry = {
     id: file?.id || makeId(),
     ...(named ? {} : { label: `${source.name} ${day}` }),

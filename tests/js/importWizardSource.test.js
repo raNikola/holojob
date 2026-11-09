@@ -25,7 +25,8 @@ describe('the import wizard writes only in handleApply, through the guarded appl
 
   it('reads a PDF into a draft without a write: extract and parse are all that is handed to readPdfDraft', () => {
     const read1 = wizard.slice(wizard.indexOf('const handleFile'), wizard.indexOf('const reset'))
-    expect(read1).toMatch(/readPdfDraft\(file, pdfSource, \{ extract: extractTextFromPdf, parse: parseImportText \}\)/)
+    expect(read1).toMatch(/readPdfDraft\(file, source, \{ extract: extractTextFromPdf, parse: parseImportText \}\)/)
+    expect(read1).toMatch(/readTextFileDraft\(file, \{ parse: parseImportText \}\)/)
     expect(read1).toMatch(/setView\('review'\)/)
     expect(read1).not.toMatch(/updateProfile|uploadCvFile|cvActions/)
   })

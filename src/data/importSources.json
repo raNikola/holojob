@@ -2,8 +2,28 @@
   "_comment": "The one list of profile import sources. Read by src/modules/profile/importDraft.js, scripts/run-profile-import.js and python/profile_import/text_parser.py; tests/js/importSources.test.js checks the three agree. input: 'text' = the parser receives text (a PDF is read to text in the browser).",
   "draftVersion": 1,
   "sources": {
-    "paste": { "importSource": "pasted_text", "name": "Pasted text", "input": "text" },
-    "resume_pdf": { "importSource": "resume_pdf", "name": "Resume PDF", "input": "text", "pdf": true },
-    "linkedin_pdf": { "importSource": "linkedin_pdf", "name": "LinkedIn PDF", "input": "text", "pdf": true }
+    "paste": {
+      "importSource": "pasted_text",
+      "name": "Pasted text",
+      "input": "text"
+    },
+    "resume_pdf": {
+      "importSource": "resume_pdf",
+      "name": "Resume PDF",
+      "input": "text",
+      "pdf": true
+    },
+    "linkedin_pdf": {
+      "importSource": "linkedin_pdf",
+      "name": "LinkedIn PDF",
+      "input": "text",
+      "pdf": true
+    },
+    "text_file": {
+      "importSource": "text_file",
+      "name": "Text file",
+      "input": "text",
+      "file": true
+    }
   }
 }

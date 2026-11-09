@@ -31,6 +31,7 @@ MAX_ENTRIES = 60
 MAX_SKILLS = 80
 MAX_LINKS = 30
 
+from profile_import.markdown_text import to_plain  # noqa: E402
 from profile_import.vocabulary import (  # noqa: E402
     CONTACT_LABELS as _CONTACT_LABELS,
     LEVEL_OF as _LEVEL_OF,
@@ -953,12 +954,13 @@ def _scrub_domains(line: str, found: dict[str, list[str]]) -> str:
 def parse_text(text: object, source: str = "paste", today: date | None = None) -> dict:
     """The import draft for CV text. Raises TextImportError with a fixed code.
 
-    `source` is "paste", "resume_pdf" or "linkedin_pdf": the same parser reads all three; the LinkedIn
+    `source` is any text source listed in src/data/importSources.json: the same parser reads them all; the LinkedIn
     mode only adds the headings and page footers of a LinkedIn profile PDF. `today` dates the
     years-of-experience fallback and is only passed by tests."""
     if source not in SOURCES:
         raise TextImportError("invalid_request")
-    raw_text = clean_text(text)
+    # A text file may be Markdown: its markup is removed first; a plain text file is unchanged by this.
+    raw_text = clean_text(to_plain(text) if source == "text_file" else text)
     lines = [l.strip() for l in raw_text.split("\n")]
     ignored: list[dict] = []
     if source == "linkedin_pdf":

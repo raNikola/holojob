@@ -8,7 +8,7 @@ import ImportResult from './ImportResult'
 import { useProfile } from '../../context/ProfileContext'
 import { defaultChoices } from '../../modules/profile/importDraft'
 import { fetchImportImpact, parseImportText, parsePastedText } from '../../modules/profile/importApi'
-import { readPdfDraft } from '../../modules/profile/importFlow'
+import { ACCEPT_ANY_FILE, readPdfDraft, readTextFileDraft, sourceForFile } from '../../modules/profile/importFlow'
 import { applyReviewedImport } from '../../modules/profile/importApply'
 import { buildImportPreview } from '../../modules/profile/importPreview'
 import { currentProfile, realImportDeps } from '../../modules/profile/importDeps'
@@ -46,7 +46,7 @@ export default function ImportWizard({ onBusyChange, onManual, onSaved }) {
     setError(null)
     if (id === 'manual') { onManual?.(); return }
     if (id === 'paste') { setView('paste'); return }
-    setPdfSource(id === 'linkedin' ? 'linkedin_pdf' : 'resume_pdf')
+    setPdfSource(id === 'linkedin' ? 'linkedin_pdf' : 'any_file')
     setView('pdf')
   }
 
@@ -69,13 +69,19 @@ export default function ImportWizard({ onBusyChange, onManual, onSaved }) {
     setBusy(true)
     setError(null)
     try {
-      const parsed = await readPdfDraft(file, pdfSource, { extract: extractTextFromPdf, parse: parseImportText })
+      // "Upload a file" reads the type from the file; the LinkedIn option is always a PDF.
+      const source = pdfSource === 'linkedin_pdf' ? 'linkedin_pdf' : sourceForFile(file)
+      if (!source) throw new Error('This file type is not supported yet. Use a PDF, a TXT or Markdown file, or paste the text.')
+      const isPdf = source === 'resume_pdf' || source === 'linkedin_pdf'
+      const parsed = isPdf
+        ? await readPdfDraft(file, source, { extract: extractTextFromPdf, parse: parseImportText })
+        : await readTextFileDraft(file, { parse: parseImportText })
       setDraft(parsed)
-      setPdfFile(file)
+      setPdfFile(isPdf ? file : null) // only a PDF is stored with the CV entry
       setChoices(defaultChoices(profile, parsed))
       setView('review')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The PDF could not be read.')
+      setError(err instanceof Error ? err.message : 'The file could not be read.')
     } finally {
       setBusy(false)
     }
@@ -143,6 +149,6 @@ export default function ImportWizard({ onBusyChange, onManual, onSaved }) {
     )
   }
   if (view === 'paste') return <PasteStep onParse={handleParse} onBack={() => { setError(null); setView('pick') }} busy={busy} error={error} />
-  if (view === 'pdf') return <PdfStep source={pdfSource} onFile={handleFile} onBack={() => { setError(null); setView('pick') }} busy={busy} error={error} />
+  if (view === 'pdf') return <PdfStep source={pdfSource} accept={pdfSource === 'any_file' ? ACCEPT_ANY_FILE : undefined} onFile={handleFile} onBack={() => { setError(null); setView('pick') }} busy={busy} error={error} />
   return <SourcePicker onPick={pick} />
 }
