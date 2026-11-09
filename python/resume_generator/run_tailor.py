@@ -23,7 +23,7 @@ import pipeline_lock  # noqa: E402
 from cover_letter_generator import BANNED_PHRASES, build_cover_letter_context, lint_cover_letter  # noqa: E402
 from llm_tailor import generate_llm_content, load_project_intelligence  # noqa: E402
 from pdf_renderer import render_single_page_pdf  # noqa: E402
-from provenance_checker import build_canonical_facts, check_provenance  # noqa: E402
+from provenance_checker import build_canonical_facts, check_document, check_draft  # noqa: E402
 from resume_parser import parse_resume_from_profile, skill_label  # noqa: E402
 from resume_tailor import build_resume_context  # noqa: E402
 from docx_renderer import render_resume_docx  # noqa: E402
@@ -135,6 +135,15 @@ def _apply_llm_content(ctx: dict, llm: dict, intelligence: dict) -> dict:
     return merged
 
 
+def _project_names(project_intel: dict) -> list[str]:
+    """Names the candidate's own projects may be called by: project name, tech stack and domain, never a metric."""
+    out: list[str] = []
+    for p in project_intel.get("projects") or []:
+        out += [str(p.get("name") or ""), str(p.get("domain") or "")] + [str(t) for t in p.get("techStack") or []]
+    out += [str(t) for t in (project_intel.get("aggregate") or {}).get("techStack") or []]
+    return out
+
+
 def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = True) -> dict:
     job_id = job.get("jobId") or "unknown"
     out_dir = RESUMES_ROOT / job_id
@@ -144,6 +153,8 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     # Gaps in the profile that the CV cannot cover without inventing something.
     warnings = list(ctx.get("warnings") or [])
     facts = build_canonical_facts(profile, intelligence)
+    # The job's own title, company and location are the target of the documents and may be named in them.
+    facts_with_job = facts | {str(job.get(k) or "").lower() for k in ("title", "company", "location") if job.get(k)}
     content_engine = "rule-based"
     llm_paragraphs = None
     llm_issues: list[str] = []
@@ -165,7 +176,11 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
                 candidate_ctx = _apply_llm_content(ctx, llm, intelligence)
                 paragraphs = [p.strip() for p in llm["cover_letter_paragraphs"]]
                 trial_md = render_resume_md(candidate_ctx)
-                prov_ok, prov_issues = check_provenance(trial_md + "\n" + "\n".join(paragraphs), facts)
+                prov_issues = list(dict.fromkeys(
+                    check_document(trial_md + "\n" + "\n".join(paragraphs), facts_with_job)
+                    + check_draft(llm, facts, job=job, extra=_project_names(load_project_intelligence()))
+                ))
+                prov_ok = not prov_issues
                 lint = lint_cover_letter(paragraphs)
                 cliches = [p for p in BANNED_PHRASES if p in (trial_md + " ".join(paragraphs)).lower()]
             except (AttributeError, KeyError, TypeError, ValueError) as exc:
@@ -185,6 +200,9 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
                         + "; ".join(prov_issues + lint + [f"cliché '{c}'" for c in cliches])
                     )
 
+    # The reasons stay in tailoredAssets.llmIssues, and are printed so the person running it sees them.
+    for issue in llm_issues:
+        print(f"  ! {issue}", flush=True)
     if not use_llm or content_engine == "rule-based":
         print("  · Using rule-based content", flush=True)
     print("  · Rendering HTML templates…", flush=True)
@@ -197,7 +215,8 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     cover_md = render_cover_letter_md(cl_ctx)
 
     print("  · Validating provenance (no invented facts)…", flush=True)
-    passed, issues = check_provenance(md + "\n" + cover_md, facts)
+    issues = check_document(md + "\n" + cover_md, facts_with_job)
+    passed = not issues
 
     # Spec filenames (HOLOJOB_GENERATION_CONTEXT.md Part 6 §4)
     name_slug = _slug(ctx.get("name") or "")

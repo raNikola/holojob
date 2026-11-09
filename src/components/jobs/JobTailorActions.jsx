@@ -166,7 +166,20 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
         title={evaluating ? 'AI evaluation…' : 'AI log'}
       />
       {assets?.provenancePassed === false && (
-        <p className="text-[length:calc(var(--text-xs)-0.125rem)] text-amber-600 dark:text-amber-400">Provenance warnings</p>
+        <div role="status" data-testid="tailor-provenance-issues" className="text-[length:calc(var(--text-xs)-0.125rem)] text-amber-600 dark:text-amber-400">
+          <p>These documents state facts the profile does not:</p>
+          <ul className="list-disc pl-4">
+            {(assets.provenanceIssues || []).slice(0, 5).map((issue) => <li key={issue}>{issue}</li>)}
+          </ul>
+        </div>
+      )}
+      {(assets?.llmIssues || []).length > 0 && (
+        <div role="status" data-testid="tailor-llm-issues" className="text-[length:calc(var(--text-xs)-0.125rem)] text-stone-600 dark:text-stone-400">
+          <p>Why the AI draft was not used:</p>
+          <ul className="list-disc pl-4">
+            {assets.llmIssues.slice(0, 5).map((issue) => <li key={issue}>{issue}</li>)}
+          </ul>
+        </div>
       )}
     </div>
   )

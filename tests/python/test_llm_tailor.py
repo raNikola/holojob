@@ -381,6 +381,13 @@ def test_a_banned_phrase_rejects_the_draft(allowed, tmp_path):
     assert "passionate" not in written["tailored_resume.md"].lower()
 
 
+def test_dynamic_is_a_banned_phrase_the_code_enforces(allowed, tmp_path):
+    allowed.reply = json.dumps(good_output(summary="A dynamic product leader with a long record of shipping billing platforms and partner tools."))
+    assets, _ = tailor(tmp_path)
+    assert assets["contentEngine"] == "rule-based"
+    assert any("dynamic" in issue for issue in assets["llmIssues"])
+
+
 def test_a_letter_of_the_wrong_length_rejects_the_draft(allowed, tmp_path):
     allowed.reply = json.dumps(good_output(cover_letter_paragraphs=["Short.", "Short.", "Short.", "Short."]))
     assets, _ = tailor(tmp_path)
@@ -390,11 +397,6 @@ def test_a_letter_of_the_wrong_length_rejects_the_draft(allowed, tmp_path):
 
 # --- the fact gate: what principle 8 asks and it does not reject ---------------------------------
 
-UNCAUGHT = "BUG (DECISIONS.md principle 8, Phase 4 fact gate): check_provenance only looks at numbers shaped like " \
-           "METRIC_RE, so this invented claim passes the gate and is written to the CV as candidate fact"
-
-
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=UNCAUGHT)
 @pytest.mark.parametrize("claim", [
     "Managed a team of 47 engineers.",
     "Grew revenue to $8 billion in one year.",
@@ -699,16 +701,11 @@ def test_a_full_run_refused_by_the_gate_keeps_the_reason_in_the_scored_file(cli,
     assert "AI budget is 0" in assets["llmIssues"][0]
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG: a gate refusal is swallowed for the person running it. tailor_job stores the "
-                                       "reason in tailoredAssets.llmIssues, but prints only 'Using rule-based content', and "
-                                       "no code under src/ or scripts/ reads llmIssues")
 def test_a_refusal_reason_reaches_the_output_of_the_run(cli, tmp_path, monkeypatch, capsys):
     _, _, out = _run_main(tmp_path, monkeypatch, capsys)
     assert "AI budget is 0" in out
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG: same as the refusal: a draft rejected by the fact gate is reported only in "
-                                       "tailoredAssets.llmIssues, which nothing shows")
 def test_a_rejection_reason_reaches_the_output_of_the_run(allowed, tmp_path, monkeypatch, capsys):
     allowed.reply = json.dumps(_invent_in_summary("73% growth"))
     _, _, out = _run_main(tmp_path, monkeypatch, capsys)

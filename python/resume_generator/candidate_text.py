@@ -20,6 +20,7 @@ BANNED_PHRASES = (
     "think outside the box",
     "self-starter",
     "synergy",
+    "dynamic",
 )
 
 # Each word of a phrase may carry an ending, so "thinking outside the box" and

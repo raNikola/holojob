@@ -379,8 +379,8 @@ Known and left open on purpose. Checked against the code on 2026-11-02.
 
 **Phase 4, strict xfails in `tests/python/test_llm_tailor.py`:**
 
-- The fact gate only sees metric-shaped numbers, so "47 engineers" passes.
-- Refusal and rejection reasons are stored in `tailoredAssets.llmIssues` but not shown to the owner.
+- ~~The fact gate only sees metric-shaped numbers~~ built (Phase 4, area 2): `provenance_checker.check_draft` / `check_document` cover numbers, years of experience, named things, degrees and certifications; limits listed in the module docstring.
+- ~~Refusal and rejection reasons not shown~~ built: printed by the run and listed in `JobTailorActions.jsx`.
 - Identifiers inside the sections LLM tailoring sends are not redacted.
 - LLM tailoring has no confirm step.
 
@@ -389,8 +389,7 @@ Known and left open on purpose. Checked against the code on 2026-11-02.
 - `scripts/run-tailor.js` and the `/api/tailor/*` routes.
 - A bulk tailoring run that aborts. A malformed draft in a bulk run is covered; a failure outside the draft is not (below).
 - Empty stdout with a non-zero exit from the Claude Code CLI: `claude_code._call` does not read the exit code, and the tests only use exit 0.
-- "dynamic": the tailoring prompt bans it, but it is not in `BANNED_PHRASES` (`candidate_text.py`), so code does not enforce it and no test covers it.
-- Project intelligence metrics are not a fact source: `build_canonical_facts` does not read that file, so a draft that uses a metric from it is rejected. Nothing tests this.
+- Project intelligence metrics count only when the profile states them too (owner decision, Phase 4); tested in `tests/python/test_fact_gate.py`.
 
 **Tailoring and audit behaviour:**
 
