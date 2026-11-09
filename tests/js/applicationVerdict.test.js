@@ -4,7 +4,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as store from '../../scripts/application-store.js'
 import { GATE_VERSION, verdictPath } from '../../scripts/document-verdicts.js'
 import { writeVerdict } from './helpers/documentVerdict.js'
@@ -33,7 +33,7 @@ beforeEach(() => {
   put('Acme_Resume.pdf', PDF)
   put('Acme_CoverLetter.pdf', LETTER)
 })
-afterEach(() => fs.rmSync(root, { recursive: true, force: true }))
+afterEach(() => { vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }) })
 
 const body = (attempt = {}, jobId = JOB.jobId) => ({
   requestId: `req-${(seq += 1)}-${crypto.randomUUID()}`,
@@ -95,6 +95,20 @@ describe('a generated document is attached only with a passing, current verdict'
     const error = await refusal(() => create({ coverLetter: { fileName: 'Acme_CoverLetter.pdf' } }))
     expect(error?.status).toBe(409)
     expect(tree()).toEqual({})
+  })
+
+  it('refuses and removes the copy when the file is replaced between the check and the copy', async () => {
+    writeVerdict(folder(), 'Acme_Resume.pdf')
+    const target = path.join(folder(), 'Acme_Resume.pdf')
+    const real = fs.readFileSync
+    let reads = 0
+    // The first read is the verdict check; the second is the copy, which now sees other bytes.
+    vi.spyOn(fs, 'readFileSync').mockImplementation((file, ...rest) => (String(file) === target && (reads += 1) === 2 ? Buffer.from('swapped in') : real(file, ...rest)))
+    const before = tree()
+    const error = await refusal(() => create())
+    expect(error?.status).toBe(409)
+    expect(error.extra).toMatchObject({ reason: 'unverified_document', code: 'changed' })
+    expect(tree()).toEqual(before)
   })
 
   it('does not ask for a verdict on a library CV', async () => {
