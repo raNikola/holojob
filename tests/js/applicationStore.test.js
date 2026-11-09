@@ -253,7 +253,7 @@ describe('data integrity', () => {
       'handleApplicationsRequest', 'isAppId', 'isStoreBackupEntry', 'knownContactIdentity', 'loadSettings', 'loadStore', 'localDay',
       'mergeFromBackup', 'migrateApplications', 'moveApplication', 'norm', 'normalizeUrl', 'planMigration',
       'postingKeyFor', 'previewMigration', 'previewShaOf', 'readSettings', 'snapshotSha', 'stageCounts',
-      'storePaths', 'verifyMigration', 'writeFileAtomic',
+      'storePaths', 'verifyMigration', 'withApplicationLock', 'writeFileAtomic',
     ])
     expect(names.filter((n) => /^(update|delete|set)/i.test(n))).toEqual([])
     expect([...new Set(store.APPLICATION_ROUTES.map((r) => r.method))].sort()).toEqual(['GET', 'POST'])
