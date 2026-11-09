@@ -121,6 +121,16 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 2. ~~The `older_key` retention window~~ decided: 180 days (Wave 4, h); the owner still runs the report and `--apply`.
 3. The Infostud snapshot switch (Wave 4, c): off until several consecutive complete runs are seen in Activity; then set `SNAPSHOT_AFTER_PROOF` in `job_history.py`. Any category change waits for several probes.
 
+## Wave 5 Infostud incomplete description - built (2026-11-09), owner steps pending
+
+- [x] Full ad text read from the detail page (`__NEXT_DATA__ job.textAd`), chosen by a real-content check, not length (`infostud_description.py`).
+- [x] `descriptionStatus` per ad: complete / teaser / failed / source_truncated; ledger keeps a complete text over a later teaser.
+- [x] Scoring: incomplete description = low-confidence reason; one-line switch to Insufficient Data (`data_sufficiency.py`).
+- [x] Repair script, dry run by default, throttled, counts only (`scripts/repair-infostud-descriptions.py`). Dry run: 9 of 9 stored Infostud ads are candidates.
+- [ ] Owner: run the dry run, decide `--apply`, then Re-score; check the next discovery run.
+- [ ] Follow-up: the Graphify adapter build exited non-zero in Wave 4 (cause not investigated).
+- [ ] Not started on purpose: Infostud snapshot switch (Wave 4) stays off.
+
 ## Job relevance, lifecycle, salary, deadline - built (2026-11-08), owner visual check pending
 
 - [x] Three title tiers, cap 40 for an unrelated title, program work accepted for the product family.

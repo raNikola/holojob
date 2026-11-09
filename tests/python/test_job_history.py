@@ -311,6 +311,21 @@ def test_a_thin_description_does_not_replace_a_fuller_one_so_the_facts_survive()
     assert stats["keptFullerDescription"] == 1 and stats["changed"] == 0
 
 
+def test_a_complete_infostud_text_survives_a_later_teaser_even_though_the_teaser_is_not_thin():
+    ledger = jh.empty_ledger()
+    run(ledger, [{**job(description=FULL), "descriptionStatus": "complete", "descriptionSource": "next_data"}])
+    teaser = "Own the roadmap for our platform and work with engineering to deliver features customers value. " * 5 + "..."
+    out, stats = run(ledger, [{**job(description=teaser), "descriptionStatus": "failed"}], day=1)
+    assert out[0]["description"] == FULL and out[0]["descriptionStatus"] == "complete" and stats["keptFullerDescription"] == 1
+
+
+def test_a_complete_text_replaces_a_stored_teaser():
+    ledger = jh.empty_ledger()
+    run(ledger, [{**job(description="teaser " * 70 + "..."), "descriptionStatus": "teaser"}])
+    out, _ = run(ledger, [{**job(description=FULL), "descriptionStatus": "complete", "descriptionSource": "next_data"}], day=1)
+    assert out[0]["description"] == FULL and out[0]["descriptionStatus"] == "complete"
+
+
 def test_a_fuller_description_replaces_a_thin_one_and_the_ad_is_read_again():
     ledger = jh.empty_ledger()
     thin = job(description="")

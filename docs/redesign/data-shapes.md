@@ -572,6 +572,8 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
       },
       "workMode?": "<string>",
       "expiresAt?": "<string>",
+      "descriptionStatus?": "complete"|"teaser"|"failed"|"source_truncated",  // Infostud only (Wave 5)
+      "descriptionSource?": "next_data"|"json_ld"|"body"|"teaser",
       "category?": "<string>",
       "standardizedPosition?": "<string>",
       "tags?": [
@@ -831,6 +833,8 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
       "aiEnrichment?": "missing",
       "workMode?": "<string>",
       "expiresAt?": "<string>",
+      "descriptionStatus?": "complete"|"teaser"|"failed"|"source_truncated",  // Infostud only (Wave 5)
+      "descriptionSource?": "next_data"|"json_ld"|"body"|"teaser",
       "category?": "<string>",
       "standardizedPosition?": "<string>",
       "tags?": [
@@ -970,6 +974,8 @@ Fields added later, in the browser job store and not in this file until saved:
         "status": "<string>",
         "workMode?": "<string>",
         "expiresAt?": "<string>",
+        "descriptionStatus?": "complete"|"teaser"|"failed"|"source_truncated",  // Infostud only (Wave 5)
+        "descriptionSource?": "next_data"|"json_ld"|"body"|"teaser",
         "category?": "<string>",
         "standardizedPosition?": "<string>",
         "tags?": [

@@ -25,6 +25,12 @@ CUES = (
     "stakeholder", "roadmap", "strategy", "analy", "ownership",
 )
 
+# Wave 5 (owner decision): an ad whose description is known to be cut off (Infostud `descriptionStatus`) is shown with a
+# low-confidence reason, not as Insufficient Data. Setting this to True is the one-line switch to the stricter rule.
+INCOMPLETE_DESCRIPTION_IS_INSUFFICIENT = False
+INCOMPLETE_STATUSES = ("teaser", "failed", "source_truncated")  # mirrors providers/infostud_description.INCOMPLETE
+INCOMPLETE_REASON = "Description incomplete (ad text cut off at source)"
+
 STATE = "insufficient"
 SCORE_CEILING = 5
 
@@ -32,6 +38,11 @@ SCORE_CEILING = 5
 def _requirements(job: dict) -> list:
     facts = job.get("llmFacts") or {}
     return [r for r in (facts.get("requirements") or []) if isinstance(r, dict) and (r.get("text") or "").strip()]
+
+
+def description_incomplete(job: dict) -> bool:
+    """The ad's description is known not to be whole. An ad without a status (every other source) is never incomplete."""
+    return (job.get("descriptionStatus") or "") in INCOMPLETE_STATUSES
 
 
 def metrics(job: dict) -> dict:
@@ -47,6 +58,8 @@ def metrics(job: dict) -> dict:
 def assess(job: dict) -> list[str]:
     """Reasons the ad cannot be scored; an empty list means it can."""
     m = metrics(job)
+    if INCOMPLETE_DESCRIPTION_IS_INSUFFICIENT and description_incomplete(job):
+        return [INCOMPLETE_REASON]
     if m["requirements"]:
         return []
     if m["chars"] >= MIN_CHARS and m["terms"] >= MIN_TERMS:
@@ -68,6 +81,8 @@ def low_confidence(job: dict, *, location_stated: bool, seniority_stated: bool, 
     """Reasons a score that was computed deserves less trust. The score itself is not changed."""
     m = metrics(job)
     reasons = []
+    if description_incomplete(job):
+        reasons.append(INCOMPLETE_REASON)
     if not m["requirements"]:
         reasons.append("Requirements not extracted: must-have and nice-to-have are not separated")
     if m["chars"] < LOW_CONFIDENCE_CHARS:

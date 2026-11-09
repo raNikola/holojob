@@ -79,3 +79,26 @@ def test_the_enhancer_skips_insufficient(monkeypatch):
     enhancer._count = counted.append
     base = {"matchScore": 5, "dataStatus": "insufficient"}
     assert enhancer.enhance({}, base, {}) is base and counted == ["skipped"]
+
+
+# --- Wave 5: a description known to be cut off ------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("status", ["teaser", "failed", "source_truncated"])
+def test_cut_off_description_is_low_confidence_not_insufficient_and_the_score_is_unchanged(status):
+    plain = score_job(job(), INTEL)
+    cut = score_job(job(descriptionStatus=status), INTEL)
+    assert cut["dataStatus"] == "sufficient" and cut["matchScore"] == plain["matchScore"]
+    assert cut["confidence"]["level"] == "low" and data_sufficiency.INCOMPLETE_REASON in cut["confidence"]["reasons"]
+    assert data_sufficiency.INCOMPLETE_REASON not in plain["confidence"]["reasons"]
+
+
+def test_complete_or_absent_status_adds_no_reason():
+    for extra in ({}, {"descriptionStatus": "complete"}):
+        assert data_sufficiency.INCOMPLETE_REASON not in score_job(job(**extra), INTEL)["confidence"]["reasons"]
+
+
+def test_one_line_switch_makes_a_cut_off_description_insufficient(monkeypatch):
+    monkeypatch.setattr(data_sufficiency, "INCOMPLETE_DESCRIPTION_IS_INSUFFICIENT", True)
+    result = score_job(job(descriptionStatus="teaser"), INTEL)
+    assert result["dataStatus"] == "insufficient" and result["matchLabel"] == "Insufficient data"
+    assert score_job(job(descriptionStatus="complete"), INTEL)["dataStatus"] == "sufficient"
