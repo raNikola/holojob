@@ -95,8 +95,18 @@ describe('the table on a long list', () => {
     expect(screen.text()).toContain('The status was not saved: status is not valid')
   })
 
-  it('a row\'s new status keeps the rows loaded', async () => {
+  it('a status change with the API unreachable keeps the old status and shows the error', async () => {
     stubServer({ health: false })
+    screen = await mountScreen({ stored: many(5) })
+    const before = JSON.stringify(screen.storedJobs())
+    await screen.click(screen.rows()[0].querySelector('button[aria-label="Save"]'))
+    await settle()
+    expect(JSON.stringify(screen.storedJobs())).toBe(before)
+    expect(screen.text()).toContain('The status was not saved: Job statuses need the local API server')
+  })
+
+  it('a row\'s new status keeps the rows loaded', async () => {
+    stubServer({})
     screen = await mountScreen({ stored: many(250) })
     await screen.click(screen.button(/Show 100 more/))
     await screen.click(screen.rows()[150].querySelector('button[aria-label="Save"]'))

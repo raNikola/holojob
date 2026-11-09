@@ -113,9 +113,10 @@ def test_the_report_prints_no_title(world, capsys):
 # --- the guarded write ------------------------------------------------------------------------------------------------------
 
 
-def run_prune(root, apply, days=180, app=frozenset(), protect=frozenset(), store_sha="current"):
+def run_prune(root, apply, days=180, app=frozenset(), protect=frozenset(), store_sha="current", jobless=0, ledger_sha=None):
     sha = retention.live_store_sha(root) if store_sha == "current" else store_sha
-    return retention.prune(root, days=days, now=NOW, application_ids=set(app), protect_ids=set(protect), apply=apply, stamp="t1", store_sha=sha)
+    return retention.prune(root, days=days, now=NOW, application_ids=set(app), protect_ids=set(protect), apply=apply, stamp="t1", store_sha=sha,
+                           jobless=jobless, coverage_ledger_sha=ledger_sha)
 
 
 def test_a_dry_run_changes_nothing(world):
@@ -246,3 +247,34 @@ def test_no_retention_code_writes_under_data_applications():
         for line in file.read_text().splitlines():
             if "applications" in line and any(w in line for w in ("write_", "unlink", "rmtree", "shutil.", "open(")):
                 raise AssertionError(f"{file.name} may write near the application store: {line.strip()}")
+
+
+# --- applications without a job id (URL / posting-key coverage) -------------------------------------------------------------
+
+
+def test_apply_refuses_when_the_export_does_not_say_how_many_applications_have_no_job_id(world):
+    root, _ = world
+    ledger_before = (root / "data/jobs/job_history.json").read_bytes()
+    with pytest.raises(SystemExit, match="jobid-less-applications"):
+        run_prune(root, apply=True, jobless=None)
+    assert (root / "data/jobs/job_history.json").read_bytes() == ledger_before and not (root / "data/backups").exists()
+
+
+def test_apply_with_job_id_less_applications_needs_coverage_computed_against_the_live_ledger(world):
+    root, _ = world
+    ledger_before = (root / "data/jobs/job_history.json").read_bytes()
+    for stale in (None, "a" * 64):
+        with pytest.raises(SystemExit, match="different job_history.json"):
+            run_prune(root, apply=True, jobless=2, ledger_sha=stale)
+    assert (root / "data/jobs/job_history.json").read_bytes() == ledger_before and not (root / "data/backups").exists()
+    out = run_prune(root, apply=True, jobless=2, ledger_sha=retention.live_ledger_sha(root))
+    assert out["applied"] is True and out["jobIdlessApplications"] == 2
+
+
+def test_the_coverage_header_is_parsed_and_a_missing_one_reads_as_unknown(tmp_path):
+    f = tmp_path / "ids.txt"
+    f.write_text("# store-sha256 " + "a" * 64 + "\n# jobid-less-applications 3\n# ledger-sha256 " + "b" * 64 + "\njob-1\n")
+    assert retention.parse_coverage(f) == (3, "b" * 64)
+    g = tmp_path / "old.txt"
+    g.write_text("# store-sha256 " + "a" * 64 + "\njob-1\n")
+    assert retention.parse_coverage(g) == (None, None) and retention.parse_coverage(None) == (None, None)
