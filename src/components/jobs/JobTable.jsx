@@ -17,7 +17,6 @@ import { ApplyBadge, PriorityBadge } from './JobScoreBadge'
 import FitScore from './FitScore'
 import AuthorizationBadge from './AuthorizationBadge'
 import JobTailorActions from './JobTailorActions'
-import { EngineShadowBadge } from './EngineShadowSection'
 import SortableTh, { useTableSort } from '../ui/SortableTh'
 import { sortRows } from '../../modules/tableSort'
 import { PRIORITIES } from '../../modules/jobs/matchScore'
@@ -47,9 +46,15 @@ const STATUS_VARIANT = {
   applied_manually: 'medium',
 }
 
-function StatusBadge({ status }) {
-  const label = jobStatusLabel(status)
-  return <Badge variant={STATUS_VARIANT[status] || 'default'}>{label}</Badge>
+/** A history-only row nobody reviewed says so in other words: "Unreviewed" would claim a triage the owner never saw. */
+export const HISTORY_ONLY_LABEL = 'History only'
+export const HISTORY_ONLY_NOTE = 'Known from the job history. Press Keep this ad to review it.'
+
+function StatusBadge({ status, historyOnly = false }) {
+  if (historyOnly && (!status || status === 'new')) {
+    return <span title={HISTORY_ONLY_NOTE}><Badge variant="default">{HISTORY_ONLY_LABEL}</Badge></span>
+  }
+  return <Badge variant={STATUS_VARIANT[status] || 'default'}>{jobStatusLabel(status)}</Badge>
 }
 
 function FollowUpBadge({ job }) {
@@ -196,8 +201,7 @@ function JobCard({
           </div>
           <div className="flex flex-col items-end gap-1">
             {showScores && <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} emptyLabel="Not scored" />}
-            {showScores && <EngineShadowBadge shadow={job.engineShadow} />}
-            <StatusBadge status={job.status} />
+            <StatusBadge status={job.status} historyOnly={rowKind(job) === 'server'} />
             <HistoryBadges job={job} classView={classView} />
             <FollowUpBadge job={job} />
           </div>
@@ -343,7 +347,6 @@ export default function JobTable({
                 {showScores && (
                   <td className="px-3 py-2 align-top">
                     <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} emptyLabel="Not scored" />
-                    {job.engineShadow && <div className="mt-1"><EngineShadowBadge shadow={job.engineShadow} /></div>}
                   </td>
                 )}
                 <td className="w-full px-3 py-2 align-top font-medium text-stone-900 dark:text-stone-100">
@@ -360,7 +363,7 @@ export default function JobTable({
                 <td className="whitespace-nowrap px-3 py-2 align-top text-stone-600 dark:text-stone-400"><ApplyBy job={job} today={today} /></td>
                 {showProvider && <td className="px-3 py-2 align-top"><ProviderBadge job={job} /></td>}
                 {showScores && <td className="px-3 py-2 align-top"><PriorityBadge priority={job.priority} /></td>}
-                <td className="px-3 py-2 align-top"><StatusBadge status={job.status} /></td>
+                <td className="px-3 py-2 align-top"><StatusBadge status={job.status} historyOnly={rowKind(job) === 'server'} /></td>
                 <td className="px-3 py-2 align-top" onClick={(e) => e.stopPropagation()}>
                   {rowKind(job) === 'filtered' ? <FilteredRowActions job={job} onAddFromRow={onAddFromRow} /> : <JobActions job={job} onStatusChange={onStatusChange} onApply={onApply} />}
                   {rowKind(job) === 'server' && <div className="mt-1"><KeepAdButton row={job} /></div>}
