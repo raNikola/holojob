@@ -23,7 +23,7 @@ export function checkDocumentVerdict(dir, fileName) {
   try {
     body = JSON.parse(fs.readFileSync(verdictPath(dir, fileName), 'utf-8'))
   } catch {
-    return { ok: false, code: 'missing', reason: 'This document was never checked against the profile, so it cannot be attached. Generate it again.' }
+    return { ok: false, code: 'missing', reason: 'This document has not passed the automatic checks yet, so it cannot be attached. Generate it again, or re-check it (scripts: recheck_documents.py).' }
   }
   let sha
   try {
@@ -32,14 +32,14 @@ export function checkDocumentVerdict(dir, fileName) {
     return { ok: false, code: 'missing', reason: 'The document file cannot be read.' }
   }
   if (!body || body.file !== fileName || body.sha256 !== sha) {
-    return { ok: false, code: 'changed', reason: 'This document changed after it was checked, so it cannot be attached. Generate it again.' }
+    return { ok: false, code: 'changed', reason: 'This document changed after the automatic checks, so it cannot be attached. Generate it again.' }
   }
   if (!Number.isInteger(body.gateVersion) || body.gateVersion < GATE_VERSION) {
-    return { ok: false, code: 'old_gate', reason: 'This document was checked by an older version of the fact gate. Generate it again.' }
+    return { ok: false, code: 'old_gate', reason: 'This document was checked by an older version of the automatic checks. Generate it again, or re-check it.' }
   }
   if (body.passed !== true) {
     const issues = Array.isArray(body.issues) ? body.issues.slice(0, 20) : []
-    return { ok: false, code: 'failed', reason: 'This document states facts the profile does not, so it cannot be attached.', issues }
+    return { ok: false, code: 'failed', reason: 'This document did not pass the automatic checks, so it cannot be attached.', issues }
   }
   return { ok: true, sha256: sha }
 }

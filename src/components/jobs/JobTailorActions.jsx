@@ -13,6 +13,7 @@ import { tailoringBlocked } from '../../modules/jobs/keptRescore'
 import { useProfile } from '../../context/ProfileContext'
 import { runAiFeature } from '../../modules/ai/aiClient'
 import TailorConfirmDialog from './TailorConfirmDialog'
+import { CHECKS_FAILED, CHECKS_PASSED, CHECK_LIMITS } from '../../modules/jobs/factCheckNote'
 
 export const NOT_IN_SCORED_LIST = 'Tailoring works from the latest scored list, and this ad is not in it (it was kept, or it is no longer listed). It cannot be tailored until a search lists it again.'
 
@@ -183,11 +184,17 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
       />
       {assets?.provenancePassed === false && (
         <div role="status" data-testid="tailor-provenance-issues" className="text-[length:calc(var(--text-xs)-0.125rem)] text-amber-600 dark:text-amber-400">
-          <p>These documents state facts the profile does not:</p>
+          <p>{CHECKS_FAILED}. These documents cannot be attached to an application until they are generated again:</p>
           <ul className="list-disc pl-4">
             {(assets.provenanceIssues || []).slice(0, 5).map((issue) => <li key={issue}>{issue}</li>)}
           </ul>
         </div>
+      )}
+      {assets?.provenancePassed === true && (
+        <details data-testid="tailor-checks-passed" className="text-[length:calc(var(--text-xs)-0.125rem)] text-stone-600 dark:text-stone-400">
+          <summary className="cursor-pointer">{CHECKS_PASSED}. Read it before you send it.</summary>
+          <p className="mt-1">{CHECK_LIMITS}</p>
+        </details>
       )}
       {(assets?.llmIssues || []).length > 0 && (
         <div role="status" data-testid="tailor-llm-issues" className="text-[length:calc(var(--text-xs)-0.125rem)] text-stone-600 dark:text-stone-400">

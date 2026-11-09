@@ -18,7 +18,7 @@ const JOB_ID_RE = /^[A-Za-z0-9._:-]{1,200}$/
 const FAILURES = {
   invalid_job: [400, 'This job id cannot be used.'],
   no_draft: [404, 'There is no saved AI cover letter for this job. Generate one first.'],
-  no_profile: [409, 'The profile or intelligence on the server could not be read, so the letter could not be checked.'],
+  no_profile: [409, 'The profile or intelligence on the server could not be read, so the automatic checks could not run.'],
 }
 
 export async function acceptCoverLetter({ jobId, confirm }, { spawnFn = spawn, python = VENV_PYTHON, script = SCRIPT } = {}) {
@@ -45,7 +45,7 @@ export async function acceptCoverLetter({ jobId, confirm }, { spawnFn = spawn, p
   if (answer.error === 'facts_not_verified') {
     return {
       status: 422,
-      body: { ok: false, error: 'facts_not_verified', message: 'The letter states facts the profile does not, so it was not saved as a document.', issues: (answer.issues || []).slice(0, 20) },
+      body: { ok: false, error: 'facts_not_verified', message: 'The letter did not pass the automatic checks (it has numbers, names or claims the profile does not state), so it was not saved as a document.', issues: (answer.issues || []).slice(0, 20) },
     }
   }
   const [status, message] = FAILURES[answer.error] || [500, 'The letter could not be checked.']

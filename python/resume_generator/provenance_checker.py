@@ -15,7 +15,8 @@ Claim types covered, each matched against the facts as whole tokens:
 Structure is checked elsewhere: experience companies must be in the CV (`llm_tailor._validate`), skills must be in the
 candidate's skill pool and projects in project intelligence (`run_tailor._apply_llm_content`).
 
-NOT covered: a lowercase technology or role invented in prose ("built it on kubernetes"), a true fact reworded into a
+A pass means "passed the defined automatic checks" (`provenancePassed`, a verdict file), never that every statement is true; the
+owner reads a document before sending it. NOT covered: a lowercase technology or role invented in prose ("built it on kubernetes"), a true fact reworded into a
 false one with the same words and numbers, a number reused with another meaning when the same number occurs elsewhere
 in the CV, tone and quality. The gate checks that claims trace to facts, not that they are well written.
 """

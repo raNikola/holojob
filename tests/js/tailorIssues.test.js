@@ -2,6 +2,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
+import { CHECKS_FAILED, CHECKS_PASSED, CHECK_LIMITS, NOT_COVERED } from '../../src/modules/jobs/factCheckNote.js'
 
 vi.mock('../../src/context/ProfileContext', () => ({ useProfile: () => ({ profile: {} }) }))
 
@@ -25,9 +26,32 @@ describe('tailoring reasons are shown', () => {
     expect(html).toContain('Unverified number: 9')
   })
 
-  it('shows nothing extra when all is well', () => {
+  it('shows no failure notice when all is well', () => {
     const html = render({ llmIssues: [], provenancePassed: true, provenanceIssues: [] })
     expect(html).not.toContain('tailor-llm-issues')
     expect(html).not.toContain('tailor-provenance-issues')
+  })
+
+  it('words a pass as "passed the automatic checks", never as a guarantee, and lists what is not checked', () => {
+    const html = render({ llmIssues: [], provenancePassed: true, provenanceIssues: [] })
+    expect(html).toContain('tailor-checks-passed')
+    expect(html).toContain(CHECKS_PASSED)
+    expect(html).toContain('Read it before you send it')
+    for (const gap of NOT_COVERED) expect(html).toContain(gap)
+    expect(html.toLowerCase()).not.toMatch(/guarantee|all facts are true|verified true|fully verified|fact-?checked/)
+  })
+
+  it('words a failure as "did not pass the automatic checks"', () => {
+    const html = render({ llmIssues: [], provenancePassed: false, provenanceIssues: ['Unverified number: 9'] })
+    expect(html).toContain(CHECKS_FAILED)
+    expect(html).not.toContain('tailor-checks-passed')
+  })
+
+  it('names the four uncovered cases the owner asked for', () => {
+    expect(CHECK_LIMITS).toMatch(/lowercase/)
+    expect(CHECK_LIMITS).toMatch(/reworded into a false one/)
+    expect(CHECK_LIMITS).toMatch(/reused with another meaning/)
+    expect(CHECK_LIMITS).toMatch(/tone/)
+    expect(CHECK_LIMITS).toMatch(/do not prove every statement is true/)
   })
 })

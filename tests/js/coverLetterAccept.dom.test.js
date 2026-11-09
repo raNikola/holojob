@@ -30,6 +30,7 @@ describe('CoverLetterAccept', () => {
     await mount()
     expect(host.querySelector('[data-testid="cover-letter-download"]')).toBeNull()
     expect(host.textContent).toContain('This is a draft')
+    expect(host.textContent).toContain('not a guarantee')
   })
 
   it('posts the job id and the confirmation only, then offers the document', async () => {
@@ -41,6 +42,8 @@ describe('CoverLetterAccept', () => {
     expect(url).toBe('/api/ai/cover-letter/accept')
     expect(JSON.parse(init.body)).toEqual({ jobId: 'job-1', confirm: true })
     expect(host.querySelector('[data-testid="cover-letter-download"]').getAttribute('href')).toBe('/api/resumes/job-1/ai_cover_letter.md')
+    expect(host.textContent).toContain('Passed the automatic checks')
+    expect(host.querySelector('[data-testid="cover-letter-limits"]').textContent).toContain('do not prove every statement is true')
   })
 
   it('shows the refusal and the unverified claims, and still offers no download', async () => {

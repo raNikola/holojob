@@ -215,7 +215,7 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
         print(f"  ! {warning}", flush=True)
     cover_md = render_cover_letter_md(cl_ctx)
 
-    print("  · Validating provenance (no invented facts)…", flush=True)
+    print("  · Running the automatic fact checks…", flush=True)
     issues = check_document(md + "\n" + cover_md, facts_with_job)
     passed = not issues
 

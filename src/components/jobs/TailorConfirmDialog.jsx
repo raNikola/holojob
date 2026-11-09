@@ -3,6 +3,7 @@ import { FileText, Loader2, Send, ShieldAlert, X } from 'lucide-react'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { previewTailor } from '../../modules/jobs/pipelineRunner'
+import { CHECK_LIMITS } from '../../modules/jobs/factCheckNote'
 
 const NEVER_SENT = 'name, e-mail, phone, links, salary, questionnaire answers, notes, recruiter contacts'
 
@@ -52,7 +53,7 @@ export default function TailorConfirmDialog({ opts, onClose, onConfirm, onRuleBa
           <>
             <p className="text-sm text-stone-600 dark:text-stone-400">
               The text below goes to <strong>{preview.provider}</strong>, outside this server. Name, e-mail addresses, phone numbers and
-              personal links are removed first. Any claim in the result that the profile does not state is rejected, and rule-based documents are made instead.
+              personal links are removed first. A result with a number, name, degree or years of experience that the profile does not state is rejected, and rule-based documents are made instead. {CHECK_LIMITS}
             </p>
             {reasons.length > 0 && (
               <Alert variant="error" title="This cannot be sent">
