@@ -6,7 +6,7 @@ import ImportReview from './ImportReview'
 import ImportConfirm from './ImportConfirm'
 import ImportResult from './ImportResult'
 import { useProfile } from '../../context/ProfileContext'
-import { defaultChoices } from '../../modules/profile/importDraft'
+import { blankDraft, defaultChoices } from '../../modules/profile/importDraft'
 import { fetchImportImpact, parseDocxFile, parseImportText, parsePastedText } from '../../modules/profile/importApi'
 import { ACCEPT_ANY_FILE, readDocxDraft, readPdfDraft, readTextFileDraft, sourceForFile, unsupportedFileMessage } from '../../modules/profile/importFlow'
 import { applyReviewedImport } from '../../modules/profile/importApply'
@@ -23,7 +23,7 @@ const APPLY_FAILURES = {
 // Step 1 of the profile wizard: pick a source, read it, review the draft, confirm, apply. Nothing reaches the
 // profile, the CV library or the CV files before handleApply, which goes through applyReviewedImport (backup first, one write,
 // mirror retry that never re-applies); the draft, and a PDF's File, live in this component's state only and are lost on a refresh.
-export default function ImportWizard({ onBusyChange, onManual, onSaved }) {
+export default function ImportWizard({ onBusyChange, onSaved }) {
   const { profile, commitProfile } = useProfile()
   const [view, setView] = useState('pick')
   const [pdfSource, setPdfSource] = useState('resume_pdf')
@@ -44,7 +44,15 @@ export default function ImportWizard({ onBusyChange, onManual, onSaved }) {
 
   const pick = (id) => {
     setError(null)
-    if (id === 'manual') { onManual?.(); return }
+    if (id === 'manual') {
+      // "Start blank": the same review, confirm and apply steps with an empty draft the owner fills in.
+      const blank = blankDraft()
+      setDraft(blank)
+      setPdfFile(null)
+      setChoices(defaultChoices(profile, blank))
+      setView('review')
+      return
+    }
     if (id === 'paste') { setView('paste'); return }
     setPdfSource(id === 'linkedin' ? 'linkedin_pdf' : 'any_file')
     setView('pdf')

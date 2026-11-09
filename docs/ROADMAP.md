@@ -298,7 +298,8 @@ Sources and design: [DECISIONS.md](DECISIONS.md#import-redesign).
 | S2 | TXT / MD | Built on `wave7-profile-import` (2026-11-09) |
 | S3 | JSON Resume | Built on `wave7-profile-import` (2026-11-09) |
 | S4 | DOCX | Built on `wave7-profile-import` (2026-11-09) |
-| S6, S7 | PDF real-file hardening, manual "Start blank" | Next, in this order |
+| S6 | PDF failure hardening (password, scanned, page cap, empty MIME type) | Built on `wave7-profile-import` (2026-11-09). Real-file check with one resume PDF and one LinkedIn PDF is still the owner's |
+| S7 | Manual "Start blank" through the same review, confirm and apply | Built on `wave7-profile-import` (2026-11-09) |
 | S5 | LinkedIn data ZIP | Last: waits for the owner's real file names and header rows |
 | 1a | Wizard, paste step, review screen | Done |
 | 1b | TXT / MD and DOCX | Not built ("Other file types are coming"). `python-docx` is already pinned |

@@ -180,7 +180,7 @@ export default function OnboardingWizard({ mode = 'onboarding', onComplete }) {
   const renderStep = () => {
     switch (currentStep) {
       case 0: return <WelcomeStep onNext={goNext} onDemoComplete={onComplete} />
-      case 1: return <ImportWizard onBusyChange={setImportBusy} onManual={() => jumpToStep(2)} onSaved={() => jumpToStep(2)} />
+      case 1: return <ImportWizard onBusyChange={setImportBusy} onSaved={() => jumpToStep(2)} />
       case 2: return <ProfileForm showErrors={showFieldErrors} />
       case 3: return <RepositoryForm />
       case 4: return <QuestionnaireForm

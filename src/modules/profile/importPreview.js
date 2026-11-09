@@ -1,14 +1,14 @@
 // What applying a reviewed draft would do, worked out without touching anything: the confirm screen reads it, and the cache impact
 // request is made from `planned`. Pure; it calls the same applyImportDraft the apply step calls, so the preview cannot disagree with the result.
 
-import { BASIC_FIELDS, SECTIONS, applyImportDraft, effectiveSectionChoice, liveSummary, resolveChoices, sectionKeys, willBeActive } from './importDraft.js'
+import { BASIC_FIELDS, SECTIONS, applyImportDraft, effectiveSectionChoice, liveSummary, makesCvEntry, resolveChoices, sectionKeys, willBeActive } from './importDraft.js'
 import { sameProfile } from './importApply.js'
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
 
 /**
  * @returns {{
- *   planned: object, unchanged: boolean, becomesActive: boolean,
+ *   planned: object, unchanged: boolean, addsCvEntry: boolean, becomesActive: boolean,
  *   sections: { id: string, label: string, choice: string, added: number, removed: number, kept: number }[],
  *   basics: { field: string, action: 'fills'|'changes' }[], summary: 'fills'|'changes'|null,
  *   removals: number, needsReplaceConfirm: boolean,
@@ -48,7 +48,8 @@ export function buildImportPreview(profile, draft, choices, options = {}) {
   return {
     planned,
     unchanged: sameProfile(planned, profile),
-    becomesActive: willBeActive(profile),
+    addsCvEntry: makesCvEntry(draft),
+    becomesActive: makesCvEntry(draft) && willBeActive(profile),
     sections,
     basics,
     summary,

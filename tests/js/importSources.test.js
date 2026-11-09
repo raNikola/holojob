@@ -20,7 +20,7 @@ describe('the import source list is one file', () => {
       expect(id).toMatch(/^[a-z_]+$/)
       expect(source.importSource).toMatch(/^[a-z_]+$/)
       expect(source.name.length).toBeGreaterThan(2)
-      expect(['text', 'bytes']).toContain(source.input)
+      expect(['text', 'bytes', 'none']).toContain(source.input)
     }
   })
 

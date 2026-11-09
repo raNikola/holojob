@@ -1,5 +1,5 @@
 {
-  "_comment": "The one list of profile import sources. Read by src/modules/profile/importDraft.js, scripts/run-profile-import.js and python/profile_import/text_parser.py; tests/js/importSources.test.js checks they agree. input: 'text' = the text route receives text (a PDF is read to text in the browser); 'bytes' = the file route receives the file's bytes and the server reads it. reader: 'text' = the text parser reads (after any conversion to text), 'json' = the JSON Resume mapper.",
+  "_comment": "The one list of profile import sources. Read by src/modules/profile/importDraft.js, scripts/run-profile-import.js and python/profile_import/text_parser.py; tests/js/importSources.test.js checks they agree. input: 'text' = the text route receives text (a PDF is read to text in the browser); 'none' = nothing is read (a blank draft the owner fills in); 'bytes' = the file route receives the file's bytes and the server reads it. cvEntry: false = no My CVs entry is made for it. reader: 'text' = the text parser reads (after any conversion to text), 'json' = the JSON Resume mapper.",
   "draftVersion": 1,
   "sources": {
     "paste": {
@@ -42,6 +42,13 @@
       "input": "bytes",
       "reader": "text",
       "file": true
+    },
+    "manual": {
+      "importSource": "manual",
+      "name": "Entered by hand",
+      "input": "none",
+      "reader": "none",
+      "cvEntry": false
     }
   }
 }

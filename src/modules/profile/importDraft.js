@@ -228,6 +228,30 @@ export function draftKey(draft) {
   return `dk-${hash53(canonical, 0)}${hash53(canonical, 1)}`
 }
 
+/** An empty draft for "Start blank": the review screen's editors fill it in, and it goes through the same confirm and apply steps. */
+export function blankDraft() {
+  return {
+    version: DRAFT_VERSION,
+    parserVersion: 'manual-1',
+    source: 'manual',
+    fileName: '',
+    rawText: '',
+    headline: '',
+    summary: '',
+    basicProfile: {},
+    parsedData: { skills: [], projects: [], education: [], workExperience: [], certifications: [], experienceDetail: [], educationDetail: [], competencyGroups: [] },
+    languages: [],
+    links: [],
+    confidence: {},
+    unplaced: [],
+    ignored: [],
+    warnings: [],
+  }
+}
+
+/** Whether applying a draft of this source adds a My CVs entry (a blank draft has no file or text to keep). */
+export const makesCvEntry = (draft) => (IMPORT_SOURCES[draft?.source] || {}).cvEntry !== false
+
 /** True when saving would make the new My CVs entry the active CV: the profile has no CV yet. */
 export function willBeActive(profile) {
   return !ensureCvLibrary(profile).defaultCvId
@@ -307,8 +331,10 @@ export function applyImportDraft(profile, draft, choices, { now = new Date(), ma
     parsedData: incoming,
   }
 
-  const merged = { ...profile, basicProfile, repositories, _confidence: confidence, resume: { ...profile.resume, parsedData } }
-  // The same reviewed draft never adds a second My CVs entry.
+  // `_confidence` is only added when there is something to say, so an apply that changes nothing returns an equal profile.
+  const merged = { ...profile, basicProfile, repositories, ...(profile._confidence || Object.keys(confidence).length ? { _confidence: confidence } : {}), resume: { ...profile.resume, parsedData } }
+  // A blank draft changes the profile fields only. The same reviewed draft never adds a second My CVs entry.
+  if (!makesCvEntry(draft)) return merged
   if (list(profile.cvLibrary).some((c) => c.importDraftKey === entry.importDraftKey)) return merged
   const next = addCv(merged, entry, { makeDefault: false })
   // addCv makes the entry active when the profile had no CV; keep the merged fields in that case too.

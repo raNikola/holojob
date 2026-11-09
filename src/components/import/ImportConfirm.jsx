@@ -48,7 +48,7 @@ export default function ImportConfirm({ preview, impact, applying, error, onAppl
 
       <Card title="What will change">
         {preview.basics.length === 0 && !preview.summary && changedSections.length === 0 ? (
-          <p className="text-sm text-stone-600 dark:text-stone-400">Your profile fields stay as they are. Only a new CV entry is added to My CVs.</p>
+          <p className="text-sm text-stone-600 dark:text-stone-400">Your profile fields stay as they are.{preview.addsCvEntry ? ' Only a new CV entry is added to My CVs.' : ''}</p>
         ) : (
           <ul className="space-y-2">
             {preview.basics.map((b) => (
@@ -67,7 +67,9 @@ export default function ImportConfirm({ preview, impact, applying, error, onAppl
           </ul>
         )}
         <p className="mt-4 text-sm text-stone-600 dark:text-stone-400">
-          A new entry is added to My CVs. {preview.becomesActive ? 'You have no CV yet, so it becomes your active CV.' : 'It does not become your active CV.'}
+          {!preview.addsCvEntry
+            ? 'Nothing is added to My CVs: this changes the profile fields only.'
+            : `A new entry is added to My CVs. ${preview.becomesActive ? 'You have no CV yet, so it becomes your active CV.' : 'It does not become your active CV.'}`}
         </p>
       </Card>
 

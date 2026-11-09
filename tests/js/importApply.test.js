@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import * as importDraftModule from '../../src/modules/profile/importDraft.js'
 import { applyImportDraft, defaultChoices, draftKey, resolveChoices } from '../../src/modules/profile/importDraft.js'
 import { applyReviewedImport, retryMirrorSync, sameProfile, undoLastImport } from '../../src/modules/profile/importApply.js'
 
@@ -262,5 +263,61 @@ describe('Undo', () => {
     expect(undone).toMatchObject({ ok: true })
     expect(sameProfile(state.profile, richProfile())).toBe(true)
     expect(await undoLastImport({ getProfile: () => state.profile, deps })).toEqual({ ok: false, reason: 'none' })
+  })
+})
+
+describe('Start blank (manual source)', () => {
+  const { blankDraft, withBasic, withSection, addEntry, withEntry, makesCvEntry } = importDraftModule
+  const filled = () => {
+    let d = blankDraft()
+    d = withBasic(d, 'currentRole', 'Product Manager')
+    d = addEntry(d)
+    d = withEntry(d, 0, { title: 'PM', company: 'Acme', location: '', start: '2019', end: '2022', description: '', bullets: ['Led the roadmap.'] })
+    d = withSection(d, 'skills', ['SQL', 'Roadmapping'])
+    return d
+  }
+
+  it('is a draft nothing was read for: it makes no My CVs entry and says so', () => {
+    expect(makesCvEntry(blankDraft())).toBe(false)
+    expect(makesCvEntry(draft())).toBe(true)
+  })
+
+  it('what the owner types into the editors reaches the profile through the same apply, with no CV entry and no change to My CVs', () => {
+    counter = 0
+    const p = richProfile()
+    const d = filled()
+    const next = applyImportDraft(p, d, resolveChoices(p, d, defaultChoices(p, d)), options())
+    expect(next.cvLibrary).toEqual(p.cvLibrary)
+    expect(next.defaultCvId).toBe('cv-old')
+    expect(next.resume.parsedData.skills).toEqual(['Excel']) // the profile already has skills: the default keeps them ...
+    const replaced = applyImportDraft(p, d, resolveChoices(p, d, { ...defaultChoices(p, d), sections: { ...defaultChoices(p, d).sections, skills: 'add' } }), options())
+    expect(replaced.resume.parsedData.skills).toEqual(['Excel', 'SQL', 'Roadmapping']) // ... until the owner adds
+    const fresh = emptyProfile()
+    const onEmpty = applyImportDraft(fresh, d, resolveChoices(fresh, d, defaultChoices(fresh, d)), options())
+    expect(onEmpty.basicProfile.currentRole).toBe('Product Manager')
+    expect(onEmpty.resume.parsedData.experienceDetail.map((e) => e.company)).toEqual(['Acme'])
+    expect(onEmpty.resume.parsedData.workExperience[0]).toBe('PM — Acme | 2019 – 2022 | Led the roadmap.')
+    expect(onEmpty.cvLibrary).toEqual([])
+    expect(onEmpty.defaultCvId).toBeNull()
+  })
+
+  it('goes through the guarded apply: backup first, and a second Apply of the same entries changes nothing', async () => {
+    counter = 0
+    const { state, deps } = makeDeps(emptyProfile())
+    const d = filled()
+    const first = await applyReviewedImport({ profile: state.profile, draft: d, choices: defaultChoices(state.profile, d), deps, options: options() })
+    expect(first).toMatchObject({ ok: true, applied: true })
+    expect(state.calls).toEqual(['backup', 'snapshot', 'commit', 'sync'])
+    const second = await applyReviewedImport({ profile: state.profile, draft: d, choices: defaultChoices(state.profile, d), deps, options: options() })
+    expect(second.duplicate).toBe(true)
+    expect(state.backups).toHaveLength(1)
+  })
+
+  it('a blank draft with nothing entered changes nothing and makes no backup', async () => {
+    const { state, deps } = makeDeps(richProfile())
+    const d = blankDraft()
+    const res = await applyReviewedImport({ profile: state.profile, draft: d, choices: defaultChoices(state.profile, d), deps, options: options() })
+    expect(res).toMatchObject({ ok: true, applied: false, duplicate: true })
+    expect(deps.backup).not.toHaveBeenCalled()
   })
 })

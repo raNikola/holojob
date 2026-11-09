@@ -5,7 +5,7 @@ const SOURCES = [
   { id: 'file', icon: FileUp, title: 'Upload a file', text: 'A resume as a PDF or Word file, a text or Markdown file, or a JSON Resume file. Other file types are coming.' },
   { id: 'linkedin', icon: Briefcase, title: 'LinkedIn', text: 'The PDF you get from "Save to PDF" on your profile.' },
   { id: 'paste', icon: ClipboardPaste, title: 'Paste text', text: 'Paste your CV or the sections of your LinkedIn profile.' },
-  { id: 'manual', icon: PencilLine, title: 'Enter manually', text: 'Skip the import and fill in your profile by hand.' },
+  { id: 'manual', icon: PencilLine, title: 'Start blank', text: 'Fill in your history by hand, in the same review screen. Nothing is added to My CVs.' },
 ]
 
 export default function SourcePicker({ onPick }) {

@@ -352,7 +352,7 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
 {
   "version": 1,
   "parserVersion": "text-1",
-  "source": "paste|resume_pdf|linkedin_pdf|text_file|json_resume|resume_docx",
+  "source": "paste|resume_pdf|linkedin_pdf|text_file|json_resume|resume_docx|manual",
   "fileName": "<string>",
   "rawText": "<string>",
   "headline": "<string>",
