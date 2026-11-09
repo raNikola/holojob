@@ -65,6 +65,13 @@ export function ProfileChangeNotices({ onChange }) {
   )
 }
 
+/** What Undo can and cannot do, said next to the button: the copy for it lives in memory, the durable one is on the server. */
+export const UNDO_NOTE = 'Undo works only until you reload this page. The lasting copy of your previous profile is the backup on the server (data/backups, the newest 10 import backups are kept).'
+
+export function UndoNote() {
+  return <p className="text-xs text-stone-500 dark:text-stone-400">{UNDO_NOTE}</p>
+}
+
 /** Shown after Apply: what happened, what is still open, Undo while nothing has changed since, and Continue. */
 export default function ImportResult({ result, onContinue }) {
   const { commitProfile } = useProfile()
@@ -80,6 +87,8 @@ export default function ImportResult({ result, onContinue }) {
     refresh((n) => n + 1)
   }
 
+  const canUndo = !undone && !result.duplicate && Boolean(snapshotStore.load())
+
   return (
     <div className="space-y-4">
       <Card title={undone ? 'Import undone' : result.duplicate ? 'Nothing to apply' : 'Import applied'}>
@@ -93,8 +102,9 @@ export default function ImportResult({ result, onContinue }) {
       </Card>
       <ProfileChangeNotices onChange={() => refresh((n) => n + 1)} />
       {undoMessage && <Alert variant="error">{undoMessage}</Alert>}
+      {canUndo && <UndoNote />}
       <div className="flex flex-wrap justify-end gap-2">
-        {!undone && !result.duplicate && snapshotStore.load() && <Button variant="ghost" onClick={undo}>Undo this import</Button>}
+        {canUndo && <Button variant="ghost" onClick={undo}>Undo this import</Button>}
         <Button onClick={onContinue}>Continue</Button>
       </div>
     </div>
