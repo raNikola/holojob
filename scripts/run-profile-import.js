@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const VENV_PYTHON = process.platform === 'win32' ? path.join(ROOT, '.venv/Scripts/python.exe') : path.join(ROOT, '.venv/bin/python')
+const SOURCES_FILE = path.join(ROOT, 'src/data/importSources.json')
 const TEXT_RUNNER = path.join(ROOT, 'python/profile_import/run_text_import.py')
 
 export const MAX_PASTE_BYTES = 200 * 1024
@@ -72,7 +73,10 @@ function runPythonParser(runner, request) {
   })
 }
 
-export const IMPORT_SOURCES = ['paste', 'resume_pdf', 'linkedin_pdf']
+// The sources whose input is text come from src/data/importSources.json (shared with the parser and the browser).
+export const IMPORT_SOURCES = Object.entries(JSON.parse(fs.readFileSync(SOURCES_FILE, 'utf-8')).sources)
+  .filter(([, source]) => source.input === 'text')
+  .map(([id]) => id)
 
 const defaultRunners = Object.fromEntries(IMPORT_SOURCES.map((source) => [source, (request) => runPythonParser(TEXT_RUNNER, request)]))
 let runners = defaultRunners

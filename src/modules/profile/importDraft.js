@@ -6,12 +6,11 @@
 
 import { addCv, ensureCvLibrary, newCvId } from '../../utils/cvLibrary.js'
 import { normalizeLanguages } from '../../utils/languages.js'
+import sourcesFile from '../../data/importSources.json'
 
-export const IMPORT_SOURCES = {
-  paste: { importSource: 'pasted_text', name: 'Pasted text' },
-  resume_pdf: { importSource: 'resume_pdf', name: 'Resume PDF', pdf: true },
-  linkedin_pdf: { importSource: 'linkedin_pdf', name: 'LinkedIn PDF', pdf: true },
-}
+/** From src/data/importSources.json, the one list the parser, the route and this module share. */
+export const IMPORT_SOURCES = sourcesFile.sources
+export const DRAFT_VERSION = sourcesFile.draftVersion
 
 export const BASIC_FIELDS = ['fullName', 'email', 'phone', 'location', 'currentRole', 'experienceYears']
 
