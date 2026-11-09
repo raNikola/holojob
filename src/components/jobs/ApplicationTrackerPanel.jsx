@@ -54,7 +54,7 @@ function CvPicker({ id, options, value, label, onPick, onLabel }) {
   )
 }
 
-function NewApplicationForm({ job, cache, onStatusChange }) {
+function NewApplicationForm({ job, cache }) {
   const { profile } = useProfile()
   const options = cvOptions(job, profile)
   const [cvLabel, setCvLabel] = useState('')
@@ -71,7 +71,6 @@ function NewApplicationForm({ job, cache, onStatusChange }) {
     setError(null)
     try {
       await markApplied(job, cache, { ...next, cvLabel })
-      onStatusChange?.(job.jobId, 'applied_manually')
       setForm({ ...next, requestId: newRequestId(), separateAttempt: null })
     } catch (e) {
       setError(e)
@@ -257,7 +256,7 @@ function TrackedForm({ app, settings, onVoid }) {
   )
 }
 
-export default function ApplicationTrackerPanel({ job, onStatusChange }) {
+export default function ApplicationTrackerPanel({ job }) {
   const cache = useApplications()
   const mode = panelMode(job, cache)
   const [pickedId, setPickedId] = useState(null)
@@ -285,7 +284,7 @@ export default function ApplicationTrackerPanel({ job, onStatusChange }) {
       </Alert>
     )
   } else if (mode.mode === 'new') {
-    body = <NewApplicationForm job={job} cache={cache} onStatusChange={onStatusChange} />
+    body = <NewApplicationForm job={job} cache={cache} />
   } else {
     const shown = mode.attempts.find((a) => a.id === pickedId) ?? mode.current
     const voided = foldApplication(shown).voided
@@ -322,13 +321,13 @@ export default function ApplicationTrackerPanel({ job, onStatusChange }) {
         {!voided && closed && (
           <details className="text-sm">
             <summary className="cursor-pointer text-stone-600 dark:text-stone-400">Apply to this job again</summary>
-            <div className="mt-2"><NewApplicationForm job={job} cache={cache} onStatusChange={onStatusChange} /></div>
+            <div className="mt-2"><NewApplicationForm job={job} cache={cache} /></div>
           </details>
         )}
         {voided && mode.attempts.every((a) => foldApplication(a).voided) && (
           <details className="text-sm">
             <summary className="cursor-pointer text-stone-600 dark:text-stone-400">Record a new application</summary>
-            <div className="mt-2"><NewApplicationForm job={job} cache={cache} onStatusChange={onStatusChange} /></div>
+            <div className="mt-2"><NewApplicationForm job={job} cache={cache} /></div>
           </details>
         )}
       </div>

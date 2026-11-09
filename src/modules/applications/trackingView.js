@@ -59,7 +59,9 @@ export function overlayTracking(jobs, store, settings) {
     const apps = applicationsForJob(store, job.jobId)
     if (!apps.length) return job
     const current = latestActiveApplication(apps)
-    return { ...job, applicationTracking: current ? trackingFromApplication(current, settings) : null }
+    if (!current) return { ...job, applicationTracking: null }
+    // Applied is derived: the store has an active application, so the row shows it whatever the browser's stored status says.
+    return { ...job, status: 'applied_manually', applicationTracking: trackingFromApplication(current, settings) }
   })
 }
 

@@ -35,6 +35,7 @@ import { autoLoadJobs } from '../../modules/jobs/autoLoadJobs'
 import { derivePipelineStateFromHealth, loadPipelineState, syncPipelineCounts, updatePipelineState } from '../../modules/jobs/pipelineState'
 import { overlayTracking, trackerStats } from '../../modules/applications/trackingView'
 import { useApplications } from '../../hooks/useApplications'
+import QuickApplyDialog from './QuickApplyDialog'
 import { useJobsSync } from '../../hooks/useJobs'
 import { loadJobsTab, persistJobsTab } from '../../modules/appNavigation'
 import {
@@ -76,6 +77,7 @@ export default function JobDiscoveryScreen() {
   const [reference, setReference] = useState(() => Date.now())
   const [addInitial, setAddInitial] = useState(null)
   const [selectedJob, setSelectedJob] = useState(null)
+  const [applyJob, setApplyJob] = useState(null) // the job whose Applied form is open; nothing is written until it is saved
   const [bulkRunning, setBulkRunning] = useState(false)
   const [rerunning, setRerunning] = useState(false)
   const [rerunMsg, setRerunMsg] = useState('')
@@ -470,6 +472,7 @@ export default function JobDiscoveryScreen() {
               <JobTable
                 jobs={filteredJobs}
                 onStatusChange={handleStatusChange}
+                onApply={setApplyJob}
                 apiAvailable={pipelineApiAvailable}
                 onJobUpdated={handleJobUpdated}
                 selectedJobIds={selectedJobIds}
@@ -506,6 +509,8 @@ export default function JobDiscoveryScreen() {
           )}
         </div>
       )}
+
+      {applyJob && <QuickApplyDialog job={stripDisplayFields(applyJob)} cache={applications} onClose={() => setApplyJob(null)} />}
 
       <JobDetailDrawer
         job={selectedJob}
