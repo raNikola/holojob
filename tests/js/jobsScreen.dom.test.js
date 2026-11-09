@@ -82,6 +82,19 @@ describe('the table on a long list', () => {
     expect(JSON.stringify(screen.storedJobs())).toBe(before)
   })
 
+  it('a status the server refuses is not saved, here or in the browser, and says so', async () => {
+    stubServer({})
+    const served = globalThis.fetch
+    vi.stubGlobal('fetch', async (url, options = {}) => (String(url) === '/api/jobs/state' && options.method === 'POST'
+      ? { ok: false, status: 400, json: async () => ({ error: 'status is not valid' }) }
+      : served(url, options)))
+    screen = await mountScreen({ stored: many(5) })
+    await screen.click(screen.rows()[0].querySelector('button[aria-label="Save"]'))
+    await settle()
+    expect(screen.storedJobs().filter((j) => j.status === 'saved')).toHaveLength(0)
+    expect(screen.text()).toContain('The status was not saved: status is not valid')
+  })
+
   it('a row\'s new status keeps the rows loaded', async () => {
     stubServer({ health: false })
     screen = await mountScreen({ stored: many(250) })

@@ -35,7 +35,7 @@ const reply = (status, body) => ({ ok: status < 400, status, json: async () => b
 
 /** `route(call)` answers /api/jobs/all; `ledger(jobId)` answers /api/jobs/history; `applications` is the store the server holds. */
 export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {} } = {}) {
-  const server = { allCalls: 0, posts: [], applications }
+  const server = { allCalls: 0, posts: [], applications, jobState: { version: 1, updatedAt: null, jobs: {} }, stateWrites: [] }
   vi.stubGlobal('fetch', async (url, options = {}) => {
     const path = String(url).split('?')[0]
     if (path === '/api/pipeline/health') return health ? reply(200, { available: true, scoring: {}, discovery: {} }) : reply(503, {})
@@ -50,6 +50,15 @@ export function stubServer({ route = () => routeAnswer([]), health = true, score
       const found = ledger(decodeURIComponent(path.slice('/api/jobs/history/'.length)))
       return found ? reply(200, { found: true, ...found }) : reply(404, { found: false })
     }
+    if (path === '/api/jobs/state' && options.method === 'POST') {
+      const { key, jobId, patch } = JSON.parse(options.body)
+      const before = server.jobState.jobs[key] ?? { jobId, status: 'new', statusAt: null, keep: false }
+      const entry = { ...before, ...patch, statusAt: patch.status ? '2026-11-09T10:00:00.000Z' : before.statusAt }
+      server.stateWrites.push({ key, patch })
+      server.jobState = { ...server.jobState, jobs: { ...server.jobState.jobs, [key]: entry } }
+      return reply(200, { entry, sha256: `sha${server.stateWrites.length}`, changed: true })
+    }
+    if (path === '/api/jobs/state') return reply(200, { doc: server.jobState, sha256: `sha${server.stateWrites.length}` })
     if (path === '/api/applications' && options.method === 'POST') {
       const body = JSON.parse(options.body)
       server.posts.push(body)

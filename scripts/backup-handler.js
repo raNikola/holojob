@@ -240,5 +240,5 @@ export async function importBackupZip(root, zipBuffer, options = {}) {
   }
 
   const applications = storeEntries.length ? await mergeFromBackup(root, storeEntries, options) : null
-  return { ok: true, restored, count: restored.length, refused, applications, jobState, verified: verification.hashed }
+  return { ok: true, restored, count: restored.length, refused, applications, ...(jobState ? { jobState } : {}), verified: verification.hashed }
 }

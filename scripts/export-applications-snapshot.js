@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Read-only copy of the application store for the owner to keep before any Wave 6 apply step:
- * data/applications/{applications.json, settings.json, files/**} -> data/backups/applications-<ts>/ with a
- * manifest.json (sha256 and size per file). Nothing under data/applications is written. New folders are 700, files 600.
+ * the store folder {applications.json, settings.json, files/**} -> data/backups/applications-<ts>/ with a
+ * manifest.json (sha256 and size per file). Nothing in the store folder is written. New folders are 700, files 600.
  *
  *   podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm \
  *     node scripts/export-applications-snapshot.js
@@ -13,6 +13,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { storePaths } from './application-store.js'
 import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE, copyToNewFile, replaceFileAtomic } from './atomic-file.js'
 
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex')
@@ -32,7 +33,7 @@ function stamp(date) {
 
 /** @returns {{ dir: string, fileCount: number, storeSha256: string|null }} */
 export function exportApplicationsSnapshot(root, { now = () => new Date() } = {}) {
-  const source = path.join(root, 'data/applications')
+  const source = storePaths(root).dir // the store module owns the path (the isolation test confines it to one module)
   const files = listFiles(source)
   const dir = path.join(root, 'data/backups', `applications-${stamp(now())}`)
   fs.mkdirSync(path.join(root, 'data/backups'), { recursive: true, mode: PRIVATE_DIR_MODE })
