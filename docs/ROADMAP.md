@@ -9,11 +9,11 @@ This is the only phase list; DECISIONS.md, CLAUDE.md and the README link here.
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Audit: what exists, per-module Reuse / Adapt / Build / Skip, engine contract | Done |
-| 1 | Scoring core: role-family config, requirement extraction with quotes and canonical ids, evidence index, evidence matcher + deterministic Fit, confidence, gates. Shadow mode next to the current score; stability test on fixtures | Steps 1-8c built (role families, requirements, evidence index, matcher, Fit and gates, stability test, shadow mode, privacy test); acceptance criteria pending owner confirmation; stable-id follow-up in progress (below) |
+| 1 | Scoring core: role-family config, requirement extraction with quotes and canonical ids, evidence index, evidence matcher + deterministic Fit, confidence, gates. Shadow mode next to the current score; stability test on fixtures | Steps 1-8c built (role families, requirements, evidence index, matcher, Fit and gates, stability test, shadow mode, privacy test); acceptance criteria pending owner confirmation; stable-id follow-up partly built (below) |
 | 2 | Evidence profile: restructured optional questionnaire (story bank, skills with evidence, preferences, gates), AI prefill from the CV through the review screen, ask-user loop that stores confirmed facts | Planned |
 | 3 | Application tracker independent of discovery: own store with a posting snapshot, append-only event history, channel, CV version, outcomes, follow-up nudges, import of past applications | In progress. Built: store with event history and configurable stages, migration from job records, Job Details tracker (Mark Applied, CV used, history, void and restore), Board with drag, Statistics, Settings > Applications (tracking switch, columns), applications that open and count without their ad ([decision](DECISIONS.md#applications-open-without-the-ad-history-read-path-2026-11-03)). Not built: Closed panel, "Show voided", removal of the legacy `applicationTracking` field (S4), follow-up nudges and the reminders switch's UI (S5), CSV import of past applications (S6), several contacts. See [redesign/TRACKER_PLAN.md](redesign/TRACKER_PLAN.md) |
-| 3b | Sources as user configuration: Settings > Sources with an on/off switch per job board, watched companies added from a pasted careers or board URL and probed live, stored server-side in `data/config/sources.json`; replaces the hard-coded `serbia` group and the repo's `companies/*.json` as runtime config (principle 16). Spec: [redesign/SOURCES_SPEC.md](redesign/SOURCES_SPEC.md). Independent of Phases 1-2; built next to Phase 3 because both are user-owned data that must persist | First slice built: `data/config/sources.json` and Settings > Sources > Job boards, with the Joberty opt-in only. Not built: a switch for the other boards (they still follow the provider groups, `serbia` is still the default), watched companies from a pasted URL with a live probe (providers still read `companies/*.json`) |
-| 4 | Interview prep from requirement statuses and the story bank; CV and cover letter tailoring behind a fact gate; market report of requirements per role family | Planned |
+| 3b | Sources as user configuration: Settings > Sources with an on/off switch per job board, watched companies added from a pasted careers or board URL and probed live, stored server-side in `data/config/sources.json`; replaces the hard-coded `serbia` group and the repo's `companies/*.json` as runtime config (principle 16). Spec: [redesign/SOURCES_SPEC.md](redesign/SOURCES_SPEC.md). Independent of Phases 1-2; built next to Phase 3 because both are user-owned data that must persist | Built: `data/config/sources.json`, Settings > Sources > Job boards with the Joberty opt-in, and (2026-11-09, merged to `main`) a server-side on/off switch per source plus a one-run "Skip LinkedIn this time" ([decision](DECISIONS.md#per-source-switches-and-one-off-skip-linkedin-2026-11-09)). Not built: watched companies from a pasted URL with a live probe (providers still read `companies/*.json`); `serbia` is still the default provider group |
+| 4 | Interview prep from requirement statuses and the story bank; CV and cover letter tailoring behind a fact gate; market report of requirements per role family | In progress. Built and merged to `main` (2026-11-09): the protections around tailoring and applications (fact gate, identifier redaction with a fail-closed leak check, server-enforced confirm and preview, AI cover letter as a draft until accepted, fact-gate verdicts checked when a document is attached; [decision](DECISIONS.md#phase-4-protections-fact-gate-identifier-redaction-confirm-2026-11-09-branch-phase4-fact-gate)). Not built: interview prep, market report |
 | 5 | Feedback loop: conversion by channel and Fit band, calibration of Fit against real outcomes (report only, never auto-tuning) | Planned |
 
 ## Phase 1 acceptance criteria - PROPOSED, owner to confirm
@@ -39,7 +39,7 @@ engine invariants in [ENGINE_CONTRACT.md](redesign/ENGINE_CONTRACT.md) section 5
 fit" is judged by the owner on real runs after shadow mode; "Honest documents" and "Nothing is lost" belong to
 Phases 4 and 3.
 
-## Phase 1 follow-up: stable requirement ids - PLANNED
+## Phase 1 follow-up: stable requirement ids - PARTLY BUILT
 
 Decided 2026-10-26 ([DECISIONS.md](redesign/DECISIONS.md)). Today 92% of requirement ids are provisional (a hash of
 the ad's own wording), so a requirement worded differently in another ad gets another id and the owner's answers
@@ -50,8 +50,9 @@ could never be reused. Built in four phases, each measured by the share of provi
    proposes new competencies or aliases, and the audit tool for the accuracy gate (a sample of about 100 real
    requirements: correct, wrong, legitimately provisional). The owner sets the acceptable wrong-merge rate after
    the first measurement.
-   Seed, validator (`python/match_engine/competencies.py`) and report (`podman exec holojob npm run competencies:report`, writes
-   `data/competency-report.json`) exist; the audit tool does not yet.
+   Seed, validator (`python/match_engine/competencies.py`), report (`podman exec holojob npm run competencies:report`, writes
+   `data/competency-report.json`) and audit tool (`python/match_engine/competency_audit.py`) exist. Mapping inside extraction
+   (phase 2, `python/job_scoring/competency_mapping.py`) is in the code. Phases 3 and 4 are not built (no `evidenceVersion` / `answersVersion` in the code).
 2. **Mapping in extraction.** The model picks a `competencyId` from the list or NONE; code accepts only listed ids;
    precedence previous frame > alias > dictionary > model suggestion > provisional; pending aliases and the
    `prov:` -> canonical remap table under `data/`; one re-extraction of the stored ads.
@@ -97,14 +98,14 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 | Wave | Priority | Content |
 |---|---|---|
 | Before 0 | Planning complete; implementation deferred | **UI redesign and Design System planning** (shadcn/ui preset `b1a1cZcRs`, which superseded `b7CScIWmG` on 2026-11-04, plus a semantic extension). Documents only, in [design-system/](design-system/README.md); nothing is built. Implementation is postponed and needs separate PO approval: see [the Epic](#epic-ui-redesign--design-system---deferred--to-do). |
-| 0 | P0, minimal | **Built on branch `wave0-backup`, not merged or deployed** ([as built](DECISIONS.md#wave-0-verified-backup-and-restore-check-2026-11-08); owner still rotates the keys and runs one real backup through `scripts/backup-check.js`). Verified backup plus restore check covering server data and browser state (Keep, statuses, applications), with integrity hashes and a tested restore; include `data/analytics` if it cannot be reconstructed. Rotate the OpenAI key and `li_at` (the owner does this). Align the rules in ROADMAP.md and DECISIONS.md. |
+| 0 | P0, minimal | **Built; merged to `main`** ([as built](DECISIONS.md#wave-0-verified-backup-and-restore-check-2026-11-08); owner still rotates the keys and runs one real backup through `scripts/backup-check.js`). Verified backup plus restore check covering server data and browser state (Keep, statuses, applications), with integrity hashes and a tested restore; include `data/analytics` if it cannot be reconstructed. Rotate the OpenAI key and `li_at` (the owner does this). Align the rules in ROADMAP.md and DECISIONS.md. |
 | 1 | P0 | **(k) + (q) discovery safety**, one rule (below): a throttled source never proves an ad disappeared; "ok with 0 read" is not automatically proof of closure; a confirmed-empty source is told apart from an incomplete or failed read; successful sources import independently (a partial source must not block the import); failed sources never affect closing. |
-| 2 | P0 | **Built on branch `wave2-scoring-correctness` (local, not merged)** ([as built](DECISIONS.md#wave-2-scoring-correctness-built-2026-11-08)). **(a1) scoring correctness:** junk baseline of at most about 5 plus a distinct Insufficient Data state, hard/soft requirement handling, low-confidence reasons. **(e)** manual Re-score and tailoring for kept ads. **(g)** exclude closed ads from the IDF corpus (approved; measured effect at most 1 point). **(i)** `scoringBehind` after a cancel. |
-| 3 | P0 | **Built on branch `wave3-scoring-quality` (local, not merged)** ([as built](DECISIONS.md#wave-3-scoring-quality-and-the-three-level-role-filter-built-2026-11-08)). **(a2)** skills from the whole history, domain transferability (proven vs assumed), the keyword bank holds keywords only, `TARGET_COVERAGE` recalibrated. **(b)** the three-level role filter (Target / Near / Excluded). Owner steps: regenerate the intelligence, then Re-score. |
-| 4 | P1 | **Built on branch `wave4-coverage-retention` (local, not merged)** ([as built](DECISIONS.md#wave-4-coverage-retention-and-import-meta-built-2026-11-09)). **(h)** `older_key` retention rule and guarded prune script (window 180 days chosen; the owner runs the report and `--apply`, nothing is automatic); **(c)** Infostud: why it returns irrelevant ads explained, per-category probe, complete-read proof recorded report-only (`SNAPSHOT_AFTER_PROOF` off until several complete runs are seen); **(n)** `lastImport.meta` v2, `lastPartial`, held counts in Activity. |
-| 5 | P1 | **Built on branch `wave6-application-tracking` (local, not merged)** ([as built](DECISIONS.md#wave-5--goal-j-application-tracking-built-2026-11-09)). **(j) Application Tracking:** all records including history-only and voided (Applications > All records), snapshots (existing, shown with their honesty), applied sync (Applied derived from the store, `job-state.json` v1 for Saved, Rejected and Keep with an owner-run export and import), the Applied button opens a confirm form, history-only rows no longer read "Unreviewed", shadow badge off the table, prune `--apply` checks the live store hash. Follow-up built: a failed status write (API unreachable included) changes nothing, and prune `--apply` also refuses unless applications without a job id are covered by URL / posting-key protection (`export-application-job-ids.js --check`). Owner steps listed in the decision. |
-| 6 | P2, release blockers | Profile import slices. Phase 4 protections (fact gate, identifier redaction, confirm) are release blockers for AI and application workflows. Review the 11 of 17 resume docs with stale unverified-degree findings before they are used for applications. |
-| 7 | P2 | UX, Settings, **(d)**. (d) is probably not a bug: the toggle exists only for Joberty and the other boards follow group `serbia`. Treat it as a missing feature and confirm the UX first. |
+| 2 | P0 | **Built; merged to `main`** ([as built](DECISIONS.md#wave-2-scoring-correctness-built-2026-11-08)). **(a1) scoring correctness:** junk baseline of at most about 5 plus a distinct Insufficient Data state, hard/soft requirement handling, low-confidence reasons. **(e)** manual Re-score and tailoring for kept ads. **(g)** exclude closed ads from the IDF corpus (approved; measured effect at most 1 point). **(i)** `scoringBehind` after a cancel. |
+| 3 | P0 | **Built; merged to `main`** ([as built](DECISIONS.md#wave-3-scoring-quality-and-the-three-level-role-filter-built-2026-11-08)). **(a2)** skills from the whole history, domain transferability (proven vs assumed), the keyword bank holds keywords only, `TARGET_COVERAGE` recalibrated. **(b)** the three-level role filter (Target / Near / Excluded). Owner steps: regenerate the intelligence, then Re-score. |
+| 4 | P1 | **Built; merged to `main`** ([as built](DECISIONS.md#wave-4-coverage-retention-and-import-meta-built-2026-11-09)). **(h)** `older_key` retention rule and guarded prune script (window 180 days chosen; the owner runs the report and `--apply`, nothing is automatic); **(c)** Infostud: why it returns irrelevant ads explained, per-category probe, complete-read proof recorded report-only (`SNAPSHOT_AFTER_PROOF` off until several complete runs are seen); **(n)** `lastImport.meta` v2, `lastPartial`, held counts in Activity. |
+| 5 | P1 | **Built; merged to `main`** ([as built](DECISIONS.md#wave-5--goal-j-application-tracking-built-2026-11-09)). **(j) Application Tracking:** all records including history-only and voided (Applications > All records), snapshots (existing, shown with their honesty), applied sync (Applied derived from the store, `job-state.json` v1 for Saved, Rejected and Keep with an owner-run export and import), the Applied button opens a confirm form, history-only rows no longer read "Unreviewed", shadow badge off the table, prune `--apply` checks the live store hash. Follow-up built: a failed status write (API unreachable included) changes nothing, and prune `--apply` also refuses unless applications without a job id are covered by URL / posting-key protection (`export-application-job-ids.js --check`). Owner steps listed in the decision. |
+| 6 | P2, release blockers | Profile import slices (built on `wave7-profile-import`, merged to `main`: S0-S4, S6, S7; S5 LinkedIn ZIP waits, see Import redesign below). Phase 4 protections (fact gate, identifier redaction, confirm) are release blockers for AI and application workflows: **built and merged to `main`** (2026-11-09). Review the 11 of 17 resume docs with stale unverified-degree findings before they are used for applications. |
+| 7 | P2 | UX, Settings, **(d)**. (d) was a missing feature (the toggle existed only for Joberty): **built** as per-source switches (2026-11-09, merged to `main`), see "Per-source switches" below. |
 | 8 | P3 | Step 5 server master ([TRACKER_PLAN.md](redesign/TRACKER_PLAN.md)). A verified backup (Wave 0) is mandatory before bigger changes. |
 | 9 | P3 | **(f)** ledger growth; **(m)** hand-edited `appliedRuns` double-count; **(o)** truncated ledger with an unchanged generation; **(p)** never run the old `import_run --backfill-filtered` below S6; Step 6; tech debt. |
 
@@ -148,7 +149,7 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 
 Acceptance: a fixture per provider shows which fields it fills; a job and its company are two records joined by the key; re-running discovery on unchanged data changes nothing; the shape is written so a future shared Company entity can take it over (no per-user field in it). Dependencies: Wave 4 import meta (built; merged into `main`). Open: the company key (name only is weak; domain when known), and where the record lives (a `data/companies` file beside the ledger).
 
-## Delete job for hand-entered jobs - built on branch `delete-manual-jobs` (2026-11-09), owner check pending
+## Delete job for hand-entered jobs - built, merged to `main` (2026-11-09), owner check pending
 
 Details Delete for manual jobs only; the server re-checks the application store (voided records included) and removes the job from `manual_jobs.json`, `scored_jobs.json`, `job-state.json` and the browser. Decisions: `docs/DECISIONS.md` "Delete job for hand-entered jobs". Not built: Delete in the list row actions.
 
@@ -182,7 +183,7 @@ Decisions: [DECISIONS.md](DECISIONS.md#job-relevance-lifecycle-salary-and-deadli
 | 4. Job Details & Scoring UI | To Do | Wave 2 UI |
 | 5. Application Tracker | To Do | Wave 5 |
 | 6. Profile & Resume Management | To Do | Wave 6 profile import |
-| 7. Tailoring & Application Preparation | In progress | Wave 6 Phase 4 protections built on branch `phase4-fact-gate` (not merged): fact gate, tailoring redaction and confirm, draft + accept for the AI cover letter, verdicts checked when a document is attached. Browser AI features confirm stays in Step 6 |
+| 7. Tailoring & Application Preparation | In progress | Wave 6 Phase 4 protections built and merged to `main`: fact gate, tailoring redaction and confirm, draft + accept for the AI cover letter, verdicts checked when a document is attached. Browser AI features confirm stays in Step 6 |
 | 8. Settings & Sources | To Do | Wave 7 |
 | 9. Responsive, Accessibility & Visual Consistency | To Do | |
 
@@ -251,7 +252,7 @@ A minimal, removable, stdlib-only adapter over the local Graphify graph (no serv
 
 As built: [DECISIONS.md](DECISIONS.md#graph-tooling-the-graphify-adapter-as-built-2026-11-08). Open: run the cycle on the real repo; file the upstream Graphify issue (owner).
 
-## Activity screen - planned
+## Activity screen - built
 
 A new screen named Activity, in the nav group System, built in this repo. Decisions and known gaps:
 [DECISIONS.md](DECISIONS.md#activity-screen-approved-2026-11-02).
@@ -310,8 +311,8 @@ Backlog: Infostud completeness measurement (end of this work). Infostud is **not
 
 **Backlog from owner decisions, 2026-11-03** (reasons in [DECISIONS.md](DECISIONS.md#owner-decisions-baseline-score-role-filter-infostud-testing-2026-11-03)). None is started:
 
-- [ ] **Scoring baseline for junk or empty ads.** A made-up manual job with a junk description scored 44 (Weak, P3, Maybe; Role 45, Skill 20, Industry 55, Experience 65, Location 50, Culture 58). The owner expects at most about 5 and an "insufficient data" label. Deferred to the end of the current Activity work and solved with [Fix scoring](#fix-scoring-skill-extraction-scope-requirement-weighting-domain-transferability---todo).
-- [ ] **Role filter too strict across platforms.** `role_filter.py` checks `TITLE_EXCLUDE` ("project manager", ...) first, and an ad with no include term is dropped silently (Infostud: 392 of 409 dropped with no reason; for example ad 765172 "Medior Dev Project Manager Niš", position "IT Project Manager"). Idea: three tiers (clear no / clear yes / borderline kept with a "for review" flag; AI only on a borderline title plus a short description). Depends on the scoring fix and on the discard-reason data from S2. Deferred.
+- [x] **Scoring baseline for junk or empty ads** (built in Wave 2, a1: Insufficient Data state). A made-up manual job with a junk description scored 44 (Weak, P3, Maybe; Role 45, Skill 20, Industry 55, Experience 65, Location 50, Culture 58). The owner expects at most about 5 and an "insufficient data" label. Deferred to the end of the current Activity work and solved with [Fix scoring](#fix-scoring-skill-extraction-scope-requirement-weighting-domain-transferability---todo).
+- [x] **Role filter too strict across platforms** (built in Wave 3, b: three-level role filter). `role_filter.py` checks `TITLE_EXCLUDE` ("project manager", ...) first, and an ad with no include term is dropped silently (Infostud: 392 of 409 dropped with no reason; for example ad 765172 "Medior Dev Project Manager Niš", position "IT Project Manager"). Idea: three tiers (clear no / clear yes / borderline kept with a "for review" flag; AI only on a borderline title plus a short description). Depends on the scoring fix and on the discard-reason data from S2. Deferred.
 - [ ] **Infostud stays unclassified** (not snapshot-based) until its fetch coverage is confirmed; the six checks are postponed to the end.
 - **Testing rule:** the owner tests everything at the end. No merge and no production before the real-container integration check.
 
@@ -342,21 +343,16 @@ Sources and design: [DECISIONS.md](DECISIONS.md#import-redesign).
 
 | Slice | Content | Status |
 |---|---|---|
-| S0 | Atomic profile mirror write; import backup route (last 10, profile JSON only) | Built on `wave7-profile-import` (2026-11-09) |
-| S1 | One source list + draft version; guarded apply (backup, one write, retry never re-applies, Undo); confirm step with cache impact | Built on `wave7-profile-import` (2026-11-09) |
-| S2 | TXT / MD | Built on `wave7-profile-import` (2026-11-09) |
-| S3 | JSON Resume | Built on `wave7-profile-import` (2026-11-09) |
-| S4 | DOCX | Built on `wave7-profile-import` (2026-11-09) |
-| S6 | PDF failure hardening (password, scanned, page cap, empty MIME type) | Built on `wave7-profile-import` (2026-11-09). Real-file check with one resume PDF and one LinkedIn PDF is still the owner's |
-| S7 | Manual "Start blank" through the same review, confirm and apply | Built on `wave7-profile-import` (2026-11-09) |
+| S0 | Atomic profile mirror write; import backup route (last 10, profile JSON only) | Built (2026-11-09); `wave7-profile-import` merged to `main` |
+| S1 | One source list + draft version; guarded apply (backup, one write, retry never re-applies, Undo); confirm step with cache impact | Built (2026-11-09); `wave7-profile-import` merged to `main` |
+| S2 | TXT / MD | Built (2026-11-09); `wave7-profile-import` merged to `main` |
+| S3 | JSON Resume | Built (2026-11-09); `wave7-profile-import` merged to `main` |
+| S4 | DOCX | Built (2026-11-09); `wave7-profile-import` merged to `main` |
+| S6 | PDF failure hardening (password, scanned, page cap, empty MIME type) | Built (2026-11-09); `wave7-profile-import` merged to `main`. Real-file check with one resume PDF and one LinkedIn PDF is still the owner's |
+| S7 | Manual "Start blank" through the same review, confirm and apply | Built (2026-11-09); `wave7-profile-import` merged to `main` |
 | S5 | LinkedIn data ZIP | Last: waits for the owner's real file names and header rows |
 | Gate | Full gate for S0-S4, S6, S7 on the real tree (2026-11-09): pytest 3040 passed, Vitest 2320 passed (the listed flaky `rescrape.test.js` failed once, passed on rerun), lint and build clean, mutation checks on the new logic, private files unchanged. Rerun the changed areas when S5 lands | Done |
-| 1a | Wizard, paste step, review screen | Done |
-| 1b | TXT / MD and DOCX | Not built ("Other file types are coming"). `python-docx` is already pinned |
-| 3 | PDF and LinkedIn PDF | Listed after 1b, but both are already in the code (`PdfStep`, `4f2cd7e`). Real-file test below still open |
-| 2 | LinkedIn data ZIP. Needs real export file names and headers | Not built |
-| 4 | JSON Resume | Not built |
-| 5 | Structured experience editors | Not verified |
+| 1a | Wizard, paste step, review screen. The earlier numbering 1a-5 is retired: old 1b is S2 + S4, old 3 is the PDF steps and S6, old 4 is S3, old 2 is S5; structured experience editors are covered by the S7 tests | Done |
 
 A browser-extension profile import is only an idea (parked), not a Wave 7 source: see [the idea](#idea-holyjobs-browser-extension-linkedin-job-and-profile-import---idea--not-planned-for-implementation). LinkedIn PDF and the data ZIP stay the supported LinkedIn sources.
 
@@ -372,7 +368,7 @@ Known and left open on purpose. Checked against the code on 2026-11-02.
 
 **Step 5 (server master), [STEP5_SERVER_MASTER_PLAN.md](redesign/STEP5_SERVER_MASTER_PLAN.md):**
 
-- `applied_manually` vs the tracker: "Mark as applied" still sets the old job status beside the application store's record.
+- ~~`applied_manually` vs the tracker~~ resolved in Wave 5 (j): Applied is derived from the application store and `updateJobStatus` refuses `applied_manually`; legacy rows keep the old value until migrated.
 - `offList` rows migrate as orphans, not active `record` entries ([decision](DECISIONS.md#offlist-rows-keep-the-owners-data-2026-11-03)).
 - Whole-list save: the Jobs, Applications and Outreach screens still save their whole list from memory (`saveJobs`).
 - Hard-coded `serbia` provider group: `scripts/run-discovery.js`, `run-pipeline.js`, `api-handler.js`, `PipelineOrchestrator.jsx`, `JobDiscoveryScreen.jsx` and `npm run discover:jobs`.
@@ -414,13 +410,13 @@ Goal: one shared job database, private per-user data, shared discovery. A draft 
 - More role families and their prompt variants for CVs and cover letters.
 - Recalibrate `TARGET_COVERAGE` and fix the flat scoring dimensions (open problems in [ARCHITECTURE.md](ARCHITECTURE.md)).
 - Judge a real run and compare the adjustments with the owner's own sense of the jobs.
-- Redaction and a confirm step for LLM tailoring (privacy gap in [CLAUDE.md](../CLAUDE.md)), with the Phase 4 fact gate.
+- ~~Redaction and a confirm step for LLM tailoring, with the Phase 4 fact gate~~ built (Phase 4, merged to `main` 2026-11-09).
 - Sources consent UI: replace the inline "I have read the terms" checkbox in Settings > Sources > Job boards with a
   modal. The user opens it from the Job boards section, selects which opt-in sources to enable, reads the terms for
   each, and confirms with one explicit action. Server behaviour stays as is: opt-in default off, the server stores its
   own `consentAcceptedAt`, switching off keeps history, switching on again asks for consent again. UI-only change.
   Reason: the inline checkbox under the chips looks bad and does not scale to more opt-in sources.
-- ~~Jobs table: Applied button to the tracker, and the shadow badge off the table~~ built in Wave 5 (j), branch `wave6-application-tracking`, not merged.
+- ~~Jobs table: Applied button to the tracker, and the shadow badge off the table~~ built in Wave 5 (j), merged to `main`.
 - Settings follow-ups:
   - Usage & cost. Code check 2026-11-02: a section "AI budget, provider and usage" exists; what is still missing is not recorded.
   - Clear cache. Code check: `AISettingsPanel.jsx` has a button for the browser AI cache.

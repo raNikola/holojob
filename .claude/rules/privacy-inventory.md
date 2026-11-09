@@ -23,8 +23,8 @@ paths:
 The always-on privacy rules are in CLAUDE.md; this is the per-feature inventory they refer to. Moved verbatim from CLAUDE.md.
 
 
-Personal data stays on the server. Three steps send candidate data to the configured
-provider, each behind an explicit confirm; the browser AI features send redacted text with no confirm yet; LLM tailoring is a known gap.
+Personal data stays on the server. Four steps send candidate data to the configured
+provider, each behind an explicit confirm (CV analysis, fit judge, evidence matcher, LLM tailoring); the browser AI features send redacted text with no confirm yet (Step 6).
 
 - **CV analysis** sends the text of one CV with name, e-mails, phones and links replaced
   by placeholders (`redact.py`), only after the confirm dialog has shown that exact text

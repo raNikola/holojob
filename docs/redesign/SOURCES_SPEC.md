@@ -7,8 +7,8 @@
 **Status:** first slice built (2026-10-30): `python/job_discovery/source_settings.py`, `scripts/sources-handler.js` and
 Settings > Sources > Job boards, with the opt-in switch for Joberty only. As built, `data/config/sources.json` holds
 `version`, `updatedAt`, `boards.<provider>` (`active`, `consentAcceptedAt`, `disabledAt`, `history`) and `migrations`.
-Not built: a switch for the other boards (they still follow the provider groups, with `serbia` as the default), watched
-companies, probes, `lastRun`, `keys` and the migration below. The rest of this spec is the design for those parts.
+Per-source on/off switches are built too (2026-11-09; [DECISIONS](../DECISIONS.md#per-source-switches-and-one-off-skip-linkedin-2026-11-09)): a source with no entry is on, `active: false` turns it off. Not built: watched
+companies (the `serbia` provider group is still the default), probes, `lastRun`, `keys` and the migration below. The rest of this spec is the design for those parts.
 
 ## Goal
 

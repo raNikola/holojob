@@ -1,7 +1,7 @@
 # Scoring engine contract
 
 **v0.1 - draft for Phase 1.** Derived from [PHASE0_AUDIT.md](PHASE0_AUDIT.md) section 4 and the principles in
-[DECISIONS.md](DECISIONS.md) (1-9). Nothing here is implemented yet. Where this draft goes beyond the audit
+[DECISIONS.md](DECISIONS.md) (1-9). Phase 1 steps 1-8c are built in `python/match_engine/` (see [../ROADMAP.md](../ROADMAP.md)); this file is still the v0.1 draft text, not re-synced to the code. Where this draft goes beyond the audit
 (a field, an enum value, a rule) it says so under "Open points", and the owner confirms those before Phase 1 is
 built. Terms are defined in [../GLOSSARY.md](../GLOSSARY.md); acceptance criteria are in [../ROADMAP.md](../ROADMAP.md).
 

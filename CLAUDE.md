@@ -20,7 +20,7 @@ Personal job-hunt pipeline in Podman on a home server (DS9). Single user (DECISI
 
 - Any new model call goes through the budget gate (`python/llm/ai_gate.py`; Node `scripts/ai-gate.js`), never a provider directly.
 - Candidate data sent to a provider needs an explicit confirm and a `redact.py` / `ai-redact.js` pass (name, e-mails, phones, links removed); fail closed. Never send name, email, phone, salary, links, preferred locations, raw resume text, questionnaire answers, recruiter/contact data, notes.
-- Add a field to `_candidate_digest` or any outgoing payload only deliberately, and update the inventory in `.claude/rules/privacy-inventory.md` (what each step sends, known gap: LLM tailoring).
+- Add a field to `_candidate_digest` or any outgoing payload only deliberately, and update the inventory in `.claude/rules/privacy-inventory.md` (what each step sends, known gap: the browser AI features have no confirm yet).
 - Manual-job `notes`, `extraLinks`, `sourceUrl` are owner-only: in no payload, file, log or AI context.
 
 ## Architecture rule
