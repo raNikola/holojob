@@ -1578,7 +1578,7 @@ Owner correction: the browser extension was meant as a **business idea**, not a 
 
 Notes kept for when it is considered again:
 
-- **Data classification.** *Recommended by LinkedIn* is per-user data. The application method (Easy Apply or external), the external apply URL and a Job Poster are job-level shared data, each stored with its source and last-checked time, and kept apart from the private outreach and application records. The existing owner overlay (`job-state.json`) is the likely home for the per-user part, as Step 5 section 2.3 already plans; nothing is decided.
+- **Data classification.** *Recommended by LinkedIn* is per-user data. The application method (Easy Apply or external), the external apply URL and a Job Poster are job-level shared data, each stored with its source and last-checked time, and kept apart from the private outreach and application records.
 - **The LinkedIn rejection.** "LinkedIn profile URL" was rejected in the Wave 7 import decision because server-side access would use the owner's account session, which conflicts with LinkedIn's terms. That rejection applies **only to automatic server-side fetching**. An extension import, where the user's own browser reads a page the user opened, is **not pre-rejected**; it is also not approved.
 - **Before any planning:** an account-risk and terms-of-service assessment (it should also look at the existing JobSpy LinkedIn discovery and the `li_at` use in the contact scraper). If that is unfavourable the idea stays parked.
 - **Browser:** Chrome first, if it ever happens.
