@@ -131,6 +131,23 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 - [ ] Follow-up: the Graphify adapter build exited non-zero in Wave 4 (cause not investigated).
 - [ ] Not started on purpose: Infostud snapshot switch (Wave 4) stays off.
 
+## Discovery improvement: Company information standardization - Planned / To Do
+
+**Status: PLANNED, P1. Part of Discovery, not of the browser extension.** Nothing is built. Recorded 2026-11-09.
+
+**Goal:** the normal discovery pipeline extracts and standardises company data across providers, so the company-level facts exist once and every job and every later source (including the extension) can use them.
+
+**Audit already done (code read, 2026-11-09):** the canonical job carries only a `company` string. Infostud's list API client keeps `companyName` and drops everything else it may return; Joberty has `companyUrlName` and `companyName`; no field for company website, industry, size or headquarters exists in the canonical job, the ledger or `data-shapes.md`. The claim that Infostud already provides a useful reference could not be confirmed from the code: the first Task step is to look at what its list and detail payloads actually carry.
+
+| Step | Content |
+|---|---|
+| 1 | Provider audit: per provider, which company fields are present in the raw payload (counts and field names only, no private data); decide the field list |
+| 2 | One company record shape, keyed by a normalised company key, kept **apart from the job** (no duplicate profile per job); fields: normalised name, website, industry, size, location / headquarters, provider company-page URL, description, source and observed-at per field |
+| 3 | Missing data is distinguished from unverified: each value is `known`, `unverified` or `missing` with its source and time; unchanged data is not re-fetched (a freshness window, as the AI findings store does) |
+| 4 | Providers fill the record from data they already read; no extra page fetch by default, no scraping of private or personal contacts |
+
+Acceptance: a fixture per provider shows which fields it fills; a job and its company are two records joined by the key; re-running discovery on unchanged data changes nothing; the shape is written so a future shared Company entity can take it over (no per-user field in it). Dependencies: Wave 4 import meta (built; merged into `main`). Open: the company key (name only is weak; domain when known), and where the record lives (a `data/companies` file beside the ledger).
+
 ## Delete job for hand-entered jobs - built on branch `delete-manual-jobs` (2026-11-09), owner check pending
 
 Details Delete for manual jobs only; the server re-checks the application store (voided records included) and removes the job from `manual_jobs.json`, `scored_jobs.json`, `job-state.json` and the browser. Decisions: `docs/DECISIONS.md` "Delete job for hand-entered jobs". Not built: Delete in the list row actions.
@@ -195,11 +212,12 @@ Decisions: [DECISIONS.md](DECISIONS.md#job-relevance-lifecycle-salary-and-deadli
 | TASK-02.1 Existing-job detection and deduplication (find) | MVP, mandatory | Planned / To Do | TASK-03 |
 | TASK-02.2 Job import (new jobs) | MVP | Planned / To Do | 02.1 |
 | TASK-02.6 Existing-job enrichment | MVP | Planned / To Do | 02.1, 02.2 |
-| TASK-02.3 LinkedIn Recommended signal | MVP, mandatory | Planned / To Do | 02.1, per-user overlay (decision 6) |
+| TASK-02.3 LinkedIn Recommended signal | MVP, mandatory | Planned / To Do | 02.1, the owner overlay in `job-state.json` (decision 6) |
 | TASK-02.4 Easy Apply / External Apply | MVP, mandatory | Planned / To Do | 02.2 or 02.6 |
 | TASK-02.5 Job Poster / recruiter | MVP, only if visibly available | Planned / To Do | 02.2, contact model (decision 7) |
-| TASK-01 LinkedIn profile import: **the riskiest Task** | P1 | **Planned and BLOCKED** | TASK-03 assessment complete **and** explicit owner approval; Wave 7 merged |
-| Company information standardization (Discovery, not the extension) | P1 | Planned / To Do | Provider audit; see [below](#discovery-improvement-company-information-standardization---planned--to-do) |
+| TASK-01 LinkedIn profile import: **the riskiest Task** | P1 | **Planned and BLOCKED** | TASK-03 assessment complete **and** explicit owner approval; Wave 7 (merged into `main`) |
+
+See also (not part of this Epic): [Company information standardization](#discovery-improvement-company-information-standardization---planned--to-do) in the Discovery backlog.
 
 ### TASK-03 Extension foundations and safety (P0, prerequisite for 01 and 02)
 
@@ -230,7 +248,7 @@ Primary workflow is **Find or Import**, not "Save job". Flow: the user opens a L
 **02.3 LinkedIn Recommended signal (MVP, mandatory)**
 - Fields: `linkedinRecommended` true / false / unknown, `recommendedObservedAt`, `recommendationSource` (the visible context). Label "LinkedIn Recommended".
 - Per user, never a property of the shared job; absence of an indicator is `unknown`, never `false`; it does **not** change the Fit Score or any scoring input; when and where it was observed is kept.
-- Acceptance: stored in the per-user overlay only; a scoring test proves the score is identical with and without the signal; a second observation without the indicator does not erase an earlier `true`.
+- Acceptance: stored in the owner overlay (`job-state.json`) only; a scoring test proves the score is identical with and without the signal; a second observation without the indicator does not erase an earlier `true`.
 
 **02.4 Easy Apply / External Apply (MVP, mandatory)**
 - Values `easy_apply`, `external_apply`, `unknown`; the external destination URL when reliably visible. Shown in Job Details. A verified value is kept when a later extraction is uncertain. This is a property of the posting, not of the user's application.
@@ -239,7 +257,7 @@ Primary workflow is **Find or Import**, not "Save job". Flow: the user opens a L
 
 **02.5 Job Poster / recruiter (MVP, only if visibly available)**
 - Name, displayed role, LinkedIn profile URL, relationship `job_poster`, with source and extraction confidence. A poster is not assumed to be the hiring manager; no other profile is opened; no private contact detail inferred; no invitation, message or outreach enrolment.
-- Third-party personal data: stays owner-only like application contacts, in no AI payload (`ai-redact.js`, `safeTracking` rules); the Task decides whether it is stored on the job overlay or offered as a contact on the application (decision 7).
+- Third-party personal data: stays owner-only like application contacts, in no AI payload (`ai-redact.js`, `safeTracking` rules); the Task decides whether it is stored in the owner overlay or offered as a contact on the application (decision 7), and reuses the Step 5 contact identity (a hash of the LinkedIn URL or name computed in memory, never stored, STEP5 section 2.8, the findings-store `contact` key) instead of a new scheme.
 - Acceptance: absent on the page means no record; an AI-context test proves no poster field reaches a prompt.
 
 **02.6 Existing-job enrichment (MVP)**
@@ -267,25 +285,7 @@ Primary workflow is **Find or Import**, not "Save job". Flow: the user opens a L
 
 **Existing functionality reused (no duplicate work):** Wave 7 `ImportDraft`, `applyReviewedImport`, backup and Undo; the manual-job model, Add job form, clash check and `identityJobUrl`; the job ledger and `job-state.json` (statuses, Keep, tombstones); the application store, snapshots and Applied confirm form; the request guard, `read-body.js` limits and fixed-error-code pattern; `ai-redact.js` for contacts.
 
-**Open decisions (owner):** (1) where the Epic sits in the wave order; (2) extension credential and how the extension passes the request guard; (3) hand-off of the extension's data to the app UI (in-memory token as in Fill from ad, versus the extension opening the app); (4) browsers to support (Chromium only, or Firefox too); (5) how the true `source` is stored for an extension-created job; (6) location of the per-user signals overlay (a new store beside `job-state.json`, or an extension of it); (7) where a Job Poster is kept; (8) the terms and risk assessment outcome. Details in DECISIONS.md.
-
----
-## Discovery improvement: Company information standardization - Planned / To Do
-
-**Status: PLANNED, P1. Part of Discovery, not of the browser extension.** Nothing is built. Recorded 2026-11-09.
-
-**Goal:** the normal discovery pipeline extracts and standardises company data across providers, so the company-level facts exist once and every job and every later source (including the extension) can use them.
-
-**Audit already done (code read, 2026-11-09):** the canonical job carries only a `company` string. Infostud's list API client keeps `companyName` and drops everything else it may return; Joberty has `companyUrlName` and `companyName`; no field for company website, industry, size or headquarters exists in the canonical job, the ledger or `data-shapes.md`. The claim that Infostud already provides a useful reference could not be confirmed from the code: the first Task step is to look at what its list and detail payloads actually carry.
-
-| Step | Content |
-|---|---|
-| 1 | Provider audit: per provider, which company fields are present in the raw payload (counts and field names only, no private data); decide the field list |
-| 2 | One company record shape, keyed by a normalised company key, kept **apart from the job** (no duplicate profile per job); fields: normalised name, website, industry, size, location / headquarters, provider company-page URL, description, source and observed-at per field |
-| 3 | Missing data is distinguished from unverified: each value is `known`, `unverified` or `missing` with its source and time; unchanged data is not re-fetched (a freshness window, as the AI findings store does) |
-| 4 | Providers fill the record from data they already read; no extra page fetch by default, no scraping of private or personal contacts |
-
-Acceptance: a fixture per provider shows which fields it fills; a job and its company are two records joined by the key; re-running discovery on unchanged data changes nothing; the shape is written so a future shared Company entity can take it over (no per-user field in it). Dependencies: Wave 4 import meta (built on a local branch, not merged). Open: the company key (name only is weak; domain when known), and where the record lives (a `data/companies` file beside the ledger).
+**Open decisions (owner):** (1) where the Epic sits in the wave order; (2) extension credential and how the extension passes the request guard; (3) hand-off of the extension's data to the app UI (in-memory token as in Fill from ad, versus the extension opening the app); (4) browsers to support (Chromium only, or Firefox too); (5) how the true `source` is stored for an extension-created job; (6) the per-user signals (Recommended, observed application method, poster) become fields of the planned owner overlay `job-state.json` (Step 5 section 2.3, `joinJobs`), not a parallel store; the owner confirms the field names and the store version bump; (7) where a Job Poster is kept; (8) the terms and risk assessment outcome. Details in DECISIONS.md.
 
 ---
 ## Graph tooling (Graphify adapter) - in progress

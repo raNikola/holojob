@@ -1603,22 +1603,22 @@ Owner request, recorded on the docs-only branch `extension-epic-plan`. **Nothing
 **Other overlaps and contradictions found**
 
 - **No login (2026-10-29) against "authentication and authorization for import actions".** The request guard is not authentication and the owner accepted no application login. An extension talks to the server from another origin, so it needs a scoped credential and an Origin / Host rule that does not loosen the guard for the app. This is open decision 2; the no-login decision stays for the app itself.
-- **Shared Job Database, Company entity and multi-user.** They appear nowhere in the existing plans: GOALS lists multi-user accounts as out of scope, principle 15 says single user (server master), and the Step 5 plan says "No multi-user model". This Epic treats them as **design constraints only** (per-user signals in a per-user overlay, stable identity keys, company facts apart from jobs). It does not add them to the plan and does not change principle 15.
+- **Shared Job Database, Company entity and multi-user.** They appear nowhere in the existing plans: GOALS lists multi-user accounts as out of scope, principle 15 says single user (server master), and the Step 5 plan says "No multi-user model". This Epic treats them as **design constraints only** (per-user signals in the owner overlay `job-state.json`, stable identity keys, company facts apart from jobs). It does not add them to the plan and does not change principle 15.
 - **Profile master is the browser.** An extension cannot apply a profile on the server. TASK-01 would hand an `ImportDraft` to the app, and only the app's guarded apply writes (the draft is transient and never persisted under `data/`).
 - **Manual-job model.** A hand-entered job is `provider: 'manual'` and `manualEntry: true`, and a manual row wins over a discovered row with the same normalised URL. An extension-created job needs the true source kept as a separate field (open decision 5); new owner-only fields go in `MANUAL_FIELDS` and out of `SCORING_FIELDS`, so a Recommended signal can never reach scoring.
 - **`externalId`** is optional in the job shapes; whether a JobSpy LinkedIn id survives into the ledger and the scored file has to be verified in TASK-02.1 before "match by LinkedIn job id" is promised.
-- **Existing LinkedIn use.** JobSpy discovers LinkedIn jobs and an outreach scraper uses `li_at`. The TASK-03 assessment covers these too (the owner already has the open action to rotate `li_at`).
+- **Existing LinkedIn use.** JobSpy discovers LinkedIn jobs and the LinkedIn contact scraper (`python/outreach_scraper/scrape_linkedin_contacts.py`, via `scripts/linkedin-scraper-bridge.js`) uses `li_at`. The TASK-03 assessment covers these too (the owner already has the open action to rotate `li_at`).
 - **Company data.** The canonical job has only a `company` string; the Infostud list client keeps `companyName` only. The statement that Infostud already gives a useful reference is unverified until the provider audit.
-- **Wave order.** Roadmap v2 has no extension wave; Application Tracking (Wave 5) and Wave 7 import are built but not merged, and 02.4 / 02.6 / TASK-01 rely on them being merged. The Epic stays outside the wave order until the owner places it.
+- **Wave order.** Roadmap v2 has no extension wave; Application Tracking (Wave 5) and Wave 7 import are merged into `main` (checked with `git branch --merged main`; the ROADMAP rows for Waves 4 and 5 still say "local, not merged" and are stale), and 02.4 / 02.6 / TASK-01 build on them. The Epic stays outside the wave order until the owner places it.
 
 **Open decisions (owner approval needed)**
 
-1. Where the Epic sits in the wave order (and that Wave 5 and Wave 7 are merged first).
+1. Where the Epic sits in the wave order (Wave 5 and Wave 7 are already merged).
 2. The extension's credential and how it passes the request guard (scoped token held in extension storage, revocable; or none, with the loopback-only trust model; allowed origin format for the extension).
 3. How the extension's data reaches the app UI: a short-lived in-memory token like Fill from ad's `cachedPage`, or the extension opening an app page that receives the data. Recommended: the in-memory token; nothing is written to `data/`.
 4. Supported browsers (Chromium first, Firefox later, or both).
 5. How the true source is stored for an extension-created job (`source` plus `importOrigin` fields next to `provider`).
-6. Where per-user job signals (Recommended, application method when it is the user's observation, poster) live: a new per-user overlay store beside `job-state.json`, or an extension of it. Recommended: a new store keyed by `matchKey`, same atomic-write pattern.
+6. Per-user job signals (Recommended, the observed application method, poster) are added as fields of the planned owner overlay `job-state.json` (Step 5 section 2.3, joined by `joinJobs`), not a parallel store. Needs the owner's confirmation of field names and a store version bump; poster identity reuses the Step 5 `contact` key scheme (section 2.8).
 7. Where a Job Poster is kept (on the job overlay, or offered as a contact on the application).
 8. The outcome of the terms and account-risk assessment, and the go / no-go per Task.
 
