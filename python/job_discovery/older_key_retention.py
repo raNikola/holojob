@@ -83,6 +83,28 @@ def parse_store_sha(path: Path | None) -> str | None:
     return None
 
 
+LEDGER_SHA_HEADER = re.compile(r"^#\s*ledger-sha256\s+(none|[0-9a-f]{64})\s*$")
+JOBLESS_HEADER = re.compile(r"^#\s*jobid-less-applications\s+(\d+)\s*$")
+LEDGER_FILE = ("data", "jobs", "job_history.json")
+
+
+def parse_coverage(path: Path | None) -> tuple[int | None, str | None]:
+    """(job-id-less application count, ledger sha) from the id exporter's header; None for a header that is missing (older exporter)."""
+    jobless = ledger_sha = None
+    if path is not None:
+        for line in Path(path).read_text(encoding="utf-8").splitlines():
+            if m := JOBLESS_HEADER.match(line.strip()):
+                jobless = int(m.group(1))
+            elif m := LEDGER_SHA_HEADER.match(line.strip()):
+                ledger_sha = m.group(1)
+    return jobless, ledger_sha
+
+
+def live_ledger_sha(root: Path) -> str:
+    file = Path(root).joinpath(*LEDGER_FILE)
+    return hashlib.sha256(file.read_bytes()).hexdigest() if file.exists() else "none"
+
+
 def live_store_sha(root: Path) -> str:
     """Hash of the bytes of the CURRENT application store, `none` when there is no file. Only a hash is computed: the file is never parsed
     and nothing is written (TRACKER_PLAN 6a: Python does not read application data)."""
@@ -193,7 +215,7 @@ def _view_text(ledger: dict) -> str:
 
 
 def prune(root: Path, *, days: int, now: datetime, application_ids, protect_ids, apply: bool, stamp: str | None = None,
-          store_sha: str | None = None) -> dict:
+          store_sha: str | None = None, jobless: int | None = None, coverage_ledger_sha: str | None = None) -> dict:
     """Plan, and with `apply` make, the removal. Refuses `apply` without both id lists (an empty list is a list), the pipeline lock,
     a git-ignored backup of the ledger, and an unchanged view. Returns the plan plus what was done."""
     root = Path(root)
@@ -207,6 +229,12 @@ def prune(root: Path, *, days: int, now: datetime, application_ids, protect_ids,
     if apply and store_sha != live:
         raise SystemExit("refusing --apply: the application ids were exported from a different applications.json than the one on disk now "
                          "(the file changed, or the export is stale). Re-run scripts/export-application-job-ids.js and the dry run.")
+    if apply and jobless is None:
+        raise SystemExit("refusing --apply: the application ids file has no `# jobid-less-applications` header, so applications without a job id "
+                         "(matched to ledger rows only by URL / posting key) are not known to be covered. Re-run scripts/export-application-job-ids.js.")
+    if apply and jobless and coverage_ledger_sha != live_ledger_sha(root):
+        raise SystemExit(f"refusing --apply: {jobless} application(s) have no job id and are protected only through URL / posting-key matches "
+                         "computed against a different job_history.json than the one on disk now. Re-run scripts/export-application-job-ids.js and the dry run.")
     lock = pipeline_lock.acquire(path=root / "data" / "jobs" / ".pipeline.lock")
     if lock is None:
         raise SystemExit(pipeline_lock.BUSY_MESSAGE.replace("nothing started", "nothing pruned"))
@@ -215,6 +243,7 @@ def prune(root: Path, *, days: int, now: datetime, application_ids, protect_ids,
         result = plan(ledger, root, days=days, now=now, application_ids=application_ids, protect_ids=protect_ids)
         result["applied"] = False
         result["applicationsExportCurrent"] = store_sha is not None and store_sha == live
+        result["jobIdlessApplications"] = jobless
         if not apply or not result["candidates"]:
             return result
         target = _backup(root, ledger_file, result, stamp or now.strftime("%Y%m%d-%H%M%S"))

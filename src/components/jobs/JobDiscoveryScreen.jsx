@@ -311,7 +311,7 @@ export default function JobDiscoveryScreen() {
     setState((prev) => updateFilters(prev, patch))
   }, [])
 
-  // The server is written first. A write the server refuses changes nothing, here or in the browser's list.
+  // The server is written first. A failed write (unreachable or refused) changes nothing, here or in the browser's list.
   const handleStatusChange = useCallback(async (jobId, status) => {
     const job = state.jobs.find((j) => j.jobId === jobId)
     if (!job) return
@@ -319,12 +319,9 @@ export default function JobDiscoveryScreen() {
       await writeJobState(job, { status })
       setStatusError(null)
     } catch (e) {
-      // Status 0 = no API server (demo mode, server down): the change stays local and the "not on the server yet" notice counts it.
-      // Any answer from the server that refuses the write changes nothing.
-      if (e.status !== 0) {
-        setStatusError(`The status was not saved: ${e.message}`)
-        return
-      }
+      // The server is the single source of truth: any failed write (unreachable included) changes nothing and says so.
+      setStatusError(`The status was not saved: ${e.message}`)
+      return
     }
     setState((prev) => ({
       ...prev,
