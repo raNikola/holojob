@@ -301,6 +301,7 @@ Sources and design: [DECISIONS.md](DECISIONS.md#import-redesign).
 | S6 | PDF failure hardening (password, scanned, page cap, empty MIME type) | Built on `wave7-profile-import` (2026-11-09). Real-file check with one resume PDF and one LinkedIn PDF is still the owner's |
 | S7 | Manual "Start blank" through the same review, confirm and apply | Built on `wave7-profile-import` (2026-11-09) |
 | S5 | LinkedIn data ZIP | Last: waits for the owner's real file names and header rows |
+| Gate | Full gate for S0-S4, S6, S7 on the real tree (2026-11-09): pytest 3040 passed, Vitest 2320 passed (the listed flaky `rescrape.test.js` failed once, passed on rerun), lint and build clean, mutation checks on the new logic, private files unchanged. Rerun the changed areas when S5 lands | Done |
 | 1a | Wizard, paste step, review screen | Done |
 | 1b | TXT / MD and DOCX | Not built ("Other file types are coming"). `python-docx` is already pinned |
 | 3 | PDF and LinkedIn PDF | Listed after 1b, but both are already in the code (`PdfStep`, `4f2cd7e`). Real-file test below still open |

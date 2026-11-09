@@ -114,7 +114,8 @@ def _zip(members: dict[str, bytes]) -> bytes:
     ("old .doc or password protected", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 100, "encrypted"),
     ("macro enabled", _zip({"word/document.xml": b"<x/>", "word/vbaProject.bin": b"vba"}), "unsupported_type"),
     ("a zip that is not a Word file", _zip({"readme.txt": b"hello"}), "unsupported_type"),
-    ("an unpacked-size bomb", _zip({"word/document.xml": b"\0" * (60 * 1024 * 1024)}), "corrupt_file"),
+    ("one member over its own limit", _zip({"word/document.xml": b"\0" * (30 * 1024 * 1024)}), "corrupt_file"),
+    ("many members under their own limit that add up past the total", _zip({"word/document.xml": b"<x/>", **{f"m{i}.bin": b"\0" * (20 * 1024 * 1024) for i in range(3)}}), "corrupt_file"),
     ("too many members", _zip({"word/document.xml": b"<x/>", **{f"m{i}.txt": b"a" for i in range(2100)}}), "corrupt_file"),
     ("over the size limit", b"PK" + b"x" * (MAX_DOCX_BYTES + 1), "too_large"),
 ])
@@ -122,6 +123,18 @@ def test_refusals_use_fixed_codes(name, data, code):
     with pytest.raises(TextImportError) as err:
         docx_to_text(data)
     assert err.value.code == code, name
+
+
+@pytest.mark.parametrize("name,data", [
+    ("one member over its own limit", _zip({"word/document.xml": b"\0" * (30 * 1024 * 1024)})),
+    ("members under their own limit that add up past the total", _zip({"word/document.xml": b"<x/>", **{f"m{i}.bin": b"\0" * (20 * 1024 * 1024) for i in range(3)}})),
+    ("too many members", _zip({"word/document.xml": b"<x/>", **{f"m{i}.txt": b"a" for i in range(2100)}})),
+])
+def test_the_package_limits_refuse_before_python_docx_ever_opens_the_file(name, data):
+    """Each limit is tested on its own at check_package: python-docx would reject these fake packages anyway, and that must not hide a missing limit."""
+    with pytest.raises(TextImportError) as err:
+        check_package(data)
+    assert err.value.code == "corrupt_file", name
 
 
 def test_a_truncated_docx_is_corrupt_and_the_error_carries_no_content():
