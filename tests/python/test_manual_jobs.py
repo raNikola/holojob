@@ -510,4 +510,33 @@ def test_delete_refuses_a_discovered_ad_and_changes_nothing(env, monkeypatch, ca
 def test_delete_of_an_unknown_id_is_a_clean_no_op(env, capsys):
     code, result = _delete(env, MANUAL_ID, capsys)
     assert code == 0 and result["removed"] == {"manual": 0, "scored": 0}
-    assert not env.manual.exists() and not env.scored.exists()
+    assert not env.scored.exists()
+    assert json.loads(env.manual.read_text()) == {"jobs": [], "deleted": [MANUAL_ID]}  # remembered: a browser-only job may sync later
+
+
+def test_a_deleted_id_cannot_be_stored_or_scored_again_by_a_stale_tab(env, monkeypatch, capsys):
+    assert env.add(_manual(), monkeypatch, capsys)[0] == 0
+    assert _delete(env, MANUAL_ID, capsys)[0] == 0
+    assert json.loads(env.manual.read_text())["deleted"] == [MANUAL_ID]
+    code, out, _ = env.add(_manual(), monkeypatch, capsys)
+    assert code == 7 and json.loads(out.strip().splitlines()[-1])["error"] == "deleted"
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps([_manual(), _manual(OTHER_ID, url="https://acme.example/jobs/10")])))
+    assert importer.main(["--job-json", "-", "--store-only", *env.paths()]) == 0
+    result = json.loads(capsys.readouterr()[0].strip().splitlines()[-1])
+    assert result["stored"] == [OTHER_ID] and result["skipped"] == [{"jobId": MANUAL_ID, "error": "deleted"}]
+    assert MANUAL_ID not in env.rows() and MANUAL_ID not in env.full_rescore()
+    assert [j["jobId"] for j in manual_jobs.load(env.manual)] == [OTHER_ID]
+
+
+def test_smoke_the_command_line_the_server_runs_deletes_only_under_the_given_paths(env, monkeypatch, capsys):
+    """The exact argv scripts/manual-job-delete.js builds, as a real process, against temp files (never data/)."""
+    assert env.add(_manual(), monkeypatch, capsys)[0] == 0
+    assert env.add(_manual(OTHER_ID, url="https://acme.example/jobs/10"), monkeypatch, capsys)[0] == 0
+    done = subprocess.run([sys.executable, str(ROOT / "python/job_import/import_job_url.py"), "--delete-job", MANUAL_ID,
+                           "--manual", str(env.manual), "--scored", str(env.scored)], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout.strip().splitlines()[-1])["removed"] == {"manual": 1, "scored": 1}
+    assert set(env.rows()) == {OTHER_ID}
+    refused = subprocess.run([sys.executable, str(ROOT / "python/job_import/import_job_url.py"), "--delete-job", "d-1",
+                              "--manual", str(env.manual), "--scored", str(env.scored)], capture_output=True, text=True)
+    assert refused.returncode == 0  # not in the scored file: nothing to refuse, nothing removed

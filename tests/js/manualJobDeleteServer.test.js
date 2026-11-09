@@ -52,6 +52,8 @@ describe('deleteManualJob (server)', () => {
     expect(res.status).toBe(200)
     expect(res.body.removed).toMatchObject({ manual: 1, scored: 1, state: 1 })
     expect(py.calls[0]).toEqual(expect.arrayContaining(['--delete-job', ID]))
+    // The Python process edits the files under the root it was given, never the default data/ folder.
+    expect(py.calls[0]).toEqual(expect.arrayContaining(['--manual', path.join(root, 'data/jobs/manual_jobs.json'), '--scored', path.join(root, 'data/jobs/scored_jobs.json')]))
     expect(Object.values(loadState(root).doc.jobs).map((e) => e.jobId)).toEqual([OTHER])
   })
 

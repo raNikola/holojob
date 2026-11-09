@@ -17,6 +17,7 @@ export function scoredPatch(scored) {
 export const NO_DESCRIPTION = 'No description: paste the ad text to score it.'
 
 const MESSAGES = {
+  deleted: 'This job was deleted on the server, so it was not stored or scored. Refresh this page.',
   unreachable: 'The server could not be reached, so the job was saved but not scored.',
   no_python: 'The scoring tools are not set up on the server, so the job was saved but not scored.',
   no_intelligence: 'Candidate intelligence is missing, so the job was saved but not scored. Generate it first, then score the job.',

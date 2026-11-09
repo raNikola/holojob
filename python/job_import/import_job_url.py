@@ -277,8 +277,8 @@ def delete_manual_job(args) -> int:
     scored_rows = [j for j in scored_doc["jobs"] if j.get("jobId") == job_id]
     if not in_manual and any(not (j.get("manualEntry") or j.get("provider") == "manual") for j in scored_rows):
         return _fail(6, error="not_manual")
-    if in_manual:
-        manual_jobs.save(manual_jobs.remove(stored, job_id), args.manual)
+    # Remembered by id, so a stale browser tab that syncs or scores it again stores nothing.
+    manual_jobs.save(manual_jobs.remove(stored, job_id), args.manual, deleted=manual_jobs.load_deleted(args.manual) | {job_id})
     if scored_rows:
         scored_doc["jobs"] = [j for j in scored_doc["jobs"] if j.get("jobId") != job_id]
         scored_doc.setdefault("meta", {})["jobCount"] = len(scored_doc["jobs"])
@@ -287,7 +287,7 @@ def delete_manual_job(args) -> int:
 
 
 def run_job_json(args) -> int:
-    """Store, score and merge hand-entered jobs. Exit 0 ok, 2 invalid, 3 duplicate URL, 4 no intelligence, 5 scoring failed.
+    """Store, score and merge hand-entered jobs. Exit 0 ok, 2 invalid, 3 duplicate URL, 4 no intelligence, 5 scoring failed, 7 deleted job.
 
     Nothing printed or logged carries a field value except through the scored record itself: errors name a field only.
     """
@@ -306,6 +306,7 @@ def run_job_json(args) -> int:
     scored_jobs = _load_doc(args.scored)["jobs"]
     stored = manual_jobs.load(args.manual)
 
+    deleted = manual_jobs.load_deleted(args.manual)
     accepted, skipped = [], []
     for item in items:
         try:
@@ -314,6 +315,11 @@ def run_job_json(args) -> int:
             if not batch:
                 return _fail(2, error="invalid", field=exc.field)
             skipped.append({"error": "invalid", "field": exc.field})
+            continue
+        if job["jobId"] in deleted:
+            if not batch:
+                return _fail(7, error="deleted")
+            skipped.append({"jobId": job["jobId"], "error": "deleted"})
             continue
         clash = manual_jobs.find_clash(job["jobId"], job.get("jobUrl"), discovered_jobs, scored_jobs, stored, accepted)
         if clash:

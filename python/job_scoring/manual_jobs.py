@@ -153,10 +153,25 @@ def load(path: Path = MANUAL_PATH) -> list[dict]:
     return [j for j in jobs if isinstance(j, dict) and j.get("jobId")] if isinstance(jobs, list) else []
 
 
-def save(jobs: list[dict], path: Path = MANUAL_PATH) -> None:
+def load_deleted(path: Path = MANUAL_PATH) -> set[str]:
+    """Ids of manual jobs the owner deleted (ids only). A stale browser tab must not be able to store one of them again."""
+    try:
+        doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    deleted = doc.get("deleted") if isinstance(doc, dict) else None
+    return {i for i in deleted if isinstance(i, str)} if isinstance(deleted, list) else set()
+
+
+def save(jobs: list[dict], path: Path = MANUAL_PATH, *, deleted: set[str] | None = None) -> None:
+    """Write the jobs. The deleted-id list is kept as it is unless `deleted` is given."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(path, json.dumps({"jobs": jobs}, indent=2))
+    doc = {"jobs": jobs}
+    kept = load_deleted(path) if deleted is None else deleted
+    if kept:
+        doc["deleted"] = sorted(kept)
+    write_text_atomic(path, json.dumps(doc, indent=2))
 
 
 def upsert(jobs: list[dict], stored: list[dict]) -> list[dict]:

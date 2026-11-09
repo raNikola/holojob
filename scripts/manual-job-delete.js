@@ -47,7 +47,7 @@ function serverJobUrl(root, jobId) {
 function runDelete(jobId, { spawnFn = spawn, python = VENV_PYTHON, root = ROOT } = {}) {
   return new Promise((resolve) => {
     const out = []
-    const child = spawnFn(python, [IMPORT_SCRIPT, '--delete-job', jobId], { cwd: root, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
+    const child = spawnFn(python, [IMPORT_SCRIPT, '--delete-job', jobId, '--manual', path.join(root, 'data/jobs/manual_jobs.json'), '--scored', path.join(root, 'data/jobs/scored_jobs.json')], { cwd: root, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
     child.stdout.on('data', (d) => out.push(d))
     child.stderr?.on('data', () => {})
     child.on('error', () => resolve({ code: -1, result: {} }))

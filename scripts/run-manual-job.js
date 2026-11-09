@@ -28,6 +28,7 @@ const REPLY = {
   2: (r) => ({ status: 422, body: { ok: false, error: 'invalid', field: typeof r.field === 'string' ? r.field : 'job' } }),
   3: (r) => ({ status: 409, body: { ok: false, error: 'duplicate', existing: r.existing ?? null } }),
   4: (r) => ({ status: 503, body: { ok: false, error: 'no_intelligence', saved: r.saved ?? [] } }),
+  7: () => ({ status: 410, body: { ok: false, error: 'deleted' } }),
   75: () => ({ status: 409, body: { ok: false, error: 'run_active' } }),
   5: (r) => ({ status: 500, body: { ok: false, error: 'scoring_failed', detail: typeof r.detail === 'string' ? r.detail : '', saved: r.saved ?? [] } }),
 }

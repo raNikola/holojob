@@ -20,6 +20,12 @@ export function useStoredJob(jobId) {
 export function useJobsSync(setState) {
   useEffect(() => subscribe(({ source, removedId }) => {
     if (source === 'save') return
-    setState((prev) => ({ ...prev, jobs: adoptStored(removedId ? prev.jobs.filter((job) => job.jobId !== removedId) : prev.jobs, getJobsSnapshot().jobs) }))
+    setState((prev) => {
+      const stored = getJobsSnapshot().jobs
+      const have = new Set(stored.map((job) => job.jobId))
+      // A hand-entered job is stored before any screen holds it, so one missing from another tab's write was deleted there.
+      const alive = prev.jobs.filter((job) => job.jobId !== removedId && !(source === 'storage' && job.manualEntry && !have.has(job.jobId)))
+      return { ...prev, jobs: adoptStored(alive, stored) }
+    })
   }), [setState])
 }
