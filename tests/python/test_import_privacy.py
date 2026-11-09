@@ -67,7 +67,7 @@ def test_a_crash_inside_the_parser_is_a_fixed_code_not_the_exception(tmp_path):
     crash.write_text(
         "import sys\n"
         f"sys.path.insert(0, {str(ROOT / 'python')!r}); sys.path.insert(0, {str(IMPORT_DIR)!r})\n"
-        "import text_parser\n"
+        "import profile_import.text_parser as text_parser\n"
         f"def boom(*a, **k): raise ValueError({CV!r})\n"
         "text_parser.parse_text = boom\n"
         f"sys.argv = [{str(RUNNER)!r}]\n"

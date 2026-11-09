@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import http from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handleApiRoutes } from '../../scripts/api-handler.js'
-import { MAX_PASTE_BYTES, parseImportSource, setImpactRunner, setImportRunners } from '../../scripts/run-profile-import.js'
+import { IMPORT_ERRORS, MAX_PASTE_BYTES, parseImportSource, setImpactRunner, setImportRunners } from '../../scripts/run-profile-import.js'
 import { checkApiRequest } from '../../scripts/request-guard.js'
 
 const ROUTE = '/api/profile/import/parse'
@@ -198,5 +198,14 @@ describe('POST /api/profile/import/impact', () => {
     expect(res.status).toBe(500)
     expect(JSON.parse(res.text).code).toBe('impact_failed')
     setImpactRunner()
+  })
+})
+
+describe('JSON Resume refusals reach the browser as fixed messages', () => {
+  it('knows the two JSON codes and answers 422 with a message that holds no input', () => {
+    for (const code of ['json_invalid', 'json_not_resume']) {
+      expect(IMPORT_ERRORS[code].status).toBe(422)
+      expect(IMPORT_ERRORS[code].error).toMatch(/JSON/)
+    }
   })
 })

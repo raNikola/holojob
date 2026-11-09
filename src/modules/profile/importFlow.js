@@ -11,7 +11,11 @@ export const MAX_TEXT_FILE_BYTES = 200 * 1024
 export const FILE_KINDS = [
   { source: 'resume_pdf', extensions: ['pdf'], mime: ['application/pdf'] },
   { source: 'text_file', extensions: ['txt', 'md', 'markdown'], mime: ['text/plain', 'text/markdown'] },
+  { source: 'json_resume', extensions: ['json'], mime: ['application/json'] },
 ]
+
+/** The file sources the browser reads as text and sends to the parser (a PDF is read with pdf.js instead). */
+const TEXT_FILE_SOURCES = ['text_file', 'json_resume']
 
 /** The `accept` attribute of the file input. */
 export const ACCEPT_ANY_FILE = FILE_KINDS.flatMap((k) => [...k.mime, ...k.extensions.map((e) => `.${e}`)]).join(',')
@@ -24,18 +28,19 @@ export function sourceForFile(file) {
 }
 
 /**
- * Read a TXT or Markdown file into an import draft: the text is read in the browser and parsed by the same server parser as pasted text
+ * Read a TXT, Markdown or JSON Resume file into an import draft: the text is read in the browser and parsed by the same server parser as pasted text
  * (the server removes Markdown markup); nothing is saved. A file that is not UTF-8 text is refused before anything is sent.
  * @param {File} file
  * @param {{ parse: (source: string, text: string) => Promise<object>, read?: (file: File) => Promise<string> }} deps
  */
 export async function readTextFileDraft(file, { parse, read = (f) => f.text() }) {
-  if (sourceForFile(file) !== 'text_file') throw new Error('This is not a text file.')
+  const source = sourceForFile(file)
+  if (!TEXT_FILE_SOURCES.includes(source)) throw new Error('This is not a text file.')
   if (file.size > MAX_TEXT_FILE_BYTES) throw new Error('The file is too large. The limit for a text file is 200 KB.')
   const text = await read(file)
   const replaced = (text.match(/\uFFFD/g) || []).length
   if (text.includes('\u0000') || replaced > Math.max(3, text.length * 0.02)) throw new Error('This file is not UTF-8 text. Save it as UTF-8 and try again, or paste the text.')
-  const draft = await parse('text_file', text)
+  const draft = await parse(source, text)
   return { ...draft, fileName: file.name || '' }
 }
 

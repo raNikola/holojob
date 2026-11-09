@@ -20,12 +20,15 @@ MAX_REQUEST_CHARS = 2_000_000
 
 def main() -> int:
     try:
-        from text_parser import TextImportError, parse_text
+        from profile_import.json_resume import parse_json_resume
+        from profile_import.text_parser import TextImportError, parse_text
 
         payload = json.loads(sys.stdin.read(MAX_REQUEST_CHARS) or "{}")
         if not isinstance(payload, dict):
             raise TextImportError("invalid_request")
-        result = {"ok": True, "draft": parse_text(payload.get("text"), payload.get("source", "paste"))}
+        source = payload.get("source", "paste")
+        draft = parse_json_resume(payload.get("text")) if source == "json_resume" else parse_text(payload.get("text"), source)
+        result = {"ok": True, "draft": draft}
     except Exception as error:  # noqa: BLE001 - the answer is a fixed code, never the cause
         code = getattr(error, "code", None)
         result = {"ok": False, "code": code if isinstance(code, str) else "parse_failed"}

@@ -186,6 +186,8 @@ describe('reading a text or Markdown file', () => {
     expect(sourceForFile({ name: 'cv.MD', type: '' })).toBe('text_file')
     expect(sourceForFile({ name: 'cv.markdown', type: 'text/markdown' })).toBe('text_file')
     expect(sourceForFile({ name: 'noext', type: 'text/plain' })).toBe('text_file')
+    expect(sourceForFile({ name: 'resume.json', type: '' })).toBe('json_resume')
+    expect(sourceForFile({ name: 'resume', type: 'application/json' })).toBe('json_resume')
     expect(sourceForFile({ name: 'cv.docx', type: '' })).toBeNull()
     expect(sourceForFile({ name: 'cv.exe', type: 'application/octet-stream' })).toBeNull()
   })
@@ -194,6 +196,12 @@ describe('reading a text or Markdown file', () => {
     const draft = await readTextFileDraft(md('jane.md'), { parse, read: async () => '# Jane\nSQL' })
     expect(parse).toHaveBeenCalledWith('text_file', '# Jane\nSQL')
     expect(draft).toMatchObject({ source: 'text_file', fileName: 'jane.md' })
+  })
+
+  it('reads a JSON Resume file as the json_resume source', async () => {
+    const draft = await readTextFileDraft(md('resume.json'), { parse, read: async () => '{"basics":{}}' })
+    expect(parse).toHaveBeenCalledWith('json_resume', '{"basics":{}}')
+    expect(draft.source).toBe('json_resume')
   })
 
   it('refuses a binary, a non-UTF-8 or an oversized file before anything is sent', async () => {

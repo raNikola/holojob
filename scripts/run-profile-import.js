@@ -22,6 +22,8 @@ export const IMPORT_ERRORS = {
   too_large: { status: 413, error: 'The text is too large. The limit is 200 KB.' },
   timeout: { status: 504, error: 'The import took too long and was stopped.' },
   runner_missing: { status: 503, error: 'Python venv not found. Run: npm run setup' },
+  json_invalid: { status: 422, error: 'This file is not valid JSON.' },
+  json_not_resume: { status: 422, error: 'This JSON file is not a JSON Resume: it has none of the sections basics, work, education, skills, languages, projects or certificates.' },
   parse_failed: { status: 500, error: 'The text could not be read.' },
   impact_failed: { status: 500, error: 'The effect on your scoring caches could not be worked out.' },
 }

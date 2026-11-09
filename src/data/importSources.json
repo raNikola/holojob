@@ -24,6 +24,12 @@
       "name": "Text file",
       "input": "text",
       "file": true
+    },
+    "json_resume": {
+      "importSource": "json_resume",
+      "name": "JSON Resume",
+      "input": "text",
+      "file": true
     }
   }
 }
