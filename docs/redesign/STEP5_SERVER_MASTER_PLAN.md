@@ -1,6 +1,6 @@
 # Step 5: the server becomes the master for profile, intelligence, jobs and the remaining browser data
 
-Status: PLAN, 2026-10-29, revised with the owner's decisions on Q-A to Q-K (section 9). Docs only: no code, no `data/` change, no AI call, no commit.
+Status: PLAN, 2026-10-29. **Built so far (2026-11-09):** `data/jobs/job-state.json` v1 (status `new|saved|rejected` and Keep; [DECISIONS.md](../DECISIONS.md#wave-5--goal-j-application-tracking-built-2026-11-09)). **Not built:** the complete Step 5 server master. Revised with the owner's decisions on Q-A to Q-K (section 9). Docs only: no code, no `data/` change, no AI call, no commit.
 Revision 2 (2026-10-29): owner answers to Q-L, Q-M, Q-N (changed) and Q-O are applied (sections 2.8, 6, 9); the cache key now lists every input per feature.
 Revision: **Q-B changed.** The browser AI cache is not simply removed: a server-side **AI findings store** replaces it (section 2.8, step 2b).
 Implements: BROWSER_STORAGE_POLICY section 7, step 5, and Q1 / Q7 of section 8 (DECISIONS.md log 2026-10-29).
@@ -114,7 +114,7 @@ Three parts with one owner each.
   "jobs": {
     "<matchKey>": {
       "jobId": "<string>",
-      "status": "new|saved|rejected|applied_manually",
+      "status": "new|saved|rejected",   // applied_manually removed 2026-11-10: Applied is derived from the application store (Wave 5 j)
       "statusAt": "<ISO timestamp>|null",
       "tailoredAssets?": "<same as today>",
       "aiInsights?": "<same as today>",

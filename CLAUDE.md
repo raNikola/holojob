@@ -11,6 +11,7 @@ Personal job-hunt pipeline in Podman on a home server (DS9). Single user (DECISI
 - **Never push, merge or deploy without the owner's explicit approval.** Never `git push --no-verify`.
 - The owner runs commands (builds, deploys, `--apply` scripts). Propose them; do not assume they ran. A `.env` change needs `podman-compose up -d --force-recreate`.
 - Never bypass a failing test, or change production data to make one pass.
+- **Tests must never touch the real `data/` directory:** no test reads, writes, moves or removes a path under `/srv/holojob/data`, and mocking one `fs` call is not a way to prevent a write. Use a temp directory. Guards that detect a change exist (Vitest `tests/js/setup/realDataGuard.js`, pytest `tests/python/real_data_guard.py`); history and limits: `docs/DECISIONS.md`, "Incident 2026-11-09".
 - All code and comments in English.
 - After finishing a feature, update `docs/ROADMAP.md` and `docs/DECISIONS.md` (mark what is built, record decisions).
 - Never read `docs/DECISIONS.md`, `docs/redesign/data-shapes.md` or `docs/ROADMAP.md` whole: grep for the heading, then read with offset and limit.

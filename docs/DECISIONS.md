@@ -1,6 +1,6 @@
 # Holojob - Decisions
 
-Short entries for decisions that were not yet written down. Planned work is in [ROADMAP.md](ROADMAP.md). The product
+Short entries for decisions that were not yet written down. Planned work is in [ROADMAP.md](ROADMAP.md). Operational rules for working in the repo live in [../CLAUDE.md](../CLAUDE.md) and `.claude/rules/`; this file is the history of why, and other files link here instead of repeating an entry. The product
 principles and the older owner decisions stay in [redesign/DECISIONS.md](redesign/DECISIONS.md) and are not repeated here.
 
 The date is the day the entry was recorded (2026-11-02), unless the entry names the day of the decision. "Code check" says
@@ -304,7 +304,7 @@ Recorded from the owner's addendum. Docs only; no code changed. Backlog entries:
 
 ## Testing and commit policy (owner decision, 2026-11-04)
 
-Docs only; no code changed. The short form is in `CLAUDE.md`. It extends item 4 of "Owner decisions: baseline score, role filter, Infostud, testing (2026-11-03)" (no merge and no production before the real-container integration check).
+Docs only; no code changed. `CLAUDE.md` ("Testing and commit policy") is the canonical text of the rules; this entry is their history. It extends item 4 of "Owner decisions: baseline score, role filter, Infostud, testing (2026-11-03)" (no merge and no production before the real-container integration check).
 
 **Rules**
 
@@ -1133,21 +1133,20 @@ Slices in order: S0 safe writes, S1 draft contract + guarded apply, S2 TXT/MD, S
 
 ## Product principles
 
-- **Other users:** Holojob will be used by other users, so no personal data is hard-coded.
-- **English only:** no Serbian, Cyrillic or multilingual parsing. AI translates non-English ads and CVs. English
-  section-header synonyms live in one data file.
+- **Single user now, multi-user later (owner decision, 2026-11-10; replaces "Holojob will be used by other users").** Principle 15 in [redesign/DECISIONS.md](redesign/DECISIONS.md) stands. A shared job database for several users is a future goal ([ROADMAP.md](ROADMAP.md), [redesign/SHARED_JOB_DB_PLAN.md](redesign/SHARED_JOB_DB_PLAN.md)), not the current architecture. Still true for now: no personal data is hard-coded.
+- **English UI and documentation (owner decision, 2026-11-10; replaces "English only").** Support for Serbian and Cyrillic when parsing CVs stays, and the Serbian heading vocabulary exception (`src/data/sectionHeadings.json`) is kept. Still open from the earlier entry: AI translation of non-English ads and CVs does not exist, and `resume_parser.py` has its own English heading list (`SECTION_STEMS`).
 - **Access:** no login and no basic auth; home LAN plus Tailscale. Already recorded:
   [redesign/DECISIONS.md](redesign/DECISIONS.md), 2026-10-29.
 
 **Code check, differs:**
 
-- **Single user:** principle 15 in [redesign/DECISIONS.md](redesign/DECISIONS.md) and [../CLAUDE.md](../CLAUDE.md) still say
-  "single user for now".
+- **Single user:** principle 15 in [redesign/DECISIONS.md](redesign/DECISIONS.md) and [../CLAUDE.md](../CLAUDE.md) say
+  "single user for now"; the 2026-11-10 decision above makes the entry consistent with them.
 - **Hard-coded market:** the `serbia` provider group ([ROADMAP.md](ROADMAP.md), Tech debt leftovers) and Serbian place names in
   `location_text.py`, which is also how "Confirmed from Serbia" above is read.
 - **Serbian parsing exists:** `src/data/sectionHeadings.json` has `en` and `sr` blocks and a Cyrillic transliteration, used by
-  `python/profile_import/vocabulary.py` and `src/utils/headingVocabulary.js` (commit `10bf5d3`, 2026-11-01). Its removal is
-  not scheduled.
+  `python/profile_import/vocabulary.py` and `src/utils/headingVocabulary.js` (commit `10bf5d3`, 2026-11-01). Kept by the
+  2026-11-10 decision (exception to English-only).
 - **Serbian sites:** [redesign/DECISIONS.md](redesign/DECISIONS.md) keeps "job sources incl. Serbian sites" in scope. This
   entry is about parsing, and does not say whether those sources change.
 - **No AI translation exists:** the prompts in `job_import/ad_ai.py` and `cv_analysis/analysis.py` tell the model not to translate.
@@ -1398,7 +1397,7 @@ Owner-authorized (S1 to S6, autonomous execution, no push or merge). Code: `tool
 
 ## Workflow sizes and UI skills (owner decision, 2026-11-08)
 
-Recorded in `CLAUDE.md` ("Workflow sizes", "UI skills"). Docs only; no code changes.
+Canonical text: `CLAUDE.md` ("Workflow sizes", "UI"); this entry is the history. Docs only; no code changes.
 
 - **Workflow sizes.** S (columns, UI fixes): implement, test, commit. M (role scoring, filters, ad statuses): short self-directed analysis, implement, test, commit, no separate analysis round. L (discovery pipeline, importer, migrations, AI scoring architecture): Plan Mode, one approval, then autonomous implementation; stop only for a blocking product decision or significant risk; one final report. The owner decides product behavior, Code decides the technical approach. Skills and plugins add no ceremony to S and M.
 - **UI skills.** `docs/design-system` has priority over any UI plugin guidance (UI UX Pro Max). No external image-generation or logo / icon services from plugins, since they send prompts off the server (principle: personal data and prompts stay on the home server).

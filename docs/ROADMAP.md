@@ -6,12 +6,23 @@ Engine contract (draft): [redesign/ENGINE_CONTRACT.md](redesign/ENGINE_CONTRACT.
 
 This is the only phase list; DECISIONS.md, CLAUDE.md and the README link here.
 
+## Status at a glance (2026-11-10)
+
+Built, merged and deployed are three different states; this table says only what the repo shows. "Merged" means in `main` (pushed to `origin/main`). Deployment is not recorded in the repo, so no row below claims it. Details are in the sections that follow; nothing else in this file was reorganized.
+
+| State | Items |
+|---|---|
+| **Done** (built and merged) | Phase 0; Phase 1 steps 1-8c; Roadmap v2 waves 0-5; Phase 4 protections (fact gate, identifier redaction, confirm, verdicts); Wave 7 profile import S0-S4, S6, S7; per-source switches; Delete job for hand-entered jobs; Activity screen A1-S8b; Graphify adapter S0-S6 |
+| **Next** | Owner checks and owner-run steps listed in the sections (Wave 7 real-file PDF check; Infostud repair dry run and `--apply`; prune report; Wave 0 key rotation); Wave 7 S5 LinkedIn ZIP (waits for the owner's real file); the rest of Phase 3 (Closed panel, nudges, CSV import) and Phase 3b (watched companies) |
+| **Later** | Phase 2 (only the read side of confirmed facts exists); Phase 4 interview prep and market report; Phase 5; stable requirement ids phases 3 and 4 (Planned); Step 5 server master (not built; `job-state.json` v1 is built); wave 9 items; the list under "Later" |
+| **Deferred** | UI Redesign Epic; HolyJobs browser extension (idea, parked); Company information standardization (planned, To Do); Shared job database (goal only, draft reference); test isolation by per-test data directory; the items under "DEFERRED after S8" |
+
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Audit: what exists, per-module Reuse / Adapt / Build / Skip, engine contract | Done |
 | 1 | Scoring core: role-family config, requirement extraction with quotes and canonical ids, evidence index, evidence matcher + deterministic Fit, confidence, gates. Shadow mode next to the current score; stability test on fixtures | Steps 1-8c built (role families, requirements, evidence index, matcher, Fit and gates, stability test, shadow mode, privacy test); acceptance criteria pending owner confirmation; stable-id follow-up partly built (below) |
-| 2 | Evidence profile: restructured optional questionnaire (story bank, skills with evidence, preferences, gates), AI prefill from the CV through the review screen, ask-user loop that stores confirmed facts | Planned |
-| 3 | Application tracker independent of discovery: own store with a posting snapshot, append-only event history, channel, CV version, outcomes, follow-up nudges, import of past applications | In progress. Built: store with event history and configurable stages, migration from job records, Job Details tracker (Mark Applied, CV used, history, void and restore), Board with drag, Statistics, Settings > Applications (tracking switch, columns), applications that open and count without their ad ([decision](DECISIONS.md#applications-open-without-the-ad-history-read-path-2026-11-03)). Not built: Closed panel, "Show voided", removal of the legacy `applicationTracking` field (S4), follow-up nudges and the reminders switch's UI (S5), CSV import of past applications (S6), several contacts. See [redesign/TRACKER_PLAN.md](redesign/TRACKER_PLAN.md) |
+| 2 | Evidence profile: restructured optional questionnaire (story bank, skills with evidence, preferences, gates), AI prefill from the CV through the review screen, ask-user loop that stores confirmed facts | Partially built: only the read side of confirmed facts. `python/job_scoring/confirmed_facts.py` loads and validates `data/profile/confirmed-facts.json` (a missing file is an empty store, a malformed entry is dropped) and the evidence index and matcher apply a confirmed fact over inferred evidence. Nothing writes the store yet (the module's own docstring says so; no caller of `save` and no route). Not built: the ask-user loop, the restructured questionnaire (story bank, skills with evidence), AI prefill through the review screen |
+| 3 | Application tracker independent of discovery: own store with a posting snapshot, append-only event history, channel, CV version, outcomes, follow-up nudges, import of past applications | In progress. Built: store with event history and configurable stages, migration from job records, Job Details tracker (Mark Applied, CV used, history, void and restore), Board with drag, Statistics, Settings > Applications (tracking switch, columns), applications that open and count without their ad ([decision](DECISIONS.md#applications-open-without-the-ad-history-read-path-2026-11-03)). "Show voided" is built as Applications > All records (Wave 5 j). Not built: Closed panel (code check 2026-11-10: the Board only counts applications with another outcome as a footnote "N closed (other outcomes)" in `boardModel.js`; `stageRegistry.js` mentions a Closed panel but no component renders one; whether All records is an equivalent view is not verified, so this stays open), removal of the legacy `applicationTracking` field (S4), follow-up nudges and the reminders switch's UI (S5), CSV import of past applications (S6), several contacts. See [redesign/TRACKER_PLAN.md](redesign/TRACKER_PLAN.md) |
 | 3b | Sources as user configuration: Settings > Sources with an on/off switch per job board, watched companies added from a pasted careers or board URL and probed live, stored server-side in `data/config/sources.json`; replaces the hard-coded `serbia` group and the repo's `companies/*.json` as runtime config (principle 16). Spec: [redesign/SOURCES_SPEC.md](redesign/SOURCES_SPEC.md). Independent of Phases 1-2; built next to Phase 3 because both are user-owned data that must persist | Built: `data/config/sources.json`, Settings > Sources > Job boards with the Joberty opt-in, and (2026-11-09, merged to `main`) a server-side on/off switch per source plus a one-run "Skip LinkedIn this time" ([decision](DECISIONS.md#per-source-switches-and-one-off-skip-linkedin-2026-11-09)). Not built: watched companies from a pasted URL with a live probe (providers still read `companies/*.json`); `serbia` is still the default provider group |
 | 4 | Interview prep from requirement statuses and the story bank; CV and cover letter tailoring behind a fact gate; market report of requirements per role family | In progress. Built and merged to `main` (2026-11-09): the protections around tailoring and applications (fact gate, identifier redaction with a fail-closed leak check, server-enforced confirm and preview, AI cover letter as a draft until accepted, fact-gate verdicts checked when a document is attached; [decision](DECISIONS.md#phase-4-protections-fact-gate-identifier-redaction-confirm-2026-11-09-branch-phase4-fact-gate)). Not built: interview prep, market report |
 | 5 | Feedback loop: conversion by channel and Fit band, calibration of Fit against real outcomes (report only, never auto-tuning) | Planned |
@@ -52,7 +63,7 @@ could never be reused. Built in four phases, each measured by the share of provi
    the first measurement.
    Seed, validator (`python/match_engine/competencies.py`), report (`podman exec holojob npm run competencies:report`, writes
    `data/competency-report.json`) and audit tool (`python/match_engine/competency_audit.py`) exist. Mapping inside extraction
-   (phase 2, `python/job_scoring/competency_mapping.py`) is in the code. Phases 3 and 4 are not built (no `evidenceVersion` / `answersVersion` in the code).
+   (phase 2, `python/job_scoring/competency_mapping.py`) is in the code. Phases 3 and 4 stay **Planned** (not built: no `evidenceVersion` / `answersVersion` in the code).
 2. **Mapping in extraction.** The model picks a `competencyId` from the list or NONE; code accepts only listed ids;
    precedence previous frame > alias > dictionary > model suggestion > provisional; pending aliases and the
    `prov:` -> canonical remap table under `data/`; one re-extraction of the stored ads.
@@ -75,14 +86,14 @@ skills or domain. GitHub Issues are disabled on this repo, so the work is tracke
 - [x] **Skill extraction covers the whole work history** (Wave 3). JavaScript, React, PHP, HTML, CSS, Git, Figma and REST APIs
   were flagged missing although they are explicit in an earlier role (Senior Web Programmer, 2014-2021). Today only
   recent roles are read.
-- [ ] **Hard vs. nice-to-have requirements.** A "plus if you have X" line was weighted like a must-have. The model
+- [ ] **Hard vs. nice-to-have requirements** (stays open; Wave 2 reviewed it and did not redesign it). A "plus if you have X" line was weighted like a must-have. The model
   tags each requirement hard or soft as a fact; `scorer.py` decides the weight (architectural rule in CLAUDE.md).
 - [x] **Domain transferability** (Wave 3; a fixed table of adjacent industries, so the marketplace example below is not covered). "No clear industry match" was emitted for B2B two-sided dynamics (carrier / shipper)
   that are structurally similar to the posting's marketplace (host / guest). Judge structural similarity, not a flat
   mismatch.
 - [ ] **Low-confidence reasons only when the signal is absent.** "seniority not stated" and "no strong culture
   signals" fired on a posting that lists salary bands per seniority tier and 3-month / 6-month onboarding milestones.
-  Guard each string with a check of the source text.
+  Guard each string with a check of the source text. **Checked in the code 2026-11-10, stays open:** "Seniority not stated" comes from the model's `seniority` fact or the title (`experience_match.py`), not from a source-text check; "No strong culture signals" comes from a keyword match (`culture_match.py`); neither has a test for the salary-band example. Already guarded by a computed signal, not text: "Requirements not extracted", "Short description", "Location not stated", "No keyword bank" (`data_sufficiency.low_confidence`).
 - **Must NOT change: location mismatch detection.** It worked correctly in this test; the location cap rules, the
   "Verify location" flag and the location gate stay untouched, and their tests must keep passing.
 
@@ -104,8 +115,9 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 | 3 | P0 | **Built; merged to `main`** ([as built](DECISIONS.md#wave-3-scoring-quality-and-the-three-level-role-filter-built-2026-11-08)). **(a2)** skills from the whole history, domain transferability (proven vs assumed), the keyword bank holds keywords only, `TARGET_COVERAGE` recalibrated. **(b)** the three-level role filter (Target / Near / Excluded). Owner steps: regenerate the intelligence, then Re-score. |
 | 4 | P1 | **Built; merged to `main`** ([as built](DECISIONS.md#wave-4-coverage-retention-and-import-meta-built-2026-11-09)). **(h)** `older_key` retention rule and guarded prune script (window 180 days chosen; the owner runs the report and `--apply`, nothing is automatic); **(c)** Infostud: why it returns irrelevant ads explained, per-category probe, complete-read proof recorded report-only (`SNAPSHOT_AFTER_PROOF` off until several complete runs are seen); **(n)** `lastImport.meta` v2, `lastPartial`, held counts in Activity. |
 | 5 | P1 | **Built; merged to `main`** ([as built](DECISIONS.md#wave-5--goal-j-application-tracking-built-2026-11-09)). **(j) Application Tracking:** all records including history-only and voided (Applications > All records), snapshots (existing, shown with their honesty), applied sync (Applied derived from the store, `job-state.json` v1 for Saved, Rejected and Keep with an owner-run export and import), the Applied button opens a confirm form, history-only rows no longer read "Unreviewed", shadow badge off the table, prune `--apply` checks the live store hash. Follow-up built: a failed status write (API unreachable included) changes nothing, and prune `--apply` also refuses unless applications without a job id are covered by URL / posting-key protection (`export-application-job-ids.js --check`). Owner steps listed in the decision. |
-| 6 | P2, release blockers | Profile import slices (built on `wave7-profile-import`, merged to `main`: S0-S4, S6, S7; S5 LinkedIn ZIP waits, see Import redesign below). Phase 4 protections (fact gate, identifier redaction, confirm) are release blockers for AI and application workflows: **built and merged to `main`** (2026-11-09). Review the 11 of 17 resume docs with stale unverified-degree findings before they are used for applications. |
-| 7 | P2 | UX, Settings, **(d)**. (d) was a missing feature (the toggle existed only for Joberty): **built** as per-source switches (2026-11-09, merged to `main`), see "Per-source switches" below. |
+| 6 | P2, release blocker | Phase 4 protections (fact gate, identifier redaction, confirm) are release blockers for AI and application workflows: **built and merged to `main`** (2026-11-09); deployment not recorded. Review the 11 of 17 resume docs with stale unverified-degree findings before they are used for applications (still open). |
+| 7 | P2 | **Profile Import** (branch `wave7-profile-import`, merged to `main`; deployment not recorded): S0-S4, S6, S7 built; S5 LinkedIn data ZIP waits for the owner's real file. Details: [Import redesign (Wave 7)](#import-redesign-wave-7---in-progress). Branch names are not renamed. |
+| - | P2 | UX, Settings, **(d)** (no wave number since the renumbering). (d) was a missing feature (the toggle existed only for Joberty): **built** as per-source switches (2026-11-09, merged to `main`; deployment not recorded), see "Per-source switches" below. |
 | 8 | P3 | Step 5 server master ([TRACKER_PLAN.md](redesign/TRACKER_PLAN.md)). A verified backup (Wave 0) is mandatory before bigger changes. |
 | 9 | P3 | **(f)** ledger growth; **(m)** hand-edited `appliedRuns` double-count; **(o)** truncated ledger with an unchanged generation; **(p)** never run the old `import_run --backfill-filtered` below S6; Step 6; tech debt. |
 
@@ -182,9 +194,9 @@ Decisions: [DECISIONS.md](DECISIONS.md#job-relevance-lifecycle-salary-and-deadli
 | 3. Jobs Listing & Filtering | To Do | Wave 3 role filter built (discovery side) |
 | 4. Job Details & Scoring UI | To Do | Wave 2 UI |
 | 5. Application Tracker | To Do | Wave 5 |
-| 6. Profile & Resume Management | To Do | Wave 6 profile import |
+| 6. Profile & Resume Management | To Do | Wave 7 profile import |
 | 7. Tailoring & Application Preparation | In progress | Wave 6 Phase 4 protections built and merged to `main`: fact gate, tailoring redaction and confirm, draft + accept for the AI cover letter, verdicts checked when a document is attached. Browser AI features confirm stays in Step 6 |
-| 8. Settings & Sources | To Do | Wave 7 |
+| 8. Settings & Sources | To Do | (d) per-source switches (built, no wave number) |
 | 9. Responsive, Accessibility & Visual Consistency | To Do | |
 
 **Implementation prerequisites (future gates, not authorization to execute):**
@@ -446,7 +458,7 @@ analysis with verification; tailoring; outreach contact scraping. See CHANGELOG.
 ## DEFERRED after S8 (recorded 2026-11-04)
 
 Functional gap (must be fixed, not just noted):
-- [ ] **"Keep this ad" stores an ad but does not guarantee every action on it.** Tailoring a kept ad is impossible, because the server reads only the scored file; the button now says so (`NOT_IN_SCORED_LIST`). The fix is to let the tailor read a kept ad from the ledger or send its text, with the fact gate (Phase 4).
+- [ ] **"Keep this ad" stores an ad but does not guarantee every action on it.** Documents cannot be generated for a kept ad that is not in the scored list, because the server reads only the scored file; the button says so (`NOT_IN_SCORED_LIST`). The fix is to let document generation read a kept ad from the ledger or send its text, with the fact gate (Phase 4). Stays Deferred until verified: Wave 2 (e) added a manual Re-score for kept ads, which puts the ad in the scored list, but nothing has verified that document generation then works end to end.
 
 Deferred items (known, not scheduled):
 - [ ] Runs with every source skipped used to hold rows of any search key (design 2026-11-02); with `require_usable` they no longer import. A caller that does not pass it (the plain importer) still holds them.
