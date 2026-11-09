@@ -264,6 +264,19 @@ function withLock(root, fn) {
   return run
 }
 
+/** Delete job (scripts/manual-job-delete.js) takes this same lock around its tracker check and the delete. */
+export const withApplicationLock = withLock
+
+/** A hand-entered job the owner deleted is remembered by id in manual_jobs.json; no application may be created for it. */
+function isDeletedManualJob(root, jobId) {
+  try {
+    const doc = JSON.parse(fs.readFileSync(path.join(root, 'data/jobs/manual_jobs.json'), 'utf-8'))
+    return Array.isArray(doc?.deleted) && doc.deleted.includes(jobId)
+  } catch {
+    return false
+  }
+}
+
 // --- the append-only guard -------------------------------------------------------------------
 
 function fail(message) {
@@ -492,6 +505,9 @@ export function createApplication(root, body, { now = () => new Date() } = {}) {
     const claimed = body.newAttempt?.distinctReason ?? null
     if (claimed !== null && !DISTINCT_REASONS.includes(claimed)) throw new StoreError(400, 'Invalid distinctReason')
 
+    if (typeof body.jobId === 'string' && isDeletedManualJob(root, body.jobId)) {
+      throw new StoreError(410, 'This hand-entered job was deleted, so no application can be recorded for it.')
+    }
     const posting = buildPosting(root, body, createdAt)
     const cvSrc = cvSource(root, attempt.cv, posting.jobId)
     const letterSrc = attempt.coverLetter?.fileName

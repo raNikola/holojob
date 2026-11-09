@@ -44,7 +44,7 @@ export async function scoreOnServer(job, { fetchFn = globalThis.fetch } = {}) {
   const { status, data } = await post('/api/jobs/manual/score', { job: scoringPayload(job) }, fetchFn)
   if (status === 200 && data.ok && data.jobs?.[0]) return { ok: true, scored: data.jobs[0] }
   if (status === 409 && data.existing) return { ok: false, reason: 'duplicate', existing: data.existing }
-  const reason = status === 0 ? 'unreachable' : data.error === 'run_active' ? 'run_active' : data.error === 'no_python' ? 'no_python' : data.error === 'no_intelligence' ? 'no_intelligence' : data.error === 'invalid' ? 'invalid' : 'failed'
+  const reason = status === 0 ? 'unreachable' : data.error === 'run_active' ? 'run_active' : data.error === 'no_python' ? 'no_python' : data.error === 'no_intelligence' ? 'no_intelligence' : data.error === 'invalid' ? 'invalid' : data.error === 'deleted' ? 'deleted' : 'failed'
   return { ok: false, reason, message: MESSAGES[reason] }
 }
 

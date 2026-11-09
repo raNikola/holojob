@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react'
-import { adoptStored, getJobsSnapshot, getStoredJob, subscribe } from '../modules/jobs/jobsStore'
+import { getJobsSnapshot, getStoredJob, subscribe, syncMemoryJobs } from '../modules/jobs/jobsStore'
 
 const listen = (onChange) => subscribe(onChange)
 
@@ -18,14 +18,8 @@ export function useStoredJob(jobId) {
  * write from another tab, take the stored fields in. The screen's own saves are ignored.
  */
 export function useJobsSync(setState) {
-  useEffect(() => subscribe(({ source, removedId }) => {
-    if (source === 'save') return
-    setState((prev) => {
-      const stored = getJobsSnapshot().jobs
-      const have = new Set(stored.map((job) => job.jobId))
-      // A hand-entered job is stored before any screen holds it, so one missing from another tab's write was deleted there.
-      const alive = prev.jobs.filter((job) => job.jobId !== removedId && !(source === 'storage' && job.manualEntry && !have.has(job.jobId)))
-      return { ...prev, jobs: adoptStored(alive, stored) }
-    })
+  useEffect(() => subscribe((event) => {
+    if (event.source === 'save') return
+    setState((prev) => ({ ...prev, jobs: syncMemoryJobs(prev.jobs, getJobsSnapshot().jobs, event) }))
   }), [setState])
 }

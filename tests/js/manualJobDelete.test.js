@@ -2,9 +2,9 @@ import React, { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { importJobsFromFile, loadJobs, saveJobs } from '../../src/modules/jobs/jobStorage.js'
-import { adoptStored, getStoredJob, invalidateJobs, subscribe } from '../../src/modules/jobs/jobsStore.js'
+import { adoptStored, getStoredJob, invalidateJobs, subscribe, syncMemoryJobs } from '../../src/modules/jobs/jobsStore.js'
 import { buildManualJob } from '../../src/modules/jobs/manualJob.js'
-import { deleteConfirmMessage, deleteManualJob } from '../../src/modules/jobs/manualScoring.js'
+import { deleteConfirmMessage, deleteManualJob, scoreOnServer } from '../../src/modules/jobs/manualScoring.js'
 
 const ID = 'manual-123e4567-e89b-12d3-a456-426614174000'
 const FORM = { title: 'Product Manager Canary', company: 'Acme', description: 'Own the roadmap.', jobUrl: 'https://acme.example/jobs/9', notes: 'n', extraLinks: [] }
@@ -88,5 +88,27 @@ describe('as rendered', () => {
 
   it('the confirmation names the job title', () => {
     expect(deleteConfirmMessage(getStoredJob(ID))).toContain('“Product Manager Canary”')
+  })
+})
+
+describe('stale-tab protection', () => {
+  it('the scoring route answers 410 deleted and the client says so, nothing is stored', async () => {
+    const fetchFn = vi.fn(async () => json(410, { ok: false, error: 'deleted' }))
+    const result = await scoreOnServer({ jobId: ID, title: 'PM', company: 'Acme', description: 'x', jobUrl: FORM.jobUrl }, { fetchFn })
+    expect(result).toMatchObject({ ok: false, reason: 'deleted' })
+    expect(result.message).toMatch(/deleted on the server/)
+  })
+
+  it('the other tab drops the row on the storage event, and its own save cannot write it back', async () => {
+    const memory = loadJobs().jobs // this tab's screen state, still holding the job
+    saveJobs({ ...loadJobs(), jobs: memory.filter((j) => j.jobId !== ID) }) // what the deleting tab wrote
+    const stored = loadJobs().jobs
+    const next = syncMemoryJobs(memory, stored, { source: 'storage' })
+    expect(next.map((j) => j.jobId)).toEqual(['d-1'])
+    // Without the rule the screen keeps the row (the old behaviour), and its save effect would write it back:
+    expect(adoptStored(memory, stored).map((j) => j.jobId)).toContain(ID)
+    // A job only this tab holds and that is not hand-entered is untouched; other sources keep memory-only rows.
+    const local = { jobId: 'local-1', title: 'x', manualEntry: true }
+    expect(syncMemoryJobs([...memory, local], stored, { source: 'patch' }).map((j) => j.jobId)).toContain('local-1')
   })
 })

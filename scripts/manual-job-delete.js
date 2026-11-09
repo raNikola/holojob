@@ -14,7 +14,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { loadStore, normalizeUrl } from './application-store.js'
+import { loadStore, normalizeUrl, withApplicationLock } from './application-store.js'
 import { removeJobStateEntries } from './job-state-store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -72,30 +72,35 @@ function runDelete(jobId, { spawnFn = spawn, python = VENV_PYTHON, root = ROOT }
 export async function deleteManualJob(root, body, options = {}) {
   const jobId = body?.jobId
   if (typeof jobId !== 'string' || !JOB_ID.test(jobId)) return { status: 422, body: { ok: false, error: 'invalid', field: 'jobId' } }
-  let applicationIds
-  try {
-    const urls = [body.jobUrl, serverJobUrl(root, jobId)].filter((u) => typeof u === 'string' && u)
-    applicationIds = applicationsForJob(loadStore(root), jobId, urls)
-  } catch {
-    return { status: 500, body: { ok: false, error: 'tracker_unreadable', message: 'The application tracker could not be read, so nothing was deleted.' } }
-  }
-  if (applicationIds.length) {
-    return {
-      status: 409,
-      body: {
-        ok: false,
-        error: 'has_application',
-        applicationIds,
-        message: 'This job has an application in the tracker (including voided ones), so it cannot be deleted. Voiding the application does not unlock deletion.',
-      },
+  // One critical section: the application store's own lock (every application write takes it), then, inside Python, the pipeline lock.
+  // Always in that order and nothing takes them the other way round, so there is no deadlock. A concurrent create either finished
+  // before the check below (delete refused) or waits until the delete is done, and then finds the job's id remembered as deleted.
+  return withApplicationLock(root, async () => {
+    let applicationIds
+    try {
+      const urls = [body.jobUrl, serverJobUrl(root, jobId)].filter((u) => typeof u === 'string' && u)
+      applicationIds = applicationsForJob(loadStore(root), jobId, urls)
+    } catch {
+      return { status: 500, body: { ok: false, error: 'tracker_unreadable', message: 'The application tracker could not be read, so nothing was deleted.' } }
     }
-  }
-  const pythonPath = options.python ?? VENV_PYTHON
-  if (!options.spawnFn && !fs.existsSync(pythonPath)) return { status: 503, body: { ok: false, error: 'no_python' } }
-  const { code, result } = await runDelete(jobId, { ...options, root })
-  if (code === 75) return { status: 409, body: { ok: false, error: 'run_active', message: 'A run is active. Try again when it has finished.' } }
-  if (code === 6) return { status: 422, body: { ok: false, error: 'not_manual', message: 'Only hand-entered jobs can be deleted.' } }
-  if (code !== 0 || !result.ok) return { status: 500, body: { ok: false, error: 'delete_failed' } }
-  const state = await removeJobStateEntries(root, jobId)
-  return { status: 200, body: { ok: true, removed: { ...result.removed, state: state.removed } } }
+    if (applicationIds.length) {
+      return {
+        status: 409,
+        body: {
+          ok: false,
+          error: 'has_application',
+          applicationIds,
+          message: 'This job has an application in the tracker (including voided ones), so it cannot be deleted. Voiding the application does not unlock deletion.',
+        },
+      }
+    }
+    const pythonPath = options.python ?? VENV_PYTHON
+    if (!options.spawnFn && !fs.existsSync(pythonPath)) return { status: 503, body: { ok: false, error: 'no_python' } }
+    const { code, result } = await runDelete(jobId, { ...options, root })
+    if (code === 75) return { status: 409, body: { ok: false, error: 'run_active', message: 'A run is active. Try again when it has finished.' } }
+    if (code === 6) return { status: 422, body: { ok: false, error: 'not_manual', message: 'Only hand-entered jobs can be deleted.' } }
+    if (code !== 0 || !result.ok) return { status: 500, body: { ok: false, error: 'delete_failed' } }
+    const state = await removeJobStateEntries(root, jobId)
+    return { status: 200, body: { ok: true, removed: { ...result.removed, state: state.removed } } }
+  })
 }

@@ -191,6 +191,17 @@ export function adoptStored(memoryJobs, storedJobs) {
   return [...merged, ...storedJobs.filter((job) => !known.has(job.jobId))]
 }
 
+/**
+ * What a screen that keeps its own list holds after a store event: the stored fields taken in, the removed job dropped, and, for a
+ * write from another tab (`storage`), a hand-entered row the stored list no longer has. A hand-entered job is stored before any screen
+ * holds it, so one missing there was deleted there; keeping it would let the screen's own save write it back.
+ */
+export function syncMemoryJobs(memoryJobs, storedJobs, { source, removedId } = {}) {
+  const have = new Set(storedJobs.map((job) => job.jobId))
+  const alive = memoryJobs.filter((job) => job.jobId !== removedId && !(source === 'storage' && job.manualEntry && !have.has(job.jobId)))
+  return adoptStored(alive, storedJobs)
+}
+
 /** A prop copy of a job with the stored record on top, except tracking, which the screen derives from the application store. */
 export function mergeLive(job, stored) {
   if (!stored) return job
