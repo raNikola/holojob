@@ -18,6 +18,7 @@ import { getProjectScanStatus, runProjectScan } from './run-project-scan.js'
 import { runJobImport } from './run-job-import.js'
 import { checkClaudeAuth, ensureClaudeLogin } from './claude-auth.js'
 import { saveProfileToDisk, PROFILE_PATH } from './save-profile.js'
+import { backupProfileForImport, BACKUP_ERRORS, BackupError } from './profile-backup.js'
 import { runProfileReset, RESET_CONFIRM_WORD, RESET_ERRORS } from './profile-reset.js'
 import { saveIntelligenceToDisk, INTELLIGENCE_PATH } from './save-intelligence.js'
 import { checkAiFinding, runAiFeature, runAiFeatureStream, runAiChat, getAiStatus, getAiModels } from './run-ai.js'
@@ -748,6 +749,21 @@ export async function handleApiRequest(req, res) {
       sendJson(res, 200, { ok: true, ...result })
     } catch (e) {
       sendJson(res, 400, { error: e.message })
+    }
+    return true
+  }
+
+  // Backup taken when an import is applied: the browser's current profile (the master) is written, read back and kept (newest 10).
+  // Fixed answers only.
+  if (url === '/api/profile/backup' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req, res, { limit: MAX_LARGE_BODY_BYTES })
+      const result = backupProfileForImport(ROOT, body?.profile)
+      sendJson(res, 200, { ok: true, ...result })
+    } catch (e) {
+      const code = e instanceof BackupError ? e.code : 'invalid_profile'
+      const { status, error } = BACKUP_ERRORS[code]
+      sendJson(res, status, { ok: false, code, error })
     }
     return true
   }

@@ -141,13 +141,14 @@ describe('uploaded CVs', () => {
 })
 
 describe('profile mirror', () => {
-  it('asks for 600 / 700 on the file and folder it creates', () => {
-    // The path is fixed under the repo, so the writes are intercepted and never reach the real file.
-    const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {})
-    const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
-    saveProfileToDisk({ basicProfile: {} })
-    expect(mkdir).toHaveBeenCalledWith(path.dirname(PROFILE_PATH), { recursive: true, mode: 0o700 })
-    expect(write).toHaveBeenCalledWith(PROFILE_PATH, expect.any(String), { encoding: 'utf-8', mode: 0o600 })
+  it('creates the file 600 and the folder 700, through a temp file and a rename', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mirror-'))
+    const file = path.join(dir, 'profile/candidate-profile.json')
+    saveProfileToDisk({ basicProfile: {} }, file)
+    expect(fs.statSync(file).mode & 0o777).toBe(0o600)
+    expect(fs.statSync(path.dirname(file)).mode & 0o777).toBe(0o700)
+    expect(fs.readdirSync(path.dirname(file))).toEqual(['candidate-profile.json'])
+    expect(PROFILE_PATH.endsWith('data/profile/candidate-profile.json')).toBe(true)
   })
 })
 

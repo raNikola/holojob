@@ -287,12 +287,13 @@ Left for a later slice from slice 1: scored, closed, missing and expired counts 
 source are unreliable. It never closes ads automatically. `joberty_client.py` also drops listing pages it could not read
 ([details](DECISIONS.md#activity-slice-1-as-built-2026-11-02)).
 
-## Import redesign - in progress
+## Import redesign (Wave 7) - in progress
 
 Sources and design: [DECISIONS.md](DECISIONS.md#import-redesign).
 
-| Slice | Content | Status on 2026-11-02 |
+| Slice | Content | Status |
 |---|---|---|
+| S0 | Atomic profile mirror write; import backup route (last 10, profile JSON only) | Built on `wave7-profile-import` (2026-11-09) |
 | 1a | Wizard, paste step, review screen | Done |
 | 1b | TXT / MD and DOCX | Not built ("Other file types are coming"). `python-docx` is already pinned |
 | 3 | PDF and LinkedIn PDF | Listed after 1b, but both are already in the code (`PdfStep`, `4f2cd7e`). Real-file test below still open |

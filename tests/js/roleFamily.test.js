@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
+import os from 'node:os'
+import nodePath from 'node:path'
 import roleFamilies from '../../src/data/roleFamilies.json'
 import { ROLE_FAMILY_IDS, ROLE_FAMILY_LABELS, normalizeRoleFamily } from '../../src/utils/roleFamily.js'
 import { generateCandidateIntelligence } from '../../src/modules/intelligence/candidateIntelligenceEngine.js'
@@ -61,13 +63,9 @@ describe('profile write-through', () => {
   })
 
   it('reaches the disk mirror Python reads', () => {
-    const written = []
-    vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {})
-    vi.spyOn(fs, 'writeFileSync').mockImplementation((path, data) => written.push([String(path), data]))
-    saveProfileToDisk(buildExportProfile(withFamily('product')))
-    expect(written).toHaveLength(1)
-    expect(written[0][0]).toMatch(/data\/profile\/candidate-profile\.json$/)
-    expect(JSON.parse(written[0][1]).basicProfile.roleFamily).toBe('product')
+    const file = nodePath.join(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'rf-')), 'candidate-profile.json')
+    saveProfileToDisk(buildExportProfile(withFamily('product')), file)
+    expect(JSON.parse(fs.readFileSync(file, 'utf-8')).basicProfile.roleFamily).toBe('product')
   })
 })
 

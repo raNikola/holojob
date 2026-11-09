@@ -1069,7 +1069,7 @@ Earlier related decision: top 50 per run ([redesign/DECISIONS.md](redesign/DECIS
   code's default, not the current state. The same file also caps calls at `maxCallsDaily` 5 and `maxCallsMonthly` 25.
 - Ollama: no binary on the host or in the container, and no running service. It remains a provider in the code and the price table.
 
-## Import redesign
+## Import redesign (Wave 7)
 
 **Approved sources:** PDF, DOCX, TXT / MD, pasted text, LinkedIn data ZIP, JSON Resume, LinkedIn PDF, manual form.
 **Rejected:** PDF URL, LinkedIn profile URL.
@@ -1087,6 +1087,19 @@ Slice order and status: [ROADMAP.md](ROADMAP.md). Draft shape: [redesign/data-sh
 
 **Code check, differs in one place:** the first CV imported becomes the active one (`willBeActive` in `importDraft.js`); any
 later import does not. The rest of what is built matches.
+
+### Wave 7: profile import, approved plan and rules (2026-11-09, branch `wave7-profile-import`)
+
+Slices in order: S0 safe writes, S1 draft contract + guarded apply, S2 TXT/MD, S3 JSON Resume, S4 DOCX, S6 PDF real-file hardening, S7 manual form ("Start blank" draft in the same review screen), S5 LinkedIn data ZIP last (waits for the owner's real file names and header rows; 7-file allowlist: Profile, Positions, Education, Skills, Languages, Certifications, Projects). Limits: text 200 KB, DOCX/PDF 10 MB, ZIP 50 MB, no OCR. The Serbian heading vocabulary stays. Import happens on the browser master; the write path stays one swappable function so Step 5 can re-point it (Wave 7 does not grow into Step 5).
+
+**Owner answers:** Replace stays (per section only, double confirm, never over edited fields); an imported CV never becomes active automatically (only the first CV of an empty profile); backups: last 10, profile JSON only; explicit "profile changed, regenerate intelligence" banner (regeneration stays the owner's action); cache impact preview with counts in the confirm screen.
+
+**Rules (binding):**
+- **Backup only at import apply time.** `POST /api/profile/backup` is called by the import apply step and by nothing else; an ordinary profile save never makes a backup. It writes the browser's current profile (the master, not the older mirror) to `data/backups/profile-import-<stamp>[-n]/candidate-profile.json` (600/700), reads it back, and keeps the newest 10 folders of that name only (`scripts/profile-backup.js`).
+- Apply requires a successful backup first; a failed backup aborts with nothing written.
+- A failed mirror sync is shown as "not synced yet"; retry resends the already-applied profile and never re-applies the import. Idempotency is proved by tests of repeated Apply (Merge and Replace) and of an apply interrupted at sync followed by a retry, not by the draft hash alone.
+
+**S0 built:** `writeProfileFile` (every Node write of `data/profile/candidate-profile.json`: save, pipeline, rescrape, discovery, tailor) is now temp file + fsync + rename (`replaceFileAtomic`); it was a plain `writeFileSync`. Two tests that mocked `writeFileSync` now write a temp file and check the result.
 
 ## Product principles
 
