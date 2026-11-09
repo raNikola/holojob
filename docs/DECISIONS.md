@@ -1452,3 +1452,13 @@ Branch `wave5-infostud-description`, local, not merged, nothing deployed, no pro
 - **Cause:** `jobResolve.js` takes the stored browser row, then the scored or discovered file, and asks the ledger only when the text is blank (`loadJobSources`, `resolveJob`). A non-blank teaser in a row or file therefore always won. The API was not at fault: `/api/jobs/history/<id>` and `/api/jobs/texts` serve the ledger text, and the ledger index reloads on a changed file signature. Not checked: the owner's browser rows (private).
 - **Fix (display only, nothing written):** `loadJobSources` also asks the ledger for an Infostud row not marked `complete`; `resolveJob` replaces a text not marked `complete` with a complete ledger text. Hand-entered jobs and texts already marked complete are never replaced. Tests in `tests/js/jobResolve.test.js`.
 - **Not fixed here:** the files and browser rows stay stale until the next discovery run rewrites them from the ledger. The list-level description (search filter, AI context) still reads the row text, so it keeps the teaser until then.
+
+## Infostud ad shown in English: diagnosis, no bug (2026-11-09)
+
+The owner saw the Product Owner ad (Cyrillic Software, Infostud 762924) in English in Job Details and expected Serbian. Findings (code, counts and one polite GET of that public ad; no body text printed, no data changed):
+
+- **No locale is forced.** `infostud_client._get` sends `Accept-Language: sr,en;q=0.8` (Serbian first); the URLs carry no locale. The detail page answers `<html lang="sr">`, with no `locale`, `defaultLocale` or hreflang alternates in `__NEXT_DATA__`. So Infostud is not being asked for an English version.
+- **The app never translates.** No translation, language detection or translation cache exists in `python/` or `src/`. The only model prompts that mention it say "never translate" (`ad_ai.py`, CV analysis). Job Details shows `job.description` as stored (or the ledger's, `jobResolve.js`), not an AI field.
+- **The English is in Infostud's own `textAd`.** The live `__NEXT_DATA__ -> job.textAd` is English (about 83 common English words, 0 Serbian) and matches the stored text (3064 chars, `descriptionSource: next_data`, `complete`; no Cyrillic or Serbian diacritics). Of the 9 repaired Infostud ads, 6 are English and 3 Serbian: the employer writes each ad in its own language.
+
+Decision: no code change. If the owner's browser shows a Serbian body for this ad, it is a different view of the same listing (for example a Serbian blurb beside an English `textAd`); the owner should compare, and a re-fetch of the 9 repaired ads would not change this. Not run.
