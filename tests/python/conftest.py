@@ -7,6 +7,25 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
+import real_data_guard  # noqa: E402
+
+
+def pytest_sessionstart(session):
+    session.config._real_data_before = real_data_guard.fingerprint()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Fail the run when a test changed the owner's real profile, intelligence or applications (see real_data_guard.py)."""
+    before = getattr(session.config, "_real_data_before", None)
+    if before is None:
+        return
+    moved = real_data_guard.changes(before, real_data_guard.fingerprint())
+    if moved:
+        print("\nREAL DATA CHANGED DURING THE TEST RUN (a test must use a temp directory; if you saved the profile in the app meanwhile, run again):")
+        for line in moved:
+            print(f"  {line}")
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
 # Insert in reverse so job_scoring (last) wins import precedence over resume_generator.
 for sub in ("job_import", "llm", "job_discovery", "resume_generator", "job_scoring", "cv_analysis"):
     path = ROOT / "python" / sub
