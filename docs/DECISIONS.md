@@ -1591,3 +1591,29 @@ Notes kept for when it is considered again:
 Owner request, separate from the extension idea.
 
 **Company information standardization:** P1, Discovery roadmap. First step is the provider audit; the target record is one company record per normalised key, apart from jobs, with per-field source and observed time and a `known` / `unverified` / `missing` state. No private data and no personal contacts. Details: [ROADMAP.md](ROADMAP.md#discovery-improvement-company-information-standardization---planned--to-do).
+
+## Shared job database for several users: plan recorded (2026-11-09)
+
+Planning only: no code, test or data changed, and nothing is scheduled. Plan: [redesign/SHARED_JOB_DB_PLAN.md](redesign/SHARED_JOB_DB_PLAN.md). Principle 15 (single user for now) stays in force; this guides Step 5 so that a second user does not force a rewrite.
+
+**Owner directions recorded (binding for the plan):**
+
+1. Three layers: Job Catalog (one global record per ad with stable identity), Discovery (sources, queries, role families, scrape runs), User Workspace (scores, Keep, applications, notes, history). The same ad found twice is told apart from similar ads; similar ads are never auto-merged without a strong identity key.
+2. Role families are tags in a many-to-many relation on one shared database, not separate databases or tables.
+3. A global scheduler independent of users: freshness check first, TTL per source and family, concurrent requests share one run, rate limits and backoff per provider, Refresh shows existing results at once. "Source disabled globally" (operator) is separate from a per-user preference to hide a source.
+4. Two independent status axes: global (Active, Closed, Stale, Unknown) and per user (Unreviewed, Saved, Rejected, Applied). Global Closed never touches a user's application, snapshot or history. Ad changes are kept as versions; a changed description never alters the snapshot an application was based on. A shared ad is never deleted while any user references it.
+5. Shared AI extraction key = ad content + parser version + prompt version + model/provider (+ dictionary version), never a user profile. Each user gets a private fit score.
+6. Per-provider policy for what may be stored, processed and shared; restricted sources share metadata or a reference only.
+7. P1/P2 ideas (family subscriptions, new-ad notifications, canonical company dedupe, source coverage analytics) are ROADMAP notes only.
+
+**Findings from the code that the plan rests on:**
+
+- `llmFacts` and the requirement frames are keyed by the ad alone (`job_fingerprint.py`, `requirement_frames.py`), but the key has **no model or provider** and no separate parser version, so it falls short of direction 5 until slice S4.
+- The fit judge, the matcher / engine cache (`profile_version` in the key), CV analysis and the `jobAnalysis`, `coverLetter` and `interviewPrep` findings depend on the profile and stay per user. `companyIntelligence` includes AI memory in its key, so it is per user as built.
+- Term rarity (IDF) is built over the run's jobs, so a shared corpus would let one user's families move another user's Fit. The plan keeps a per-user corpus.
+- `jobId` is `sha256(raw URL)[:16]` and no canonical-URL step was found; it differs from the browser `matchKey`. The catalog keeps every existing `jobId` and adds identity keys; no re-keying.
+- Discovery search terms and locations are read from the owner's intelligence file today; in a shared design they come from family definitions.
+
+**Conflicts with earlier decisions, left for the owner (plan section 0.1):** `matchKey` versus a global `jobId` (STEP5 2.3); no login (Q3, request-guard) versus several users; principle 16 (sources are the user's configuration) versus a global scheduler; no `userId` on the Step 5 stores.
+
+**Not verified:** the terms of Infostud, Joberty and the board vendors, and the LinkedIn terms and account risk; the contents of `competency-aliases.json` and `requirement-remap.json` (not opened); how closing evidence is scoped in code beyond the board lines (to trace before the scheduler slice). Open owner questions Q1 to Q14 are in the plan.
