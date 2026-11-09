@@ -17,8 +17,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python" / "llm"))
+# Appended: other python folders have modules of the same name as the ones here.
+if str(ROOT / "python" / "cv_analysis") not in sys.path:
+    sys.path.append(str(ROOT / "python" / "cv_analysis"))
 
 import claude_code  # noqa: E402
+import redact  # noqa: E402
 
 PROJECT_INTEL_PATH = ROOT / "data/intelligence/project-intelligence.json"
 
@@ -89,6 +93,42 @@ def load_project_intelligence() -> dict:
     return {}
 
 
+# What redact.py leaves in the text in place of a name, e-mail, phone number or link. A draft that has one in it
+# copied a placeholder instead of writing a sentence, and would print "[NAME]" in a document.
+PLACEHOLDER_RE = re.compile(r"\[(?:NAME|EMAIL|PHONE|LINK)\]")
+
+
+def _identity(parsed: dict) -> tuple[str, list[str]]:
+    """The name and links of the candidate as the parser read them: what redact.py needs besides its patterns."""
+    name = str(parsed.get("name") or "").strip()
+    if name.lower() == "candidate":  # the parser's stand-in when the CV has no name
+        name = ""
+    links = [str(l).strip() for l in parsed.get("links") or [] if str(l or "").strip()]
+    return name, links
+
+
+def _redact_tree(value, name: str, links: list[str]):
+    """The same structure with every text redacted (keys are ours and stay)."""
+    if isinstance(value, str):
+        return redact.redact_cv_text(value, name, links)[0]
+    if isinstance(value, list):
+        return [_redact_tree(v, name, links) for v in value]
+    if isinstance(value, dict):
+        return {k: _redact_tree(v, name, links) for k, v in value.items()}
+    return value
+
+
+def _texts(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, list):
+        for v in value:
+            yield from _texts(v)
+    elif isinstance(value, dict):
+        for v in value.values():
+            yield from _texts(v)
+
+
 def _is_text_or_none(value) -> bool:
     return value is None or isinstance(value, str)
 
@@ -109,6 +149,8 @@ def _entries(data: dict, key: str, issues: list[str]) -> list[dict]:
 def _validate(data: dict, parsed: dict) -> list[str]:
     """Structural checks before the caller's provenance/lint gates."""
     issues = []
+    if any(PLACEHOLDER_RE.search(t) for t in _texts(data)):
+        issues.append("draft contains a redaction placeholder")
     if not isinstance(data.get("subtitle"), str) or not data["subtitle"].strip():
         issues.append("missing subtitle")
     if not isinstance(data.get("summary"), str) or len(data["summary"]) < 80:
@@ -140,10 +182,14 @@ def _validate(data: dict, parsed: dict) -> list[str]:
     return issues
 
 
-def generate_llm_content(parsed: dict, intelligence: dict, job: dict) -> tuple[dict | None, str]:
-    """Returns (content, '') or (None, reason). Caller must fact-check before use."""
-    if not claude_code.is_available():
-        return None, claude_code.availability()["reason"]
+def build_prompt(parsed: dict, intelligence: dict, job: dict) -> tuple[str | None, str]:
+    """(prompt, '') or (None, reason). Every text that goes in is redacted first (name, e-mails, phones, links, with the
+    name and links the parser read), and a final check on the redacted texts fails closed: if anything of the candidate's
+    is left, nothing is built and so nothing is sent."""
+    name, links = _identity(parsed)
+
+    def clean(value):
+        return _redact_tree(value, name, links)
 
     intel_slim = {
         "candidateSummary": intelligence.get("candidateSummary"),
@@ -160,22 +206,45 @@ def generate_llm_content(parsed: dict, intelligence: dict, job: dict) -> tuple[d
         ],
     } if project_intel else "none available"
 
-    prompt = PROMPT_TEMPLATE.format(
-        title=job.get("title") or "",
-        company=job.get("company") or "",
-        location=job.get("location") or "",
-        description=_strip_html(job.get("description") or "")[:5000],
-        parsed_resume=json.dumps(
-            {k: parsed.get(k) for k in ("about_me", "experience", "skill_categories", "education")},
-            ensure_ascii=False, indent=1),
-        intelligence=json.dumps(intel_slim, ensure_ascii=False, indent=1),
-        project_intel=json.dumps(project_slim, ensure_ascii=False, indent=1) if isinstance(project_slim, dict) else project_slim,
-    )
+    sent = {
+        "title": clean(job.get("title") or ""),
+        "company": clean(job.get("company") or ""),
+        "location": clean(job.get("location") or ""),
+        "description": clean(_strip_html(job.get("description") or "")[:5000]),
+        "parsed_resume": clean({k: parsed.get(k) for k in ("about_me", "experience", "skill_categories", "education")}),
+        "intelligence": clean(intel_slim),
+        "project_intel": clean(project_slim),
+    }
+    leaks = redact.find_leaks("\n".join(_texts(sent)), name, links)
+    if leaks:
+        return None, f"personal details could not be removed ({', '.join(leaks)}), so nothing was sent"
+
+    return PROMPT_TEMPLATE.format(
+        title=sent["title"],
+        company=sent["company"],
+        location=sent["location"],
+        description=sent["description"],
+        parsed_resume=json.dumps(sent["parsed_resume"], ensure_ascii=False, indent=1),
+        intelligence=json.dumps(sent["intelligence"], ensure_ascii=False, indent=1),
+        project_intel=json.dumps(sent["project_intel"], ensure_ascii=False, indent=1)
+        if isinstance(sent["project_intel"], dict) else sent["project_intel"],
+    ), ""
+
+
+def generate_llm_content(parsed: dict, intelligence: dict, job: dict) -> tuple[dict | None, str]:
+    """Returns (content, '') or (None, reason). Caller must fact-check before use."""
+    if not claude_code.is_available():
+        return None, claude_code.availability()["reason"]
+
+    prompt, refused = build_prompt(parsed, intelligence, job)
+    if prompt is None:
+        return None, refused
 
     with claude_code.ai_gate.context(feature="tailoring", job_id=job.get("jobId")):
         data, err = claude_code.complete_json(prompt, timeout=300)
     if data is None:
-        return None, err
+        name, links = _identity(parsed)
+        return None, redact.redact_cv_text(err, name, links)[0]
     issues = _validate(data, parsed)
     if issues:
         return None, "; ".join(issues)

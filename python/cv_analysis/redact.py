@@ -72,6 +72,26 @@ def identity_of(profile: dict | None) -> tuple[str, list[str]]:
     return name, [str(l).strip() for l in links if str(l or "").strip()] if isinstance(links, list) else []
 
 
+def find_leaks(text: str, name: str = "", links: list[str] | None = None) -> list[str]:
+    """What of the owner's is still in `text` after redaction; empty when it is clean.
+
+    The final check of every caller that sends redacted text: it fails closed, so a pattern the redaction missed
+    stops the call instead of reaching the provider."""
+    leaks = []
+    if EMAIL_RE.search(text):
+        leaks.append("an e-mail address")
+    if any(_is_phone(m.group(0)) for m in PHONE_RE.finditer(text)):
+        leaks.append("a phone number")
+    if name and _name_spans(text, [name]):
+        leaks.append("the owner's name")
+    for link in links or []:
+        bare = re.sub(r"^https?://", "", (link or "").strip(), flags=re.I).rstrip("/").lower()
+        if bare and bare in text.lower():
+            leaks.append("a profile link")
+            break
+    return leaks
+
+
 def redact_cv_text(text: str, full_name: str = "", links: list[str] | None = None) -> tuple[str, dict]:
     """(redacted text, how many of each kind were removed)."""
     removed = {"names": 0, "emails": 0, "phones": 0, "links": 0}

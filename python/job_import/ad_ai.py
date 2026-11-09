@@ -102,23 +102,8 @@ def load_profile(path: Path = PROFILE_PATH):
 
 
 def find_leaks(text: str, name: str, links: list[str]) -> list[str]:
-    """What of the owner's is still in `text` after redaction; empty when it is clean."""
-    leaks = []
-    if redact.EMAIL_RE.search(text):
-        leaks.append("an e-mail address")
-    if any(redact._is_phone(m.group(0)) for m in redact.PHONE_RE.finditer(text)):
-        leaks.append("a phone number")
-    folded = _fold(text)
-    for word in {w for w in re.findall(r"\w+", _fold(name)) if len(w) >= 3}:
-        if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", folded):
-            leaks.append("the owner's name")
-            break
-    for link in links or []:
-        bare = re.sub(r"^https?://", "", (link or "").strip(), flags=re.I).rstrip("/").lower()
-        if bare and bare in text.lower():
-            leaks.append("a profile link")
-            break
-    return leaks
+    """What of the owner's is still in `text` after redaction; empty when it is clean (the shared check in redact.py)."""
+    return redact.find_leaks(text, name, links)
 
 
 def build_request(page_text: str, want, profile) -> dict:

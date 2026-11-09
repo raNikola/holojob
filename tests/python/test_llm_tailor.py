@@ -252,8 +252,6 @@ def _in_project_intel(parsed, intel, project, text):
     project["projects"][0]["highlights"] = [text]
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG (known gap, DECISIONS.md principle 14, Phase 4): llm_tailor has no redaction "
-                                       "pass, so an identifier inside a section it sends goes to the provider")
 @pytest.mark.parametrize("identifier", IDENTIFIERS)
 @pytest.mark.parametrize("place", [_in_about_me, _in_a_bullet, _in_a_skill, _in_education, _in_the_pitch,
                                    _in_a_highlight, _in_project_intel], ids=lambda f: f.__name__)
@@ -265,13 +263,46 @@ def test_an_identifier_inside_a_sent_section_is_redacted(allowed, tmp_path, plac
     assert identifier not in allowed.prompt
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG (known gap, DECISIONS.md principle 14, Phase 4): the summary of a real CV "
-                                       "that names its owner reaches the provider through the parser, unredacted")
 def test_a_cv_summary_that_names_its_owner_is_redacted_end_to_end(allowed):
     prof = profile()
     prof["resume"]["rawText"] = RAW_CV.replace(SUMMARY_TEXT, f"{NAME} is a product leader. Write to {EMAIL}.")
     generate(parse_resume_from_profile(prof))
     assert NAME not in allowed.prompt and EMAIL not in allowed.prompt
+
+
+def test_a_draft_that_copies_a_redaction_placeholder_is_rejected(allowed):
+    allowed.reply = json.dumps(good_output(summary="Product leader, reach [NAME] at [EMAIL] for billing platforms and partner tools."))
+    data, err = generate()
+    assert data is None and "placeholder" in err
+
+
+def test_nothing_is_sent_when_redaction_leaves_something_of_the_candidate(allowed, monkeypatch):
+    monkeypatch.setattr(llm_tailor.redact, "redact_cv_text", lambda text, *a, **k: (text, {}))
+    parsed = parse_resume_from_profile(profile())
+    _in_about_me(parsed, None, None, f"Write to {EMAIL}.")
+    data, err = generate(parsed)
+    assert data is None and "nothing was sent" in err
+    assert allowed.prompts == []
+
+
+def test_a_provider_error_that_echoes_a_contact_detail_is_masked_everywhere(allowed):
+    allowed.stdout = json.dumps({"is_error": True, "result": f"Cannot process {EMAIL} or {PHONE} at {LINKEDIN}"})
+    data, err = generate()
+    assert data is None and "Cannot process" in err
+    for identifier in (EMAIL, PHONE, LINKEDIN):
+        assert identifier not in err
+    assert all(identifier not in json.dumps(row) for row in ai_gate.read_ledger() for identifier in (EMAIL, PHONE, LINKEDIN))
+
+
+def test_an_unparseable_provider_output_is_masked_and_cut(allowed):
+    allowed.stdout = f"not json {EMAIL} " + "x" * 500
+    data, err = generate()
+    assert data is None and EMAIL not in err and len(err) < 260
+
+
+def test_the_project_scan_tools_cannot_read_commit_authors():
+    joined = " ".join(claude_code.READONLY_TOOLS)
+    assert "git log" not in joined and "git shortlog" not in joined
 
 
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG (known gap, DECISIONS.md principle 14, Phase 4): no confirm step; "

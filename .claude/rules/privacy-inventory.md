@@ -72,8 +72,11 @@ provider, each behind an explicit confirm; the browser AI features send redacted
   nothing leaves the server. Never stored: the prompt, keys, base URLs, an answer in which `ai-redact.js` (`findLeaks`) still finds an identifier. Details in
   `docs/redesign/STEP5_SERVER_MASTER_PLAN.md` section 2.8.
 - **Profile import** (`python/profile_import`, `scripts/run-profile-import.js`, Wave 7): no model, no network, no gate; a static test keeps it so. Failures answer with a fixed code only (no text, no file name); `/api/profile/import/impact` is read-only and answers counts and profile versions. The import backup (`/api/profile/backup`) is a local file under `data/backups`.
-- **Known gap:** LLM tailoring (`resume_generator/llm_tailor.py`, Claude Code CLI) also
-  sends candidate data (parsed CV sections about_me, experience, skill_categories,
-  education, an intelligence summary and project intelligence) with no confirm step and
-  no redaction pass. DECISIONS.md principle 14 requires both; it is scheduled with the
-  fact gate (Phase 4, `docs/ROADMAP.md`).
+- **LLM tailoring** (`resume_generator/llm_tailor.py`, Claude Code CLI) sends parsed CV sections (about_me, experience, skill_categories,
+  education), an intelligence summary and project intelligence, and the ad. Every text is redacted first (`redact.py` with the name and links the parser
+  read), then a final check (`redact.find_leaks`) fails closed: if anything of the candidate's is left, nothing is sent. A draft that copies a
+  placeholder (`[NAME]`, `[EMAIL]`, ...) is rejected. **Known gap until the confirm slice:** no confirm step yet (Phase 4, area 3).
+- **Project scan** (`claude_code.analyze_repo`): read-only tools in the repo; `git log` and `git shortlog` are not allowed, because they print commit
+  authors. `git show` can still print an author line (remaining risk).
+- **Provider error text** (`claude_code.safe_error`): output the provider returns inside an error string is cut to 200 characters with e-mails, phones and
+  links removed before it reaches an error, the ledger or `llmIssues`.

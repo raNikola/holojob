@@ -17,20 +17,35 @@ import logging
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import ai_gate
+
+_CV_ANALYSIS = str(Path(__file__).resolve().parents[1] / "cv_analysis")
+if _CV_ANALYSIS not in sys.path:
+    sys.path.append(_CV_ANALYSIS)
+
+import redact  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 READONLY_TOOLS = [
     "Read", "Grep", "Glob", "LS",
-    "Bash(git log:*)", "Bash(git shortlog:*)", "Bash(git diff:*)",
+    # No git log or git shortlog: they print the commit authors' names and e-mail addresses, which would go to the provider.
+    "Bash(git diff:*)",
     "Bash(git show:*)", "Bash(git branch:*)", "Bash(ls:*)", "Bash(wc:*)",
     "Bash(find:*)", "Bash(cat:*)",
 ]
 
 _availability: dict | None = None
+
+
+def safe_error(text, limit: int = 200) -> str:
+    """Provider output that ends up in an error string, the ledger or a stored reason: e-mail addresses, phone numbers
+    and links removed (redact.py), one line, cut to `limit`. The model can echo part of what it was sent."""
+    cleaned, _ = redact.redact_cv_text(str(text or ""))
+    return re.sub(r"\s+", " ", cleaned).strip()[:limit]
 
 
 def availability() -> dict:
@@ -95,13 +110,13 @@ def _call(args: list[str], prompt: str, timeout: int, cwd: str | None) -> tuple[
     except subprocess.TimeoutExpired:
         return None, f"Claude Code timed out after {timeout}s", {}
     except Exception as exc:
-        return None, str(exc), {}
+        return None, safe_error(exc), {}
     try:
         data = json.loads(proc.stdout or "{}")
     except json.JSONDecodeError:
-        return None, f"Unparseable Claude Code output: {proc.stdout[:200]}", {}
+        return None, f"Unparseable Claude Code output: {safe_error(proc.stdout)}", {}
     if data.get("is_error"):
-        return None, data.get("result") or "Claude Code error", usage_of(data)
+        return None, safe_error(data.get("result")) or "Claude Code error", usage_of(data)
     return data.get("result") or "", "", usage_of(data)
 
 
@@ -136,7 +151,7 @@ def complete_json(prompt: str, *, timeout: int = 240) -> tuple[dict | None, str]
         return None, err
     data = extract_json(text)
     if data is None:
-        return None, f"No JSON object in response: {text[:200]}"
+        return None, f"No JSON object in response: {safe_error(text)}"
     return data, ""
 
 
@@ -153,5 +168,5 @@ def analyze_repo(repo_path: str, prompt: str, *, timeout: int = 600) -> tuple[di
         return None, err
     data = extract_json(text)
     if data is None:
-        return None, f"No JSON object in response: {text[:200]}"
+        return None, f"No JSON object in response: {safe_error(text)}"
     return data, ""
