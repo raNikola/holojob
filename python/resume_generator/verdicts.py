@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +18,14 @@ from atomic_write import PRIVATE_FILE_MODE, write_text_atomic
 
 # Bump when the gate's rules change in a way that should invalidate earlier verdicts.
 GATE_VERSION = 1
+
+
+# What an application can attach: the generated CV and cover letter files (never a verdict file, a draft or anything hidden).
+DOCUMENT_RE = re.compile(r"^(?!\.)(?:tailored_resume\.(?:md|html)|cover_letter\.md|ai_cover_letter\.md|.+_(?:Resume|CoverLetter)\.(?:pdf|docx|json))$")
+
+
+def is_document(file_name: str) -> bool:
+    return bool(DOCUMENT_RE.match(file_name))
 
 
 def verdict_path(folder: Path, file_name: str) -> Path:
@@ -27,6 +36,19 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def write_verdict(folder: Path, file_name: str, sha256: str, passed: bool, issues: list[str]) -> None:
+    """Write the verdict for the file as it had the given hash when it was judged. A file that differs now simply does not match."""
+    body = {
+        "file": file_name,
+        "sha256": sha256,
+        "passed": bool(passed),
+        "issues": list(issues),
+        "gateVersion": GATE_VERSION,
+        "checkedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    write_text_atomic(verdict_path(folder, file_name), json.dumps(body, indent=2), new_file_mode=PRIVATE_FILE_MODE)
+
+
 def record_verdicts(folder: Path, file_names: list[str], passed: bool, issues: list[str]) -> list[str]:
     """Write a verdict for each of the named files that exists in `folder`; returns the names written."""
     written = []
@@ -34,15 +56,7 @@ def record_verdicts(folder: Path, file_names: list[str], passed: bool, issues: l
         file = folder / name
         if not file.is_file():
             continue
-        body = {
-            "file": name,
-            "sha256": file_sha256(file),
-            "passed": bool(passed),
-            "issues": list(issues),
-            "gateVersion": GATE_VERSION,
-            "checkedAt": datetime.now(timezone.utc).isoformat(),
-        }
-        write_text_atomic(verdict_path(folder, name), json.dumps(body, indent=2), new_file_mode=PRIVATE_FILE_MODE)
+        write_verdict(folder, name, file_sha256(file), passed, issues)
         written.append(name)
     return written
 

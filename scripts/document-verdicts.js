@@ -23,7 +23,7 @@ export function checkDocumentVerdict(dir, fileName) {
   try {
     body = JSON.parse(fs.readFileSync(verdictPath(dir, fileName), 'utf-8'))
   } catch {
-    return { ok: false, code: 'missing', reason: 'This document has not passed the automatic checks yet, so it cannot be attached. Generate it again, or re-check it (scripts: recheck_documents.py).' }
+    return { ok: false, code: 'missing', reason: 'This document has not passed the automatic checks yet, so it cannot be attached. Generate it again, or re-check it (python/resume_generator/recheck_documents.py).' }
   }
   let sha
   try {

@@ -10,7 +10,6 @@ Usage: .venv/bin/python scripts/inspect-document-verdicts.py [--root DIR]
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -21,17 +20,13 @@ sys.path.insert(0, str(ROOT / "python" / "job_scoring"))
 
 import verdicts  # noqa: E402
 
-# What an application can attach: the generated CV and cover letter files (not the verdict files or drafts).
-DOCUMENT_RE = re.compile(r"^(?!\.)(?:tailored_resume\.(?:md|html)|cover_letter\.md|ai_cover_letter\.md|.+_(?:Resume|CoverLetter)\.(?:pdf|docx|json))$")
-
-
 def inspect(resumes_root: Path) -> tuple[Counter, dict[str, list[str]]]:
     counts: Counter = Counter()
     jobs_by_status: dict[str, list[str]] = {}
     for folder in sorted(p for p in resumes_root.iterdir() if p.is_dir()) if resumes_root.is_dir() else []:
         seen = set()
         for file in sorted(folder.iterdir()):
-            if file.is_file() and DOCUMENT_RE.match(file.name):
+            if file.is_file() and verdicts.is_document(file.name):
                 state = verdicts.status(folder, file.name)
                 counts[state] += 1
                 seen.add(state)
