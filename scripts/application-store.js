@@ -25,6 +25,7 @@ import {
   CLOSED_COLUMNS,
   OUTCOMES,
 } from '../src/modules/applications/applicationEnums.js'
+import { checkDocumentVerdict } from './document-verdicts.js'
 import { foldApplication, isActive } from '../src/modules/applications/foldApplication.js'
 import {
   RegistryError,
@@ -399,7 +400,21 @@ function tailoredSource(paths, jobId, fileName, what) {
   if (!name || name !== fileName) throw new StoreError(400, `Invalid ${what} file name`)
   const file = path.join(paths.resumes, jobId, name)
   if (!fs.existsSync(file)) throw new StoreError(400, `The ${what} file does not exist`)
-  return { file, fileName: name }
+  // A generated document is attached only if the fact gate passed it and it is unchanged since (document-verdicts.js).
+  // The server reads the verdict itself; nothing the browser sends can stand in for it.
+  const verdict = checkDocumentVerdict(path.dirname(file), name)
+  if (!verdict.ok) {
+    throw new StoreError(409, verdict.reason, { reason: 'unverified_document', code: verdict.code, issues: verdict.issues ?? [] })
+  }
+  return { file, fileName: name, judgedSha: verdict.sha256 }
+}
+
+/** The copy must be the document that was judged: a file replaced between the check and the copy is refused and removed. */
+function assertJudged(src, dest, copiedSha) {
+  if (src.judgedSha && copiedSha !== src.judgedSha) {
+    fs.rmSync(dest, { force: true })
+    throw new StoreError(409, 'This document changed while it was being attached, so it was not attached. Try again.', { reason: 'unverified_document', code: 'changed', issues: [] })
+  }
 }
 
 /** Copy (never link) a file into the application's folder; returns its sha256. */
@@ -407,7 +422,9 @@ function freezeFile(dir, src) {
   fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE })
   const dest = path.join(dir, src.fileName)
   copyToNewFile(src.file, dest, PRIVATE_FILE_MODE)
-  return sha256(fs.readFileSync(dest))
+  const copiedSha = sha256(fs.readFileSync(dest))
+  assertJudged(src, dest, copiedSha)
+  return copiedSha
 }
 
 // --- duplicate rules (6c) --------------------------------------------------------------------
@@ -705,7 +722,9 @@ function freezeUnique(dir, src) {
       if (e.code === 'EEXIST') continue
       throw e
     }
-    return { fileName, dest, sha256: sha256(fs.readFileSync(dest)) }
+    const copiedSha = sha256(fs.readFileSync(dest))
+    assertJudged(src, dest, copiedSha)
+    return { fileName, dest, sha256: copiedSha }
   }
 }
 

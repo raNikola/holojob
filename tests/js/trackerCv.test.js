@@ -1,3 +1,4 @@
+import { writeVerdict } from './helpers/documentVerdict.js'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -42,6 +43,7 @@ beforeEach(async () => {
   write(`data/profile/cvs/${LIB_ID}.pdf`, '%PDF-main')
   write(`data/profile/cvs/${OTHER_LIB_ID}.pdf`, '%PDF-short')
   write(`data/resumes/${JOB_ID}/${TAILORED}`, '%PDF-tailored')
+  writeVerdict(path.join(root, `data/resumes/${JOB_ID}`), TAILORED)
   const now = () => new Date('2026-11-03T10:00:00.000Z')
   server = http.createServer(async (req, res) => {
     if (!(await store.handleApplicationsRequest(req, res, req.url.split('?')[0], { root, now }))) { res.statusCode = 418; res.end() }

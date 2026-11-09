@@ -57,3 +57,17 @@ def read_verdict(folder: Path, file_name: str) -> dict | None:
     except (OSError, ValueError, AttributeError):
         pass
     return None
+
+
+def status(folder: Path, file_name: str) -> str:
+    """'verified', 'failed' (the gate refused it), 'changed' (the file differs from what was judged), 'old_gate' or 'missing'."""
+    try:
+        body = json.loads(verdict_path(folder, file_name).read_text(encoding="utf-8"))
+        current = file_sha256(folder / file_name)
+    except (OSError, ValueError):
+        return "missing"
+    if not isinstance(body, dict) or body.get("file") != file_name or body.get("sha256") != current:
+        return "changed"
+    if not isinstance(body.get("gateVersion"), int) or body["gateVersion"] < GATE_VERSION:
+        return "old_gate"
+    return "verified" if body.get("passed") is True else "failed"

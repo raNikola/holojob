@@ -774,3 +774,96 @@ def test_every_file_goes_under_the_given_root(allowed, tmp_path):
     assert not real_resumes.exists()
     for key in ("resumeMd", "resumeHtml", "resumeJson", "coverLetterMd"):
         assert (tmp_path / job["tailoredAssets"][key]).is_file(), key
+
+
+# --- the verdict the application store reads, and the records tailoring must never touch ---------------
+
+
+def _verdict_status(tmp_path, name):
+    import verdicts
+
+    return verdicts.status(tmp_path / "data" / "resumes" / JOB["jobId"], name)
+
+
+DOCUMENTS = ("tailored_resume.md", "tailored_resume.html", "cover_letter.md")
+
+
+def test_every_document_of_a_run_gets_a_passing_verdict_bound_to_its_hash(allowed, tmp_path):
+    assets, _ = tailor(tmp_path)
+    assert assets["provenancePassed"] is True
+    for name in DOCUMENTS:
+        assert _verdict_status(tmp_path, name) == "verified", name
+    folder = tmp_path / "data" / "resumes" / JOB["jobId"]
+    sidecar = folder / ".tailored_resume.md.verdict.json"
+    assert sidecar.stat().st_mode & 0o777 == 0o600
+    body = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert body["passed"] is True and body["issues"] == [] and len(body["sha256"]) == 64
+
+
+def test_a_document_that_fails_the_final_check_gets_a_failing_verdict_and_the_reasons(allowed, tmp_path, monkeypatch):
+    monkeypatch.setattr(run_tailor, "check_document", lambda text, facts: ["Unverified number: 9"])
+    assets, _ = tailor(tmp_path)
+    assert assets["provenancePassed"] is False and assets["provenanceIssues"] == ["Unverified number: 9"]
+    for name in DOCUMENTS:
+        assert _verdict_status(tmp_path, name) == "failed", name
+    body = json.loads((tmp_path / "data" / "resumes" / JOB["jobId"] / ".cover_letter.md.verdict.json").read_text(encoding="utf-8"))
+    assert body["issues"] == ["Unverified number: 9"]
+
+
+def test_a_document_changed_after_the_run_no_longer_matches_its_verdict(allowed, tmp_path):
+    tailor(tmp_path)
+    (tmp_path / "data" / "resumes" / JOB["jobId"] / "cover_letter.md").write_text("edited afterwards", encoding="utf-8")
+    assert _verdict_status(tmp_path, "cover_letter.md") == "changed"
+    assert _verdict_status(tmp_path, "tailored_resume.md") == "verified"
+
+
+def test_a_rerun_replaces_the_verdicts_with_the_new_documents_hashes(allowed, tmp_path):
+    tailor(tmp_path)
+    allowed.reply = json.dumps(good_output(subtitle="Lead Product Manager | Billing"))
+    tailor(tmp_path)
+    for name in DOCUMENTS:
+        assert _verdict_status(tmp_path, name) == "verified", name
+
+
+def _snapshot(root):
+    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+def _make_application_records(tmp_path):
+    base = tmp_path / "data" / "applications"
+    (base / "files" / "app-1").mkdir(parents=True)
+    (base / "applications.json").write_text(json.dumps({"applications": {"app-1": {"events": [{"type": "application_voided"}]}}}))
+    (base / "files" / "app-1" / "Resume.pdf").write_bytes(b"%PDF frozen copy")
+    (base / "settings.json").write_text("{}")
+    return base
+
+
+@pytest.mark.parametrize("reply", ["good", "invented", "garbage"])
+def test_tailoring_never_touches_the_application_records(allowed, tmp_path, reply):
+    base = _make_application_records(tmp_path)
+    before = _snapshot(base)
+    allowed.reply = {"good": json.dumps(good_output()), "invented": json.dumps(_invent_in_summary("73% growth")), "garbage": "not json"}[reply]
+    tailor(tmp_path)
+    tailor(tmp_path)
+    assert _snapshot(base) == before
+
+
+def test_a_run_without_confirm_and_a_preview_never_touch_the_application_records(allowed, tmp_path, monkeypatch, capsys):
+    base = _make_application_records(tmp_path)
+    before = _snapshot(base)
+    _run_main(tmp_path, monkeypatch, capsys, extra=())
+    _run_main(tmp_path, monkeypatch, capsys, extra=("--preview",))
+    assert _snapshot(base) == before
+
+
+def test_no_phase_4_module_writes_under_the_application_store():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    guarded = [
+        "python/resume_generator/verdicts.py", "python/resume_generator/accept_cover_letter.py", "python/resume_generator/llm_tailor.py",
+        "python/resume_generator/provenance_checker.py", "python/resume_generator/run_tailor.py", "python/llm/claude_code.py",
+        "scripts/ai-draft-accept.js", "scripts/document-verdicts.js", "scripts/run-tailor.js", "scripts/inspect-document-verdicts.py",
+    ]
+    for rel in guarded:
+        assert "applications" not in (root / rel).read_text(encoding="utf-8").lower().replace("application store", "").replace("an application", "").replace("applications.", ""), rel

@@ -182,7 +182,7 @@ Decisions: [DECISIONS.md](DECISIONS.md#job-relevance-lifecycle-salary-and-deadli
 | 4. Job Details & Scoring UI | To Do | Wave 2 UI |
 | 5. Application Tracker | To Do | Wave 5 |
 | 6. Profile & Resume Management | To Do | Wave 6 profile import |
-| 7. Tailoring & Application Preparation | To Do | Wave 6 Phase 4 protections |
+| 7. Tailoring & Application Preparation | In progress | Wave 6 Phase 4 protections built on branch `phase4-fact-gate` (not merged): fact gate, tailoring redaction and confirm, draft + accept for the AI cover letter, verdicts checked when a document is attached. Browser AI features confirm stays in Step 6 |
 | 8. Settings & Sources | To Do | Wave 7 |
 | 9. Responsive, Accessibility & Visual Consistency | To Do | |
 

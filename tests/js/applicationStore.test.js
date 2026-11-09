@@ -11,6 +11,7 @@ import { createBackupStream, importBackupZip } from '../../scripts/backup-handle
 import { deleteCvFile } from '../../scripts/cv-store.js'
 import { daysBetween, daysInCurrentStage, daysInStage, foldApplication, isActive } from '../../src/modules/applications/foldApplication.js'
 import { boardColumn, labelFor } from '../../src/modules/applications/stageRegistry.js'
+import { writeVerdict } from './helpers/documentVerdict.js'
 
 const require = createRequire(import.meta.url)
 const AdmZip = require('adm-zip')
@@ -57,6 +58,7 @@ function makeRoot() {
   fs.writeFileSync(path.join(dir, `data/profile/cvs/${CV_B}.pdf`), PDF_B)
   fs.mkdirSync(path.join(dir, `data/resumes/${JOB.jobId}`), { recursive: true })
   fs.writeFileSync(path.join(dir, `data/resumes/${JOB.jobId}/Acme_Resume.pdf`), TAILORED)
+  writeVerdict(path.join(dir, `data/resumes/${JOB.jobId}`), 'Acme_Resume.pdf')
   return dir
 }
 
@@ -529,6 +531,7 @@ describe('frozen CV copies', () => {
 
   it('copies a tailored CV and cover letter from the job folder', async () => {
     fs.writeFileSync(path.join(root, `data/resumes/${JOB.jobId}/cover_letter.pdf`), Buffer.from('%PDF-1.4\nletter'))
+    writeVerdict(path.join(root, `data/resumes/${JOB.jobId}`), 'cover_letter.pdf')
     const app = (await create({
       attempt: { cv: { kind: 'tailored', fileName: 'Acme_Resume.pdf', label: 'Tailored' }, coverLetter: { fileName: 'cover_letter.pdf' } },
     })).json.application

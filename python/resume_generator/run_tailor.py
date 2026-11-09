@@ -7,7 +7,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,6 +29,7 @@ from resume_parser import parse_resume_from_profile, skill_label  # noqa: E402
 from resume_tailor import build_resume_context  # noqa: E402
 from docx_renderer import render_resume_docx  # noqa: E402
 from json_resume_export import build_json_resume  # noqa: E402
+from verdicts import record_verdicts, verdict_path  # noqa: E402
 from template_engine import (  # noqa: E402
     render_cover_letter_html,
     render_cover_letter_md,
@@ -152,6 +153,9 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     facts = build_canonical_facts(profile, intelligence)
     # The job's own title, company and location are the target of the documents and may be named in them.
     facts_with_job = facts | {str(job.get(k) or "").lower() for k in ("title", "company", "location") if job.get(k)}
+    # The letter template prints today's date (code, not a claim of the model).
+    today = date.today()
+    facts_with_job.add(f"{today.strftime('%B')} {today.day}, {today.year}".lower())
     content_engine = "rule-based"
     llm_paragraphs = None
     llm_issues: list[str] = []
@@ -242,6 +246,7 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     for stale in [*out_dir.glob("*_Resume.pdf"), *out_dir.glob("*_CoverLetter.pdf")]:
         if stale.name not in (pdf_path.name, cover_pdf_path.name):
             stale.unlink(missing_ok=True)
+            verdict_path(out_dir, stale.name).unlink(missing_ok=True)
 
     print("  · Generating PDFs (Playwright)…", flush=True)
     pdf_ok, resume_pages = render_single_page_pdf(
@@ -253,6 +258,15 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
             lambda fit: render_resume_html({**ctx, "fit": fit}), pdf_path, footer=True)
     cover_ok, cover_pages = render_single_page_pdf(
         lambda fit: render_cover_letter_html(cl_ctx), cover_pdf_path)
+
+    # The gate's verdict on every document of this run, bound to each file's hash. The application store reads it before it
+    # attaches a document, so a document that failed, or was never judged, cannot be sent. Written last: a crash before this
+    # leaves documents without a verdict, which are refused (fail closed).
+    record_verdicts(
+        out_dir,
+        [md_path.name, html_path.name, cover_path.name, json_resume_path.name, docx_path.name, pdf_path.name, cover_pdf_path.name],
+        passed, issues,
+    )
 
     validation = {
         "resumePages": resume_pages,
