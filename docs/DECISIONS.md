@@ -1574,7 +1574,7 @@ when the owner next saves that source) and drops a bad history or migrations val
 
 ## Browser extension Epic and company information standardization (planning only, 2026-11-09)
 
-Owner request, recorded on the docs-only branch `extension-epic-plan`. **Nothing is implemented, no dependency is installed, and every item is Planned / To Do.** Plan and acceptance criteria: [ROADMAP.md](ROADMAP.md#epic-holojobs-browser-extension-linkedin-job-and-profile-import---planned--to-do).
+Owner request, recorded on the docs-only branch `extension-epic-plan`. **Nothing is implemented, no dependency is installed, and every item is Planned / To Do.** Plan and acceptance criteria: [ROADMAP.md](ROADMAP.md#epic-holyjobs-browser-extension-linkedin-job-and-profile-import---planned--to-do).
 
 **Owner decisions recorded**
 
