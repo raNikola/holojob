@@ -83,3 +83,52 @@ describe('no test can change the real data/ folder', () => {
     expect(fs.existsSync(PROBE)).toBe(false)
   })
 })
+
+describe('the guard also covers modules that use named imports from node:fs', () => {
+  it('refuses writes made through `import { writeFileSync } from "node:fs"` and `node:fs/promises`', async () => {
+    const { writeNamed, renameNamed, writeNamedPromise } = await import('./fixtures/namedFsWriter.js')
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-named-'))
+    fs.writeFileSync(path.join(tmp, 's.txt'), 'x')
+    expect(() => writeNamed(PROBE)).toThrow(/real data/)
+    expect(() => renameNamed(path.join(tmp, 's.txt'), PROBE)).toThrow(/real data/)
+    await expect(writeNamedPromise(PROBE)).rejects.toThrow(/real data/)
+    expect(fs.existsSync(PROBE)).toBe(false)
+    writeNamed(path.join(tmp, 'ok.txt')) // a temp path still works
+    expect(fs.existsSync(path.join(tmp, 'ok.txt'))).toBe(true)
+  })
+})
+
+describe('the fingerprint guard (for spawned processes)', () => {
+  it('reports added, removed and changed files by name, from stat only, and ignores pipeline files', async () => {
+    const { changes, fingerprint } = await import('./setup/realDataFingerprint.js')
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fp-'))
+    for (const dir of ['data/profile', 'data/applications/files', 'data/intelligence', 'data/jobs']) fs.mkdirSync(path.join(root, dir), { recursive: true })
+    const put = (rel, text) => fs.writeFileSync(path.join(root, rel), text)
+    put('data/profile/candidate-profile.json', '{"a":1}')
+    put('data/applications/applications.json', '{}')
+    put('data/intelligence/candidate-intelligence.json', '{}')
+    put('data/jobs/manual_jobs.json', '{}')
+    const before = fingerprint(root)
+    expect(changes(before, fingerprint(root))).toEqual([])
+    await new Promise((resolve) => setTimeout(resolve, 15))
+    put('data/profile/candidate-profile.json', '') // the 2026-11-09 incident
+    put('data/applications/files/new.pdf', 'x')
+    fs.unlinkSync(path.join(root, 'data/intelligence/candidate-intelligence.json'))
+    put('data/jobs/manual_jobs.json', '{}') // same size, new mtime: still a write
+    put('data/jobs/scored_jobs.json', '{}') // pipeline file: not guarded
+    expect(changes(before, fingerprint(root))).toEqual([
+      'added: data/applications/files/new.pdf',
+      'changed: data/jobs/manual_jobs.json',
+      'changed: data/profile/candidate-profile.json',
+      'removed: data/intelligence/candidate-intelligence.json',
+    ])
+  })
+
+  it('guards the same paths as the pytest guard', async () => {
+    const { GUARDED_DIRS, GUARDED_FILES } = await import('./setup/realDataFingerprint.js')
+    const python = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../python/real_data_guard.py'), 'utf8')
+    const list = (name) => [...python.match(new RegExp(`${name} = \\(([^)]*)\\)`))[1].matchAll(/"([^"]+)"/g)].map((m) => m[1])
+    expect(GUARDED_DIRS).toEqual(list('GUARDED_DIRS'))
+    expect(GUARDED_FILES).toEqual(list('GUARDED_FILES'))
+  })
+})

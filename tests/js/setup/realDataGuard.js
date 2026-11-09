@@ -8,6 +8,7 @@
 // tests/js/realDataGuard.test.js keeps this honest. The guard reports the path relative to the repo, never any content.
 
 import fs from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -75,3 +76,7 @@ for (const target of [fs, fs.promises]) {
       : function guardedOpen(file, flags = 'r', ...rest) { check(file, flags); return original.call(this, file, flags, ...rest) }
   }
 }
+
+// `import { writeFileSync } from 'node:fs'` (and 'node:fs/promises') bind to the original functions until the builtin's ESM exports are
+// re-synced from the patched objects above; without this a module that uses named imports would bypass the guard.
+syncBuiltinESMExports()

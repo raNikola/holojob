@@ -9,6 +9,8 @@ export default defineConfig({
     include: ['tests/js/**/*.test.js'],
     environment: 'node',
     setupFiles: ['tests/js/setup/findingsRoot.js', 'tests/js/setup/realDataGuard.js'],
+    // The second guard: owner-private files are fingerprinted before and after the run (catches what a spawned process writes).
+    globalSetup: ['tests/js/setup/realDataFingerprint.js'],
     // No test reaches the real data/secrets or a key from the environment; tests that need a store point it at a temp dir.
     env: {
       HOLOJOB_SECRETS_DIR: path.join(os.tmpdir(), `holojob-vitest-secrets-${process.pid}`),
