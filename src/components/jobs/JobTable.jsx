@@ -17,7 +17,6 @@ import { ApplyBadge, PriorityBadge } from './JobScoreBadge'
 import FitScore from './FitScore'
 import AuthorizationBadge from './AuthorizationBadge'
 import JobTailorActions from './JobTailorActions'
-import { EngineShadowBadge } from './EngineShadowSection'
 import SortableTh, { useTableSort } from '../ui/SortableTh'
 import { sortRows } from '../../modules/tableSort'
 import { PRIORITIES } from '../../modules/jobs/matchScore'
@@ -47,9 +46,15 @@ const STATUS_VARIANT = {
   applied_manually: 'medium',
 }
 
-function StatusBadge({ status }) {
-  const label = jobStatusLabel(status)
-  return <Badge variant={STATUS_VARIANT[status] || 'default'}>{label}</Badge>
+/** A history-only row nobody reviewed says so in other words: "Unreviewed" would claim a triage the owner never saw. */
+export const HISTORY_ONLY_LABEL = 'History only'
+export const HISTORY_ONLY_NOTE = 'Known from the job history. Press Keep this ad to review it.'
+
+function StatusBadge({ status, historyOnly = false }) {
+  if (historyOnly && (!status || status === 'new')) {
+    return <span title={HISTORY_ONLY_NOTE}><Badge variant="default">{HISTORY_ONLY_LABEL}</Badge></span>
+  }
+  return <Badge variant={STATUS_VARIANT[status] || 'default'}>{jobStatusLabel(status)}</Badge>
 }
 
 function FollowUpBadge({ job }) {
@@ -128,13 +133,16 @@ const ACTION_ICON = {
   applied_manually: { Icon: SquareCheckBig, label: 'Mark as applied' },
 }
 
-function JobActions({ job, onStatusChange }) {
-  const readOnly = rowKind(job) === 'server'
+function JobActions({ job, onStatusChange, onApply }) {
+  const serverRow = rowKind(job) === 'server'
   const others = JOB_STATUSES.filter((s) => s !== job.status)
   return (
     <div className="flex gap-0.5" onClick={(e) => e.stopPropagation()}>
       {others.map((status) => {
         const { Icon, label } = ACTION_ICON[status]
+        // Applied is never a stored status: the button opens the quick form, and the status shows once the server has saved the application.
+        const isApply = status === 'applied_manually'
+        const readOnly = serverRow && !isApply
         return (
           <button
             key={status}
@@ -142,7 +150,7 @@ function JobActions({ job, onStatusChange }) {
             title={readOnly ? SERVER_ONLY_NOTE : label}
             aria-label={readOnly ? `${label}: ${SERVER_ONLY_NOTE}` : label}
             disabled={readOnly}
-            onClick={() => onStatusChange(job.jobId, status)}
+            onClick={() => (isApply ? onApply?.(job) : onStatusChange(job.jobId, status))}
             className="rounded-md p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100"
           >
             <Icon className="h-4 w-4" aria-hidden="true" />
@@ -156,6 +164,7 @@ function JobActions({ job, onStatusChange }) {
 function JobCard({
   job,
   onStatusChange,
+  onApply,
   apiAvailable,
   onJobUpdated,
   showScores,
@@ -192,8 +201,7 @@ function JobCard({
           </div>
           <div className="flex flex-col items-end gap-1">
             {showScores && <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} emptyLabel="Not scored" />}
-            {showScores && <EngineShadowBadge shadow={job.engineShadow} />}
-            <StatusBadge status={job.status} />
+            <StatusBadge status={job.status} historyOnly={rowKind(job) === 'server'} />
             <HistoryBadges job={job} classView={classView} />
             <FollowUpBadge job={job} />
           </div>
@@ -220,7 +228,7 @@ function JobCard({
               </a>
             ) : <span />}
             <div className="flex flex-col items-end gap-1">
-              <JobActions job={job} onStatusChange={onStatusChange} />
+              <JobActions job={job} onStatusChange={onStatusChange} onApply={onApply} />
               {kind === 'server' && <KeepAdButton row={job} />}
             </div>
           </>
@@ -238,6 +246,7 @@ function JobCard({
 export default function JobTable({
   jobs: unsortedJobs,
   onStatusChange,
+  onApply,
   apiAvailable,
   onJobUpdated,
   selectedJobIds = NO_SELECTION,
@@ -338,7 +347,6 @@ export default function JobTable({
                 {showScores && (
                   <td className="px-3 py-2 align-top">
                     <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} emptyLabel="Not scored" />
-                    {job.engineShadow && <div className="mt-1"><EngineShadowBadge shadow={job.engineShadow} /></div>}
                   </td>
                 )}
                 <td className="w-full px-3 py-2 align-top font-medium text-stone-900 dark:text-stone-100">
@@ -355,9 +363,9 @@ export default function JobTable({
                 <td className="whitespace-nowrap px-3 py-2 align-top text-stone-600 dark:text-stone-400"><ApplyBy job={job} today={today} /></td>
                 {showProvider && <td className="px-3 py-2 align-top"><ProviderBadge job={job} /></td>}
                 {showScores && <td className="px-3 py-2 align-top"><PriorityBadge priority={job.priority} /></td>}
-                <td className="px-3 py-2 align-top"><StatusBadge status={job.status} /></td>
+                <td className="px-3 py-2 align-top"><StatusBadge status={job.status} historyOnly={rowKind(job) === 'server'} /></td>
                 <td className="px-3 py-2 align-top" onClick={(e) => e.stopPropagation()}>
-                  {rowKind(job) === 'filtered' ? <FilteredRowActions job={job} onAddFromRow={onAddFromRow} /> : <JobActions job={job} onStatusChange={onStatusChange} />}
+                  {rowKind(job) === 'filtered' ? <FilteredRowActions job={job} onAddFromRow={onAddFromRow} /> : <JobActions job={job} onStatusChange={onStatusChange} onApply={onApply} />}
                   {rowKind(job) === 'server' && <div className="mt-1"><KeepAdButton row={job} /></div>}
                 </td>
               </tr>
@@ -372,6 +380,7 @@ export default function JobTable({
             key={job.jobId}
             job={job}
             onStatusChange={onStatusChange}
+            onApply={onApply}
             apiAvailable={apiAvailable}
             onJobUpdated={onJobUpdated}
             showScores={showScores}

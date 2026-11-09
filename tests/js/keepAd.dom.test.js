@@ -294,7 +294,11 @@ describe('what needs a stored ad waits for Keep, and says why', () => {
     expect(screen.text()).toContain('bulk actions cover saved rows only')
     const buttons = [...absentRow().querySelectorAll('button[aria-label]')]
     expect(buttons.length).toBeGreaterThan(0)
-    for (const button of buttons) {
+    // Applied works without Keep (it writes to the tracker, which needs no stored row); every other action waits for Keep.
+    const applied = buttons.filter((b) => b.getAttribute('aria-label') === 'Mark as applied')
+    expect(applied).toHaveLength(1)
+    expect(applied[0].disabled).toBe(false)
+    for (const button of buttons.filter((b) => !applied.includes(b))) {
       expect(button.disabled).toBe(true)
       expect(button.title).toBe('Press Keep this ad first')
     }

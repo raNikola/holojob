@@ -59,7 +59,9 @@ export function overlayTracking(jobs, store, settings) {
     const apps = applicationsForJob(store, job.jobId)
     if (!apps.length) return job
     const current = latestActiveApplication(apps)
-    return { ...job, applicationTracking: current ? trackingFromApplication(current, settings) : null }
+    if (!current) return { ...job, applicationTracking: null }
+    // Applied is derived: the store has an active application, so the row shows it whatever the browser's stored status says.
+    return { ...job, status: 'applied_manually', applicationTracking: trackingFromApplication(current, settings) }
   })
 }
 
@@ -103,4 +105,33 @@ export function applicationOnlyJobs(jobs, store, settings) {
     applicationId: app.id,
     applicationTracking: trackingFromApplication(app, settings),
   }))
+}
+
+/**
+ * Every application in the store as one list row, voided and ad-less ones included (Wave 6 j), newest first. Display only:
+ * the counts and the board keep excluding voided applications. `snapshot` says where the frozen ad text came from and
+ * whether it was taken after the application (migration), so an old record never passes as an apply-time capture.
+ */
+export function allApplicationRecords(store) {
+  return Object.values(store?.applications ?? {})
+    .map((app) => {
+      const folded = foldApplication(app)
+      const p = app.posting ?? {}
+      return {
+        id: app.id,
+        jobId: p.jobId ?? null,
+        company: p.company ?? '',
+        title: p.title ?? '',
+        appliedDate: folded.appliedDate ?? null,
+        origin: app.origin,
+        voided: folded.voided === true,
+        snapshot: {
+          capturedFrom: p.capturedFrom ?? null,
+          capturedAfterApply: p.capturedAfterApply === true,
+          descriptionMissing: p.descriptionMissing === true || !(p.description ?? '').trim(),
+        },
+        createdAt: app.createdAt,
+      }
+    })
+    .sort((a, b) => (a.createdAt === b.createdAt ? (a.id < b.id ? 1 : -1) : a.createdAt < b.createdAt ? 1 : -1))
 }

@@ -366,7 +366,7 @@ describe('the screen', () => {
   it('the metrics keep their inputs', () => {
     expect(screen).toContain('...computeJobStats(viewJobs)')
     expect(screen).toContain('syncPipelineCounts(health, state.jobs)')
-    expect(screen).toContain('() => overlayTracking(state.jobs,')
+    expect(screen).toContain('() => overlayTracking(withServerState(state.jobs, jobState.doc),')
     expect(screen).toContain('jobs: listed,')
     expect(screen).toContain('downloadJobsCsv(listed)')
     expect(screen).toContain('jobs={state.jobs}')
@@ -549,5 +549,24 @@ describe('the class filter list is complete', () => {
   it('ten entries, one of them for display only', () => {
     expect(CLASS_FILTERS).toHaveLength(10)
     expect(CLASS_FILTERS).toContain(SAVED_IN_BROWSER)
+  })
+})
+
+describe('Wave 6: history-only rows and the shadow badge', () => {
+  it('a history-only row that nobody reviewed says "History only", not "Unreviewed"; a reviewed one keeps its status', () => {
+    const html = table([serverOnly('h1', 'absent'), { ...serverOnly('h2', 'absent'), status: 'saved' }, stored('s1', { status: 'new' })])
+    expect((html.match(/History only/g) ?? []).length).toBe(1) // h1 only: h2 was saved
+    expect(html).toContain('saved')
+    expect(html).toContain('Unreviewed') // the stored row s1 still is
+    const only = table([serverOnly('h1', 'absent')])
+    expect(only).not.toContain('Unreviewed')
+  })
+
+  it('the table and cards no longer carry the shadow badge; Job Details still does', () => {
+    const shadow = { fit: 81, label: 'Strong', requirements: [], engineVersion: 'x' }
+    const html = table([stored('s2', { engineShadow: shadow, matchScore: 70, matchLabel: 'Good' })])
+    expect(html).not.toMatch(/shadow/i)
+    expect(fs.readFileSync('src/components/jobs/JobDetailBody.jsx', 'utf-8')).toContain('<EngineShadowBadge shadow={job.engineShadow} />')
+    expect(fs.readFileSync('src/components/jobs/JobTable.jsx', 'utf-8')).not.toContain('EngineShadowBadge')
   })
 })

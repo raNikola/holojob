@@ -275,7 +275,8 @@ export function importJobsFromFile(json, existingState = null) {
 }
 
 export function updateJobStatus(jobs, jobId, status) {
-  if (!JOB_STATUSES.includes(status)) return jobs
+  // "applied_manually" is derived from the application store (Wave 6): it is never written by a status change.
+  if (!JOB_STATUSES.includes(status) || status === 'applied_manually') return jobs
   return jobs.map((job) => (job.jobId === jobId ? { ...job, status } : job))
 }
 
@@ -286,6 +287,7 @@ export function updateJobStatus(jobs, jobId, status) {
  */
 export function updateJobRecord(jobs, jobId, patch) {
   const { applicationTracking: _derived, ...rest } = patch
+  if (rest.status === 'applied_manually') delete rest.status // derived for display from the store, never saved from a composed row
   return jobs.map((job) => (job.jobId === jobId ? { ...job, ...rest } : job))
 }
 

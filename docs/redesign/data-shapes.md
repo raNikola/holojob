@@ -1556,6 +1556,17 @@ the dry run returned (sha256 of the canonical JSON of `jobs`). The backup is
 store existed, its `applications.json`. Migrated records have `origin: "migration"`, id `mig-<jobId>`, the original
 `applicationTracking` object in `legacy`, and events with `source: "migration"`.
 
+## Job state (`data/jobs/job-state.json`, Wave 5 j)
+
+Owner state of jobs on the server. Written only by `scripts/job-state-store.js`; the pipeline never reads or writes it. The version of the file is the sha256 of its bytes (`none` when absent).
+
+```json
+{ "version": 1, "updatedAt": "<ISO>|null",
+  "jobs": { "<matchKey>": { "jobId": "<id>", "status": "new|saved|rejected", "statusAt": "<ISO>|null", "keep": false } } }
+```
+
+`matchKey` is `jobMatchKey` of the browser (`url:<lowercased url>` or `tcl:<title>|<company>|<location>`). "Applied" is never stored here: it is derived from the application store. Import from the browser is union-only (server entries win, nothing is deleted); a restored file only adds missing keys. Browser exports go to `data/backups/browser-state-<ts>.json` (ids and flags only, mode 600); an import backs up to `data/backups/job-state-<ts>/`.
+
 ## Source switches
 
 `data/config/sources.json`, the owner's switches for opt-in job boards ([SOURCES_SPEC.md](SOURCES_SPEC.md), first slice). A

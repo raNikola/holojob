@@ -79,7 +79,7 @@ export default function JobDetailDrawer({ job: row, onClose, apiAvailable }) {
             </div>
           )}
           <div className="mt-5">
-            <ApplicationTrackingSummary job={stripDisplayFields(job)} onStatusChange={onStatusChange} onOpenFull={openFullDetails} canOpenFull={canOpen} />
+            <ApplicationTrackingSummary job={stripDisplayFields(job)} onOpenFull={openFullDetails} canOpenFull={canOpen} />
           </div>
         </div>
       </aside>

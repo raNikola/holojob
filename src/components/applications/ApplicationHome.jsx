@@ -14,6 +14,7 @@ import {
   saveJobs,
 } from '../../modules/jobs/jobStorage'
 import { normalizeApplicationTracking } from '../../modules/jobs/applicationTracking'
+import ApplicationRecordsList from './ApplicationRecordsList'
 import { applicationOnlyJobs, overlayTracking, trackerStats } from '../../modules/applications/trackingView'
 import { columnByJobId, stageFilterOptions } from '../../modules/applications/applicationStatistics'
 import { applicationOpenTarget, openJobPage } from '../../modules/jobs/jobRoute'
@@ -44,6 +45,7 @@ const TRACKER_COLUMNS = {
 const APPLICATION_TABS = [
   { id: 'board', label: 'Board' },
   { id: 'statistics', label: 'Statistics' },
+  { id: 'records', label: 'All records' },
 ]
 const TRACKER_DEFAULT_SORT = { key: 'applied', dir: 'desc' }
 
@@ -126,6 +128,10 @@ export default function ApplicationHome() {
       <ApplicationAIInsights />
 
       <Tabs tabs={APPLICATION_TABS} active={tab} onChange={setTab} />
+
+      {tab === 'records' && (storeReady
+        ? <ApplicationRecordsList store={applications.store} onOpenJob={openJob} />
+        : <p className="text-sm text-stone-600 dark:text-stone-400">{applications.status === 'error' ? `The tracker could not be loaded: ${applications.error}` : 'Loading the application tracker…'}</p>)}
 
       {tab === 'board' && <ApplicationBoard onOpenJob={openJob} adClosed={adClosed} />}
 

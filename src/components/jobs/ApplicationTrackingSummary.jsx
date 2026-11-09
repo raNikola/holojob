@@ -30,7 +30,7 @@ function OpenFullDetails({ onOpen, canOpen }) {
 }
 
 /** One click records the application through the same call as the full form; the owner corrects date, CV and channel on Job Details. */
-function MarkApplied({ job, cache, onStatusChange, voidedOnly }) {
+function MarkApplied({ job, cache, voidedOnly }) {
   const { profile } = useProfile()
   const [form, setForm] = useState(() => newApplicationDefaults(job, profile))
   const [busy, setBusy] = useState(false)
@@ -41,7 +41,6 @@ function MarkApplied({ job, cache, onStatusChange, voidedOnly }) {
     setError(null)
     try {
       await markApplied(job, cache, form)
-      onStatusChange?.(job.jobId, 'applied_manually')
       setForm(newApplicationDefaults(job, profile))
     } catch (e) {
       setError(e)
@@ -67,7 +66,7 @@ function MarkApplied({ job, cache, onStatusChange, voidedOnly }) {
 }
 
 /** The quick view's read-only tracking block. Every edit stays on the full Job Details page. */
-export default function ApplicationTrackingSummary({ job, onStatusChange, onOpenFull, canOpenFull }) {
+export default function ApplicationTrackingSummary({ job, onOpenFull, canOpenFull }) {
   const cache = useApplications()
   const view = drawerTracking(job, cache)
   let body
@@ -79,7 +78,7 @@ export default function ApplicationTrackingSummary({ job, onStatusChange, onOpen
         This job still has tracking saved in the old format. Run the migration first (<SettingsLink section="application-migration">Settings → Application tracking migration</SettingsLink>).
       </Alert>
     )
-  } else if (view.kind === 'none') body = <MarkApplied job={job} cache={cache} onStatusChange={onStatusChange} voidedOnly={view.voidedOnly} />
+  } else if (view.kind === 'none') body = <MarkApplied job={job} cache={cache} voidedOnly={view.voidedOnly} />
   else {
     const s = view.summary
     body = (

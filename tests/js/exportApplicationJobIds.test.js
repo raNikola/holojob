@@ -17,7 +17,7 @@ describe('export of application job ids', () => {
     fs.writeFileSync(path.join(root, 'data/applications/applications.json'), JSON.stringify({ version: 1, requests: {}, applications: { x: { posting: { jobId: 'job-1', title: 'Secret Title' } } } }))
     const out = path.join(root, 'out/ids.txt')
     expect(exportApplicationJobIds(root, out)).toBe(1)
-    expect(fs.readFileSync(out, 'utf-8')).toBe('job-1\n')
+    expect(fs.readFileSync(out, 'utf-8')).toMatch(/^# store-sha256 [0-9a-f]{64}\njob-1\n$/)
     expect(fs.statSync(out).mode & 0o777).toBe(0o600)
   })
 
@@ -25,6 +25,6 @@ describe('export of application job ids', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'appids-'))
     const out = path.join(root, 'ids.txt')
     expect(exportApplicationJobIds(root, out)).toBe(0)
-    expect(fs.readFileSync(out, 'utf-8')).toBe('')
+    expect(fs.readFileSync(out, 'utf-8')).toBe('# store-sha256 none\n')
   })
 })
