@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import http from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handleApiRoutes } from '../../scripts/api-handler.js'
-import { IMPORT_ERRORS, MAX_PASTE_BYTES, parseImportSource, setImpactRunner, setImportRunners } from '../../scripts/run-profile-import.js'
+import { IMPORT_ERRORS, MAX_PASTE_BYTES, parseImportSource, setFileRunners, setImpactRunner, setImportRunners } from '../../scripts/run-profile-import.js'
 import { checkApiRequest } from '../../scripts/request-guard.js'
 
 const ROUTE = '/api/profile/import/parse'
@@ -207,5 +207,65 @@ describe('JSON Resume refusals reach the browser as fixed messages', () => {
       expect(IMPORT_ERRORS[code].status).toBe(422)
       expect(IMPORT_ERRORS[code].error).toMatch(/JSON/)
     }
+  })
+})
+
+describe('POST /api/profile/import/parse-docx', () => {
+  const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  const upload = (bytes, { type = DOCX } = {}) => new Promise((resolve, reject) => {
+    const req = http.request(`${base}/api/profile/import/parse-docx`, { method: 'POST', headers: { 'Content-Type': type, 'Content-Length': bytes.length } }, (res) => {
+      const chunks = []
+      res.on('data', (c) => chunks.push(c))
+      res.on('end', () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString('utf-8') }))
+    })
+    req.on('error', reject)
+    req.end(bytes)
+  })
+  let files
+  beforeEach(() => {
+    files = []
+    setFileRunners({ resume_docx: async (bytes) => { files.push(bytes); return { ok: true, draft: { source: 'resume_docx' } } } })
+  })
+  afterEach(() => setFileRunners())
+
+  it('hands the bytes to the file runner and answers its draft; nothing else is passed', async () => {
+    const res = await upload(Buffer.from('PK-bytes'))
+    expect(res.status).toBe(200)
+    expect(JSON.parse(res.text)).toEqual({ ok: true, draft: { source: 'resume_docx' } })
+    expect(files).toHaveLength(1)
+    expect(files[0].toString()).toBe('PK-bytes')
+  })
+
+  it('refuses an empty body, an oversized body (413, runner never called) and a wrong content type (415)', async () => {
+    expect(JSON.parse((await upload(Buffer.alloc(0))).text)).toMatchObject({ ok: false, code: 'empty' })
+    const big = await upload(Buffer.alloc(10 * 1024 * 1024 + 1))
+    expect(big.status).toBe(413)
+    expect(files).toHaveLength(0)
+    expect((await upload(Buffer.from('x'), { type: 'application/json' })).status).toBe(415)
+    expect((await upload(Buffer.from('x'), { type: 'application/pdf' })).status).toBe(415)
+    expect(files).toHaveLength(0)
+  })
+
+  it('a parser refusal is a fixed message and nothing of the file is echoed', async () => {
+    setFileRunners({ resume_docx: async () => ({ ok: false, code: 'corrupt_file' }) })
+    const res = await upload(Buffer.from('CANARY-DOCX-BYTES'))
+    expect(res.status).toBe(422)
+    expect(JSON.parse(res.text)).toMatchObject({ ok: false, code: 'corrupt_file' })
+    expect(res.text).not.toContain('CANARY')
+  })
+
+  it('the file entry point refuses what is not a Buffer, not a file source, empty or too large before any runner', async () => {
+    const { parseImportFile } = await import('../../scripts/run-profile-import.js')
+    expect(await parseImportFile('resume_docx', 'not a buffer')).toEqual({ ok: false, code: 'invalid_request' })
+    expect(await parseImportFile('paste', Buffer.from('x'))).toEqual({ ok: false, code: 'invalid_request' })
+    expect(await parseImportFile('resume_docx', Buffer.alloc(0))).toEqual({ ok: false, code: 'empty' })
+    expect(await parseImportFile('resume_docx', Buffer.alloc(10 * 1024 * 1024 + 1))).toEqual({ ok: false, code: 'too_large' })
+  })
+
+  it('writes nothing to disk', async () => {
+    const spies = ['writeFileSync', 'appendFileSync', 'mkdirSync', 'renameSync', 'createWriteStream', 'copyFileSync'].map((name) => vi.spyOn(fs, name))
+    expect((await upload(Buffer.from('x'))).status).toBe(200)
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled()
+    vi.restoreAllMocks()
   })
 })

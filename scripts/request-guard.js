@@ -18,6 +18,7 @@ const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 export const BODY_TYPES = {
   'POST /api/cvs': 'application/pdf',
   'POST /api/backup/import': 'application/zip',
+  'POST /api/profile/import/parse-docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 }
 
 function hostOf(value) {

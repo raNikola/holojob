@@ -51,3 +51,20 @@ export async function fetchImportImpact(before, after) {
     return null
   }
 }
+
+export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+export const MAX_DOCX_BYTES = 10 * 1024 * 1024
+
+/**
+ * Send a Word document to the local API, which reads it and answers an import draft. The file is parsed in memory and is not stored.
+ * @param {File} file
+ */
+export async function parseDocxFile(file) {
+  if (file.size > MAX_DOCX_BYTES) throw new Error('The file is too large. The limit for a Word document is 10 MB.')
+  if (!(await ensureApiAvailable())) throw new Error('Import requires the local API server (npm run dev or npm run start)')
+  const res = await fetch('/api/profile/import/parse-docx', { method: 'POST', headers: { 'Content-Type': DOCX_MIME }, body: file })
+  let payload = null
+  try { payload = await res.json() } catch { /* a non-JSON answer is reported below */ }
+  if (!res.ok || !payload?.ok || !payload.draft) throw new Error(payload?.error || 'The file could not be read.')
+  return payload.draft
+}

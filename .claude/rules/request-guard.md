@@ -14,7 +14,7 @@ paths:
 
 Every `/api` request passes `scripts/request-guard.js` first (`handleApiRoutes` in `api-handler.js`, used by the
 production server and the Vite dev middleware): POST / PUT / PATCH need `Content-Type: application/json` (a DELETE only
-when it has a body); the two binary uploads take their own type (`POST /api/cvs` PDF, `POST /api/backup/import` zip);
+when it has a body); the binary uploads take their own type (`POST /api/cvs` PDF, `POST /api/backup/import` zip, `POST /api/profile/import/parse-docx` Word);
 an `Origin` header must be an allowed origin; wrong type 415, wrong origin or host 403. It is not authentication.
 
 - **Setting:** `HOLOJOB_ALLOWED_ORIGINS` in `.env`, comma separated, scheme optional and ignored, for example

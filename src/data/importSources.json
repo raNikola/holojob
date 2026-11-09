@@ -1,34 +1,46 @@
 {
-  "_comment": "The one list of profile import sources. Read by src/modules/profile/importDraft.js, scripts/run-profile-import.js and python/profile_import/text_parser.py; tests/js/importSources.test.js checks the three agree. input: 'text' = the parser receives text (a PDF is read to text in the browser).",
+  "_comment": "The one list of profile import sources. Read by src/modules/profile/importDraft.js, scripts/run-profile-import.js and python/profile_import/text_parser.py; tests/js/importSources.test.js checks they agree. input: 'text' = the text route receives text (a PDF is read to text in the browser); 'bytes' = the file route receives the file's bytes and the server reads it. reader: 'text' = the text parser reads (after any conversion to text), 'json' = the JSON Resume mapper.",
   "draftVersion": 1,
   "sources": {
     "paste": {
       "importSource": "pasted_text",
       "name": "Pasted text",
-      "input": "text"
+      "input": "text",
+      "reader": "text"
     },
     "resume_pdf": {
       "importSource": "resume_pdf",
       "name": "Resume PDF",
       "input": "text",
-      "pdf": true
+      "pdf": true,
+      "reader": "text"
     },
     "linkedin_pdf": {
       "importSource": "linkedin_pdf",
       "name": "LinkedIn PDF",
       "input": "text",
-      "pdf": true
+      "pdf": true,
+      "reader": "text"
     },
     "text_file": {
       "importSource": "text_file",
       "name": "Text file",
       "input": "text",
-      "file": true
+      "file": true,
+      "reader": "text"
     },
     "json_resume": {
       "importSource": "json_resume",
       "name": "JSON Resume",
       "input": "text",
+      "file": true,
+      "reader": "json"
+    },
+    "resume_docx": {
+      "importSource": "resume_docx",
+      "name": "Word document",
+      "input": "bytes",
+      "reader": "text",
       "file": true
     }
   }

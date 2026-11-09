@@ -7,7 +7,7 @@ import Alert from '../ui/Alert'
 const COPY = {
   any_file: {
     title: 'Upload a file',
-    description: 'A resume as a PDF (up to 10 MB), or a text, Markdown or JSON Resume file (up to 200 KB). English headings work best. The file is read on this server; nothing is saved until you have reviewed it.',
+    description: 'A resume as a PDF or Word (.docx) file (up to 10 MB), or a text, Markdown or JSON Resume file (up to 200 KB). English headings work best. The file is read on this server; nothing is saved until you have reviewed it.',
     drop: 'Drag & drop your file here',
   },
   resume_pdf: {

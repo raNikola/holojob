@@ -297,7 +297,8 @@ Sources and design: [DECISIONS.md](DECISIONS.md#import-redesign).
 | S1 | One source list + draft version; guarded apply (backup, one write, retry never re-applies, Undo); confirm step with cache impact | Built on `wave7-profile-import` (2026-11-09) |
 | S2 | TXT / MD | Built on `wave7-profile-import` (2026-11-09) |
 | S3 | JSON Resume | Built on `wave7-profile-import` (2026-11-09) |
-| S4, S6, S7 | DOCX, PDF real-file hardening, manual "Start blank" | Next, in this order |
+| S4 | DOCX | Built on `wave7-profile-import` (2026-11-09) |
+| S6, S7 | PDF real-file hardening, manual "Start blank" | Next, in this order |
 | S5 | LinkedIn data ZIP | Last: waits for the owner's real file names and header rows |
 | 1a | Wizard, paste step, review screen | Done |
 | 1b | TXT / MD and DOCX | Not built ("Other file types are coming"). `python-docx` is already pinned |

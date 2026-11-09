@@ -7,8 +7,8 @@ import ImportConfirm from './ImportConfirm'
 import ImportResult from './ImportResult'
 import { useProfile } from '../../context/ProfileContext'
 import { defaultChoices } from '../../modules/profile/importDraft'
-import { fetchImportImpact, parseImportText, parsePastedText } from '../../modules/profile/importApi'
-import { ACCEPT_ANY_FILE, readPdfDraft, readTextFileDraft, sourceForFile } from '../../modules/profile/importFlow'
+import { fetchImportImpact, parseDocxFile, parseImportText, parsePastedText } from '../../modules/profile/importApi'
+import { ACCEPT_ANY_FILE, readDocxDraft, readPdfDraft, readTextFileDraft, sourceForFile, unsupportedFileMessage } from '../../modules/profile/importFlow'
 import { applyReviewedImport } from '../../modules/profile/importApply'
 import { buildImportPreview } from '../../modules/profile/importPreview'
 import { currentProfile, realImportDeps } from '../../modules/profile/importDeps'
@@ -71,11 +71,13 @@ export default function ImportWizard({ onBusyChange, onManual, onSaved }) {
     try {
       // "Upload a file" reads the type from the file; the LinkedIn option is always a PDF.
       const source = pdfSource === 'linkedin_pdf' ? 'linkedin_pdf' : sourceForFile(file)
-      if (!source) throw new Error('This file type is not supported yet. Use a PDF, a TXT or Markdown file, or paste the text.')
+      if (!source) throw new Error(unsupportedFileMessage(file))
       const isPdf = source === 'resume_pdf' || source === 'linkedin_pdf'
       const parsed = isPdf
         ? await readPdfDraft(file, source, { extract: extractTextFromPdf, parse: parseImportText })
-        : await readTextFileDraft(file, { parse: parseImportText })
+        : source === 'resume_docx'
+          ? await readDocxDraft(file, { parseFile: parseDocxFile })
+          : await readTextFileDraft(file, { parse: parseImportText })
       setDraft(parsed)
       setPdfFile(isPdf ? file : null) // only a PDF is stored with the CV entry
       setChoices(defaultChoices(profile, parsed))

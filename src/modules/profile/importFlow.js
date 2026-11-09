@@ -12,6 +12,7 @@ export const FILE_KINDS = [
   { source: 'resume_pdf', extensions: ['pdf'], mime: ['application/pdf'] },
   { source: 'text_file', extensions: ['txt', 'md', 'markdown'], mime: ['text/plain', 'text/markdown'] },
   { source: 'json_resume', extensions: ['json'], mime: ['application/json'] },
+  { source: 'resume_docx', extensions: ['docx'], mime: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'] },
 ]
 
 /** The file sources the browser reads as text and sends to the parser (a PDF is read with pdf.js instead). */
@@ -25,6 +26,26 @@ export function sourceForFile(file) {
   const extension = String(file?.name || '').split('.').pop().toLowerCase()
   const type = String(file?.type || '').toLowerCase()
   return (FILE_KINDS.find((k) => k.extensions.includes(extension)) || FILE_KINDS.find((k) => k.mime.includes(type)))?.source ?? null
+}
+
+/**
+ * Read a Word document into an import draft: the file's bytes go to the local API, which reads it in memory and answers a draft;
+ * nothing is stored and nothing is saved. Old .doc and macro-enabled files are refused before anything is sent.
+ * @param {File} file
+ * @param {{ parseFile: (file: File) => Promise<object> }} deps
+ */
+export async function readDocxDraft(file, { parseFile }) {
+  if (sourceForFile(file) !== 'resume_docx') throw new Error(unsupportedFileMessage(file))
+  const draft = await parseFile(file)
+  return { ...draft, fileName: file.name || '' }
+}
+
+/** Why a file type is not accepted, in words the owner can act on. */
+export function unsupportedFileMessage(file) {
+  const extension = String(file?.name || '').split('.').pop().toLowerCase()
+  if (extension === 'doc') return 'Old Word (.doc) files are not supported. Save the file as .docx, or paste the text.'
+  if (extension === 'docm') return 'Macro-enabled Word files are not supported. Save a copy as .docx, or paste the text.'
+  return 'This file type is not supported. Use a PDF, a Word (.docx), TXT, Markdown or JSON Resume file, or paste the text.'
 }
 
 /**

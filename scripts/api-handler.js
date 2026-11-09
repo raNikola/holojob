@@ -34,7 +34,7 @@ import {
   loadQualityReport,
   runQualityAudit,
 } from './run-quality-audit.js'
-import { IMPORT_ERRORS, MAX_IMPORT_BODY_BYTES, importImpact, parseImportSource } from './run-profile-import.js'
+import { FILE_LIMITS, IMPORT_ERRORS, MAX_IMPORT_BODY_BYTES, importImpact, parseImportFile, parseImportSource } from './run-profile-import.js'
 import { handleAiSettingsRequest } from './ai-settings-handler.js'
 import { handleSecretsRequest } from './secrets-handler.js'
 import { handleSourcesRequest } from './sources-handler.js'
@@ -737,6 +737,26 @@ export async function handleApiRequest(req, res) {
       return true
     }
     const result = await parseImportSource(body?.source, body?.text)
+    if (result.ok) sendJson(res, 200, { ok: true, draft: result.draft })
+    else fail(result.code)
+    return true
+  }
+
+  // Stateless: a Word document's bytes in, an import draft out. The file is handed to the parser on stdin and never stored or logged;
+  // every answer is a draft or fixed text.
+  if (url === '/api/profile/import/parse-docx' && req.method === 'POST') {
+    const fail = (code) => {
+      const { status, error } = IMPORT_ERRORS[code] ?? IMPORT_ERRORS.parse_failed
+      sendJson(res, status, { ok: false, code, error })
+    }
+    let bytes
+    try {
+      bytes = await readRawBody(req, res, { limit: FILE_LIMITS.resume_docx, tooLarge: { ok: false, code: 'too_large', error: IMPORT_ERRORS.too_large.error } })
+    } catch {
+      fail('invalid_request')
+      return true
+    }
+    const result = await parseImportFile('resume_docx', bytes)
     if (result.ok) sendJson(res, 200, { ok: true, draft: result.draft })
     else fail(result.code)
     return true

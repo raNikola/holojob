@@ -53,8 +53,8 @@ _CERT_WORDS = set(_EDU["certificateWords"])
 _REMOTE_WORDS = set(_EDU["remoteWords"])
 
 _SOURCES_FILE = json.loads((Path(__file__).resolve().parents[2] / "src" / "data" / "importSources.json").read_text(encoding="utf-8"))
-# The one list of import sources (src/data/importSources.json); this parser takes the ones whose input is text.
-SOURCES = tuple(name for name, source in _SOURCES_FILE["sources"].items() if source.get("input") == "text")
+# The one list of import sources (src/data/importSources.json); this parser reads the ones whose reader is "text" (a DOCX is converted to text first).
+SOURCES = tuple(name for name, source in _SOURCES_FILE["sources"].items() if source.get("reader") == "text")
 # A draft says which shape and which parser made it; both change only on purpose.
 DRAFT_VERSION = _SOURCES_FILE["draftVersion"]
 PARSER_VERSION = "text-1"

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { cvEntryParsedData, readPdfDraft, readTextFileDraft, sourceForFile } from '../../src/modules/profile/importFlow.js'
+import { cvEntryParsedData, readDocxDraft, readPdfDraft, readTextFileDraft, sourceForFile, unsupportedFileMessage } from '../../src/modules/profile/importFlow.js'
 import { applyReviewedImport } from '../../src/modules/profile/importApply.js'
 import { defaultChoices } from '../../src/modules/profile/importDraft.js'
 import { ensureCvLibrary } from '../../src/utils/cvLibrary.js'
@@ -188,7 +188,9 @@ describe('reading a text or Markdown file', () => {
     expect(sourceForFile({ name: 'noext', type: 'text/plain' })).toBe('text_file')
     expect(sourceForFile({ name: 'resume.json', type: '' })).toBe('json_resume')
     expect(sourceForFile({ name: 'resume', type: 'application/json' })).toBe('json_resume')
-    expect(sourceForFile({ name: 'cv.docx', type: '' })).toBeNull()
+    expect(sourceForFile({ name: 'cv.docx', type: '' })).toBe('resume_docx')
+    expect(sourceForFile({ name: 'cv.doc', type: 'application/msword' })).toBeNull()
+    expect(sourceForFile({ name: 'cv.docm', type: '' })).toBeNull()
     expect(sourceForFile({ name: 'cv.exe', type: 'application/octet-stream' })).toBeNull()
   })
 
@@ -215,5 +217,25 @@ describe('reading a text or Markdown file', () => {
 
   it('a few stray replacement characters do not make a file "not text"', async () => {
     await expect(readTextFileDraft(md(), { parse, read: async () => `Name ��\n${'text '.repeat(200)}` })).resolves.toBeTruthy()
+  })
+})
+
+describe('reading a Word document', () => {
+  const docx = (name = 'cv.docx') => ({ name, type: '', size: 1000 })
+
+  it('sends the file to the parser as it is, keeps the file name and writes nothing', async () => {
+    const parseFile = vi.fn(async () => ({ source: 'resume_docx', parsedData: {} }))
+    const file = docx('jane.docx')
+    const draft = await readDocxDraft(file, { parseFile })
+    expect(parseFile).toHaveBeenCalledWith(file)
+    expect(draft).toMatchObject({ source: 'resume_docx', fileName: 'jane.docx' })
+  })
+
+  it('refuses a file that is not a .docx before anything is sent, with a message that says what to do', async () => {
+    const parseFile = vi.fn()
+    await expect(readDocxDraft(docx('old.doc'), { parseFile })).rejects.toThrow(/Old Word \(\.doc\)/)
+    await expect(readDocxDraft(docx('macro.docm'), { parseFile })).rejects.toThrow(/Macro-enabled/)
+    expect(unsupportedFileMessage(docx('x.xyz'))).toMatch(/PDF, a Word \(\.docx\)/)
+    expect(parseFile).not.toHaveBeenCalled()
   })
 })
