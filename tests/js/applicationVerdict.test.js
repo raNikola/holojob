@@ -108,7 +108,10 @@ describe('a generated document is attached only with a passing, current verdict'
     const error = await refusal(() => create())
     expect(error?.status).toBe(409)
     expect(error.extra).toMatchObject({ reason: 'unverified_document', code: 'changed' })
-    expect(tree()).toEqual(before)
+    // No file is left; the empty `files` parent folder the copy step creates is not a record.
+    const filesOnly = (t) => Object.fromEntries(Object.entries(t).filter(([, hash]) => hash !== ''))
+    expect(filesOnly(tree())).toEqual(filesOnly(before))
+    expect(fs.readdirSync(path.join(root, 'data/applications/files'))).toEqual([])
   })
 
   it('does not ask for a verdict on a library CV', async () => {
