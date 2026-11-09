@@ -41,7 +41,8 @@ export function writeInterviewPrep(jobId, data) {
 }
 
 export function writeCoverLetter(jobId, variants) {
-  const dir = path.join(outputDir('resumes'), path.basename(jobId))
+  // A draft: nothing can attach it to an application. `ai-draft-accept.js` makes it a document after the fact gate.
+  const dir = path.join(outputDir('resumes'), path.basename(jobId), 'drafts')
   ensureDir(dir)
   const content = [
     '# AI Cover Letter Variants',

@@ -6,6 +6,9 @@ const runTailor = vi.fn(async () => ({ ok: true, payload: null }))
 const runTailorStream = vi.fn((res) => { res.statusCode = 200; res.end('{}') })
 const previewTailor = vi.fn(async () => ({ status: 200, body: { ok: true, jobs: [] } }))
 
+const acceptCoverLetter = vi.fn(async () => ({ status: 200, body: { ok: true } }))
+vi.mock('../../scripts/ai-draft-accept.js', () => ({ acceptCoverLetter: (...a) => acceptCoverLetter(...a) }))
+
 vi.mock('../../scripts/run-tailor.js', async (importOriginal) => ({
   ...(await importOriginal()),
   runTailor: (...a) => runTailor(...a),
@@ -29,6 +32,15 @@ beforeEach(async () => {
 afterEach(async () => { await new Promise((r) => server.close(r)) })
 
 const post = (url, body) => fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+
+describe('the AI cover letter accept route', () => {
+  it('hands the job id and the confirmation to the checker and returns its answer', async () => {
+    acceptCoverLetter.mockResolvedValueOnce({ status: 422, body: { ok: false, error: 'facts_not_verified', issues: ['x'] } })
+    const res = await post('/api/ai/cover-letter/accept', { jobId: 'job-1', confirm: true, text: 'NOT USED' })
+    expect(res.status).toBe(422)
+    expect(acceptCoverLetter).toHaveBeenCalledWith({ jobId: 'job-1', confirm: true })
+  })
+})
 
 describe('confirm is required to tailor', () => {
   it.each(['/api/tailor/run', '/api/tailor/stream'])('%s refuses a body without confirm: true and starts nothing', async (url) => {

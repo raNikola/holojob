@@ -381,8 +381,8 @@ Known and left open on purpose. Checked against the code on 2026-11-02.
 
 - ~~The fact gate only sees metric-shaped numbers~~ built (Phase 4, area 2): `provenance_checker.check_draft` / `check_document` cover numbers, years of experience, named things, degrees and certifications; limits listed in the module docstring.
 - ~~Refusal and rejection reasons not shown~~ built: printed by the run and listed in `JobTailorActions.jsx`.
-- Identifiers inside the sections LLM tailoring sends are not redacted.
-- LLM tailoring has no confirm step.
+- ~~Identifiers inside the sections LLM tailoring sends are not redacted~~ built (Phase 4, area 1).
+- ~~LLM tailoring has no confirm step~~ built (Phase 4, area 3): server-enforced confirm, preview route, dialog.
 
 **Untested:**
 

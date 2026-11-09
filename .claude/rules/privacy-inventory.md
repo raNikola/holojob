@@ -75,7 +75,7 @@ provider, each behind an explicit confirm; the browser AI features send redacted
 - **LLM tailoring** (`resume_generator/llm_tailor.py`, Claude Code CLI) sends parsed CV sections (about_me, experience, skill_categories,
   education), an intelligence summary and project intelligence, and the ad. Every text is redacted first (`redact.py` with the name and links the parser
   read), then a final check (`redact.find_leaks`) fails closed: if anything of the candidate's is left, nothing is sent. A draft that copies a
-  placeholder (`[NAME]`, `[EMAIL]`, ...) is rejected. **Known gap until the confirm slice:** no confirm step yet (Phase 4, area 3).
+  placeholder (`[NAME]`, `[EMAIL]`, ...) is rejected. **Confirm:** `/api/tailor/run` and `/api/tailor/stream` answer 409 `confirm_required` without `"confirm": true` (except `noLlm: true`, rule-based, sends nothing); `/api/tailor/preview` (`run_tailor.py --preview`) returns the exact redacted prompt per job and the AI gate's answer and calls no model; `generate_llm_content` itself sends nothing without `confirmed=True`, and the CLI needs `--confirm`. The dialog is `TailorConfirmDialog.jsx` (single job, bulk). The pipeline's tailoring step is rule-based (`noLlm`). `tests/js/tailorRoutes.test.js`, `tests/python/test_llm_tailor.py`.
 - **Project scan** (`claude_code.analyze_repo`): read-only tools in the repo; `git log` and `git shortlog` are not allowed, because they print commit
   authors. `git show` can still print an author line (remaining risk).
 - **Provider error text** (`claude_code.safe_error`): output the provider returns inside an error string is cut to 200 characters with e-mails, phones and

@@ -12,6 +12,8 @@ import { cvEntryParsedData } from '../../modules/profile/importFlow'
 import { cvDownloadUrl, deleteCvFile, uploadCvFile } from '../../modules/cvs/cvApi'
 import { canRemoveCv } from '../../utils/cvLibrary'
 import { regenerateAndSync } from '../../modules/cvs/regenerateAfterApply'
+import { applyWithBackup } from '../../modules/cvs/applyWithBackup'
+import { backupProfileForImport } from '../../modules/jobs/profileSync'
 import CvAnalyzeDialog from './CvAnalyzeDialog'
 import CvAnalysisReview from './CvAnalysisReview'
 
@@ -188,7 +190,15 @@ export default function CvLibrary() {
   // Write the ticked suggestions, then regenerate intelligence from the result so
   // scoring sees them, the same as the Regenerate Intelligence button.
   const applyAnalysis = async (cv, selected) => {
-    const applied = cvActions.applyCvAnalysis(cv.id, selected)
+    setError(null)
+    // The server keeps a verified backup of the profile first, as the import does; without it nothing is changed.
+    const taken = await applyWithBackup({
+      profile,
+      backup: backupProfileForImport,
+      apply: () => cvActions.applyCvAnalysis(cv.id, selected),
+    })
+    if (!taken.ok) { setError(taken.message); return }
+    const applied = taken.result
     if (!applied || applied.count === 0) return
     recordApply(cv, applied.count, await regenerateAndSync(applied.profile))
   }

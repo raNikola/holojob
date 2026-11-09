@@ -23,7 +23,7 @@ describe('saved AI answers', () => {
     vi.stubEnv('HOLOJOB_AI_OUTPUT_DIR', dir)
     try {
       expect(writeInterviewPrep('job-1', { answer: 'ok' })).toBe(path.join(dir, 'interviews/job-1/interview_prep.json'))
-      expect(writeCoverLetter('job-1', {})).toBe(path.join(dir, 'resumes/job-1/ai_cover_letter.md'))
+      expect(writeCoverLetter('job-1', {})).toBe(path.join(dir, 'resumes/job-1/drafts/ai_cover_letter.md'))
       expect(writeSkillGap({})).toBe(path.join(dir, 'analytics/skill_gap.json'))
       expect(fs.existsSync(path.join(dir, 'analytics/skill_gap.json'))).toBe(true)
     } finally {
@@ -37,7 +37,7 @@ describe('saved AI answers', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true)
     const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
     expect(writeInterviewPrep('job-1', {})).toBe(path.join(REPO_DATA, 'interviews/job-1/interview_prep.json'))
-    expect(writeCoverLetter('job-1', {})).toBe(path.join(REPO_DATA, 'resumes/job-1/ai_cover_letter.md'))
+    expect(writeCoverLetter('job-1', {})).toBe(path.join(REPO_DATA, 'resumes/job-1/drafts/ai_cover_letter.md'))
     expect(writeSkillGap({})).toBe(path.join(REPO_DATA, 'analytics/skill_gap.json'))
     expect(write).toHaveBeenCalledTimes(3)
   })

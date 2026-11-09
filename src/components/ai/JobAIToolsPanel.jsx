@@ -8,6 +8,7 @@ import { useOperationLog } from '../../hooks/useOperationLog'
 import { runAiFeature } from '../../modules/ai/aiClient'
 import { REGENERATE_CONFIRM, analysisButtonState, fetchFindingStatus, regenerateDecision } from '../../modules/ai/findingStatus'
 import OutreachComposer from '../outreach/OutreachComposer'
+import CoverLetterAccept from './CoverLetterAccept'
 import { rankContacts } from '../../modules/outreach/contactRanking'
 import { isApiAvailable } from '../../utils/apiAvailability'
 
@@ -192,16 +193,7 @@ export default function JobAIToolsPanel({ job, onJobUpdated }) {
               <p className="mt-1 whitespace-pre-wrap text-stone-700 dark:text-stone-300">{d[k]}</p>
             </div>
           ))}
-          {insights.generatedAt && isApiAvailable() && (
-            <a
-              href={`/api/resumes/${job.jobId}/ai_cover_letter.md`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-teal-600"
-            >
-              Download ai_cover_letter.md
-            </a>
-          )}
+          {insights.generatedAt && isApiAvailable() && <CoverLetterAccept jobId={job.jobId} />}
         </div>
       )
     }

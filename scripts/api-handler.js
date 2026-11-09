@@ -13,6 +13,7 @@ import { deleteManualJob } from './manual-job-delete.js'
 import { pruneKeptRescored, runKeptRescore } from './run-kept-rescore.js'
 import { extractAdAi, fetchAd, previewAdAi } from './run-ad-fill.js'
 import { buildScoringCommand, getScoringStatus, previewJudge, runJudgedScoring, runScoring } from './run-scoring.js'
+import { acceptCoverLetter } from './ai-draft-accept.js'
 import { buildTailorCommand, CONFIRM_REQUIRED, getTailorStatus, mayTailor, previewTailor, runTailor, runTailorStream } from './run-tailor.js'
 import { getProjectScanStatus, runProjectScan } from './run-project-scan.js'
 import { runJobImport } from './run-job-import.js'
@@ -957,6 +958,19 @@ export async function handleApiRequest(req, res) {
   }
 
   // AI budget gate: effective settings and today's / this month's usage (python/llm/ai_gate.py).
+  // The AI cover letter is saved as a draft. This is the only way it becomes a document: the server re-runs the fact gate on its
+  // own copy of the draft; the request is the job id and `confirm: true`.
+  if (url === '/api/ai/cover-letter/accept' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req, res)
+      const result = await acceptCoverLetter({ jobId: body.jobId, confirm: body.confirm })
+      sendJson(res, result.status, result.body)
+    } catch (e) {
+      sendJson(res, 500, { ok: false, error: e.message })
+    }
+    return true
+  }
+
   if (url === '/api/ai/usage' && req.method === 'GET') {
     try {
       sendJson(res, 200, await readAiUsage())

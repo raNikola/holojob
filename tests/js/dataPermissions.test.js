@@ -155,7 +155,7 @@ describe('profile mirror', () => {
 describe('saved AI answers', () => {
   const writers = [
     ['interview prep', () => writeInterviewPrep('job-1', { answer: 'x' }), 'interviews/job-1/interview_prep.json'],
-    ['cover letter', () => writeCoverLetter('job-1', { short: 'x' }), 'resumes/job-1/ai_cover_letter.md'],
+    ['cover letter', () => writeCoverLetter('job-1', { short: 'x' }), 'resumes/job-1/drafts/ai_cover_letter.md'],
     ['skill gap', () => writeSkillGap({ answer: 'x' }), 'analytics/skill_gap.json'],
   ]
 

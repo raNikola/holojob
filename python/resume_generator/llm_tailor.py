@@ -80,6 +80,15 @@ Return ONLY a JSON object, no prose, with exactly this shape:
 }}"""
 
 
+def project_names(project_intel: dict) -> list[str]:
+    """Names the candidate's own projects may be called by in a document: project name, tech stack and domain, never a metric."""
+    out: list[str] = []
+    for p in project_intel.get("projects") or []:
+        out += [str(p.get("name") or ""), str(p.get("domain") or "")] + [str(t) for t in p.get("techStack") or []]
+    out += [str(t) for t in (project_intel.get("aggregate") or {}).get("techStack") or []]
+    return out
+
+
 def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", " ", html.unescape(text or ""))
 

@@ -21,7 +21,7 @@ if str(ROOT / "python" / "job_scoring") not in sys.path:
 from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic  # noqa: E402
 import pipeline_lock  # noqa: E402
 from cover_letter_generator import BANNED_PHRASES, build_cover_letter_context, lint_cover_letter  # noqa: E402
-from llm_tailor import build_prompt, generate_llm_content, load_project_intelligence  # noqa: E402
+from llm_tailor import build_prompt, generate_llm_content, load_project_intelligence, project_names  # noqa: E402
 import claude_code  # noqa: E402
 from pdf_renderer import render_single_page_pdf  # noqa: E402
 from provenance_checker import build_canonical_facts, check_document, check_draft  # noqa: E402
@@ -141,15 +141,6 @@ def _apply_llm_content(ctx: dict, llm: dict, intelligence: dict) -> dict:
     return merged
 
 
-def _project_names(project_intel: dict) -> list[str]:
-    """Names the candidate's own projects may be called by: project name, tech stack and domain, never a metric."""
-    out: list[str] = []
-    for p in project_intel.get("projects") or []:
-        out += [str(p.get("name") or ""), str(p.get("domain") or "")] + [str(t) for t in p.get("techStack") or []]
-    out += [str(t) for t in (project_intel.get("aggregate") or {}).get("techStack") or []]
-    return out
-
-
 def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = True, confirmed: bool = False) -> dict:
     job_id = job.get("jobId") or "unknown"
     out_dir = RESUMES_ROOT / job_id
@@ -184,7 +175,7 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
                 trial_md = render_resume_md(candidate_ctx)
                 prov_issues = list(dict.fromkeys(
                     check_document(trial_md + "\n" + "\n".join(paragraphs), facts_with_job)
-                    + check_draft(llm, facts, job=job, extra=_project_names(load_project_intelligence()))
+                    + check_draft(llm, facts, job=job, extra=project_names(load_project_intelligence()))
                 ))
                 prov_ok = not prov_issues
                 lint = lint_cover_letter(paragraphs)
