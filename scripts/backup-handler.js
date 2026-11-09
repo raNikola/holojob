@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto'
 import { PassThrough } from 'node:stream'
 import { createRequire } from 'node:module'
 import { isStoreBackupEntry, mergeFromBackup } from './application-store.js'
+import { isJobStateBackupEntry, mergeStateFromBackup } from './job-state-store.js'
 import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE, replaceFileAtomic } from './atomic-file.js'
 import { isSecretPath, safeRelativePath } from './secret-paths.js'
 
@@ -186,6 +187,7 @@ export async function importBackupZip(root, zipBuffer, options = {}) {
   const entries = zip.getEntries()
   const restored = []
   const refused = []
+  let jobState = null
   const storeEntries = []
   const dataRoot = path.resolve(root, 'data') + path.sep
 
@@ -216,6 +218,13 @@ export async function importBackupZip(root, zipBuffer, options = {}) {
       storeEntries.push({ name, data: entry.getData() })
       continue
     }
+    if (isJobStateBackupEntry(name)) {
+      // Never replaced: entries are added where missing, the live ones stay (job-state-store.js).
+      const merged = mergeStateFromBackup(root, entry.getData())
+      if (merged.refused) refused.push(`${name} (${merged.refused})`)
+      else jobState = merged
+      continue
+    }
     const dest = path.resolve(root, name)
     if (!dest.startsWith(dataRoot)) {
       throw new Error(`Backup refused: path leaves data/ (${name.slice(0, 80)})`)
@@ -231,5 +240,5 @@ export async function importBackupZip(root, zipBuffer, options = {}) {
   }
 
   const applications = storeEntries.length ? await mergeFromBackup(root, storeEntries, options) : null
-  return { ok: true, restored, count: restored.length, refused, applications, verified: verification.hashed }
+  return { ok: true, restored, count: restored.length, refused, applications, jobState, verified: verification.hashed }
 }

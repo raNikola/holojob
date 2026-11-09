@@ -43,6 +43,7 @@ import { previewCvAnalysis, runCvAnalysis } from './run-cv-analyze.js'
 import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv-store.js'
 import { handleApplicationsRequest } from './application-store.js'
 import { handleJobHistoryRequest, handleJobTextsRequest } from './job-history-read.js'
+import { handleJobStateRequest } from './job-state-store.js'
 import { handleJobsAllRequest } from './job-all-read.js'
 import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
 import { getRun, listRuns } from './run-history.js'
@@ -639,6 +640,10 @@ export async function handleApiRequest(req, res) {
 
   // Application tracker: the store module owns every route under /api/applications.
   if (await handleApplicationsRequest(req, res, url, { root: ROOT })) {
+    return true
+  }
+
+  if (await handleJobStateRequest(req, res, url, { root: ROOT })) {
     return true
   }
 
