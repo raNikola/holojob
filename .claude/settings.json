@@ -1,0 +1,8 @@
+{
+  "enabledPlugins": {
+    "superpowers@superpowers-marketplace": false,
+    "code-review@claude-plugins-official": false,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
+    "mattpocock-skills@claude-plugins-official": true
+  }
+}
