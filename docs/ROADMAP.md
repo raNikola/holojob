@@ -178,6 +178,116 @@ Decisions: [DECISIONS.md](DECISIONS.md#job-relevance-lifecycle-salary-and-deadli
 5. Recheck framework and dependency compatibility.
 6. Obtain separate PO implementation approval.
 
+## Epic: HolyJobs Browser Extension (LinkedIn job and profile import) - Planned / To Do
+
+**Status: PLANNED. Nothing is built, no branch for implementation exists, no dependency is installed.** Recorded 2026-11-09 on the docs-only branch `extension-epic-plan`. The Epic is **not** part of the Roadmap v2 wave order; the owner decides where it sits (open decision 1). Owner decisions and the conflict analysis: [DECISIONS.md](DECISIONS.md#browser-extension-epic-and-company-information-standardization-planning-only-2026-11-09).
+
+**Goal:** a browser extension that, on a LinkedIn page the user opened and activated it on, transfers a job posting (first) or the user's own profile (later, blocked) into HolyJobs. It complements discovery, scoring, profile import and application tracking; it adds no second writer, no AI call and no crawling.
+
+**Principles (owner, binding for every Task):** user-initiated only; no LinkedIn credentials or session cookies stored or sent to HolyJobs; no background crawling, automatic navigation or continuous scraping; no new AI call for extraction; preview and confirmation before any data change; reuse existing HolyJobs records; no duplicates, silent overwrites or change to user-owned job states; collect only what the opened page shows; account-restriction and terms-of-service risk assessed **before** any implementation. LinkedIn first, architecture open to other sites later.
+
+**Order of work (owner):** 1 foundations and safety (TASK-03) -> 2 exact matching and deduplication (02.1) -> 3 new-job import (02.2) and existing-job enrichment (02.6) -> 4 LinkedIn Recommended (02.3) and application method (02.4) -> 5 Job Poster (02.5, only if visible) -> 6 profile import (TASK-01, **BLOCKED**) -> 7 multi-job and other sites (later). Each phase is useful alone, tested and reviewed before the next starts.
+
+| Task | Priority | Status | Depends on |
+|---|---|---|---|
+| TASK-03 Extension foundations and safety (incl. LinkedIn terms and account-risk assessment) | P0, prerequisite | Planned / To Do | Owner decisions 2, 3, 4 |
+| TASK-02 LinkedIn job import and enrichment: **the first useful extension slice** | P0 for the extension | Planned / To Do | TASK-03 |
+| TASK-02.1 Existing-job detection and deduplication (find) | MVP, mandatory | Planned / To Do | TASK-03 |
+| TASK-02.2 Job import (new jobs) | MVP | Planned / To Do | 02.1 |
+| TASK-02.6 Existing-job enrichment | MVP | Planned / To Do | 02.1, 02.2 |
+| TASK-02.3 LinkedIn Recommended signal | MVP, mandatory | Planned / To Do | 02.1, per-user overlay (decision 6) |
+| TASK-02.4 Easy Apply / External Apply | MVP, mandatory | Planned / To Do | 02.2 or 02.6 |
+| TASK-02.5 Job Poster / recruiter | MVP, only if visibly available | Planned / To Do | 02.2, contact model (decision 7) |
+| TASK-01 LinkedIn profile import: **the riskiest Task** | P1 | **Planned and BLOCKED** | TASK-03 assessment complete **and** explicit owner approval; Wave 7 merged |
+| Company information standardization (Discovery, not the extension) | P1 | Planned / To Do | Provider audit; see [below](#discovery-improvement-company-information-standardization---planned--to-do) |
+
+### TASK-03 Extension foundations and safety (P0, prerequisite for 01 and 02)
+
+Decide before any extension code: the architecture decision record covers the items below. Deliverables are documents and a go / no-go, not code.
+
+- **Terms and account risk:** read LinkedIn's current terms, robots and extension / automation rules; assess whether reading the page the user opened can restrict the user's account; record the finding, the approach chosen (for example reading the visible page DOM on a click, versus nothing else) and what was rejected. The same assessment states whether the existing JobSpy LinkedIn discovery and the `li_at` use (outreach scraper) change the picture.
+- **Activation and scope:** Manifest V3, explicit click (no content script that runs by itself beyond what is needed to answer the click), host permissions limited to the supported LinkedIn job and profile paths, no `cookies`, `webRequest` or `history` permission, no background fetching.
+- **Transport and authorization:** the request guard today is not authentication and the owner accepted no login ([DECISIONS.md](DECISIONS.md) 2026-10-29). The extension needs its own scoped credential (open decision 2) and a way past the Origin / Host rules without weakening them for the app. Every payload is validated by a fixed schema (size, types, host allowlist for URLs, unknown keys dropped and counted), answers use fixed error codes, no raw HTML is stored, no private data in logs (same discipline as profile import).
+- **Where data lands:** extension payloads never reach a store directly. Jobs go through the Find or Import flow into the app's confirm screen and then the existing manual-job path; the profile goes only as an `ImportDraft` into the Wave 7 review, confirm and guarded apply (the profile master is still the browser, so only the app can apply it).
+- **Compatibility:** per-user signals live in a per-user overlay, never on a shared job record; stable identity keys so a future Shared Job Database and Company entity can adopt the data without a rewrite.
+- **Acceptance:** assessment and decision record approved by the owner; permission list and payload schema written; handoff mechanism chosen; abuse cases listed (a web page posting to the extension API, a replayed payload, an oversize or hostile payload); a static-test plan (no model import, no storage of raw HTML, no cookie access); go / no-go recorded per Task.
+
+### TASK-02 LinkedIn job import and enrichment (P0 for the extension; the first useful slice)
+
+Primary workflow is **Find or Import**, not "Save job". Flow: the user opens a LinkedIn posting and clicks **Find in HolyJobs**; the extension reads the visible job data and the LinkedIn signals; HolyJobs looks the job up; exact match opens the existing job, possible matches are shown for review, no match offers a preview and "create". Nothing is created or changed without the user's confirmation.
+
+**02.1 Existing-job detection and deduplication (MVP, mandatory)**
+- Match order: (1) LinkedIn job id, (2) normalised canonical URL (reuse `identityJobUrl` / `identity_url`, fixture `tests/fixtures/url-normalisation.json`), (3) existing provider / source id (`externalId`, optional today, to verify it is kept for JobSpy rows), (4) company + title + location similarity as **candidates only**.
+- Search all of: active (`scored_jobs.json`, `discovered_jobs.json`), closed and history-only (ledger `job_history.json`), kept and rejected (`job-state.json`), hand-entered (`manual_jobs.json`, deleted-job tombstones), and jobs linked to applications, voided included (application store and its posting snapshots).
+- A possible match is never merged automatically. A closed or history-only job is never duplicated because it is missing from current discovery.
+- Acceptance: id and URL matches are exact and tested on a fixture covering each source above; a same-text different-id pair stays a candidate; a deleted manual job and a voided application still match; the find call writes nothing (test: file hashes unchanged); a canary in the payload appears in no log or error body.
+
+**02.2 Job import (MVP)**
+- Capture title, company, location, the complete available description, LinkedIn job id and canonical URL, source and original URL, publication date, salary and work mode when shown, application method and destination URL.
+- Reuse the Add job form, its validation and the clash check (`manualJob.js`, `/api/jobs/manual/score`); **no automatic creation**; the user reviews and confirms. True source (`LinkedIn`) and import origin (`browser_extension`) are two separate fields; today a hand-entered job is `provider: 'manual'`, so the Task decides how `source` is recorded (open decision 5).
+- Acceptance: the form opens prefilled and saves nothing before Save; description is whole or marked incomplete (no silent truncation); owner-only fields stay out of scoring payloads (`SCORING_FIELDS` unchanged unless the owner adds a field); the saved job scores through the normal path with no extra AI call.
+
+**02.3 LinkedIn Recommended signal (MVP, mandatory)**
+- Fields: `linkedinRecommended` true / false / unknown, `recommendedObservedAt`, `recommendationSource` (the visible context). Label "LinkedIn Recommended".
+- Per user, never a property of the shared job; absence of an indicator is `unknown`, never `false`; it does **not** change the Fit Score or any scoring input; when and where it was observed is kept.
+- Acceptance: stored in the per-user overlay only; a scoring test proves the score is identical with and without the signal; a second observation without the indicator does not erase an earlier `true`.
+
+**02.4 Easy Apply / External Apply (MVP, mandatory)**
+- Values `easy_apply`, `external_apply`, `unknown`; the external destination URL when reliably visible. Shown in Job Details. A verified value is kept when a later extraction is uncertain. This is a property of the posting, not of the user's application.
+- Never submits an application; a click on an apply link never marks the job Applied; application records are untouched by import (reuse the Applied confirm form and the application store as they are).
+- Acceptance: tests that an import and an enrichment leave the application store hash unchanged; an uncertain re-extraction keeps the earlier verified value; the destination URL passes the same URL validation as other links.
+
+**02.5 Job Poster / recruiter (MVP, only if visibly available)**
+- Name, displayed role, LinkedIn profile URL, relationship `job_poster`, with source and extraction confidence. A poster is not assumed to be the hiring manager; no other profile is opened; no private contact detail inferred; no invitation, message or outreach enrolment.
+- Third-party personal data: stays owner-only like application contacts, in no AI payload (`ai-redact.js`, `safeTracking` rules); the Task decides whether it is stored on the job overlay or offered as a contact on the application (decision 7).
+- Acceptance: absent on the page means no record; an AI-context test proves no poster field reaches a prompt.
+
+**02.6 Existing-job enrichment (MVP)**
+- For a found job, compare and show additions only: missing description content, application method, external link, poster, recommended signal. Never replace a description blindly (longer is not better; show the difference, user chooses). Saved, Rejected, Keep, Applied, notes, application history and application-time snapshots are never touched. No automatic scoring; "Re-score" is offered when material job data changed.
+- Acceptance: a test per preserved state above; a changed description needs an explicit choice; applying an enrichment changes only the fields shown in the preview.
+
+### TASK-01 LinkedIn profile import (P1) - PLANNED AND BLOCKED
+
+**Blocked until the TASK-03 account-risk and terms assessment is complete and the owner approves.** It is the riskiest Task (the data is the user's own personal profile, LinkedIn's rules and detection are most likely to apply, and the page structure changes often). LinkedIn PDF and LinkedIn data ZIP (Wave 7 S5) **remain the supported LinkedIn import sources** and are the safe path in the meantime. The earlier decision "LinkedIn profile URL import: rejected" stays in force for any server-side fetch by URL; how this Task relates to it is in [DECISIONS.md](DECISIONS.md#browser-extension-epic-and-company-information-standardization-planning-only-2026-11-09).
+- Flow: the user opens their own profile and clicks the extension; the visible sections (headline, summary, experience, skills, education, certifications, projects, languages, links) become an `ImportDraft` in a new source value (for example `linkedin_page`, added to `src/data/importSources.json`); the user sees the Wave 7 review, Merge / Replace confirm, backup, guarded apply, Undo and sync retry unchanged.
+- Rules: no second profile writer; manual edits and CV entries preserved (Merge default, `_editedFields` protected); a missing or unreadable section is marked unavailable, never guessed and never overwrites; no navigation to further pages; no AI call; import never triggers scoring or AI.
+- Acceptance (if approved): the draft passes the same draft validator as the other sources; the apply path is the existing `applyReviewedImport` (static test: no other writer); a section that cannot be read leaves the stored section unchanged; canary test on all failure paths.
+- Later: more section coverage; other profile sites (separate product decision).
+
+### Phases
+
+| Phase | Content | Exit |
+|---|---|---|
+| A | TASK-03 documents: terms and account-risk assessment, architecture decision record, auth and handoff decision, payload schema | Owner go / no-go per Task |
+| B (MVP core) | 02.1 find, 02.2 import | Find or Import works on real postings, no duplicate in fixture and in a real check |
+| C | 02.6 enrichment, 02.3 Recommended, 02.4 application method | Every preserved-state test passes; owner check in Job Details |
+| D | 02.5 Job Poster (if visible) | Owner check |
+| E | TASK-01 profile import | Only after owner approval; real-file check against a LinkedIn PDF import for the same profile |
+| F (later) | Several selected jobs, other websites, richer contact data, company-level dedup, Shared Job Database integration | Separate decisions |
+
+**Existing functionality reused (no duplicate work):** Wave 7 `ImportDraft`, `applyReviewedImport`, backup and Undo; the manual-job model, Add job form, clash check and `identityJobUrl`; the job ledger and `job-state.json` (statuses, Keep, tombstones); the application store, snapshots and Applied confirm form; the request guard, `read-body.js` limits and fixed-error-code pattern; `ai-redact.js` for contacts.
+
+**Open decisions (owner):** (1) where the Epic sits in the wave order; (2) extension credential and how the extension passes the request guard; (3) hand-off of the extension's data to the app UI (in-memory token as in Fill from ad, versus the extension opening the app); (4) browsers to support (Chromium only, or Firefox too); (5) how the true `source` is stored for an extension-created job; (6) location of the per-user signals overlay (a new store beside `job-state.json`, or an extension of it); (7) where a Job Poster is kept; (8) the terms and risk assessment outcome. Details in DECISIONS.md.
+
+---
+## Discovery improvement: Company information standardization - Planned / To Do
+
+**Status: PLANNED, P1. Part of Discovery, not of the browser extension.** Nothing is built. Recorded 2026-11-09.
+
+**Goal:** the normal discovery pipeline extracts and standardises company data across providers, so the company-level facts exist once and every job and every later source (including the extension) can use them.
+
+**Audit already done (code read, 2026-11-09):** the canonical job carries only a `company` string. Infostud's list API client keeps `companyName` and drops everything else it may return; Joberty has `companyUrlName` and `companyName`; no field for company website, industry, size or headquarters exists in the canonical job, the ledger or `data-shapes.md`. The claim that Infostud already provides a useful reference could not be confirmed from the code: the first Task step is to look at what its list and detail payloads actually carry.
+
+| Step | Content |
+|---|---|
+| 1 | Provider audit: per provider, which company fields are present in the raw payload (counts and field names only, no private data); decide the field list |
+| 2 | One company record shape, keyed by a normalised company key, kept **apart from the job** (no duplicate profile per job); fields: normalised name, website, industry, size, location / headquarters, provider company-page URL, description, source and observed-at per field |
+| 3 | Missing data is distinguished from unverified: each value is `known`, `unverified` or `missing` with its source and time; unchanged data is not re-fetched (a freshness window, as the AI findings store does) |
+| 4 | Providers fill the record from data they already read; no extra page fetch by default, no scraping of private or personal contacts |
+
+Acceptance: a fixture per provider shows which fields it fills; a job and its company are two records joined by the key; re-running discovery on unchanged data changes nothing; the shape is written so a future shared Company entity can take it over (no per-user field in it). Dependencies: Wave 4 import meta (built on a local branch, not merged). Open: the company key (name only is weak; domain when known), and where the record lives (a `data/companies` file beside the ledger).
+
+---
 ## Graph tooling (Graphify adapter) - in progress
 
 A minimal, removable, stdlib-only adapter over the local Graphify graph (no services, databases, network or LLM extraction). Primary success measure: the graph reliably answers "if we change this Python module, which other parts of the system may be affected?". Decisions: [DECISIONS.md](DECISIONS.md#graph-tooling-graphify-output-update-cycle-and-backup-2026-11-08).
@@ -308,6 +418,8 @@ Sources and design: [DECISIONS.md](DECISIONS.md#import-redesign).
 | 2 | LinkedIn data ZIP. Needs real export file names and headers | Not built |
 | 4 | JSON Resume | Not built |
 | 5 | Structured experience editors | Not verified |
+
+The browser-extension profile import (TASK-01) is not a Wave 7 source: it is planned and blocked, see [the Epic](#epic-holyjobs-browser-extension-linkedin-job-and-profile-import---planned--to-do). LinkedIn PDF and the data ZIP stay the supported LinkedIn sources.
 
 Also later: the Continue / Save wizard flow fix, the score 60/58 fix, and a LinkedIn PDF test on a real file.
 
