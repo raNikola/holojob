@@ -228,6 +228,7 @@ export default function JobDiscoveryScreen() {
     }
   }, [routeEnabled, refetchAllAds])
 
+  const [skipJobspyOnce, setSkipJobspyOnce] = useState(false)
   const rescrape = useRescrapeRun({ enabled: pipelineApiAvailable, onFinished: handleRescrapeFinished })
 
   const handleRerunDiscovery = useCallback(async () => {
@@ -238,13 +239,17 @@ export default function JobDiscoveryScreen() {
       if (!intelligence?.searchStrategy?.jobSpySearchTerms?.length) {
         throw new Error('Run candidate intelligence generation first (Module 2).')
       }
-      await rescrape.start({ providers: 'serbia', country: searchCountry(profile, intelligence), intelligence, profile })
+      await rescrape.start({
+        providers: 'serbia', country: searchCountry(profile, intelligence), intelligence, profile,
+        ...(skipJobspyOnce ? { excludeProviders: ['jobspy'] } : {}), // this run only; the saved switch is not touched
+      })
+      setSkipJobspyOnce(false) // "this time" means one run
     } catch (e) {
       setRerunMsg(`Error: ${e.message}`)
     } finally {
       setRerunning(false)
     }
-  }, [profile, rescrape])
+  }, [profile, rescrape, skipJobspyOnce])
 
   const handleRescore = useCallback(async () => {
     setRerunning(true)
@@ -421,6 +426,16 @@ export default function JobDiscoveryScreen() {
                 {rerunning || rescrape.view.active ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Re-scrape jobs
               </Button>
+              <label className="flex items-center gap-1.5 text-xs text-stone-600 dark:text-stone-400" title="Skips LinkedIn (JobSpy) for this run only; the switch in Settings > Sources stays as it is.">
+                <input
+                  type="checkbox"
+                  checked={skipJobspyOnce}
+                  disabled={rerunning || rescrape.view.active}
+                  onChange={(e) => setSkipJobspyOnce(e.target.checked)}
+                  className="rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+                />
+                Skip LinkedIn this time
+              </label>
               <Button variant="secondary" onClick={handleRescore} disabled={rerunning || rescrape.view.active}>
                 <RefreshCw className="h-4 w-4" />
                 Re-score

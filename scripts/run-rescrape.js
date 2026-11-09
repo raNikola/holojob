@@ -133,6 +133,11 @@ export async function startRescrape(body = {}, options = {}) {
   const { reconcile = reconcileRuns, writeMirrors = writeRequestMirrors, spawnFn = spawn, python = VENV_PYTHON, script = SCRIPT } = options
   const providers = body.providers ?? 'serbia'
   const country = body.country ?? ''
+  // One-off "not this time" (never saved): names of sources to leave out of this run only.
+  const exclude = body.excludeProviders ?? []
+  if (!Array.isArray(exclude) || exclude.length > 20 || !exclude.every((n) => typeof n === 'string' && PROVIDERS.test(n) && !n.includes(','))) {
+    return { status: 422, body: { ok: false, error: 'invalid', field: 'excludeProviders' } }
+  }
   if (typeof providers !== 'string' || !PROVIDERS.test(providers)) return { status: 422, body: { ok: false, error: 'invalid', field: 'providers' } }
   if (typeof country !== 'string' || country.length > MAX_COUNTRY_CHARS) return { status: 422, body: { ok: false, error: 'invalid', field: 'country' } }
   if (starting) return { status: 409, body: RUN_ACTIVE }
@@ -150,7 +155,7 @@ export async function startRescrape(body = {}, options = {}) {
     if (missing) return { status: 422, body: { ok: false, error: 'no_intelligence', message: missing } }
 
     const runId = randomBytes(6).toString('hex')
-    const args = [script, 'start', '--run-id', runId, '--providers', providers, ...(country ? ['--country', country] : [])]
+    const args = [script, 'start', '--run-id', runId, '--providers', providers, ...(country ? ['--country', country] : []), ...(exclude.length ? ['--exclude', exclude.join(',')] : [])]
     // Its own session and no pipes: nothing that happens to this process or the browser can reach the run.
     const child = spawnFn(python, args, { cwd: ROOT, detached: true, stdio: 'ignore', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
     return await new Promise((resolve) => {

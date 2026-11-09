@@ -31,15 +31,18 @@ export function boardLabel(name) {
   return BOARD_LABELS[name] || name
 }
 
-/** { name: active } for the opt-in boards, as the server holds them. */
+/** { name: active } for every board, as the server holds them. A board with no `active` from the server counts as off. */
 export function draftFrom(boards) {
-  return Object.fromEntries((boards || []).filter((b) => b.optIn).map((b) => [b.name, b.active === true]))
+  return Object.fromEntries((boards || []).map((b) => [b.name, b.active === true]))
 }
 
-/** Opt-in boards the draft switches on that the server has off: each needs the consent line. */
+const optInNames = (boards) => new Set((boards || []).filter((b) => b.optIn).map((b) => b.name))
+
+/** Opt-in boards the draft switches on that the server has off: each needs the consent line. Other boards need none. */
 export function turningOn(draft, boards) {
   const saved = draftFrom(boards)
-  return Object.keys(draft).filter((name) => draft[name] && !saved[name])
+  const optIn = optInNames(boards)
+  return Object.keys(draft).filter((name) => optIn.has(name) && draft[name] && !saved[name])
 }
 
 /** The PUT body for what changed, or null when nothing did. */
@@ -47,9 +50,10 @@ export function changesFrom(draft, boards, consent = {}) {
   const saved = draftFrom(boards)
   const changed = Object.keys(draft).filter((name) => draft[name] !== saved[name])
   if (changed.length === 0) return null
-  return Object.fromEntries(changed.map((name) => [name, draft[name]
+  const optIn = optInNames(boards)
+  return Object.fromEntries(changed.map((name) => [name, draft[name] && optIn.has(name)
     ? { active: true, consentAccepted: consent[name] === true }
-    : { active: false }]))
+    : { active: draft[name] }]))
 }
 
 export function canSave(draft, boards, consent = {}) {

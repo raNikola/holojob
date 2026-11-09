@@ -56,6 +56,8 @@ def step_commands(args) -> list[tuple[str, list[str]]]:
     discovery = [str(DISCOVERY), "--providers", args.providers, "--run-id", args.run_id]
     if args.country:
         discovery += ["--country", args.country]
+    if getattr(args, "exclude", None):
+        discovery += ["--exclude", args.exclude]
     return [("discovery", discovery), ("scoring", [str(SCORING)])]
 
 
@@ -363,6 +365,7 @@ def main(argv=None) -> int:
     begin.add_argument("--run-id", required=True)
     begin.add_argument("--providers", required=True)
     begin.add_argument("--country")
+    begin.add_argument("--exclude", default="")
     commands.add_parser("reconcile")
     commands.add_parser("hold")
     stop = commands.add_parser("cancel")

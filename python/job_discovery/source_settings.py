@@ -1,7 +1,8 @@
 """The owner's source switches: data/config/sources.json (SOURCES_SPEC.md, first slice).
 
-Only opt-in sources (source_definitions.py) are read from it so far. The other
-boards still follow the provider groups until board switching (Phase 3b).
+Opt-in sources (source_definitions.py) need `active: true` and a consent time. Every other
+source is on unless its entry says `active: false` (the owner's switch, no consent); discovery
+skips such a source entirely, which is "skipped by owner", never an empty or failed read.
 
     { "version": 1, "updatedAt": "...",
       "boards": { "joberty": { "active": false, "consentAcceptedAt": "2026-10-30T12:00:00+00:00",
@@ -90,6 +91,32 @@ def is_enabled(name: str, data: dict) -> bool:
     return isinstance(entry, dict) and entry.get("active") is True and bool(entry.get("consentAcceptedAt"))
 
 
+def is_owner_off(name: str, data: dict | None) -> bool:
+    """A source that follows the groups is on unless the owner switched it off here (`active: false`). Opt-in sources use is_enabled."""
+    entry = ((data or {}).get("boards") or {}).get(name)
+    return name not in opt_in_names() and isinstance(entry, dict) and entry.get("active") is False
+
+
+SKIP_SWITCH = "skipped by owner (switched off in Settings > Sources)"
+SKIP_THIS_RUN = "skipped by owner for this run"
+
+
+def owner_skips(names: list[str], data: dict | None, exclude: list[str] | None = None) -> tuple[list[str], list[tuple[str, str]]]:
+    """(sources to run, [(source, reason)] skipped by the owner). Skipped is not empty and not failed: nothing was searched,
+    so the run records a skipped row and the importer holds that source's ads as they are (a source that did not run closes nothing).
+    `data` None (settings unreadable) switches nothing off. `exclude` is the one-off "not this time", never saved."""
+    excluded = {n.strip().lower() for n in exclude or [] if n.strip()}
+    kept, skipped = [], []
+    for name in names:
+        if is_owner_off(name, data):
+            skipped.append((name, SKIP_SWITCH))
+        elif name in excluded:
+            skipped.append((name, SKIP_THIS_RUN))
+        else:
+            kept.append(name)
+    return kept, skipped
+
+
 def effective_providers(spec: str | None, resolved: list[str], data: dict | None) -> tuple[list[str], list[str]]:
     """(providers to run, opt-in sources dropped because they are off), whatever the request named.
 
@@ -146,7 +173,10 @@ def view(data: dict | None = None, error: str | None = None) -> dict:
     boards = []
     for name, definition in SOURCE_DEFINITIONS.items():
         row = {"name": name, "optIn": definition.opt_in, "inStandardRun": name in PROVIDER_GROUPS[STANDARD_GROUP]}
-        if definition.opt_in:
+        if not definition.opt_in:
+            entry = (data.get("boards") or {}).get(name) or {}
+            row.update(active=not is_owner_off(name, data), disabledAt=entry.get("disabledAt"), history=entry.get("history") or [])
+        else:
             entry = (data.get("boards") or {}).get(name) or {}
             row.update(
                 active=is_enabled(name, data),
@@ -178,8 +208,6 @@ def save(boards, now: str | None = None) -> dict:
     for name, change in boards.items():
         if name not in SOURCE_DEFINITIONS:
             errors.append(f"{name}: unknown source")
-        elif not SOURCE_DEFINITIONS[name].opt_in:
-            errors.append(f"{name}: follows the provider groups; switching it comes with board switching (Phase 3b)")
         elif not isinstance(change, dict) or not isinstance(change.get("active"), bool):
             errors.append(f"{name}: active must be true or false")
     if errors:
@@ -191,11 +219,20 @@ def save(boards, now: str | None = None) -> dict:
             data = read()
         except SourcesError as exc:
             return {"ok": False, "errors": [f"{exc}; fix or remove the file, it was left as it is"]}
-        turning_on = [n for n, c in boards.items() if c["active"] and not is_enabled(n, data)]
+        opt_in = set(opt_in_names())
+        turning_on = [n for n, c in boards.items() if n in opt_in and c["active"] and not is_enabled(n, data)]
         missing = [n for n in turning_on if boards[n].get("consentAccepted") is not True]
         if missing:
             return {"ok": False, "needsConsent": missing}
         for name, change in boards.items():
+            if name not in opt_in:  # a group source: on unless switched off; no consent, no entry until the owner changes it
+                was_off = is_owner_off(name, data)
+                if change["active"] == (not was_off):
+                    continue
+                entry = data["boards"].setdefault(name, {"active": True, "history": []})
+                entry.update(active=change["active"], disabledAt=None if change["active"] else at)
+                _record(entry, "enabled" if change["active"] else "disabled", at)
+                continue
             entry = data["boards"].setdefault(name, {"active": False, "consentAcceptedAt": None, "history": []})
             if name in turning_on:
                 entry.update(active=True, consentAcceptedAt=at, disabledAt=None)

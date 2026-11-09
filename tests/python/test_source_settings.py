@@ -131,7 +131,7 @@ def test_saving_an_already_enabled_source_keeps_its_consent():
     assert on_disk()["boards"]["joberty"]["consentAcceptedAt"] == T1
 
 
-@pytest.mark.parametrize("boards", [{"jobspy": {"active": False}}, {"nonsense": {"active": True}},
+@pytest.mark.parametrize("boards", [{"jobspy": {"active": "no"}}, {"nonsense": {"active": True}},
                                     {"joberty": {"active": "yes"}}, {}, None])
 def test_invalid_changes_are_refused(boards):
     assert source_settings.save(boards)["ok"] is False

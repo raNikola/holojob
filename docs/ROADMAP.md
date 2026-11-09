@@ -131,6 +131,12 @@ State at this point: S1 to S8b are built, deployed from a clean build and merged
 - [ ] Follow-up: the Graphify adapter build exited non-zero in Wave 4 (cause not investigated).
 - [ ] Not started on purpose: Infostud snapshot switch (Wave 4) stays off.
 
+## Per-source switches and one-off Re-scrape skip - built (2026-11-09), owner check pending
+
+Settings > Sources: every source can be switched off and on (server-side, `data/config/sources.json`); discovery and Re-scrape skip a
+switched-off source without closing or counting anything; Re-scrape has "Skip LinkedIn this time" (one run, nothing saved).
+Decisions: `docs/DECISIONS.md` "Per-source switches". Owner steps: rebuild/restart the API, then check in Settings > Sources and Activity.
+
 ## Job relevance, lifecycle, salary, deadline - built (2026-11-08), owner visual check pending
 
 - [x] Three title tiers, cap 40 for an unrelated title, program work accepted for the product family.

@@ -3,9 +3,10 @@
  * check, the server's consent time, the atomic write to data/config/sources.json); this file only carries JSON to it.
  *
  *   GET  /api/sources                                              -> every source, opt-in switches and consent history
- *   PUT  /api/sources                 { boards: { joberty: { active, consentAccepted? } } }
+ *   PUT  /api/sources                 { boards: { joberty: { active, consentAccepted? }, jobspy: { active } } }
  *   POST /api/sources/migrate-legacy  { value }                    -> the old Jobs-screen checkbox, moved once
  *
+ * Any source can be switched off (no consent); only an opt-in source needs consent to be switched on.
  * Answers: 200 saved, 400 invalid, 409 an opt-in source is being switched on without "consentAccepted": true
  * (the body lists which), 500 the settings could not be run. Discovery reads the same file and is the gate: a
  * source that is off here never runs, whatever a request asks for.
