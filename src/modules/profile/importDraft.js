@@ -65,6 +65,17 @@ export function liveCount(profile, id) {
   return list(parsed[id]).length
 }
 
+/** One comparable key per item a section holds in a profile (the keys the merge de-duplicates by). */
+export function sectionKeys(profile, id) {
+  const parsed = profile.resume?.parsedData || {}
+  if (id === 'experience') {
+    const detail = list(parsed.experienceDetail)
+    return detail.length ? detail.map(entryKey) : list(parsed.workExperience).map(norm)
+  }
+  if (id === 'languages') return normalizeLanguages(profile.basicProfile?.languages).map((l) => norm(l.language))
+  return list(parsed[id]).map(norm)
+}
+
 /** The summary text the profile holds now (`resume.parsedData.summary`); empty when it has none. */
 export function liveSummary(profile) {
   return text(profile.resume?.parsedData?.summary)

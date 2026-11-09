@@ -1,7 +1,7 @@
-// The two steps around the import review screen, with their effects passed in so they can be tested
-// without a browser: reading a source into a draft (writes nothing) and saving a reviewed draft.
+// The step before the import review screen, with its effects passed in so it can be tested without a browser: reading a
+// source into a draft (writes nothing). Saving a reviewed draft is importApply.js.
 
-import { applyImportDraft, draftParsedData, resolveChoices } from './importDraft.js'
+import { draftParsedData } from './importDraft.js'
 
 export const PDF_SOURCES = ['resume_pdf', 'linkedin_pdf']
 
@@ -17,23 +17,6 @@ export async function readPdfDraft(file, source, { extract, parse }) {
   const text = await extract(file)
   const draft = await parse(source, text)
   return { ...draft, fileName: file.name || '' }
-}
-
-/**
- * Save a reviewed draft. For a PDF the file is stored first, best effort, as an upload always was: when
- * the API is unreachable or refuses it, the CV entry is kept without a stored file.
- * @returns {Promise<{ stored: boolean }>}
- */
-export async function saveReviewedDraft({ draft, choices, file, upload, updateProfile }) {
-  let stored = null
-  if (file) {
-    try {
-      const id = await upload(file)
-      if (id) stored = { id, filePath: `profile/cvs/${id}.pdf` }
-    } catch { /* the entry is kept without a stored file */ }
-  }
-  updateProfile((prev) => applyImportDraft(prev, draft, resolveChoices(prev, draft, choices), stored ? { file: stored } : {}))
-  return { stored: Boolean(stored) }
 }
 
 /**

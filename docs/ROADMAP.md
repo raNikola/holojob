@@ -294,6 +294,9 @@ Sources and design: [DECISIONS.md](DECISIONS.md#import-redesign).
 | Slice | Content | Status |
 |---|---|---|
 | S0 | Atomic profile mirror write; import backup route (last 10, profile JSON only) | Built on `wave7-profile-import` (2026-11-09) |
+| S1 | One source list + draft version; guarded apply (backup, one write, retry never re-applies, Undo); confirm step with cache impact | Built on `wave7-profile-import` (2026-11-09) |
+| S2-S4, S6, S7 | TXT/MD, JSON Resume, DOCX, PDF real-file hardening, manual "Start blank" | Next, in this order |
+| S5 | LinkedIn data ZIP | Last: waits for the owner's real file names and header rows |
 | 1a | Wizard, paste step, review screen | Done |
 | 1b | TXT / MD and DOCX | Not built ("Other file types are coming"). `python-docx` is already pinned |
 | 3 | PDF and LinkedIn PDF | Listed after 1b, but both are already in the code (`PdfStep`, `4f2cd7e`). Real-file test below still open |

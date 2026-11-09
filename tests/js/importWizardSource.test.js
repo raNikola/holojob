@@ -5,17 +5,22 @@ import { validateStep } from '../../src/utils/validators.js'
 const read = (file) => fs.readFileSync(`src/components/import/${file}`, 'utf8')
 const modules = (file) => [...read(file).matchAll(/from '([^']+)'/g)].map((m) => m[1])
 
-describe('the import wizard saves only in handleSave', () => {
+describe('the import wizard writes only in handleApply, through the guarded apply', () => {
   const wizard = read('ImportWizard.jsx')
-  const save = wizard.slice(wizard.indexOf('const handleSave'), wizard.indexOf('if (view ===', wizard.indexOf('const handleSave')))
+  const apply = wizard.slice(wizard.indexOf('const handleApply'), wizard.indexOf('const finish'))
 
-  it('keeps every write to the profile, the CV library and the CV files in ImportWizard.handleSave', () => {
-    expect(wizard.match(/updateProfile/g)).toHaveLength(2) // the hook and its one use below
-    expect(save).toMatch(/saveReviewedDraft\(\{ draft, choices, file: pdfFile, upload: uploadCvFile, updateProfile \}\)/)
-    expect(wizard).not.toMatch(/cvActions|saveProfile|localStorage|setStep|applyImportDraft|applyResumeExtraction/)
-    // The upload function is imported, but only handed over inside handleSave.
-    expect(wizard.match(/uploadCvFile/g)).toHaveLength(2)
-    expect(wizard.slice(0, wizard.indexOf('const handleSave'))).not.toMatch(/uploadCvFile\(/)
+  it('keeps every write to the profile, the CV library and the CV files in ImportWizard.handleApply', () => {
+    expect(apply).toMatch(/applyReviewedImport\(\{ profile: currentProfile\(\), draft, choices, file: pdfFile, deps: realImportDeps\(/)
+    expect(wizard).not.toMatch(/updateProfile|cvActions|saveProfile|localStorage|setStep|applyImportDraft|applyResumeExtraction|uploadCvFile|saveReviewedDraft/)
+    // Only the guarded apply (backup first, one write, mirror retry that never re-applies) reaches the profile; the wizard has no other writer.
+    expect(wizard.match(/applyReviewedImport\(/g)).toHaveLength(1)
+  })
+
+  it('the confirm step only previews: it builds the diff and asks for the impact, and writes nothing', () => {
+    const toConfirm = wizard.slice(wizard.indexOf('const handleReviewed'), wizard.indexOf('const handleApply'))
+    expect(toConfirm).toMatch(/buildImportPreview\(/)
+    expect(toConfirm).toMatch(/fetchImportImpact\(/)
+    expect(toConfirm).not.toMatch(/applyReviewedImport|commitProfile|saveProfile|localStorage|upload/)
   })
 
   it('reads a PDF into a draft without a write: extract and parse are all that is handed to readPdfDraft', () => {
@@ -30,17 +35,17 @@ describe('the import wizard saves only in handleSave', () => {
   })
 
   it('has no way to write in the picker, the paste step, the PDF step or the review screen', () => {
-    for (const file of ['SourcePicker.jsx', 'PasteStep.jsx', 'PdfStep.jsx', 'ImportReview.jsx']) {
+    for (const file of ['SourcePicker.jsx', 'PasteStep.jsx', 'PdfStep.jsx', 'ImportReview.jsx', 'ImportConfirm.jsx']) {
       const source = read(file)
       expect(source, file).not.toMatch(/useProfile|updateProfile|cvActions|uploadCvFile|localStorage|sessionStorage|fetch\(/)
       expect(modules(file).filter((m) => /context|cvApi|storage|ProfileContext|resumeParser/.test(m)), file).toEqual([])
     }
   })
 
-  it('parses through the one stateless route and touches /api/cvs only through cvApi in handleSave', () => {
+  it('parses through the one stateless route and touches /api/cvs only through cvApi inside the guarded apply', () => {
     const api = fs.readFileSync('src/modules/profile/importApi.js', 'utf8')
     expect(api).toMatch(/\/api\/profile\/import\/parse/)
-    for (const file of ['ImportWizard.jsx', 'SourcePicker.jsx', 'PasteStep.jsx', 'PdfStep.jsx', 'ImportReview.jsx']) {
+    for (const file of ['ImportWizard.jsx', 'SourcePicker.jsx', 'PasteStep.jsx', 'PdfStep.jsx', 'ImportReview.jsx', 'ImportConfirm.jsx', 'ImportResult.jsx']) {
       expect(read(file), file).not.toMatch(/\/api\/cvs/)
     }
     expect(api).not.toMatch(/\/api\/cvs/)
@@ -48,7 +53,7 @@ describe('the import wizard saves only in handleSave', () => {
   })
 
   it('keeps the unsaved draft in memory only', () => {
-    for (const file of ['ImportWizard.jsx', 'PasteStep.jsx', 'PdfStep.jsx', 'ImportReview.jsx']) {
+    for (const file of ['ImportWizard.jsx', 'PasteStep.jsx', 'PdfStep.jsx', 'ImportReview.jsx', 'ImportConfirm.jsx']) {
       expect(read(file), file).not.toMatch(/localStorage|sessionStorage|indexedDB/)
     }
   })

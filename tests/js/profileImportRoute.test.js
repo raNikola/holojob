@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import http from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handleApiRoutes } from '../../scripts/api-handler.js'
-import { MAX_PASTE_BYTES, parseImportSource, setImportRunners } from '../../scripts/run-profile-import.js'
+import { MAX_PASTE_BYTES, parseImportSource, setImpactRunner, setImportRunners } from '../../scripts/run-profile-import.js'
 import { checkApiRequest } from '../../scripts/request-guard.js'
 
 const ROUTE = '/api/profile/import/parse'
@@ -158,5 +158,45 @@ describe.runIf(hasVenv)('the real parser behind parseImportSource', () => {
 
   it('reports a parser refusal as a code only', async () => {
     expect(await parseImportSource('paste', '\u0000\u0001')).toEqual({ ok: false, code: 'empty' })
+  })
+})
+
+describe('POST /api/profile/import/impact', () => {
+  const impactPost = (body) => new Promise((resolve, reject) => {
+    const payload = typeof body === 'string' ? body : JSON.stringify(body)
+    const req = http.request(`${base}/api/profile/import/impact`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } }, (res) => {
+      const chunks = []
+      res.on('data', (c) => chunks.push(c))
+      res.on('end', () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString('utf-8') }))
+    })
+    req.on('error', reject)
+    req.end(payload)
+  })
+
+  it('hands the two profiles to the impact runner and answers its counts', async () => {
+    let seenRequest
+    setImpactRunner(async (request) => { seenRequest = request; return { ok: true, impact: { profileVersion: { changed: false } } } })
+    const res = await impactPost({ before: { a: 1 }, after: { a: 2 } })
+    expect(res.status).toBe(200)
+    expect(JSON.parse(res.text)).toEqual({ ok: true, impact: { profileVersion: { changed: false } } })
+    expect(seenRequest).toEqual({ before: { a: 1 }, after: { a: 2 } })
+    setImpactRunner()
+  })
+
+  it.each([[{}], [{ before: [], after: {} }], [{ before: {}, after: 'x' }], ['not json CANARY-3']])('refuses a bad request with a fixed code and echoes nothing (%j)', async (body) => {
+    setImpactRunner(async () => { throw new Error('must not run') })
+    const res = await impactPost(body)
+    expect(res.status).toBe(400)
+    expect(JSON.parse(res.text)).toMatchObject({ ok: false, code: 'invalid_request' })
+    expect(res.text).not.toContain('CANARY')
+    setImpactRunner()
+  })
+
+  it('a failing runner is a fixed 500', async () => {
+    setImpactRunner(async () => ({ ok: false, code: 'impact_failed' }))
+    const res = await impactPost({ before: {}, after: {} })
+    expect(res.status).toBe(500)
+    expect(JSON.parse(res.text).code).toBe('impact_failed')
+    setImpactRunner()
   })
 })

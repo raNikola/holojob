@@ -8,6 +8,8 @@ import { useProfile } from '../../context/ProfileContext'
 import { validateProfileForIntelligence } from '../../modules/intelligence/intelligenceValidators'
 import { regenerateIntelligence, saveIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { saveIntelligenceToDataDir } from '../../modules/jobs/intelligenceSync'
+import { clearIntelligenceStale } from '../../modules/profile/importDeps'
+import { ProfileChangeNotices } from '../import/ImportResult'
 import { VIEWS } from '../../modules/appNavigation'
 import { QUESTIONS } from '../../data/questions'
 import { describeAnswer } from '../../modules/profile/answerDisplay'
@@ -67,6 +69,7 @@ export default function ProfileHome({ onNavigate }) {
       const generated = regenerateIntelligence(profile)
       saveIntelligence(generated)
       void saveIntelligenceToDataDir(generated)
+      clearIntelligenceStale()
       setStatus('Intelligence regenerated successfully.')
     } catch (e) {
       setError(e.message || 'Failed to regenerate intelligence.')
@@ -91,6 +94,8 @@ export default function ProfileHome({ onNavigate }) {
           Regenerate Intelligence
         </Button>
       </div>
+
+      <ProfileChangeNotices />
 
       <CompleteProfileCard profile={profile} onAnswer={() => editStep(QUESTIONNAIRE_STEP)} onDismiss={dismissCompleteProfile} />
 

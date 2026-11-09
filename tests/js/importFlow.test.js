@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { cvEntryParsedData, readPdfDraft, saveReviewedDraft } from '../../src/modules/profile/importFlow.js'
+import { cvEntryParsedData, readPdfDraft } from '../../src/modules/profile/importFlow.js'
+import { applyReviewedImport } from '../../src/modules/profile/importApply.js'
 import { defaultChoices } from '../../src/modules/profile/importDraft.js'
 import { ensureCvLibrary } from '../../src/utils/cvLibrary.js'
 
@@ -71,7 +72,7 @@ describe('reading a PDF', () => {
   })
 })
 
-describe('saving a reviewed PDF draft', () => {
+describe('applying a reviewed PDF draft', () => {
   const NOW = { now: new Date('2026-11-01T09:00:00Z') }
 
   async function review(source = 'resume_pdf') {
@@ -79,23 +80,34 @@ describe('saving a reviewed PDF draft', () => {
     return { draft, choices: defaultChoices(emptyProfile(), draft) }
   }
 
-  it('stores nothing and updates nothing until Save', async () => {
+  /** The guarded apply with in-memory effects; `calls` records the order of effects. */
+  async function apply({ draft, choices, file: pdf, upload }) {
+    const calls = []
+    let stored = null
+    const deps = {
+      backup: async () => { calls.push('backup'); return true },
+      snapshot: { saveBefore: () => {}, saveAfter: () => {}, load: () => null, clear: () => {} },
+      upload: upload && (async (f) => { calls.push('upload'); return upload(f) }),
+      discardUpload: async () => {},
+      commit: (p) => { calls.push('commit'); stored = p; return p },
+      syncMirror: async () => true,
+      setSyncPending: () => {},
+    }
+    const done = await applyReviewedImport({ profile: emptyProfile(), draft, choices, file: pdf, deps, options: NOW })
+    return { done, calls, result: stored }
+  }
+
+  it('stores nothing and updates nothing until Apply', async () => {
     const upload = vi.fn(async () => 'cv-stored1')
-    const updateProfile = vi.fn()
     await review()
     expect(upload).not.toHaveBeenCalled()
-    expect(updateProfile).not.toHaveBeenCalled()
   })
 
-  it('uploads the PDF first, then adds a My CVs entry that points at the stored file', async () => {
+  it('backs up, uploads the PDF, then adds a My CVs entry that points at the stored file', async () => {
     const { draft, choices } = await review()
-    const order = []
-    const upload = vi.fn(async (f) => { order.push('upload'); expect(f).toBe(file); return 'cv-stored1' })
-    let result = null
-    const updateProfile = vi.fn((fn) => { order.push('update'); result = fn(emptyProfile()) })
-    const done = await saveReviewedDraft({ draft, choices, file, upload, updateProfile })
-    expect(order).toEqual(['upload', 'update'])
-    expect(done).toEqual({ stored: true })
+    const { done, calls, result } = await apply({ draft, choices, file, upload: async (f) => { expect(f).toBe(file); return 'cv-stored1' } })
+    expect(calls).toEqual(['backup', 'upload', 'commit'])
+    expect(done).toMatchObject({ ok: true, applied: true })
     const entry = result.cvLibrary.find((c) => c.id === 'cv-stored1')
     expect(entry).toMatchObject({ filePath: 'profile/cvs/cv-stored1.pdf', fileName: 'jane-sample.pdf', label: 'jane-sample', importSource: 'resume_pdf' })
     expect(entry.rawText).toContain('10+ years')
@@ -104,8 +116,7 @@ describe('saving a reviewed PDF draft', () => {
 
   it('fills the basics, experience years and entry fields the review showed', async () => {
     const { draft, choices } = await review('linkedin_pdf')
-    let result = null
-    await saveReviewedDraft({ draft, choices, file, upload: async () => 'cv-2', updateProfile: (fn) => { result = fn(emptyProfile()) } })
+    const { result } = await apply({ draft, choices, file, upload: async () => 'cv-2' })
     expect(result.basicProfile).toMatchObject({ fullName: 'Jane Sample', currentRole: 'Head of Product', experienceYears: '10' })
     expect(result._confidence.experienceYears).toBe('derived')
     expect(result.basicProfile.targetRoles).toBeUndefined()
@@ -118,9 +129,7 @@ describe('saving a reviewed PDF draft', () => {
   it('keeps the entry without a file when the upload fails or the API is away', async () => {
     for (const upload of [async () => { throw new Error('refused') }, async () => null]) {
       const { draft, choices } = await review()
-      let result = null
-      const done = await saveReviewedDraft({ draft, choices, file, upload, updateProfile: (fn) => { result = fn(emptyProfile(), NOW) } })
-      expect(done).toEqual({ stored: false })
+      const { result } = await apply({ draft, choices, file, upload })
       expect(result.cvLibrary[0].filePath).toBeNull()
       expect(result.cvLibrary[0].fileName).toBe('jane-sample.pdf')
     }
@@ -129,7 +138,7 @@ describe('saving a reviewed PDF draft', () => {
   it('does not upload anything for a draft that did not come from a file', async () => {
     const { draft, choices } = await review()
     const upload = vi.fn()
-    await saveReviewedDraft({ draft: { ...draft, source: 'paste', fileName: '' }, choices, file: null, upload, updateProfile: () => {} })
+    await apply({ draft: { ...draft, source: 'paste', fileName: '' }, choices, file: null, upload })
     expect(upload).not.toHaveBeenCalled()
   })
 })

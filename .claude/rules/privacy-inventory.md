@@ -71,6 +71,7 @@ provider, each behind an explicit confirm; the browser AI features send redacted
   the cache key and the input hash under `data/ai/findings/<job|company>/` (700 / 600, git-ignored), looked up before the budget gate;
   nothing leaves the server. Never stored: the prompt, keys, base URLs, an answer in which `ai-redact.js` (`findLeaks`) still finds an identifier. Details in
   `docs/redesign/STEP5_SERVER_MASTER_PLAN.md` section 2.8.
+- **Profile import** (`python/profile_import`, `scripts/run-profile-import.js`, Wave 7): no model, no network, no gate; a static test keeps it so. Failures answer with a fixed code only (no text, no file name); `/api/profile/import/impact` is read-only and answers counts and profile versions. The import backup (`/api/profile/backup`) is a local file under `data/backups`.
 - **Known gap:** LLM tailoring (`resume_generator/llm_tailor.py`, Claude Code CLI) also
   sends candidate data (parsed CV sections about_me, experience, skill_categories,
   education, an intelligence summary and project intelligence) with no confirm step and

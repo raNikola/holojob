@@ -1,4 +1,5 @@
 import { ensureApiAvailable } from '../../utils/apiAvailability.js'
+import { buildExportProfile } from '../../utils/exportJson.js'
 
 export const MAX_PASTE_BYTES = 200 * 1024
 
@@ -29,3 +30,24 @@ export async function parseImportText(source, text) {
 }
 
 export const parsePastedText = (text) => parseImportText('paste', text)
+
+/**
+ * What applying the import would do to the caches that depend on the profile (counts and profile versions, read-only on the server).
+ * Never throws: `null` means "could not be worked out", and the confirm screen says so and still lets the owner apply.
+ * @param {object} before the profile now
+ * @param {object} after the profile the import would produce
+ */
+export async function fetchImportImpact(before, after) {
+  try {
+    if (!(await ensureApiAvailable())) return null
+    const res = await fetch('/api/profile/import/impact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ before: buildExportProfile(before), after: buildExportProfile(after) }),
+    })
+    const payload = await res.json().catch(() => null)
+    return res.ok && payload?.ok && payload.impact ? payload.impact : null
+  } catch {
+    return null
+  }
+}

@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const VENV_PYTHON = process.platform === 'win32' ? path.join(ROOT, '.venv/Scripts/python.exe') : path.join(ROOT, '.venv/bin/python')
 const SOURCES_FILE = path.join(ROOT, 'src/data/importSources.json')
+const IMPACT_RUNNER = path.join(ROOT, 'python/profile_import/run_impact.py')
 const TEXT_RUNNER = path.join(ROOT, 'python/profile_import/run_text_import.py')
 
 export const MAX_PASTE_BYTES = 200 * 1024
@@ -22,10 +23,11 @@ export const IMPORT_ERRORS = {
   timeout: { status: 504, error: 'The import took too long and was stopped.' },
   runner_missing: { status: 503, error: 'Python venv not found. Run: npm run setup' },
   parse_failed: { status: 500, error: 'The text could not be read.' },
+  impact_failed: { status: 500, error: 'The effect on your scoring caches could not be worked out.' },
 }
 
 /** Spawn the Python parser with the request on stdin. Resolves { ok, draft } or { ok: false, code }; never the text. */
-function runPythonParser(runner, request) {
+function runPythonParser(runner, request, answerKey = 'draft') {
   return new Promise((resolve) => {
     if (!fs.existsSync(VENV_PYTHON)) {
       resolve({ ok: false, code: 'runner_missing' })
@@ -63,7 +65,7 @@ function runPythonParser(runner, request) {
     child.on('close', () => {
       try {
         const answer = JSON.parse(Buffer.concat(chunks).toString('utf-8'))
-        if (answer?.ok === true && answer.draft && typeof answer.draft === 'object') finish({ ok: true, draft: answer.draft })
+        if (answer?.ok === true && answer[answerKey] && typeof answer[answerKey] === 'object') finish({ ok: true, [answerKey]: answer[answerKey] })
         else finish({ ok: false, code: IMPORT_ERRORS[answer?.code] ? answer.code : 'parse_failed' })
       } catch {
         finish({ ok: false, code: 'parse_failed' })
@@ -95,4 +97,21 @@ export async function parseImportSource(source, text) {
   if (Buffer.byteLength(text, 'utf8') > MAX_PASTE_BYTES) return { ok: false, code: 'too_large' }
   if (!text.trim()) return { ok: false, code: 'empty' }
   return runners[source]({ text, source })
+}
+
+let impactRunner = (request) => runPythonParser(IMPACT_RUNNER, request, 'impact')
+
+/** Tests inject the impact runner; call with nothing to restore the real one. */
+export function setImpactRunner(next) {
+  impactRunner = next ?? ((request) => runPythonParser(IMPACT_RUNNER, request, 'impact'))
+}
+
+/**
+ * What applying an import would do to the caches that depend on the profile: counts and profile versions only, read-only, local.
+ * `before` and `after` are the two profiles as the mirror would hold them (the browser sends them through buildExportProfile).
+ */
+export async function importImpact(before, after) {
+  const isProfile = (p) => p && typeof p === 'object' && !Array.isArray(p)
+  if (!isProfile(before) || !isProfile(after)) return { ok: false, code: 'invalid_request' }
+  return impactRunner({ before, after })
 }

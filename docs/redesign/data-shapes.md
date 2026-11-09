@@ -345,8 +345,13 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
 - **Purpose:** what one import source yielded, for the review screen. It is not a profile format: every field maps onto the profile shape above, and `applyImportDraft` (`src/modules/profile/importDraft.js`) is the only code that turns a reviewed draft into a profile.
 - **Made by:** `POST /api/profile/import/parse` (body `{ "source": "paste" | "resume_pdf" | "linkedin_pdf", "text": "<string>" }`, JSON, up to 200 KB of text; a PDF is read to text in the browser and only the text is sent), which runs `python/profile_import/text_parser.py` and writes nothing. Headings and field labels ("Education", "Obrazovanje", "Ime i prezime:", ...) come from `src/data/sectionHeadings.json`, one block per language, in Latin or Cyrillic script; the same file feeds the CV library upload (`src/utils/profileExtractor.js`). The three sources go through the one parser; `linkedin_pdf` is a mode of it (the "Top Skills" heading, company-before-title entries, "Page N of M" footers listed under `ignored`). A new language is a new block there, with no code change.
 
+- **Contract (Wave 7):** the list of sources is `src/data/importSources.json` (browser, route and parser read it; a test checks they agree). `version` is the draft shape (`draftVersion` in that file) and `parserVersion` names the parser that made it (`text-1` for the text parser). A My CVs entry made by an import carries `importDraftKey` (a hash of the reviewed content): the same draft never adds a second entry.
+- **Applying:** `applyReviewedImport` (`src/modules/profile/importApply.js`) is the only writer: backup (`POST /api/profile/backup`, the browser's current profile, newest 10 kept in `data/backups/profile-import-*`) and a browser snapshot first, one write, then the mirror push; `POST /api/profile/import/impact` (read-only, counts and profile versions) feeds the confirm screen. Parse, preview and impact write nothing.
+
 ```json
 {
+  "version": 1,
+  "parserVersion": "text-1",
   "source": "paste|resume_pdf|linkedin_pdf",
   "fileName": "<string>",
   "rawText": "<string>",

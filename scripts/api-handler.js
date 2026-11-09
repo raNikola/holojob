@@ -34,7 +34,7 @@ import {
   loadQualityReport,
   runQualityAudit,
 } from './run-quality-audit.js'
-import { IMPORT_ERRORS, MAX_IMPORT_BODY_BYTES, parseImportSource } from './run-profile-import.js'
+import { IMPORT_ERRORS, MAX_IMPORT_BODY_BYTES, importImpact, parseImportSource } from './run-profile-import.js'
 import { handleAiSettingsRequest } from './ai-settings-handler.js'
 import { handleSecretsRequest } from './secrets-handler.js'
 import { handleSourcesRequest } from './sources-handler.js'
@@ -738,6 +738,26 @@ export async function handleApiRequest(req, res) {
     }
     const result = await parseImportSource(body?.source, body?.text)
     if (result.ok) sendJson(res, 200, { ok: true, draft: result.draft })
+    else fail(result.code)
+    return true
+  }
+
+  // Read-only: what applying an import would do to the caches that depend on the profile (counts and versions, never text).
+  if (url === '/api/profile/import/impact' && req.method === 'POST') {
+    const fail = (code) => {
+      const { status, error } = IMPORT_ERRORS[code] ?? IMPORT_ERRORS.impact_failed
+      sendJson(res, status, { ok: false, code, error })
+    }
+    let body
+    try {
+      const raw = await readRawBody(req, res, { limit: MAX_LARGE_BODY_BYTES, tooLarge: { ok: false, code: 'too_large', error: IMPORT_ERRORS.too_large.error } })
+      body = JSON.parse(raw.toString('utf-8') || '{}')
+    } catch {
+      fail('invalid_request')
+      return true
+    }
+    const result = await importImpact(body?.before, body?.after)
+    if (result.ok) sendJson(res, 200, { ok: true, impact: result.impact })
     else fail(result.code)
     return true
   }

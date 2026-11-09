@@ -51,7 +51,12 @@ _INSTITUTION_WORDS = set(_EDU["institutionWords"])
 _CERT_WORDS = set(_EDU["certificateWords"])
 _REMOTE_WORDS = set(_EDU["remoteWords"])
 
-SOURCES = ("paste", "resume_pdf", "linkedin_pdf")
+_SOURCES_FILE = json.loads((Path(__file__).resolve().parents[2] / "src" / "data" / "importSources.json").read_text(encoding="utf-8"))
+# The one list of import sources (src/data/importSources.json); this parser takes the ones whose input is text.
+SOURCES = tuple(name for name, source in _SOURCES_FILE["sources"].items() if source.get("input") == "text")
+# A draft says which shape and which parser made it; both change only on purpose.
+DRAFT_VERSION = _SOURCES_FILE["draftVersion"]
+PARSER_VERSION = "text-1"
 # Section headings only a LinkedIn profile PDF uses; they are a mode of the one parser, not a second parser.
 _LINKEDIN_SECTIONS = {"top skills": "skills"}
 _PAGE_FOOTER = re.compile(r"^page\s+\d+\s+of\s+\d+$", re.I)
@@ -1232,6 +1237,8 @@ def parse_text(text: object, source: str = "paste", today: date | None = None) -
         warnings.append("This does not look like a LinkedIn profile PDF (no LinkedIn address or heading); it was read like any other CV.")
 
     return {
+        "version": DRAFT_VERSION,
+        "parserVersion": PARSER_VERSION,
         "source": source,
         "fileName": "",
         "rawText": raw_text,

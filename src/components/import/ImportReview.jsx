@@ -184,7 +184,7 @@ export default function ImportReview({ draft, profile, choices, onDraftChange, o
 
   return (
     <div className="space-y-4">
-      <Alert variant="info" title="Review before saving">
+      <Alert variant="info" title="Review before importing">
         Nothing has been saved yet. Correct anything below, then choose what to do with each part. {draft.rawText ? `The full text (${draft.rawText.length.toLocaleString()} characters) is kept with the saved CV.` : ''}
       </Alert>
       {draft.warnings?.length > 0 && (
@@ -285,11 +285,11 @@ export default function ImportReview({ draft, profile, choices, onDraftChange, o
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4 dark:border-stone-800">
         <p className="text-sm text-stone-600 dark:text-stone-400">
-          Saved as "{(source.pdf && draft.fileName) || source.name}" in My CVs. {willBeActive(profile) ? 'You have no CV yet, so it becomes your active CV.' : 'It does not become your active CV.'}
+          Will be added to My CVs as "{(source.pdf && draft.fileName) || source.name}" in My CVs. {willBeActive(profile) ? 'You have no CV yet, so it becomes your active CV.' : 'It does not become your active CV.'}
         </p>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={onDiscard} disabled={saving}>Discard</Button>
-          <Button onClick={onSave} disabled={saving}>{saving ? 'Saving...' : 'Save to my profile'}</Button>
+          <Button onClick={onSave} disabled={saving}>{saving ? 'Working...' : 'Continue to confirm'}</Button>
         </div>
       </div>
     </div>

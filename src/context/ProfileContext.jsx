@@ -23,6 +23,9 @@ export function ProfileProvider({ children }) {
     })
   }, [])
 
+  // The import apply step has already written this profile to the browser store (and can fail there); this only tells the screen.
+  const commitProfile = useCallback((saved) => setProfile(saved), [])
+
   const setStep = useCallback((step) => {
     setCurrentStep(step)
     setProfile((prev) => saveProfile({ ...prev, meta: { ...prev.meta, lastStep: step } }))
@@ -98,6 +101,7 @@ export function ProfileProvider({ children }) {
       profile,
       currentStep,
       updateProfile,
+      commitProfile,
       setStep,
       markFieldEdited,
       resetProfile,
