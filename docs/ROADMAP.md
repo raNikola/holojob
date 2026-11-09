@@ -13,8 +13,8 @@ Built, merged and deployed are three different states; this table says only what
 | State | Items |
 |---|---|
 | **Done** (built and merged) | Phase 0; Phase 1 steps 1-8c; Roadmap v2 waves 0-5; Phase 4 protections (fact gate, identifier redaction, confirm, verdicts); Wave 7 profile import S0-S4, S6, S7; per-source switches; Delete job for hand-entered jobs; Activity screen A1-S8b; Graphify adapter S0-S6 |
-| **Next** | Owner checks and owner-run steps listed in the sections (Wave 7 real-file PDF check; Infostud repair dry run and `--apply`; prune report; Wave 0 key rotation); Wave 7 S5 LinkedIn ZIP (waits for the owner's real file); the rest of Phase 3 (Closed panel, nudges, CSV import) and Phase 3b (watched companies) |
-| **Later** | Phase 2 (only the read side of confirmed facts exists); Phase 4 interview prep and market report; Phase 5; stable requirement ids phases 3 and 4 (Planned); Step 5 server master (not built; `job-state.json` v1 is built); wave 9 items; the list under "Later" |
+| **Next** | Not decided. The owner has not set the next development priority. |
+| **Later** | Wave 7 S5 LinkedIn data ZIP (waits for the owner's real file); the rest of Phase 3 (Closed panel, nudges, CSV import); Phase 3b watched companies; Phase 2 (only the read side of confirmed facts exists); Phase 4 interview prep and market report; Phase 5; stable requirement ids phases 3 and 4 (Planned); Step 5 server master (not built; `job-state.json` v1 is built); wave 9 items; the list under "Later" |
 | **Deferred** | UI Redesign Epic; HolyJobs browser extension (idea, parked); Company information standardization (planned, To Do); Shared job database (goal only, draft reference); test isolation by per-test data directory; the items under "DEFERRED after S8" |
 
 | Phase | Scope | Status |
