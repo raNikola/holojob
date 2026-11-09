@@ -143,6 +143,29 @@ describe('jobFromPosting', () => {
   })
 })
 
+describe('a repaired Infostud text', () => {
+  const full = ledger({ job: { ...ledger().job, source: 'infostud', description: 'full ad text', descriptionStatus: 'complete' } })
+
+  it('replaces a teaser in the stored row and the file row, display only', () => {
+    const teaser = { source: 'infostud', description: 'teaser...' }
+    expect(resolveJob({ stored: stored(teaser), ledger: full, fileChecked: true, inFile: true }).job).toMatchObject({ description: 'full ad text', descriptionStatus: 'complete' })
+    expect(resolveJob({ fileJob: fileJob(teaser), ledger: full, fileChecked: true, inFile: true }).job.description).toBe('full ad text')
+  })
+
+  it('never replaces a text already marked complete, nor a hand-entered one', () => {
+    expect(resolveJob({ stored: stored({ description: 'mine', descriptionStatus: 'complete' }), ledger: full }).job.description).toBe('mine')
+    expect(resolveJob({ stored: stored({ description: 'mine', manualEntry: true }), ledger: full }).job.description).toBe('mine')
+  })
+
+  it('asks the ledger for an Infostud row that is not marked complete', async () => {
+    const loadHistory = vi.fn().mockResolvedValue(full)
+    const row = { jobId: ID, source: 'infostud', description: 'teaser...' }
+    const d = { autoLoad: async (s) => ({ state: { ...s, jobs: [row] }, source: 'scored' }), loadDiscovered: vi.fn(), loadHistory }
+    expect((await loadJobSources(ID, { jobs: [] }, d)).ledger).toBe(full)
+    expect(loadHistory).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('loadJobSources', () => {
   const deps = (over = {}) => ({
     autoLoad: vi.fn(async () => ({ state: { jobs: [] }, source: 'scored' })),

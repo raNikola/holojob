@@ -45,6 +45,12 @@ export function resolveJob({ stored = null, fileFields = null, fileJob = null, l
     const text = [ledger?.job?.description, application?.posting?.description].find((value) => !blank(value))
     if (text) job.description = text
   }
+  // The browser row and the discovery files keep the text of the run that wrote them, and an Infostud teaser there outlives a repair of the
+  // ledger. A complete ledger text replaces a text that is not marked complete (display only, like every fallback here).
+  if (!job.manualEntry && ledger?.job?.descriptionStatus === 'complete' && job.descriptionStatus !== 'complete' && !blank(ledger.job.description)) {
+    job.description = ledger.job.description
+    job.descriptionStatus = 'complete'
+  }
   if ((source === 'ledger' || source === 'application') && active) job.status = 'applied_manually'
 
   return {
@@ -87,6 +93,7 @@ export async function loadJobSources(jobId, state, { autoLoad, loadDiscovered, l
     }
   }
   const text = (fileJob ?? row)?.description
-  const ledger = !inFile || blank(text) ? await loadHistory(jobId) : null
+  const mayBeTeaser = (fileJob ?? row)?.source === 'infostud' && (fileJob ?? row)?.descriptionStatus !== 'complete'
+  const ledger = !inFile || blank(text) || mayBeTeaser ? await loadHistory(jobId) : null
   return { fileChecked, inFile, row, fileJob, addable, ledger }
 }

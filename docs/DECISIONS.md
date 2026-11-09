@@ -1445,3 +1445,10 @@ Branch `wave5-infostud-description`, local, not merged, nothing deployed, no pro
 - **Not changed:** Wave 4 (the snapshot switch stays off, retention `--apply` was not run, no category change), the budget gate, `data/secrets/`, `data/ai/settings.json`.
 - **Follow-up (not investigated):** the Graphify adapter build (`tools/graphify_adapter/adapter.py build`) exited non-zero in Wave 4; the cause was not looked into.
 - **Owner to do:** run the repair dry run, then decide `--apply`; run Re-score after it; after the next discovery run check that Infostud ads show the new text and that any `source_truncated` ad carries the low-confidence reason.
+
+## Job Details kept showing the Infostud teaser after the repair (2026-11-09)
+
+- **Diagnosis (counts only):** after `repair-infostud-descriptions.py --apply` the ledger holds 9 complete Infostud texts (1810 to 3955 characters). `discovered_jobs.json` and `scored_jobs.json` still hold 2 of these ads with 501 and 509 characters and no `descriptionStatus`; `normalized_jobs.json` holds 3 (501 to 524). The repair writes only the ledger, by design.
+- **Cause:** `jobResolve.js` takes the stored browser row, then the scored or discovered file, and asks the ledger only when the text is blank (`loadJobSources`, `resolveJob`). A non-blank teaser in a row or file therefore always won. The API was not at fault: `/api/jobs/history/<id>` and `/api/jobs/texts` serve the ledger text, and the ledger index reloads on a changed file signature. Not checked: the owner's browser rows (private).
+- **Fix (display only, nothing written):** `loadJobSources` also asks the ledger for an Infostud row not marked `complete`; `resolveJob` replaces a text not marked `complete` with a complete ledger text. Hand-entered jobs and texts already marked complete are never replaced. Tests in `tests/js/jobResolve.test.js`.
+- **Not fixed here:** the files and browser rows stay stale until the next discovery run rewrites them from the ledger. The list-level description (search filter, AI context) still reads the row text, so it keeps the teaser until then.
