@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Loader2, MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
+import Alert from '../ui/Alert'
 import Button from '../ui/Button'
 import Tabs from '../ui/Tabs'
 import JobDiscoverySummary from './JobDiscoverySummary'
@@ -36,6 +37,8 @@ import { derivePipelineStateFromHealth, loadPipelineState, syncPipelineCounts, u
 import { overlayTracking, trackerStats } from '../../modules/applications/trackingView'
 import { useApplications } from '../../hooks/useApplications'
 import QuickApplyDialog from './QuickApplyDialog'
+import { useJobState } from '../../hooks/useJobState'
+import { PENDING_NOTICE, pendingRows, withServerState, writeJobState } from '../../modules/jobs/jobStateClient'
 import { useJobsSync } from '../../hooks/useJobs'
 import { loadJobsTab, persistJobsTab } from '../../modules/appNavigation'
 import {
@@ -145,11 +148,15 @@ export default function JobDiscoveryScreen() {
   }, [])
 
   const applications = useApplications()
+  const jobState = useJobState()
+  const [statusError, setStatusError] = useState(null)
   // Tracking comes from the application store; `state.jobs` stays as saved and is what gets persisted.
   const viewJobs = useMemo(
-    () => overlayTracking(state.jobs, applications.status === 'ready' ? applications.store : null, applications.settings),
-    [state.jobs, applications.status, applications.store, applications.settings],
+    () => overlayTracking(withServerState(state.jobs, jobState.doc), applications.status === 'ready' ? applications.store : null, applications.settings),
+    [state.jobs, jobState.doc, applications.status, applications.store, applications.settings],
   )
+  // Browser rows the server does not hold yet stay visible here, and this says so until they are imported (Settings).
+  const pending = useMemo(() => pendingRows(state.jobs, jobState.doc).length, [state.jobs, jobState.doc])
   const stats = useMemo(
     // The tracker cards count applications from the store, whether or not their ad still has a row.
     () => ({ ...computeJobStats(viewJobs), ...trackerStats(applications.status === 'ready' ? applications.store : null, applications.settings) }),
@@ -168,10 +175,10 @@ export default function JobDiscoveryScreen() {
   const useComposed = routeEnabled && (allAds.rows !== null || listMode === 'all')
   const composedRows = useMemo(() => {
     if (!useComposed) return null
-    const rows = overlayTracking(listMode === 'all' ? composed.all : composed.active, applicationStore, applications.settings)
+    const rows = overlayTracking(withServerState(listMode === 'all' ? composed.all : composed.active, jobState.doc), applicationStore, applications.settings)
     // An application needs no stored row: the row says Applied as Job Details does, for display only.
     return rows.map((row) => (row.serverOnly && row.applicationTracking ? { ...row, status: 'applied_manually' } : row))
-  }, [useComposed, listMode, composed, applicationStore, applications.settings])
+  }, [useComposed, listMode, composed, applicationStore, applications.settings, jobState.doc])
   const shownRows = useMemo(
     () => (useComposed && listMode === 'all' ? applyAllControls(composedRows, { classes: listClasses, recent: seenRecentlyOnly, reference }) : composedRows),
     [useComposed, listMode, composedRows, listClasses, seenRecentlyOnly, reference],
@@ -304,13 +311,23 @@ export default function JobDiscoveryScreen() {
     setState((prev) => updateFilters(prev, patch))
   }, [])
 
-  const handleStatusChange = useCallback((jobId, status) => {
+  // The server is written first. A failed write changes nothing, here or in the browser's list.
+  const handleStatusChange = useCallback(async (jobId, status) => {
+    const job = state.jobs.find((j) => j.jobId === jobId)
+    if (!job) return
+    try {
+      await writeJobState(job, { status })
+      setStatusError(null)
+    } catch (e) {
+      setStatusError(`The status was not saved: ${e.message}`)
+      return
+    }
     setState((prev) => ({
       ...prev,
       jobs: updateJobStatus(prev.jobs, jobId, status),
     }))
     setSelectedJob((prev) => (prev?.jobId === jobId ? { ...prev, status } : prev))
-  }, [])
+  }, [state.jobs])
 
   const handleJobUpdated = useCallback((updatedJob) => {
     setState((prev) => ({
@@ -469,6 +486,8 @@ export default function JobDiscoveryScreen() {
                 onMarkSaved={() => handleBulkStatus('saved')}
                 onMarkRejected={() => handleBulkStatus('rejected')}
               />
+              {statusError && <Alert variant="error">{statusError}</Alert>}
+              {pending > 0 && <Alert variant="info">{PENDING_NOTICE(pending)}</Alert>}
               <JobTable
                 jobs={filteredJobs}
                 onStatusChange={handleStatusChange}

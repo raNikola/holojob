@@ -25,6 +25,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'application-tracking', category: 'applications', title: 'Tracking and board columns', keywords: ['tracking', 'tracker', 'board', 'columns', 'stages', 'applications'] },
   { id: 'application-notifications', category: 'applications', title: 'Notifications', keywords: ['notifications', 'reminders', 'follow-up', 'nudges'], note: 'Follow-up reminders are not configurable yet.' },
   { id: 'application-migration', category: 'applications', title: 'Application tracking migration', keywords: ['migration', 'migrate', 'import', 'tracking', 'old format'] },
+  { id: 'job-state', category: 'applications', title: 'Job statuses and Keep on the server', keywords: ['status', 'keep', 'saved', 'rejected', 'import', 'export', 'browser', 'server'] },
   { id: 'ai-budget', category: 'ai-costs', title: 'AI budget, provider and usage', risky: 'spend', keywords: ['ai', 'budget', 'limit', 'cost', 'automation', 'provider', 'model', 'prices', 'pricing', 'feature', 'toggles', 'usage', 'ledger', 'cache', 'temperature', 'tokens', 'gate'] },
   { id: 'secrets', category: 'privacy-security', title: 'Secrets and keys', risky: 'egress', keywords: ['secrets', 'keys', 'api key', 'linkedin', 'li_at', 'cookie', 'privacy', 'security'] },
   { id: 'backup-restore', category: 'data-backups', title: 'Backup / restore', risky: 'delete', keywords: ['backup', 'restore', 'zip', 'import', 'export', 'jobs json'] },

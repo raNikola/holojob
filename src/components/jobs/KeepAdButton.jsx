@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Bookmark, Loader2 } from 'lucide-react'
 import Alert from '../ui/Alert'
 import { KEEP_FAILED, keepAd } from '../../modules/jobs/keepAd'
+import { writeJobState } from '../../modules/jobs/jobStateClient'
 
 /** Keeps a row only the server holds. Nothing else stores one; opening it does not. On success the stored row takes over everywhere. */
 export default function KeepAdButton({ row }) {
@@ -13,6 +14,8 @@ export default function KeepAdButton({ row }) {
     setError(null)
     const result = await keepAd(row).catch(() => ({ ok: false, message: KEEP_FAILED }))
     if (!result.ok) setError(result.message)
+    // Mirror the flag to the server. A failure leaves the ad kept here and shows the "not on the server yet" notice until it is imported.
+    else writeJobState(result.job, { keep: true }).catch(() => {})
     setBusy(false)
   }
   return (

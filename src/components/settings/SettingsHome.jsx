@@ -8,6 +8,7 @@ import CompleteProfilePanel from './CompleteProfilePanel'
 import ResetProfilePanel from './ResetProfilePanel'
 import ScoringWeightsPanel from './ScoringWeightsPanel'
 import ApplicationMigrationPanel from './ApplicationMigrationPanel'
+import JobStatePanel from './JobStatePanel'
 import ApplicationSettingsPanel from './ApplicationSettingsPanel'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
@@ -249,6 +250,7 @@ const RENDERERS = {
     </Card>
   ),
   'application-migration': () => <ApplicationMigrationPanel />,
+  'job-state': () => <JobStatePanel />,
   'ai-budget': () => <AISettingsPanel />,
   'secrets': () => <SecretsPanel />,
   'complete-profile': () => <CompleteProfilePanel />,
