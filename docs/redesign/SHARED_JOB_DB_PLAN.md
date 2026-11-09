@@ -14,7 +14,7 @@ Verified in code or docs (file named where it matters). Everything marked **to v
 
 | # | Existing rule | Conflict | Proposal (needs the owner) |
 |---|---|---|---|
-| C1 | STEP5 2.3: the join key of the owner overlay is `matchKey` (`url:<lowercased url>` or `tcl:<title>\|<company>\|<location>`), and `jobId` is "never the join key". | The owner now wants a global `jobId` for ads. Today there are two identities: `jobId` = `sha256(raw url)[:16]` (`normalize_jobs.py _make_job_id`), and `matchKey` (lowercased, trimmed). They differ when a URL differs only by case or whitespace. | The catalog owns one stable `jobId`. `matchKey` stays as a compatibility alias in `identityKeys` (section 1.3). Per-user records reference `jobId`; the Step 5 overlay keeps `matchKey` until the catalog exists. |
+| C1 | STEP5 2.3: the join key of the owner overlay is `matchKey` (`url:<lowercased url>` or `tcl:<title>\|<company>\|<location>`), and `jobId` is "never the join key". | The owner now wants a global `jobId` for ads. Today there are two identities: `jobId`, computed **per provider** (JobSpy and the ATS providers through `_make_job_id` = `sha256(raw url)[:16]`, else a hash of `title\|company\|location`; Infostud as `sha1(url)[:16]`), and the browser `matchKey` (lowercased, trimmed). They differ when a URL differs only by case or whitespace, and the hash function is not the same for every source. | The catalog owns one stable `jobId`. `matchKey` stays as a compatibility alias in `identityKeys` (section 1.3). Per-user records reference `jobId`; the Step 5 overlay keeps `matchKey` until the catalog exists. |
 | C2 | STEP5 section 10 / Q3 and request-guard.md: no login, access is the home LAN or Tailscale. | Several users need to be told apart. | A second mode, off by default, with a minimal identity (section 7). Single-user mode keeps the no-login decision. |
 | C3 | Principle 16: job sources are the **user's** configuration. `data/config/sources.json` is the owner's switch, with consent. | A global scrape must not be switchable by one user. | Two levels: operator (global enable, consent, credentials) and per-user view preferences (section 4.5). Principle 16 is read as "the owner of the installation". |
 | C4 | STEP5 2.8: `memory.json`, the findings store and `job-state.json` carry no user id. | Multi-user needs one. | The `userId` seam (section 6.2). Until then every path resolves to the single owner. |
@@ -62,8 +62,8 @@ Two ads are **the same ad** only on a **strong** identity key:
 
 | Strong key | Source of the key | Status today |
 |---|---|---|
-| Source-native ad id (Infostud ad id, Greenhouse/Lever/Ashby/Workable job id, Joberty id, LinkedIn job id) | The provider's own id | Not stored as a key today: `_make_job_id` hashes the URL. Stored in the raw row for some sources (**to verify per provider**). |
-| Canonical URL (host + path, tracking parameters stripped) | The ad URL | **Not normalised today**: I found no tracking-parameter or canonical-URL step in `normalize_jobs.py`, `dedupe_jobs.py` or `job_history.py`; `_make_job_id` hashes the raw URL. The same ad with a different `utm_` parameter would get two ids. |
+| Source-native ad id (Infostud ad id, Greenhouse/Lever/Ashby/Workable job id, Joberty id, JobSpy site id) | The provider's own id | Captured by the providers as `external_ids` (jobId -> the source's own id) but **kept in the staging line only**: the canonical job "has no slot for it" (`base_provider.py`, `infostud_client.py`). It does not reach the ledger or `discovered_jobs.json` as far as read; **to verify** per provider which sites give a usable id. |
+| Canonical URL (host + path, tracking parameters stripped) | The ad URL | **Not normalised in the id step**: `_make_job_id` (`normalize_jobs.py`, used by `base_provider.py` and JobSpy) hashes the URL as given, and Infostud hashes it with sha1. I found no tracking-parameter or canonical-URL step in `normalize_jobs.py`, `dedupe_jobs.py` or `job_history.py`. The same ad with a different `utm_` parameter would get two ids. |
 
 A **weak** key is `title|company|location` lowercased (the `tcl:` fallback, also what `_make_job_id` uses when a URL is missing). Two real openings (two "Product Manager, Acme, Belgrade" ads for different teams) collide on it.
 
@@ -75,7 +75,7 @@ Rules:
 
 ### 1.3 Identity migration note
 
-Today's ledger and applications use `jobId` as computed above. The catalog keeps every existing `jobId` as is. Adding canonical-URL and source-id keys later can reveal that two existing ids are the same ad; that is recorded as a link, not a merge (a merge would re-key and break applications and the principle 13 snapshot).
+Today's ledger and applications use `jobId` as each provider computed it (hash function and input differ per provider, see the C1 row). The catalog keeps every existing `jobId` as is. Adding canonical-URL and source-id keys later can reveal that two existing ids are the same ad; that is recorded as a link, not a merge (a merge would re-key and break applications and the principle 13 snapshot).
 
 ## 2. Shared and per-user split (verified against the code)
 
@@ -104,9 +104,9 @@ Today's ledger and applications use `jobId` as computed above. The catalog keeps
 | Cache | Key (read from the code) | Depends on | Verdict |
 |---|---|---|---|
 | `llmFacts` (enrichment) | `job_fingerprint`: sha1[:16] of `PROMPT_VERSION` (5) \| title \| company \| description[:9000] (`job_fingerprint.py`) | the ad and the prompt version | **Ad-only.** Gap against owner addition 5: the **model and provider are not in the key**, and there is no separate parser version. A model change does not invalidate stored facts today. |
-| Requirement frames | `frame_key`: the same hash without the prompt version (`requirement_frames.py`) | the ad | **Ad-only.** |
+| Requirement frames | `frame_key`: the same hash without the prompt version (`requirement_frames.py`) | the ad, **and** `apply_remap`, which rewrites stored frames with `data/requirement-remap.json` | **Ad-keyed, but mutated by a curated file.** The key is ad-only; the content is rewritten when a provisional id gains a canonical id. See 2.3. |
 | Requirement ids | provisional ids hash the requirement text (`requirement_ids.py`); seed ids come from `src/data/skillsDictionary.js` (a repo file) | requirement text, the dictionary | Ad-only **if** the dictionary is the tracked one. |
-| `competencyId` inside `llmFacts` | the enrichment prompt lists the family's competency ids (`competency_mapping.py`) and the model picks one | the tracked family lists; possibly the learned aliases | **Open: poisoning risk.** If learned, owner-reviewed aliases change the stored `competencyId`, one user's curation would be written into a shared record. See 2.3. |
+| `competencyId` inside `llmFacts` | the enrichment prompt lists the family's competency ids and the model proposes one; code accepts it by the precedence previous frame id > alias (seed, then learned) > skills-dictionary term > model proposal > provisional hash (`competency_mapping.py` docstring, `enrich_jobs._reuse_previous`). An accepted proposal is stored as a **pending learned alias** in `data/competency-aliases.json`, and a remap table `data/requirement-remap.json` rewrites ids | the tracked lists **and** two private `data/` files that the run itself writes | **Not ad-only.** The id in a stored fact depends on curation state that grows as ads are read. See 2.3. |
 | Fit judge `llm_fit.json` | sha1[:16] of `PROMPT_VERSION` \| provider \| model \| the full prompt (`llm_enhancer.py _fingerprint`) | the prompt includes the redacted candidate digest | **Per-user.** |
 | Matcher / engine `engine.json` | `cache_key(ad_fingerprint, profile_version, selected, requirements)` (`match_engine/matcher.py`) | the ad **and** the profile version | **Per-user.** Its ad part is reusable, its profile part is not. |
 | CV analysis `cv_analysis.json` | the CV content hash (`cv_analysis/analysis.py`, **to verify**) | the CV | **Per-user.** |
@@ -121,7 +121,7 @@ Shared extraction key = `adContentHash` (the ad's text, title, company, as the c
 Gaps against today's code, to close in a slice (section 10, S4):
 - Add provider and model to the key. Decision needed on what a model change does (question Q5): invalidate everything (cost), or keep old facts valid until a prompt or parser bump and mark them `olderModel`.
 - Split the parser version from the prompt version.
-- The shared record keeps what the model said about the ad: requirements text, kind, importance, quote, the model's *suggested* competency id. **Resolved ids and remaps are per-user data applied on read**, unless the owner decides the learned aliases are a reviewed shared artifact with a version in the key. Until the contents of `competency-aliases.json` are inspected (by shape only), the plan assumes they are owner-specific.
+- The shared record keeps what the model said about the ad: requirements text, kind, importance, quote, the model's *suggested* competency id. **Resolved ids are not in the shared key.** The alias and remap files map requirement wording to a competency: that is dictionary curation about the market, not candidate data (it is written from ads, not from a profile), but it is curated by one owner and grows with the ads read. Two ways to handle it, for Q11: (a) treat it as **operator curation**, shared and versioned (`dictionaryVersion` in the key, frames rewritten only by the worker); (b) keep ids out of the shared record and resolve them per user on read. The plan prefers (a) because stable ids across users are the point of principle 4 and the 2026-10-26 decision. The files were not opened; their shape and any user-specific content (for example answers tied to a profile) are **to verify** first.
 - Only the shared worker writes `llmFacts`, from the text **the worker itself scraped**. A user-submitted ad (a pasted URL via `import_job_url.py`, a hand-entered job) is private to that user and never feeds the shared cache. This is the main defence against cache poisoning between users (R4).
 - Output is schema-validated before it is stored, as `enrich_jobs.py` already does.
 
@@ -250,7 +250,7 @@ data/users/<userId>/  profile, intelligence, scores, job-state, manual jobs, app
 
 ### 6.2 What Step 5 must do now so that this stays cheap (no multi-user built)
 
-Step 5 stores take a `root` argument already (`application-store.js`, `job-state-store.js`, the planned `ai-findings-store.js`). Add one rule for every new store and route:
+Step 5 stores take a `root` argument already (`application-store.js`, `job-state-store.js`, `ai-findings-store.js`, whose first slices shipped on 2026-10-29). Add one rule for every new store and route:
 1. Private records are addressed through `userPaths(root, userId)`; the id comes from the request context (a constant in single-user mode), **never from a body or a path parameter**.
 2. Shared data is addressed through `sharedPaths(root)` and has a separate module with no per-user imports.
 3. A route's access class is declared (`shared-read`, `user`, `operator`) and a test fails if a route reads a path outside its class.
@@ -338,7 +338,7 @@ Levels: **full** (store ad text, share with all users), **metadata** (store titl
 
 | Provider | What the repo records | Proposed shared level | To verify |
 |---|---|---|---|
-| LinkedIn (via JobSpy, `li_at`) | Anti-scraping is the central risk. The repo already has an open item "What the LinkedIn terms and account-risk assessment finds" (Phase 0 audit list), and the cookie is one person's account (4.4). | **reference or metadata**; never the description text; **no shared scrape under a personal `li_at`**. Outreach contact scraping stays per-user. | terms text on automated access and copying; the account-ban risk; whether metadata-only changes the position |
+| LinkedIn (via JobSpy, `li_at`) | Anti-scraping is the central risk. The repo already has an open item "What the LinkedIn terms and account-risk assessment finds" (listed under the browser extension idea in `docs/ROADMAP.md`, not in the Phase 0 audit), and the cookie is one person's account (4.4). | **reference or metadata**; never the description text; **no shared scrape under a personal `li_at`**. Outreach contact scraping stays per-user. | terms text on automated access and copying; the account-ban risk; whether metadata-only changes the position |
 | Joberty | `source_definitions.py`: "Undocumented API, terms restrict use", opt-in with recorded consent. | **none** in shared until the terms are read; stays a per-owner opt-in | terms text; whether sharing between users counts as redistribution |
 | Infostud | Public site read category by category, one request per ad with 1 s spacing (Wave 3 entry). No terms recorded in the repo. | **metadata** until verified; full only if the terms allow reuse | terms and robots rules; rate expectations |
 | Greenhouse, Lever, Ashby (company boards) | Public job-board APIs meant for listing. | **full** likely acceptable; verify each vendor's API terms | vendor API terms on caching and redistribution |
@@ -412,7 +412,7 @@ None is scheduled. Each is docs-reviewed, then built with its own tests (offline
 8. **Q8 LinkedIn.** Is a shared LinkedIn scrape wanted at all, given the account risk of one person's `li_at`? Default in this plan: reference or metadata only, no shared scrape under a personal cookie.
 9. **Q9 Corpus.** Is a per-user corpus acceptable (this plan), or is a larger shared corpus ever wanted despite the cross-user effect on Fit?
 10. **Q10 Contact details in ad text.** Strip recruiter names, e-mails and phones from stored shared ad text, or keep as scraped?
-11. **Q11 Learned aliases.** Are the owner-reviewed competency aliases a private curation (applied per user) or a shared reviewed artifact with a version? (Their contents were not opened here.)
+11. **Q11 Competency aliases and remap.** `competency-aliases.json` and `requirement-remap.json` map requirement wording to competency ids and rewrite the shared frames. Are they operator curation, shared and versioned (this plan's preference), or per-user? (Their contents were not opened here; the owner's confirmed answers are a separate, per-user thing.)
 12. **Q12 Manual and imported ads.** May a user "promote" a hand-entered or URL-imported ad into the shared catalog? Default: never, they stay private.
 13. **Q13 Reference data of shared families.** Who maintains `roleFamilies.json` and the competency lists, and how do other users' families (Dev, QA, Design) get their title vocabulary and competency lists, given the current ones are PM-centred?
 14. **Q14 Legal review.** Is the owner willing to read the terms of Infostud, Joberty and the board vendors before the first non-owner user, or should the plan assume metadata-only for all of them until then?
