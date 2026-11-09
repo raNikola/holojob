@@ -39,8 +39,25 @@ export function getTailorStatus() {
   }
 }
 
+export const CONFIRM_REQUIRED = {
+  ok: false,
+  error: 'confirm_required',
+  message: 'Tailoring sends redacted CV text to Claude Code. Review what is sent and confirm first.',
+}
+
+/** The one place the tailoring routes decide whether a request may send anything: only an explicit `confirm: true`. */
+export function isConfirmed(body) {
+  return body?.confirm === true
+}
+
+/** A request may start when it is confirmed, or when it asks for rule-based documents (`noLlm`), which send nothing. */
+export function mayTailor(body) {
+  return isConfirmed(body) || body?.noLlm === true
+}
+
 export function buildTailorCommand(opts = {}) {
-  const parts = ['source .venv/bin/activate && python python/resume_generator/run_tailor.py']
+  // `--confirm` is the person running the command saying the redacted text may be sent (`--preview` shows it first).
+  const parts = ['source .venv/bin/activate && python python/resume_generator/run_tailor.py --confirm']
   if (opts.jobId) parts.push(`--job-id ${opts.jobId}`)
   if (opts.jobIds?.length) parts.push(`--job-ids ${opts.jobIds.join(',')}`)
   if (opts.applyOnly) parts.push('--apply-only')
@@ -65,6 +82,9 @@ function prepareTailor(opts = {}) {
     return { error: `Missing ${SCORED_PATH}. Run scoring first.` }
   }
   const args = [RUN_TAILOR]
+  if (opts.noLlm === true) args.push('--no-llm')
+  else if (opts.confirm === true) args.push('--confirm')
+  if (opts.preview === true) args.push('--preview')
   if (opts.jobIds?.length) args.push('--job-ids', opts.jobIds.join(','))
   else if (opts.jobId) args.push('--job-id', opts.jobId)
   if (opts.applyOnly) args.push('--apply-only')
@@ -72,6 +92,29 @@ function prepareTailor(opts = {}) {
   if (opts.applyRecommendation) args.push('--apply-recommendation', opts.applyRecommendation)
   if (opts.limit) args.push('--limit', String(opts.limit))
   return { args }
+}
+
+/**
+ * Exactly what a run would send for the chosen jobs, and what the AI gate says. Runs `run_tailor.py --preview`:
+ * no model is called and nothing is written but the profile mirror a run writes too.
+ */
+export function previewTailor(opts = {}, { spawnFn = spawn } = {}) {
+  const prep = prepareTailor({ ...opts, preview: true, confirm: false })
+  if (prep.error) return Promise.resolve({ status: 500, body: { ok: false, error: prep.error } })
+  return new Promise((resolve) => {
+    const out = []
+    const child = spawnFn(VENV_PYTHON, prep.args, { cwd: ROOT, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
+    child.stdout.on('data', (d) => out.push(d))
+    child.on('error', () => resolve({ status: 500, body: { ok: false, error: 'preview_failed' } }))
+    child.on('close', (code) => {
+      try {
+        const body = JSON.parse(Buffer.concat(out).toString('utf-8').trim().split('\n').pop())
+        resolve({ status: code === 0 && body?.ok ? 200 : 500, body })
+      } catch {
+        resolve({ status: 500, body: { ok: false, error: 'preview_failed' } })
+      }
+    })
+  })
 }
 
 function loadTailorPayload() {
@@ -158,6 +201,7 @@ if (isMain) {
     else if (argv[i] === '--job-ids') opts.jobIds = argv[++i].split(',').map((s) => s.trim()).filter(Boolean)
     else if (argv[i] === '--priority') opts.priority = argv[++i]
     else if (argv[i] === '--apply-only') opts.applyOnly = true
+    else if (argv[i] === '--confirm') opts.confirm = true
     else if (argv[i] === '--limit') opts.limit = Number(argv[++i])
   }
   runTailor(opts).then((result) => {

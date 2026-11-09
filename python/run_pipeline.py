@@ -85,6 +85,9 @@ def parse_args(argv=None) -> argparse.Namespace:
                    help="stop before scoring if fewer than this share of jobs has facts (default 0.8)")
     p.add_argument("--tailor", action="store_true", help="tailor documents for Apply jobs after scoring")
     p.add_argument("--tailor-limit", type=int, default=10)
+    p.add_argument("--tailor-confirm", action="store_true",
+                   help="with --tailor: the redacted text may be sent to Claude Code (run_tailor.py --preview shows it); "
+                        "without it tailoring is rule-based and sends nothing")
     p.add_argument("--json", action="store_true", help="print the summary as JSON on the last line")
     return p.parse_args(argv)
 
@@ -271,7 +274,7 @@ def execute(args: argparse.Namespace, steps: list[dict]) -> dict:
 
     if args.tailor:
         run_step("tailoring", [str(PY / "resume_generator" / "run_tailor.py"), "--apply-only",
-                               "--limit", str(args.tailor_limit)], steps)
+                               "--limit", str(args.tailor_limit), *(["--confirm"] if args.tailor_confirm else [])], steps)
     return summarize(args, steps, enrich_line, share, reduced)
 
 

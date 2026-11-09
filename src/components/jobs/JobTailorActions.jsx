@@ -12,6 +12,7 @@ import {
 import { tailoringBlocked } from '../../modules/jobs/keptRescore'
 import { useProfile } from '../../context/ProfileContext'
 import { runAiFeature } from '../../modules/ai/aiClient'
+import TailorConfirmDialog from './TailorConfirmDialog'
 
 export const NOT_IN_SCORED_LIST = 'Tailoring works from the latest scored list, and this ad is not in it (it was kept, or it is no longer listed). It cannot be tailored until a search lists it again.'
 
@@ -20,12 +21,14 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
   const [running, setRunning] = useState(false)
   const [evaluating, setEvaluating] = useState(false)
   const [error, setError] = useState(null)
+  const [confirming, setConfirming] = useState(false)
   const [enhancement, setEnhancement] = useState(job.aiInsights?.resumeEnhancement || null)
   const log = useOperationLog()
   const aiLog = useOperationLog()
   const assets = job.tailoredAssets
 
-  const handleGenerate = async () => {
+  // The button only opens the confirm dialog; nothing is sent until the dialog's own button is pressed.
+  const handleGenerate = () => {
     setError(null)
     // Tailoring reads the latest scored list on the server. A kept ad, or one no longer listed, is not in it, whatever text the browser holds.
     if (tailoringBlocked(job)) {
@@ -33,11 +36,16 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
       log.append(`Not started: ${NOT_IN_SCORED_LIST}`)
       return
     }
+    setConfirming(true)
+  }
+
+  const generate = async (mode) => {
+    setConfirming(false)
     setRunning(true)
     log.start('Queuing resume + cover letter generation…')
     try {
       const result = await runTailor(
-        { jobId: job.jobId, profile },
+        { jobId: job.jobId, profile, ...mode },
         { onLog: log.append },
       )
       const updated = result.payload?.jobs?.find((j) => j.jobId === job.jobId)
@@ -97,6 +105,14 @@ export default function JobTailorActions({ job, apiAvailable, onJobUpdated, comp
 
   return (
     <div className="flex flex-col gap-1.5">
+      {confirming && (
+        <TailorConfirmDialog
+          opts={{ jobId: job.jobId, profile }}
+          onClose={() => setConfirming(false)}
+          onConfirm={() => generate({ confirm: true })}
+          onRuleBased={() => generate({ noLlm: true })}
+        />
+      )}
       {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
       {!assets?.resumeMd ? (
         <Button

@@ -29,6 +29,7 @@ import { filterJobs, getUniqueProviders, getUniqueSites, listedJobs, onListJobs 
 import { computeJobStats } from '../../modules/jobs/jobStats'
 import { selectionFor, toggleAllSelected, toggleSelected } from '../../modules/jobs/jobTableModel'
 import { probePipelineApi, runTailor } from '../../modules/jobs/pipelineRunner'
+import TailorConfirmDialog from './TailorConfirmDialog'
 import { searchCountry } from '../../utils/searchCountry'
 import { downloadJobsCsv, downloadJobsJson } from '../../modules/jobs/jobExport'
 import { usePipelineAutoRefresh } from '../../modules/jobs/usePipelineAutoRefresh'
@@ -351,10 +352,15 @@ export default function JobDiscoveryScreen() {
     setSelection((prev) => toggleAllSelected(prev, filterKey, selectableIds(filteredJobs)))
   }, [filteredJobs, filterKey])
 
-  const handleBulkTailor = useCallback(async (opts) => {
+  // The bulk buttons only open the confirm dialog; `runBulkTailor` runs when its own button is pressed.
+  const [tailorAsk, setTailorAsk] = useState(null)
+  const handleBulkTailor = useCallback((opts) => setTailorAsk(opts), [])
+
+  const runBulkTailor = useCallback(async (opts, mode) => {
+    setTailorAsk(null)
     setBulkRunning(true)
     try {
-      const result = await runTailor({ ...opts, profile })
+      const result = await runTailor({ ...opts, profile, ...mode })
       if (result.payload) {
         setState((prev) => {
           const next = importJobsFromFile(result.payload, prev)
@@ -393,6 +399,14 @@ export default function JobDiscoveryScreen() {
 
   return (
     <div className="space-y-6">
+      {tailorAsk && (
+        <TailorConfirmDialog
+          opts={{ ...tailorAsk, profile }}
+          onClose={() => setTailorAsk(null)}
+          onConfirm={() => runBulkTailor(tailorAsk, { confirm: true })}
+          onRuleBased={() => runBulkTailor(tailorAsk, { noLlm: true })}
+        />
+      )}
       <Tabs tabs={JOB_TABS} active={activeTab} onChange={handleTabChange} />
 
       {autoLoadNote && (

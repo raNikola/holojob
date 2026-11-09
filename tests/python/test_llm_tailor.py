@@ -169,16 +169,18 @@ def write_project_intel(tmp_path, data):
     return path
 
 
-def generate(parsed=None, intel=None, job=None):
+def generate(parsed=None, intel=None, job=None, confirmed=True):
+    """The owner has confirmed unless a test says otherwise."""
     return llm_tailor.generate_llm_content(
         parse_resume_from_profile(profile()) if parsed is None else parsed,
         intelligence() if intel is None else intel,
         JOB if job is None else job,
+        confirmed=confirmed,
     )
 
 
 def tailor(tmp_path, *, prof=None, intel=None):
-    job = run_tailor.tailor_job(dict(JOB), prof or profile(), intel or intelligence(), use_llm=True)
+    job = run_tailor.tailor_job(dict(JOB), prof or profile(), intel or intelligence(), use_llm=True, confirmed=True)
     assets = job["tailoredAssets"]
     folder = tmp_path / "data" / "resumes" / JOB["jobId"]
     written = {p.name: p.read_text(encoding="utf-8") for p in folder.iterdir() if p.suffix in (".md", ".html", ".json")}
@@ -305,11 +307,38 @@ def test_the_project_scan_tools_cannot_read_commit_authors():
     assert "git log" not in joined and "git shortlog" not in joined
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="BUG (known gap, DECISIONS.md principle 14, Phase 4): no confirm step; "
-                                       "candidate data is sent as soon as the function is called")
 def test_nothing_is_sent_without_an_explicit_confirm(allowed):
-    generate()
+    data, err = generate(confirmed=False)
+    assert data is None and "not confirmed" in err
     assert allowed.prompts == []
+    assert ledger_calls() == []
+
+
+def test_a_run_without_confirm_sends_nothing_and_says_so(allowed, tmp_path, monkeypatch, capsys):
+    code, doc, out = _run_main(tmp_path, monkeypatch, capsys, extra=())
+    assert code == 0 and allowed.prompts == []
+    assets = doc["jobs"][0]["tailoredAssets"]
+    assert assets["contentEngine"] == "rule-based" and "not confirmed" in assets["llmIssues"][0]
+    assert "Not confirmed" in out
+
+
+def test_the_preview_shows_the_exact_redacted_prompt_and_calls_no_model(allowed, tmp_path, monkeypatch, capsys):
+    code, _, out = _run_main(tmp_path, monkeypatch, capsys, extra=("--preview",))
+    assert code == 0 and allowed.prompts == []
+    shown = json.loads(out.strip().splitlines()[-1])
+    [item] = shown["jobs"]
+    assert item["jobId"] == JOB["jobId"] and item["gate"]["allowed"] is True
+    assert BULLET in item["prompt"] and item["characters"] == len(item["prompt"])
+    for identifier in IDENTIFIERS:
+        assert identifier not in item["prompt"]
+    assert ledger_calls() == []
+
+
+def test_the_preview_reports_a_refusal_by_the_gate_and_by_redaction(cli, tmp_path, monkeypatch, capsys):
+    _, _, out = _run_main(tmp_path, monkeypatch, capsys, extra=("--preview",))
+    [item] = json.loads(out.strip().splitlines()[-1])["jobs"]
+    assert item["gate"]["allowed"] is False and "budget" in item["gate"]["reason"].lower()
+    assert cli.prompts == []
 
 
 # --- the fact gate: what it does reject today ----------------------------------------------------
@@ -619,7 +648,7 @@ def test_a_malformed_draft_does_not_stop_a_bulk_run_or_lose_other_jobs(allowed, 
 
     monkeypatch.setattr(claude_code.subprocess, "run", answer)
     monkeypatch.setattr("sys.argv", ["run_tailor.py", "--job-ids", "job-1,job-2,job-3", "--profile", str(prof),
-                                     "--intelligence", str(intel), "--scored", str(scored)])
+                                     "--intelligence", str(intel), "--scored", str(scored), "--confirm"])
     assert run_tailor.main() == 0
     saved = {j["jobId"]: j["tailoredAssets"] for j in json.loads(scored.read_text(encoding="utf-8"))["jobs"]}
     assert {k: v["contentEngine"] for k, v in saved.items()} == {
@@ -682,13 +711,13 @@ def test_an_allowed_call_is_in_the_ledger_with_feature_and_job(allowed):
     assert row["feature"] == "tailoring" and row["jobId"] == JOB["jobId"]
 
 
-def _run_main(tmp_path, monkeypatch, capsys):
+def _run_main(tmp_path, monkeypatch, capsys, extra=("--confirm",)):
     prof, intel, scored = tmp_path / "p.json", tmp_path / "i.json", tmp_path / "s.json"
     prof.write_text(json.dumps(profile()), encoding="utf-8")
     intel.write_text(json.dumps(intelligence()), encoding="utf-8")
     scored.write_text(json.dumps({"jobs": [JOB]}), encoding="utf-8")
     monkeypatch.setattr("sys.argv", ["run_tailor.py", "--job-id", JOB["jobId"], "--profile", str(prof),
-                                     "--intelligence", str(intel), "--scored", str(scored)])
+                                     "--intelligence", str(intel), "--scored", str(scored), *extra])
     code = run_tailor.main()
     return code, json.loads(scored.read_text(encoding="utf-8")), capsys.readouterr().out
 
@@ -741,7 +770,7 @@ def test_every_file_goes_under_the_given_root(allowed, tmp_path):
     from pathlib import Path
 
     real_resumes = Path(__file__).resolve().parents[2] / "data" / "resumes" / JOB["jobId"]
-    job = run_tailor.tailor_job(dict(JOB), profile(), intelligence(), use_llm=True)
+    job = run_tailor.tailor_job(dict(JOB), profile(), intelligence(), use_llm=True, confirmed=True)
     assert not real_resumes.exists()
     for key in ("resumeMd", "resumeHtml", "resumeJson", "coverLetterMd"):
         assert (tmp_path / job["tailoredAssets"][key]).is_file(), key

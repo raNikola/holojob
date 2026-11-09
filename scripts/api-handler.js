@@ -13,7 +13,7 @@ import { deleteManualJob } from './manual-job-delete.js'
 import { pruneKeptRescored, runKeptRescore } from './run-kept-rescore.js'
 import { extractAdAi, fetchAd, previewAdAi } from './run-ad-fill.js'
 import { buildScoringCommand, getScoringStatus, previewJudge, runJudgedScoring, runScoring } from './run-scoring.js'
-import { buildTailorCommand, getTailorStatus, runTailor, runTailorStream } from './run-tailor.js'
+import { buildTailorCommand, CONFIRM_REQUIRED, getTailorStatus, mayTailor, previewTailor, runTailor, runTailorStream } from './run-tailor.js'
 import { getProjectScanStatus, runProjectScan } from './run-project-scan.js'
 import { runJobImport } from './run-job-import.js'
 import { checkClaudeAuth, ensureClaudeLogin } from './claude-auth.js'
@@ -443,10 +443,36 @@ export async function handleApiRequest(req, res) {
     return true
   }
 
+  // Shows exactly what a run would send (redacted) and what the AI gate says. Calls no model.
+  if (url === '/api/tailor/preview' && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req, res)
+      const result = await previewTailor({
+        jobId: body.jobId,
+        jobIds: body.jobIds,
+        priority: body.priority,
+        applyRecommendation: body.applyOnly ? 'Apply' : body.applyRecommendation,
+        applyOnly: Boolean(body.applyOnly),
+        limit: body.limit,
+        profile: body.profile,
+      })
+      sendJson(res, result.status, result.body)
+    } catch (e) {
+      sendJson(res, 500, { error: e.message })
+    }
+    return true
+  }
+
   if (url === '/api/tailor/stream' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req, res)
+      if (!mayTailor(body)) {
+        sendJson(res, 409, CONFIRM_REQUIRED)
+        return true
+      }
       await runTailorStream(res, {
+        confirm: body.confirm === true,
+        noLlm: body.noLlm === true,
         jobId: body.jobId,
         jobIds: body.jobIds,
         priority: body.priority,
@@ -464,7 +490,13 @@ export async function handleApiRequest(req, res) {
   if (url === '/api/tailor/run' && req.method === 'POST') {
     try {
       const body = await readJsonBody(req, res)
+      if (!mayTailor(body)) {
+        sendJson(res, 409, CONFIRM_REQUIRED)
+        return true
+      }
       const result = await runTailor({
+        confirm: body.confirm === true,
+        noLlm: body.noLlm === true,
         jobId: body.jobId,
         jobIds: body.jobIds,
         priority: body.priority,

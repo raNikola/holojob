@@ -231,8 +231,15 @@ def build_prompt(parsed: dict, intelligence: dict, job: dict) -> tuple[str | Non
     ), ""
 
 
-def generate_llm_content(parsed: dict, intelligence: dict, job: dict) -> tuple[dict | None, str]:
-    """Returns (content, '') or (None, reason). Caller must fact-check before use."""
+NOT_CONFIRMED = "not confirmed: the redacted text was not approved for sending, so nothing was sent"
+
+
+def generate_llm_content(parsed: dict, intelligence: dict, job: dict, *, confirmed: bool = False) -> tuple[dict | None, str]:
+    """Returns (content, '') or (None, reason). Caller must fact-check before use.
+
+    Sends nothing unless `confirmed` is True: the owner approved what `build_prompt` returns (the preview shows exactly it)."""
+    if confirmed is not True:
+        return None, NOT_CONFIRMED
     if not claude_code.is_available():
         return None, claude_code.availability()["reason"]
 

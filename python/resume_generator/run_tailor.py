@@ -21,7 +21,8 @@ if str(ROOT / "python" / "job_scoring") not in sys.path:
 from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic  # noqa: E402
 import pipeline_lock  # noqa: E402
 from cover_letter_generator import BANNED_PHRASES, build_cover_letter_context, lint_cover_letter  # noqa: E402
-from llm_tailor import generate_llm_content, load_project_intelligence  # noqa: E402
+from llm_tailor import build_prompt, generate_llm_content, load_project_intelligence  # noqa: E402
+import claude_code  # noqa: E402
 from pdf_renderer import render_single_page_pdf  # noqa: E402
 from provenance_checker import build_canonical_facts, check_document, check_draft  # noqa: E402
 from resume_parser import parse_resume_from_profile, skill_label  # noqa: E402
@@ -51,6 +52,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=10)
     p.add_argument("--no-llm", action="store_true",
                    help="Skip Claude Code content generation, use rule-based tailoring")
+    p.add_argument("--confirm", action="store_true",
+                   help="The redacted text may be sent to Claude Code (see --preview). Without it nothing is sent "
+                        "and the content is rule-based.")
+    p.add_argument("--preview", action="store_true",
+                   help="Print, as one JSON line, exactly what a run would send and what the AI gate says. Calls no model.")
     p.add_argument("--profile", type=Path, default=PROFILE_PATH)
     p.add_argument("--intelligence", type=Path, default=INTELLIGENCE_PATH)
     p.add_argument("--scored", type=Path, default=SCORED_PATH)
@@ -144,7 +150,7 @@ def _project_names(project_intel: dict) -> list[str]:
     return out
 
 
-def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = True) -> dict:
+def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = True, confirmed: bool = False) -> dict:
     job_id = job.get("jobId") or "unknown"
     out_dir = RESUMES_ROOT / job_id
     make_private_dirs(out_dir)
@@ -168,7 +174,7 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     if use_llm:
         print("  · Claude Code: drafting summary, bullets, cover letter…", flush=True)
         parsed = parse_resume_from_profile(profile)
-        llm, reason = generate_llm_content(parsed, intelligence, job)
+        llm, reason = generate_llm_content(parsed, intelligence, job, confirmed=confirmed)
         if llm is None:
             llm_issues.append(f"llm skipped: {reason}")
         else:
@@ -289,6 +295,27 @@ def tailor_job(job: dict, profile: dict, intelligence: dict, *, use_llm: bool = 
     return job
 
 
+def preview_jobs(jobs: list[dict], profile: dict, intelligence: dict) -> dict:
+    """What a confirmed run would send for each job, and whether the AI gate would let it through. Calls no model and
+    writes nothing (the gate's `check` records no ledger row)."""
+    import ai_gate
+
+    parsed = parse_resume_from_profile(profile)
+    items = []
+    for job in jobs:
+        prompt, refused = build_prompt(parsed, intelligence, job)
+        gate = None
+        if prompt is not None:
+            decision = ai_gate.check("claude-code", None, len(prompt), feature="tailoring", job_id=job.get("jobId"))
+            gate = {"allowed": bool(decision.allowed), "reason": None if decision.allowed else decision.reason,
+                    "class": decision.row.get("class")}
+        items.append({"jobId": job.get("jobId"), "title": job.get("title"), "company": job.get("company"),
+                      "prompt": prompt, "characters": len(prompt or ""), "refused": refused or None, "gate": gate})
+    availability = claude_code.availability()
+    return {"ok": True, "provider": "claude-code", "available": availability["available"],
+            "availability": availability["reason"] or None, "jobs": items}
+
+
 def save_tailored(scored_path: Path, assets_by_id: dict[str, dict]) -> int:
     """Add each job's tailoredAssets to the scored file as it stands now, and change nothing else in it. Returns an exit code.
 
@@ -337,9 +364,17 @@ def main() -> int:
         print("No jobs matched selection criteria", file=sys.stderr)
         return 1
 
+    if args.preview:
+        print(json.dumps(preview_jobs(selected, profile, intelligence), ensure_ascii=False))
+        return 0
+
+    if not args.no_llm and not args.confirm:
+        print("Not confirmed: nothing is sent to Claude Code and the content is rule-based. "
+              "Use --preview to see exactly what would be sent, then --confirm.", flush=True)
+
     assets_by_id = {}
     for job in selected:
-        updated = tailor_job(job, profile, intelligence, use_llm=not args.no_llm)
+        updated = tailor_job(job, profile, intelligence, use_llm=not args.no_llm, confirmed=args.confirm)
         assets_by_id[updated["jobId"]] = updated["tailoredAssets"]
         engine = updated.get("tailoredAssets", {}).get("contentEngine", "?")
         print(f"Tailored [{engine}]: {updated.get('title')} @ {updated.get('company')} -> data/resumes/{updated['jobId']}/")

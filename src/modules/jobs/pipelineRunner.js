@@ -8,7 +8,7 @@ export function buildScoringCommand() {
 }
 
 export function buildTailorCommand(opts = {}) {
-  const parts = ['source .venv/bin/activate && python python/resume_generator/run_tailor.py']
+  const parts = ['source .venv/bin/activate && python python/resume_generator/run_tailor.py --confirm']
   if (opts.jobId) parts.push(`--job-id ${opts.jobId}`)
   if (opts.jobIds?.length) parts.push(`--job-ids ${opts.jobIds.join(',')}`)
   if (opts.applyOnly) parts.push('--apply-only')
@@ -146,8 +146,27 @@ export async function loadJobHistory(jobId) {
   }
 }
 
-export async function runTailor({ jobId, jobIds, priority, limit, applyOnly, profile }, { onLog } = {}) {
-  const body = { jobId, jobIds, priority, limit, applyOnly, profile }
+/**
+ * What a tailoring run would send for these jobs (redacted, exactly), and what the AI gate says. Calls no model.
+ * Only the confirm dialog calls this.
+ */
+export async function previewTailor({ jobId, jobIds, priority, limit, applyOnly, profile }) {
+  const res = await fetch('/api/tailor/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jobId, jobIds, priority, limit, applyOnly, profile }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || data.ok === false) throw new Error(data.error || 'Could not prepare the preview.')
+  return data
+}
+
+/**
+ * `confirm: true` means the person approved the previewed text; only the confirm dialog sets it. `noLlm: true` asks for
+ * rule-based documents, which send nothing. The server refuses a request with neither.
+ */
+export async function runTailor({ jobId, jobIds, priority, limit, applyOnly, profile, confirm, noLlm }, { onLog } = {}) {
+  const body = { jobId, jobIds, priority, limit, applyOnly, profile, confirm: confirm === true, noLlm: noLlm === true }
   if (onLog && isApiAvailable()) {
     return consumeSsePost('/api/tailor/stream', body, {
       onEvent: (e) => {

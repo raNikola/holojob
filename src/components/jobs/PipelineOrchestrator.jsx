@@ -113,9 +113,11 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
   }, [state, onImport])
 
   const runTailorStep = useCallback(async () => {
+    // Rule-based documents: this step runs unattended inside a longer run and sends nothing. The AI drafts are made from the
+    // Jobs screen, where the redacted text is shown and confirmed first.
     const opts = tailorMode === 'apply'
-      ? { applyOnly: true, limit: 50, profile }
-      : { priority: 'P1', limit: 5, profile }
+      ? { applyOnly: true, limit: 50, profile, noLlm: true }
+      : { priority: 'P1', limit: 5, profile, noLlm: true }
     return runTailor(opts)
   }, [tailorMode, profile])
 
