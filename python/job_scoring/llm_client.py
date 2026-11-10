@@ -495,6 +495,8 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
             counted = data.get("usage") or {}
             if isinstance(counted.get("prompt_tokens"), int) and isinstance(counted.get("completion_tokens"), int):
                 usage.update(input_tokens=counted["prompt_tokens"], output_tokens=counted["completion_tokens"])
+                # cached_tokens is a SUBSET of prompt_tokens (as OpenAI documents), not an addition to it; the gate bills
+                # it at the cached input rate and the rest of prompt_tokens at the full rate. Not proven on a hit yet.
                 cached = (counted.get("prompt_tokens_details") or {}).get("cached_tokens")
                 if isinstance(cached, int) and not isinstance(cached, bool):
                     usage["cached_input_tokens"] = cached

@@ -72,7 +72,7 @@ def test_the_prompt_lists_the_previous_frame_only_when_there_is_one(monkeypatch)
     assert "PREVIOUS REQUIREMENTS (an earlier" not in prompts[0]
     assert "PREVIOUS REQUIREMENTS (an earlier" in prompts[1]
     assert json.dumps(PREVIOUS[1], ensure_ascii=False) in prompts[1]
-    assert "END JOB AD" in prompts[1].split("PREVIOUS REQUIREMENTS (an earlier")[0]  # after the ad
+    assert "BEGIN JOB AD" in prompts[1].split("END PREVIOUS REQUIREMENTS")[1]  # before the ad: the variable tail
 
 
 def test_the_previous_block_holds_ids_and_texts_only():
