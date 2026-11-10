@@ -26,7 +26,7 @@ import redact  # noqa: E402
 
 PROJECT_INTEL_PATH = ROOT / "data/intelligence/project-intelligence.json"
 
-PROMPT_TEMPLATE = """You are the resume/cover-letter tailoring engine of a Holojob. \
+PROMPT_TEMPLATE = """You are the resume/cover-letter tailoring engine of Holojob. \
 You receive a job description and verified candidate data. Produce tailored CONTENT only \
 — styling is handled elsewhere.
 

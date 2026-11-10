@@ -27,7 +27,7 @@ function run() {
   const isAllMode = args.length === 0 || args.includes('--all') || (!isJobspyMode && !isJobsMode);
 
   console.log('====================================');
-  console.log('         HOLOJOB SETUP            ');
+  console.log('          HOLOJOB SETUP             ');
   console.log('====================================');
 
   // 1. Verify Git
