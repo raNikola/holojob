@@ -6,6 +6,9 @@
     "a paid call with an unknown price is refused whenever the budget is not 0 too, because its cost cannot be checked.",
     "Fill a price only from the provider's own price page, and record that page in `source` and the day in `checkedAt`.",
     "model \"*\" matches every model of the provider; an exact model entry wins over \"*\".",
+  "tiers (optional): one price set per service tier of the SAME model (standard, flex), each with inputPerMTok, cachedInputPerMTok, outputPerMTok.",
+  "A call is billed at the tier that actually served it. The entry-level prices equal the standard tier. A tier missing here is unpriced and refused.",
+  "maxInputTokens (optional): the short-context limit these prices hold for. Long-context prices are not recorded; a call above it is refused, or its cost is left unpriced.",
     "A local entry counts as local only while its base URL points at this machine or a private network."
   ],
   "currency": "USD",
@@ -37,6 +40,20 @@
       "source": null,
       "checkedAt": null,
       "note": "Claude Code CLI on the owner's subscription; usage counts against a paid plan"
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "class": "paid",
+      "inputPerMTok": 0.1,
+      "outputPerMTok": 0.5,
+      "tiers": {
+        "standard": { "inputPerMTok": 0.1, "cachedInputPerMTok": 0.01, "outputPerMTok": 0.5 },
+        "flex": { "inputPerMTok": 0.05, "cachedInputPerMTok": 0.005, "outputPerMTok": 0.25 }
+      },
+      "maxInputTokens": 272000,
+      "source": "https://developers.openai.com/api/docs/pricing (short context, up to 272K input tokens)",
+      "checkedAt": "2026-11-09"
     },
     { "provider": "openai", "model": "*", "class": "paid", "inputPerMTok": null, "outputPerMTok": null, "source": null, "checkedAt": null },
     { "provider": "deepseek", "model": "*", "class": "paid", "inputPerMTok": null, "outputPerMTok": null, "source": null, "checkedAt": null },

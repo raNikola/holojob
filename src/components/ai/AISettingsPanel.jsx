@@ -6,6 +6,7 @@ import Input from '../ui/Input'
 import Alert from '../ui/Alert'
 import AIProviderSelector from './AIProviderSelector'
 import AIModelSelector from './AIModelSelector'
+import AIServiceTierSelector from './AIServiceTierSelector'
 import AIFeatureToggles from './AIFeatureToggles'
 import AIHealthStatus from './AIHealthStatus'
 import AIUsageDashboard from './AIUsageDashboard'
@@ -130,6 +131,7 @@ export default function AISettingsPanel() {
 
           <AIProviderSelector settings={settings} onChange={setSettings} providers={providers} nodeProviders={nodeProviders} />
           <AIModelSelector settings={settings} onChange={setSettings} />
+          <AIServiceTierSelector settings={settings} onChange={setSettings} />
           {settings.provider && !KEYLESS_PROVIDERS.has(settings.provider) && (
             <p className="text-sm text-stone-600 dark:text-stone-400">
               API key: {keyEntry?.set ? `set on the server (…${keyEntry.last4})` : 'not set'}. It is entered and replaced in

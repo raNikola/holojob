@@ -354,8 +354,61 @@ def _rejected_setting(error_text: str, body: dict) -> str | None:
     return next((k for k in DETERMINISTIC if k in body and k in named), None)
 
 
+class FlexUnavailable(LlmUnavailable):
+    """Flex processing had no capacity (HTTP 429 / 503). Never retried and never moved to standard: changing the tier
+    is the owner's choice (Settings > AI Provider)."""
+
+
+def _error_detail(response) -> str:
+    """What the provider said about a rejected request: its error message and code, secrets and personal data removed,
+    one line, at most 200 characters. For the log and the ledger; never the request."""
+    try:
+        err = response.json().get("error")
+    except (ValueError, AttributeError):
+        err = None
+    if isinstance(err, dict):
+        text = " ".join(str(err[k]) for k in ("message", "code") if err.get(k))
+    else:
+        text = str(err) if err else str(getattr(response, "text", ""))[:300]
+    # A provider may echo part of the key it was sent ("sk-proj-****abcd"): none of it is kept.
+    text = re.sub(r"sk-[\w*.\-]+", "[key]", secret_store.mask(text))
+    return claude_code.safe_error(text)
+
+
+def reasoning_options(model: str | None) -> dict:
+    """What a reasoning model (gpt-6-luna, ...) is sent in place of temperature and seed: reasoning_effort and
+    max_completion_tokens, from the stored selection (reasoningEffort, maxTokens), never below the floor in
+    ai_selection. {} for a model that is not a reasoning model."""
+    if not ai_selection.is_reasoning_model(model):
+        return {}
+    try:
+        selection = ai_selection.read()["selection"] or {}
+    except (KeyError, TypeError):
+        selection = {}
+    tokens = selection.get("maxTokens")
+    tokens = tokens if isinstance(tokens, int) and not isinstance(tokens, bool) else 0
+    return {
+        "reasoning_effort": selection.get("reasoningEffort") or ai_selection.DEFAULTS["reasoningEffort"],
+        "max_completion_tokens": max(tokens, ai_selection.REASONING_MIN_COMPLETION_TOKENS),
+    }
+
+
+def service_tier_for(provider_name: str, explicit: str | None = None) -> str | None:
+    """The tier to request: the caller's, else the stored selection's serviceTier (standard when unset). Only OpenAI
+    has tiers; every other provider gets None."""
+    if provider_name != "openai":
+        return None
+    if explicit:
+        return explicit
+    try:
+        return ai_selection.read()["selection"].get("serviceTier") or ai_gate.DEFAULT_TIER
+    except (AttributeError, KeyError, TypeError):
+        return ai_gate.DEFAULT_TIER
+
+
 def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
-               usage: dict | None = None, credential: Credential | None = None) -> dict:
+               usage: dict | None = None, credential: Credential | None = None,
+               service_tier: str | None = None) -> dict:
     import requests
 
     if not provider.base_url:
@@ -371,7 +424,14 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
         body["response_format"] = {"type": "json_schema", "json_schema": schema}
     elif provider.json_mode in ("schema", "object"):
         body["response_format"] = {"type": "json_object"}
-    if provider.name in DETERMINISTIC_PROVIDERS:
+    if provider.name == "openai" and service_tier:
+        if ai_gate.api_tier(service_tier) is None:
+            raise LlmRefused(f"unknown service tier {service_tier!r}")
+        body["service_tier"] = ai_gate.api_tier(service_tier)
+    reasoning = reasoning_options(model) if provider.name == "openai" else {}
+    body.update(reasoning)
+    if provider.name in DETERMINISTIC_PROVIDERS and not reasoning:
+        # Not for a reasoning model: it takes no temperature or seed, so a request that carries them is a 400.
         body.update({k: v for k, v in DETERMINISTIC.items() if (provider.name, model, k) not in _REJECTED})
 
     headers = {"Content-Type": "application/json"}
@@ -393,12 +453,21 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
             )
         except requests.RequestException as exc:
             last_error = safe(str(exc))[:200]
+            if usage is not None:
+                usage.setdefault("http_statuses", []).append("connection error")
             attempt += 1
             time.sleep(2.0 * attempt)
             continue
 
+        detail = ""
+        if usage is not None:
+            usage.setdefault("http_statuses", []).append(response.status_code)
+            if not response.ok:
+                detail = _error_detail(response)
+                usage.setdefault("http_errors", []).append({"status": response.status_code, "message": detail})
         if response.status_code in (401, 403):
-            raise LlmUnavailable(f"{provider.name} rejected the key ({response.status_code})")
+            raise LlmUnavailable(f"{provider.name} rejected the key ({response.status_code})"
+                                 + (f": {detail}" if detail else ""))
         if response.status_code == 400 and (rejected := _rejected_setting(response.text, body)):
             # The model takes no such setting: ask again without it, and remember.
             _REJECTED.add((provider.name, model, rejected))
@@ -406,20 +475,33 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
             continue
         if response.status_code == 400:
             # A body the endpoint will not accept is our bug, not a blip.
-            raise LlmRefused(safe(f"{provider.name} rejected the request: {response.text[:300]}"))
+            raise LlmRefused(f"{provider.name} rejected the request (400)" + (f": {detail or _error_detail(response)}"))
+        if service_tier == "flex" and response.status_code in (429, 503):
+            if usage is not None:
+                usage["flex_unavailable"] = True
+            raise FlexUnavailable(
+                f"{provider.name} flex processing is unavailable right now (HTTP {response.status_code}, no charge). "
+                "Not retried and not switched to standard; choose the standard tier in Settings to continue.")
         if response.status_code in (408, 429, 500, 502, 503, 529):
-            last_error = f"HTTP {response.status_code}"
+            last_error = f"HTTP {response.status_code}" + (f": {detail}" if detail else "")
             attempt += 1
             time.sleep(2.0 * attempt)
             continue
         if not response.ok:
-            raise LlmUnavailable(safe(f"{provider.name} HTTP {response.status_code}: {response.text[:200]}"))
+            raise LlmUnavailable(f"{provider.name} HTTP {response.status_code}: {detail or _error_detail(response)}")
 
         data = response.json()
         if usage is not None:
             counted = data.get("usage") or {}
             if isinstance(counted.get("prompt_tokens"), int) and isinstance(counted.get("completion_tokens"), int):
                 usage.update(input_tokens=counted["prompt_tokens"], output_tokens=counted["completion_tokens"])
+                # cached_tokens is a SUBSET of prompt_tokens (as OpenAI documents), not an addition to it; the gate bills
+                # it at the cached input rate and the rest of prompt_tokens at the full rate. Not proven on a hit yet.
+                cached = (counted.get("prompt_tokens_details") or {}).get("cached_tokens")
+                if isinstance(cached, int) and not isinstance(cached, bool):
+                    usage["cached_input_tokens"] = cached
+            if service_tier:
+                usage["service_tier_actual"] = data.get("service_tier")
         choice = (data.get("choices") or [{}])[0]
         if choice.get("finish_reason") == "length":
             raise LlmRefused("reply was cut off before the JSON ended")
@@ -451,8 +533,9 @@ def complete_json(
     if name == "claude-code":
         return _gated(name, model, None, prompt, lambda usage: _cli_json(prompt, model, usage))
 
+    tier = service_tier_for(name)
     return _gated(name, model, resolved.base_url, prompt,
-                  lambda usage: _http_json(resolved, prompt, schema, model, usage, credential))
+                  lambda usage: _http_json(resolved, prompt, schema, model, usage, credential, tier), tier)
 
 
 def _target(provider: str | None, model: str | None) -> tuple[str, str, Provider | None, Credential | None]:
@@ -480,16 +563,16 @@ def call_target(provider: str | None = None, model: str | None = None) -> tuple[
 def preflight(prompt_chars: int, provider: str | None = None, model: str | None = None):
     """ai_gate.check() for a batch about to call complete_json with these arguments; records nothing."""
     name, model, base_url = call_target(provider, model)
-    return ai_gate.check(name, model, prompt_chars, base_url=base_url)
+    return ai_gate.check(name, model, prompt_chars, base_url=base_url, service_tier=service_tier_for(name))
 
 
-def _gated(provider: str, model: str, base_url: str | None, prompt: str, call) -> dict:
+def _gated(provider: str, model: str, base_url: str | None, prompt: str, call, service_tier: str | None = None) -> dict:
     """Ask the budget gate first, then make the call once and record what it used.
 
     The HTTP retries inside one call are one ledger entry (`attempts` counts them).
     """
     try:
-        ticket = ai_gate.reserve(provider, model, len(prompt), base_url=base_url)
+        ticket = ai_gate.reserve(provider, model, len(prompt), base_url=base_url, service_tier=service_tier)
     except ai_gate.AiRefused as exc:
         raise GuardrailRefused(exc.reason) from exc
     usage: dict = {}
@@ -498,8 +581,16 @@ def _gated(provider: str, model: str, base_url: str | None, prompt: str, call) -
     except Exception as exc:
         ticket.finish(False, input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
                       error=secret_store.mask(str(exc)), attempts=usage.get("attempts"),
-                      reported_cost_usd=usage.get("reported_cost_usd"))
+                      reported_cost_usd=usage.get("reported_cost_usd"), **_tier_usage(usage))
         raise
     ticket.finish(True, input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
-                  attempts=usage.get("attempts"), reported_cost_usd=usage.get("reported_cost_usd"))
+                  attempts=usage.get("attempts"), reported_cost_usd=usage.get("reported_cost_usd"),
+                  **_tier_usage(usage))
     return result
+
+
+def _tier_usage(usage: dict) -> dict:
+    return {"cached_input_tokens": usage.get("cached_input_tokens"),
+            "service_tier_actual": usage.get("service_tier_actual"),
+            "flex_unavailable": bool(usage.get("flex_unavailable")),
+            "http_statuses": usage.get("http_statuses"), "http_errors": usage.get("http_errors")}

@@ -68,6 +68,23 @@ LEDGER_VERSION = 1
 CLASSES = ("free", "local", "paid", "unknown")
 FREE_CLASSES = {"free", "local"}
 
+# Service tiers of one model (two prices, same model). `standard` is the default tier. The API names differ:
+# standard is sent as "default". Any other tier a response reports (priority, fast, scale, auto) has no price here.
+SERVICE_TIERS = ("standard", "flex")
+DEFAULT_TIER = "standard"
+API_TIER = {"standard": "default", "flex": "flex"}
+_FROM_API_TIER = {"default": "standard", "flex": "flex"}
+
+
+def api_tier(tier: str | None) -> str | None:
+    """The service_tier value to send for a tier of ours (None: send nothing)."""
+    return API_TIER.get(tier) if tier else None
+
+
+def tier_from_api(value) -> str | None:
+    """Our tier name for the service_tier a response reports; None when it is one we do not price."""
+    return _FROM_API_TIER.get(str(value).lower()) if isinstance(value, str) else None
+
 # A missing settings file means: no paid call, no automatic AI task.
 DEFAULT_SETTINGS = {
     "currency": "USD",
@@ -225,27 +242,41 @@ def load_pricing() -> dict:
 
 
 def classify(provider: str, model: str | None = None, base_url: str | None = None,
-             pricing: dict | None = None) -> dict:
-    """{class, inputPerMTok, outputPerMTok, priceKnown, currency, source, checkedAt} for one provider / model."""
+             pricing: dict | None = None, tier: str | None = None) -> dict:
+    """{class, inputPerMTok, cachedInputPerMTok, outputPerMTok, priceKnown, tier, maxInputTokens, currency, source,
+    checkedAt} for one provider / model. An entry with `tiers` is priced by `tier` (default standard); a tier it does
+    not list, or one that is incomplete, is unpriced. An entry without `tiers` has one price for every tier."""
     pricing = pricing or load_pricing()
     name = (provider or "").lower()
     entries = [e for e in pricing.get("entries") or [] if str(e.get("provider", "")).lower() == name]
     entry = next((e for e in entries if e.get("model") == model), None) or next(
         (e for e in entries if e.get("model") == "*"), None)
     if entry is None:
-        return {"class": "unknown", "inputPerMTok": None, "outputPerMTok": None, "priceKnown": False,
+        return {"class": "unknown", "inputPerMTok": None, "cachedInputPerMTok": None, "outputPerMTok": None,
+                "priceKnown": False, "tier": tier, "maxInputTokens": None,
                 "currency": pricing.get("currency"), "source": None, "checkedAt": None}
     cls = entry.get("class") if entry.get("class") in CLASSES else "unknown"
     if cls == "local" and not _local_host(base_url):
         # Same software, someone else's machine: its bill is not known.
         cls = "unknown"
-    price_in, price_out = entry.get("inputPerMTok"), entry.get("outputPerMTok")
+    tiers = entry.get("tiers") if isinstance(entry.get("tiers"), dict) else None
+    price_tier = None
+    source_prices = entry
+    if tiers is not None:
+        price_tier = tier or DEFAULT_TIER
+        source_prices = tiers.get(price_tier) if isinstance(tiers.get(price_tier), dict) else {}
+    price_in, price_out = source_prices.get("inputPerMTok"), source_prices.get("outputPerMTok")
     known = isinstance(price_in, (int, float)) and isinstance(price_out, (int, float))
+    cached = source_prices.get("cachedInputPerMTok")
+    limit = entry.get("maxInputTokens")
     return {
         "class": cls,
         "inputPerMTok": price_in if known else None,
+        "cachedInputPerMTok": cached if known and isinstance(cached, (int, float)) else None,
         "outputPerMTok": price_out if known else None,
         "priceKnown": known,
+        "tier": price_tier,
+        "maxInputTokens": limit if isinstance(limit, int) and limit > 0 else None,
         "currency": pricing.get("currency"),
         "source": entry.get("source"),
         "checkedAt": entry.get("checkedAt"),
@@ -294,10 +325,21 @@ def estimate_tokens(chars: int) -> int:
     return math.ceil(max(0, int(chars or 0)) / 4)
 
 
-def _cost(price: dict, input_tokens: int, output_tokens: int) -> float | None:
+def _cost(price: dict, input_tokens: int, output_tokens: int, cached_tokens: int = 0) -> float | None:
+    """Cost of one call. `input_tokens` counts the cached ones too (prompt_tokens); those are billed at the cached rate,
+    or at the full input rate when the table has no cached price. Above the price's short-context limit the cost is
+    unknown (long-context prices are not recorded), never guessed."""
     if not price["priceKnown"]:
         return None
-    return round(input_tokens * price["inputPerMTok"] / 1e6 + output_tokens * price["outputPerMTok"] / 1e6, 6)
+    limit = price.get("maxInputTokens")
+    if limit and input_tokens > limit:
+        return None
+    cached = min(max(0, int(cached_tokens or 0)), input_tokens)
+    cached_rate = price.get("cachedInputPerMTok")
+    if cached_rate is None:
+        cached_rate = price["inputPerMTok"]
+    return round((input_tokens - cached) * price["inputPerMTok"] / 1e6 + cached * cached_rate / 1e6
+                 + output_tokens * price["outputPerMTok"] / 1e6, 6)
 
 
 # --- ledger ------------------------------------------------------------------
@@ -359,9 +401,15 @@ def _calls(rows: list[dict]) -> list[dict]:
             continue
         result = results.get(row.get("id"))
         if result:
-            row = {**row, **{k: result[k] for k in ("inputTokens", "outputTokens", "tokensAreEstimate", "cost")
+            row = {**row, **{k: result[k] for k in ("inputTokens", "outputTokens", "tokensAreEstimate", "cost", "cachedInputTokens",
+                                  "serviceTierActual", "costTier", "flexUnavailable", "longContextUnpriced",
+                                  "httpStatuses", "httpErrors", "notBilled")
                              if k in result and result[k] is not None},
                    "ok": result.get("ok"), "error": result.get("error")}
+            if "costTier" in result and result.get("cost") is None:
+                # Served at a tier with no price (or beyond the priced context): the pre-call estimate keeps counting
+                # against the budget, so unknown spend is never read as zero, and the call is flagged unpriced.
+                row = {**row, "costUnpriced": True}
         merged.append(row)
     return merged
 
@@ -405,9 +453,9 @@ def totals(now: datetime | None = None, settings: dict | None = None) -> dict:
             b["outputTokens"] += int(row.get("outputTokens") or 0)
             if is_paid(row.get("class", "unknown")):
                 b["paidCalls"] += 1
-                if row.get("cost") is None:
+                if row.get("cost") is None or row.get("costUnpriced"):
                     b["unpricedPaidCalls"] += 1
-                else:
+                if row.get("cost") is not None:
                     b["cost"] = round(b["cost"] + float(row["cost"]), 6)
     return out
 
@@ -441,7 +489,12 @@ def _decide(row: dict, price: dict, settings: dict, now: datetime | None) -> str
         return (f"paid call {label} refused: AI budget is 0 "
                 f"(daily {daily:g}, monthly {monthly:g} {settings.get('currency')}; class {row['class']})")
     if not price["priceKnown"]:
-        return f"paid call {label} refused: price unknown; add it to src/data/aiPricing.json with its source"
+        tier = f" (service tier {price['tier']})" if price.get("tier") else ""
+        return f"paid call {label}{tier} refused: price unknown; add it to src/data/aiPricing.json with its source"
+    limit = price.get("maxInputTokens")
+    if limit and row["inputTokens"] > limit:
+        return (f"paid call {label} refused: about {row['inputTokens']} input tokens is over {limit}, the context size "
+                f"the recorded prices cover; long-context prices are not in src/data/aiPricing.json")
     if price.get("currency") != settings.get("currency"):
         return (f"paid call {label} refused: prices are in {price.get('currency')}, "
                 f"the budget in {settings.get('currency')}")
@@ -463,8 +516,8 @@ def _decide(row: dict, price: dict, settings: dict, now: datetime | None) -> str
 
 def _call_row(provider: str, model: str | None, prompt_chars: int, base_url: str | None, feature: str | None,
               job_id: str | None, trigger: str | None, output_tokens: int | None, settings: dict,
-              now: datetime | None) -> tuple[dict, dict]:
-    price = classify(provider, model, base_url)
+              now: datetime | None, service_tier: str | None = None) -> tuple[dict, dict]:
+    price = classify(provider, model, base_url, tier=service_tier)
     feature = feature or _feature.get() or "unspecified"
     enabled, _, allowed = subscription_settings(settings)
     if enabled and (provider or "").lower() == SUBSCRIPTION_PROVIDER and feature in allowed:
@@ -492,16 +545,19 @@ def _call_row(provider: str, model: str | None, prompt_chars: int, base_url: str
         "costIsEstimate": True,
         "priceKnown": price["priceKnown"],
     }
+    if service_tier:
+        row["serviceTierRequested"] = service_tier
     return row, price
 
 
 def check(provider: str, model: str | None, prompt_chars: int, *, base_url: str | None = None,
           feature: str | None = None, job_id: str | None = None, trigger: str | None = None,
-          output_tokens: int | None = None, now: datetime | None = None) -> Decision:
+          output_tokens: int | None = None, now: datetime | None = None,
+          service_tier: str | None = None) -> Decision:
     """What reserve() would decide, without recording anything. For a batch, before its first call."""
     settings = load_settings()
     row, price = _call_row(provider, model, prompt_chars, base_url, feature, job_id, trigger, output_tokens,
-                           settings, now)
+                           settings, now, service_tier)
     reason = _decide(row, price, settings, now)
     return Decision(reason is None, reason, row)
 
@@ -520,38 +576,84 @@ def record_refused(decision: Decision, skipped: int = 1) -> None:
         _append(row)
 
 
+def _scrub(text) -> str:
+    """Provider error text for the ledger: any key-like token and e-mail address removed, one line."""
+    text = re.sub(r"sk-[\w*.\-]+", "[key]", str(text or ""))
+    text = re.sub(r"[\w.+-]+@[\w-]+\.[\w.]+", "[email]", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 class Ticket:
     """An allowed call. finish() records what it actually used; call it once, success or not."""
 
-    def __init__(self, row: dict, price: dict):
+    def __init__(self, row: dict, price: dict, reprice=None):
         self.row = row
         self.price = price
+        # reprice(tier) -> the price of the tier that actually served the call; None for a flat-priced call.
+        self._reprice = reprice
         self.id = row["id"]
         self._finished = False
 
     def finish(self, ok: bool, *, input_tokens: int | None = None, output_tokens: int | None = None,
                error: str | None = None, attempts: int | None = None,
-               reported_cost_usd: float | None = None, now: datetime | None = None) -> None:
+               reported_cost_usd: float | None = None, now: datetime | None = None,
+               cached_input_tokens: int | None = None, service_tier_actual: str | None = None,
+               flex_unavailable: bool = False, http_statuses: list | None = None,
+               http_errors: list | None = None) -> None:
         if self._finished:
             return
         self._finished = True
         measured = input_tokens is not None and output_tokens is not None
         tin = int(input_tokens) if measured else self.row["inputTokens"]
         tout = int(output_tokens) if measured else (self.row["outputTokens"] if ok else 0)
+        cached = min(max(0, int(cached_input_tokens or 0)), tin) if measured else 0
+        # Every HTTP request of the call was answered with an error status (no 2xx, no dropped connection): the provider
+        # did not bill it, so it spends nothing. Anything else without measured tokens keeps the pre-call estimate.
+        not_billed = (not ok and not measured and bool(http_statuses)
+                      and all(isinstance(x, int) and not 200 <= x < 300 for x in http_statuses))
+        if not_billed:
+            tin = tout = cached = 0
+        price = self.price
+        requested = self.row.get("serviceTierRequested")
+        if self._reprice is not None and requested:
+            # Billed at the tier that served the call, not the one asked for. A response that names no tier, or one we
+            # do not price (priority, fast, scale), is unpriced; an error before any answer has no actual tier.
+            if service_tier_actual is None and not measured:
+                price = self._reprice(requested)
+            else:
+                price = self._reprice(tier_from_api(service_tier_actual))
         result = {
             "v": LEDGER_VERSION,
             "type": "result",
             "id": self.id,
             "ts": _now(now).isoformat(),
             "ok": bool(ok),
-            "error": (error or "")[:300] or None,
+            "error": _scrub(error)[:300] or None,
             "inputTokens": tin,
             "outputTokens": tout,
-            "tokensAreEstimate": not measured,
-            "cost": _cost(self.price, tin, tout),
-            "currency": self.price.get("currency"),
+            "tokensAreEstimate": not measured and not not_billed,
+            "cost": 0.0 if not_billed else _cost(price, tin, tout, cached),
+            "currency": price.get("currency"),
             "costIsEstimate": True,
         }
+        if requested:
+            result["serviceTierActual"] = service_tier_actual  # as the API reported it (default, flex, ...)
+            result["costTier"] = price.get("tier") if price.get("priceKnown") else None
+        if measured and cached_input_tokens is not None:
+            result["cachedInputTokens"] = cached
+        if flex_unavailable:
+            result["flexUnavailable"] = True
+        if not_billed:
+            result["notBilled"] = True
+        if http_errors:
+            # The provider's own error text per failed request: secrets, e-mails, phones and links removed, cut short.
+            result["httpErrors"] = [{"status": e.get("status"), "message": _scrub(e.get("message"))[:200]}
+                                    for e in http_errors[:5] if isinstance(e, dict)]
+        if http_statuses:
+            # One entry per HTTP request the call made (a status code, or "connection error").
+            result["httpStatuses"] = [x if isinstance(x, int) else str(x)[:30] for x in http_statuses[:10]]
+        if measured and price.get("priceKnown") and price.get("maxInputTokens") and tin > price["maxInputTokens"]:
+            result["longContextUnpriced"] = True
         if attempts is not None:
             result["attempts"] = attempts
         if reported_cost_usd is not None:
@@ -562,19 +664,33 @@ class Ticket:
 
 def reserve(provider: str, model: str | None, prompt_chars: int, *, base_url: str | None = None,
             feature: str | None = None, job_id: str | None = None, trigger: str | None = None,
-            output_tokens: int | None = None, now: datetime | None = None) -> Ticket:
+            output_tokens: int | None = None, now: datetime | None = None,
+            service_tier: str | None = None) -> Ticket:
     """Check and record one call before it is made. Raises AiRefused (already recorded) when it may not go."""
     with _locked():
         settings = load_settings()
         row, price = _call_row(provider, model, prompt_chars, base_url, feature, job_id, trigger, output_tokens,
-                               settings, now)
+                               settings, now, service_tier)
         reason = _decide(row, price, settings, now)
         row.update(decision="refused" if reason else "allowed", reason=reason)
         _append(row)
     if reason:
         print(f"AI gate: {reason}", file=sys.stderr, flush=True)
         raise AiRefused(reason, row)
-    return Ticket(row, price)
+    return Ticket(row, price, _repricer(row, base_url, price))
+
+
+def _repricer(row: dict, base_url: str | None, price: dict):
+    """The price lookup for the tier that served a call; None when the call has no tier or is flat-priced."""
+    if not row.get("serviceTierRequested") or price.get("class") == SUBSCRIPTION:
+        return None
+    provider, model = row["provider"], row.get("model")
+    return lambda tier: classify(provider, model, base_url, tier=tier_from_api_or_none(tier))
+
+
+def tier_from_api_or_none(tier: str | None) -> str:
+    """Our tier name, or a name no price has (so the call is unpriced) when the response named none we price."""
+    return tier if tier in SERVICE_TIERS else "unpriced"
 
 
 def record_cache_hit(provider: str, model: str | None, *, feature: str | None = None,
@@ -900,7 +1016,8 @@ def _cli(argv: list[str]) -> int:
         try:
             ticket = reserve(args.get("provider") or "", args.get("model"), int(args.get("promptChars") or 0),
                              base_url=args.get("baseUrl"), feature=args.get("feature"), job_id=args.get("jobId"),
-                             trigger=args.get("trigger"), output_tokens=args.get("outputTokens"))
+                             trigger=args.get("trigger"), output_tokens=args.get("outputTokens"),
+                             service_tier=args.get("serviceTier"))
         except AiRefused as exc:
             print(json.dumps({"allowed": False, "reason": exc.reason, "id": exc.row.get("id")}))
             return 0
@@ -916,12 +1033,14 @@ def _cli(argv: list[str]) -> int:
         if any(r.get("type") == "result" and r.get("id") == row["id"] for r in read_ledger()):
             print(json.dumps({"ok": False, "error": "call already finished"}))
             return 1
-        price = classify(row["provider"], row.get("model"), args.get("baseUrl"))
+        price = classify(row["provider"], row.get("model"), args.get("baseUrl"), tier=row.get("serviceTierRequested"))
         if price["class"] != row.get("class"):
             price = {**price, "priceKnown": False}
-        Ticket(row, price).finish(
+        Ticket(row, price, _repricer(row, args.get("baseUrl"), price)).finish(
             bool(args.get("ok")), input_tokens=args.get("inputTokens"), output_tokens=args.get("outputTokens"),
-            error=args.get("error"))
+            error=args.get("error"), cached_input_tokens=args.get("cachedInputTokens"),
+            http_statuses=args.get("httpStatuses"), http_errors=args.get("httpErrors"),
+            service_tier_actual=args.get("serviceTierActual"), flex_unavailable=args.get("flexUnavailable") is True)
         print(json.dumps({"ok": True}))
         return 0
     if command == "cache-hit":

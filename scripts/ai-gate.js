@@ -46,9 +46,9 @@ export function setGateRunner(fn) {
 }
 
 /** Ask before a call. Resolves { allowed, id, reason }; never rejects. */
-export async function reserveAiCall({ provider, model, promptChars, baseUrl, feature, jobId }) {
+export async function reserveAiCall({ provider, model, promptChars, baseUrl, feature, jobId, serviceTier }) {
   try {
-    const result = await runner('reserve', { provider, model: model || null, promptChars, baseUrl: baseUrl || null, feature, jobId: jobId || null })
+    const result = await runner('reserve', { provider, model: model || null, promptChars, baseUrl: baseUrl || null, feature, jobId: jobId || null, serviceTier: serviceTier || null })
     return { allowed: Boolean(result?.allowed), id: result?.id || null, reason: result?.reason || null }
   } catch (e) {
     return { allowed: false, id: null, reason: `AI gate unavailable, call refused: ${e.message}` }
@@ -56,7 +56,7 @@ export async function reserveAiCall({ provider, model, promptChars, baseUrl, fea
 }
 
 /** Record what an allowed call used. Never rejects: the answer is already in hand. */
-export async function finishAiCall(id, { ok, inputTokens, outputTokens, error, baseUrl } = {}) {
+export async function finishAiCall(id, { ok, inputTokens, outputTokens, error, baseUrl, cachedInputTokens, serviceTierActual, flexUnavailable, httpStatuses, httpErrors } = {}) {
   if (!id) return
   try {
     await runner('finish', {
@@ -66,6 +66,11 @@ export async function finishAiCall(id, { ok, inputTokens, outputTokens, error, b
       outputTokens: Number.isInteger(outputTokens) ? outputTokens : null,
       error: error || null,
       baseUrl: baseUrl || null,
+      cachedInputTokens: Number.isInteger(cachedInputTokens) ? cachedInputTokens : null,
+      serviceTierActual: serviceTierActual || null,
+      flexUnavailable: flexUnavailable === true,
+      httpStatuses: Array.isArray(httpStatuses) ? httpStatuses : null,
+      httpErrors: Array.isArray(httpErrors) ? httpErrors : null,
     })
   } catch (e) {
     console.error(`AI gate: could not record the result of call ${id}: ${e.message}`)
