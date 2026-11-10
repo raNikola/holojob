@@ -405,6 +405,35 @@ def compare(a: dict, b: dict, ids: list[str]) -> dict:
             "statusDiffers": n - same_status, "adsWithChange": len(ads_changed), "ads": len(ids)}
 
 
+def boundaries(a: dict, b: dict, ids: list[str], kinds: dict) -> dict:
+    """Where two readings differ: which verdict boundary, and on which requirement kinds and importance."""
+    pair, kind = Counter(), Counter()
+    for job_id in ids:
+        for req_id, status in (a.get(job_id) or {}).items():
+            other = (b.get(job_id) or {}).get(req_id)
+            if other is None or LEVEL[other] == LEVEL[status]:
+                continue
+            low, high = sorted((LEVEL[status], LEVEL[other]))
+            pair[("silence", "PARTIAL", "MET")[low] + " / " + ("silence", "PARTIAL", "MET")[high]] += 1
+            kind[kinds.get(job_id, {}).get(req_id, "?")] += 1
+    return {"pairs": dict(pair), "kinds": dict(kind)}
+
+
+def stability(read: dict, ids: list[str], arms: tuple) -> dict:
+    """Across all the given readings of the same input: requirements that never changed level, and those seen at both a positive level and silence."""
+    n = stable = both = 0
+    for job_id in ids:
+        for req_id in (read[arms[0]].get(job_id) or {}):
+            seen = [(read[arm].get(job_id) or {}).get(req_id) for arm in arms]
+            if None in seen:
+                continue
+            levels = {LEVEL[s] for s in seen}
+            n += 1
+            stable += len(levels) == 1
+            both += 0 in levels and bool(levels & {1, 2})
+    return {"n": n, "sameLevelInAll": stable, "share": round(stable / n, 3) if n else None, "silenceAndPositiveBothSeen": both}
+
+
 def aggregate(a: str, b: str) -> tuple[str, bool]:
     """Two readings to one verdict, by the accepted rule: (status, flagged). Two silences agree; positive against silence stays out of fit."""
     if a == b or (LEVEL[a] == 0 and LEVEL[b] == 0):
@@ -463,12 +492,15 @@ def analyse(out: Path, frozen: dict, sample: dict) -> dict:
     chosen = doc["ads"]
     read = readings(doc, engine, chosen)
     lines = labelled_lines(frozen, sample, chosen)
+    kinds = {j: {r["id"]: r["kind"] for r in engine[j]["output"]["requirements"]} for j in chosen if j in engine}
     report = {"ads": len(chosen), "calls": len(doc["calls"]), "modes": {}}
     for mode in MODES:
         ids = [j for j, m in chosen.items() if m == mode]
         subset = [line for line in lines if line["mode"] == mode]
         report["modes"][mode] = {"ads": len(ids), "labelledLines": len(subset),
                                  "comparisons": {name: compare(read[a], read[b], ids) for name, a, b in COMPARISONS},
+                                 "repeatBoundaries": boundaries(read["full_1"], read["full_2"], ids, kinds),
+                                 "stabilityAcrossLowEffortFullReadings": stability(read, ids, ("step7", "full_1", "full_2", "shuffled")),
                                  "againstRan": {arm: against_ran(read[arm], subset) for arm in ("step7", *ARMS)},
                                  "twoReadings": two_readings(read["full_1"], read["shuffled"], ids, subset)}
     return report
@@ -483,6 +515,9 @@ def render_analysis(report: dict) -> list[str]:
         out.append(f"\n== {mode.upper()}: {m['ads']} ads, {m['labelledLines']} labelled real-must lines" + ("" if mode == MODES[0] else "  [DIAGNOSTIC ONLY]"))
         for name, c in m["comparisons"].items():
             out.append(f"  {name}: changed {c['changedLevel']}/{c['n']} = {c['rate']} {c['wilson95']}; up {c['up']} down {c['down']}; status differs {c['statusDiffers']}; ads with a change {c['adsWithChange']}/{c['ads']}")
+        b, st = m["repeatBoundaries"], m["stabilityAcrossLowEffortFullReadings"]
+        out.append(f"  pure repeat, where the changes sit: boundaries {b['pairs']}; kinds {b['kinds']}")
+        out.append(f"  across the four low-effort full readings (step7, full_1, full_2, shuffled): same level in all {st['sameLevelInAll']}/{st['n']} = {st['share']}; seen as both silence and positive {st['silenceAndPositiveBothSeen']}")
         out.append("  against ran's answers (accuracy, not consistency):")
         for arm, a in m["againstRan"].items():
             out.append(f"    {arm:9} n {a['n']}: exact {a['exact']}, same level {a['sameLevel']}, understated {a['understated']}, overstated {a['overstated']}; ran said no but credited {a['ranNoButCredited']}/{a['ranNoLines']}")

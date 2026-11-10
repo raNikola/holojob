@@ -269,6 +269,18 @@ def test_compare_counts_levels_direction_and_treats_missing_and_unknown_as_one_l
     assert (c["n"], c["changedLevel"], c["up"], c["down"], c["statusDiffers"], c["adsWithChange"]) == (4, 2, 1, 1, 3, 1)
 
 
+def test_boundaries_name_the_verdict_edge_and_the_kind_and_ignore_a_change_inside_silence():
+    a = {"j": {"r1": "MISSING", "r2": "PARTIAL", "r3": "MISSING", "r4": "MISSING"}}
+    b = {"j": {"r1": "PARTIAL", "r2": "MET", "r3": "MET", "r4": "UNKNOWN"}}
+    got = mc.boundaries(a, b, ["j"], {"j": {"r1": "skill", "r2": "skill", "r3": "domain", "r4": "skill"}})
+    assert got == {"pairs": {"silence / PARTIAL": 1, "PARTIAL / MET": 1, "silence / MET": 1}, "kinds": {"skill": 2, "domain": 1}}
+
+
+def test_stability_counts_requirements_stable_in_every_reading_and_those_seen_both_ways():
+    read = {"x": {"j": {"r1": "MET", "r2": "PARTIAL", "r3": "MISSING"}}, "y": {"j": {"r1": "MET", "r2": "MET", "r3": "PARTIAL"}}}
+    assert mc.stability(read, ["j"], ("x", "y")) == {"n": 3, "sameLevelInAll": 1, "share": 0.333, "silenceAndPositiveBothSeen": 1}
+
+
 @pytest.mark.parametrize("a, b, final, flagged", [
     ("MET", "MET", "MET", False), ("MISSING", "UNKNOWN", "MISSING", False), ("UNKNOWN", "UNKNOWN", "UNKNOWN", False),
     ("MET", "PARTIAL", "PARTIAL", True), ("PARTIAL", "MET", "PARTIAL", True),
