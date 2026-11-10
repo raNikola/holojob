@@ -375,6 +375,24 @@ def _error_detail(response) -> str:
     return claude_code.safe_error(text)
 
 
+def reasoning_options(model: str | None) -> dict:
+    """What a reasoning model (gpt-6-luna, ...) is sent in place of temperature and seed: reasoning_effort and
+    max_completion_tokens, from the stored selection (reasoningEffort, maxTokens), never below the floor in
+    ai_selection. {} for a model that is not a reasoning model."""
+    if not ai_selection.is_reasoning_model(model):
+        return {}
+    try:
+        selection = ai_selection.read()["selection"] or {}
+    except (KeyError, TypeError):
+        selection = {}
+    tokens = selection.get("maxTokens")
+    tokens = tokens if isinstance(tokens, int) and not isinstance(tokens, bool) else 0
+    return {
+        "reasoning_effort": selection.get("reasoningEffort") or ai_selection.DEFAULTS["reasoningEffort"],
+        "max_completion_tokens": max(tokens, ai_selection.REASONING_MIN_COMPLETION_TOKENS),
+    }
+
+
 def service_tier_for(provider_name: str, explicit: str | None = None) -> str | None:
     """The tier to request: the caller's, else the stored selection's serviceTier (standard when unset). Only OpenAI
     has tiers; every other provider gets None."""
@@ -410,7 +428,10 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
         if ai_gate.api_tier(service_tier) is None:
             raise LlmRefused(f"unknown service tier {service_tier!r}")
         body["service_tier"] = ai_gate.api_tier(service_tier)
-    if provider.name in DETERMINISTIC_PROVIDERS:
+    reasoning = reasoning_options(model) if provider.name == "openai" else {}
+    body.update(reasoning)
+    if provider.name in DETERMINISTIC_PROVIDERS and not reasoning:
+        # Not for a reasoning model: it takes no temperature or seed, so a request that carries them is a 400.
         body.update({k: v for k, v in DETERMINISTIC.items() if (provider.name, model, k) not in _REJECTED})
 
     headers = {"Content-Type": "application/json"}
@@ -438,10 +459,13 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
             time.sleep(2.0 * attempt)
             continue
 
+        detail = ""
         if usage is not None:
             usage.setdefault("http_statuses", []).append(response.status_code)
+            if not response.ok:
+                detail = _error_detail(response)
+                usage.setdefault("http_errors", []).append({"status": response.status_code, "message": detail})
         if response.status_code in (401, 403):
-            detail = _error_detail(response)
             raise LlmUnavailable(f"{provider.name} rejected the key ({response.status_code})"
                                  + (f": {detail}" if detail else ""))
         if response.status_code == 400 and (rejected := _rejected_setting(response.text, body)):
@@ -451,7 +475,7 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
             continue
         if response.status_code == 400:
             # A body the endpoint will not accept is our bug, not a blip.
-            raise LlmRefused(safe(f"{provider.name} rejected the request: {response.text[:300]}"))
+            raise LlmRefused(f"{provider.name} rejected the request (400)" + (f": {detail or _error_detail(response)}"))
         if service_tier == "flex" and response.status_code in (429, 503):
             if usage is not None:
                 usage["flex_unavailable"] = True
@@ -459,12 +483,12 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
                 f"{provider.name} flex processing is unavailable right now (HTTP {response.status_code}, no charge). "
                 "Not retried and not switched to standard; choose the standard tier in Settings to continue.")
         if response.status_code in (408, 429, 500, 502, 503, 529):
-            last_error = f"HTTP {response.status_code}"
+            last_error = f"HTTP {response.status_code}" + (f": {detail}" if detail else "")
             attempt += 1
             time.sleep(2.0 * attempt)
             continue
         if not response.ok:
-            raise LlmUnavailable(safe(f"{provider.name} HTTP {response.status_code}: {response.text[:200]}"))
+            raise LlmUnavailable(f"{provider.name} HTTP {response.status_code}: {detail or _error_detail(response)}")
 
         data = response.json()
         if usage is not None:
@@ -567,4 +591,4 @@ def _tier_usage(usage: dict) -> dict:
     return {"cached_input_tokens": usage.get("cached_input_tokens"),
             "service_tier_actual": usage.get("service_tier_actual"),
             "flex_unavailable": bool(usage.get("flex_unavailable")),
-            "http_statuses": usage.get("http_statuses")}
+            "http_statuses": usage.get("http_statuses"), "http_errors": usage.get("http_errors")}

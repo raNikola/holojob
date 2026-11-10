@@ -403,7 +403,7 @@ def _calls(rows: list[dict]) -> list[dict]:
         if result:
             row = {**row, **{k: result[k] for k in ("inputTokens", "outputTokens", "tokensAreEstimate", "cost", "cachedInputTokens",
                                   "serviceTierActual", "costTier", "flexUnavailable", "longContextUnpriced",
-                                  "httpStatuses")
+                                  "httpStatuses", "httpErrors", "notBilled")
                              if k in result and result[k] is not None},
                    "ok": result.get("ok"), "error": result.get("error")}
             if "costTier" in result and result.get("cost") is None:
@@ -576,6 +576,13 @@ def record_refused(decision: Decision, skipped: int = 1) -> None:
         _append(row)
 
 
+def _scrub(text) -> str:
+    """Provider error text for the ledger: any key-like token and e-mail address removed, one line."""
+    text = re.sub(r"sk-[\w*.\-]+", "[key]", str(text or ""))
+    text = re.sub(r"[\w.+-]+@[\w-]+\.[\w.]+", "[email]", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 class Ticket:
     """An allowed call. finish() records what it actually used; call it once, success or not."""
 
@@ -591,7 +598,8 @@ class Ticket:
                error: str | None = None, attempts: int | None = None,
                reported_cost_usd: float | None = None, now: datetime | None = None,
                cached_input_tokens: int | None = None, service_tier_actual: str | None = None,
-               flex_unavailable: bool = False, http_statuses: list | None = None) -> None:
+               flex_unavailable: bool = False, http_statuses: list | None = None,
+               http_errors: list | None = None) -> None:
         if self._finished:
             return
         self._finished = True
@@ -599,6 +607,12 @@ class Ticket:
         tin = int(input_tokens) if measured else self.row["inputTokens"]
         tout = int(output_tokens) if measured else (self.row["outputTokens"] if ok else 0)
         cached = min(max(0, int(cached_input_tokens or 0)), tin) if measured else 0
+        # Every HTTP request of the call was answered with an error status (no 2xx, no dropped connection): the provider
+        # did not bill it, so it spends nothing. Anything else without measured tokens keeps the pre-call estimate.
+        not_billed = (not ok and not measured and bool(http_statuses)
+                      and all(isinstance(x, int) and not 200 <= x < 300 for x in http_statuses))
+        if not_billed:
+            tin = tout = cached = 0
         price = self.price
         requested = self.row.get("serviceTierRequested")
         if self._reprice is not None and requested:
@@ -614,11 +628,11 @@ class Ticket:
             "id": self.id,
             "ts": _now(now).isoformat(),
             "ok": bool(ok),
-            "error": (error or "")[:300] or None,
+            "error": _scrub(error)[:300] or None,
             "inputTokens": tin,
             "outputTokens": tout,
-            "tokensAreEstimate": not measured,
-            "cost": _cost(price, tin, tout, cached),
+            "tokensAreEstimate": not measured and not not_billed,
+            "cost": 0.0 if not_billed else _cost(price, tin, tout, cached),
             "currency": price.get("currency"),
             "costIsEstimate": True,
         }
@@ -629,6 +643,12 @@ class Ticket:
             result["cachedInputTokens"] = cached
         if flex_unavailable:
             result["flexUnavailable"] = True
+        if not_billed:
+            result["notBilled"] = True
+        if http_errors:
+            # The provider's own error text per failed request: secrets, e-mails, phones and links removed, cut short.
+            result["httpErrors"] = [{"status": e.get("status"), "message": _scrub(e.get("message"))[:200]}
+                                    for e in http_errors[:5] if isinstance(e, dict)]
         if http_statuses:
             # One entry per HTTP request the call made (a status code, or "connection error").
             result["httpStatuses"] = [x if isinstance(x, int) else str(x)[:30] for x in http_statuses[:10]]
@@ -1019,6 +1039,7 @@ def _cli(argv: list[str]) -> int:
         Ticket(row, price, _repricer(row, args.get("baseUrl"), price)).finish(
             bool(args.get("ok")), input_tokens=args.get("inputTokens"), output_tokens=args.get("outputTokens"),
             error=args.get("error"), cached_input_tokens=args.get("cachedInputTokens"),
+            http_statuses=args.get("httpStatuses"), http_errors=args.get("httpErrors"),
             service_tier_actual=args.get("serviceTierActual"), flex_unavailable=args.get("flexUnavailable") is True)
         print(json.dumps({"ok": True}))
         return 0

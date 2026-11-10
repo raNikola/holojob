@@ -44,10 +44,24 @@ DEFAULTS = {
     # Processing tier of a model that has more than one price (OpenAI: standard or flex). One explicit setting;
     # a feature does not pick its own. Providers without tiers ignore it.
     "serviceTier": ai_gate.DEFAULT_TIER,
+    # Reasoning models (gpt-5, gpt-6, o-series) take no temperature or seed. They are asked for this much hidden
+    # reasoning, and maxTokens below is raised to at least REASONING_MIN_COMPLETION_TOKENS for them.
+    "reasoningEffort": "low",
     "baseUrl": "",
     "features": {name: True for name in FEATURES},
 }
 KEYS = tuple(DEFAULTS)
+
+REASONING_EFFORTS = ("low", "medium", "high")
+# Reasoning models spend the completion budget on hidden reasoning before any visible text, so a small cap comes back
+# empty. This floor is the same number as REASONING_MIN_COMPLETION_TOKENS in src/modules/ai/providers/openaiProvider.js.
+REASONING_MIN_COMPLETION_TOKENS = 8000
+_REASONING_MODEL = re.compile(r"(gpt-5|gpt-6|o\d)", re.IGNORECASE)
+
+
+def is_reasoning_model(model: str | None) -> bool:
+    """Same rule as isReasoningModel in openaiProvider.js."""
+    return bool(model) and _REASONING_MODEL.match(model) is not None
 
 _MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,99}")
 MAX_TOKENS = 200_000
@@ -104,6 +118,8 @@ def validate(candidate, *, complete: bool = False) -> list[str]:
         errors.append(f"maxTokens must be a whole number from 1 to {MAX_TOKENS}")
     if "serviceTier" in candidate and candidate["serviceTier"] not in ai_gate.SERVICE_TIERS:
         errors.append(f"serviceTier must be one of: {', '.join(ai_gate.SERVICE_TIERS)}")
+    if "reasoningEffort" in candidate and candidate["reasoningEffort"] not in REASONING_EFFORTS:
+        errors.append(f"reasoningEffort must be one of: {', '.join(REASONING_EFFORTS)}")
     if "baseUrl" in candidate:
         url = candidate["baseUrl"]
         if not isinstance(url, str) or (url and not _plain_url(url)):

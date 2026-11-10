@@ -120,3 +120,49 @@ describe('tier mapping', () => {
     expect(API_SERVICE_TIER).toEqual({ standard: 'default', flex: 'flex' })
   })
 })
+
+describe('gpt-6-luna request body (Node path)', () => {
+  const NEVER = ['temperature', 'seed', 'max_tokens', 'top_p', 'tools', 'tool_choice', 'stop', 'logprobs', 'top_logprobs', 'n',
+    'presence_penalty', 'frequency_penalty', 'prediction', 'verbosity', 'stream', 'user', 'metadata', 'safety_identifier', 'store', 'prompt_cache_key']
+
+  it('has exactly the accepted fields and none of the sampling settings', async () => {
+    const fetch = stubFetch(200, reply({ service_tier: 'default' }))
+    await run({ provider: 'openai', model: 'gpt-6-luna', temperature: 0.7, maxTokens: 900 })
+    const body = bodyOf(fetch)
+    expect(Object.keys(body).sort()).toEqual(['max_completion_tokens', 'messages', 'model', 'reasoning_effort', 'service_tier'])
+    expect(body).toMatchObject({ model: 'gpt-6-luna', service_tier: 'default', reasoning_effort: 'low', max_completion_tokens: 8000 })
+    for (const name of NEVER) expect(body, name).not.toHaveProperty(name)
+  })
+
+  it('matches the Python body in the shared fields (same effort, same floor, same tier mapping)', async () => {
+    // tests/python/test_ai_service_tiers.py::test_the_luna_body_has_exactly_the_accepted_fields asserts these same values.
+    const { REASONING_MIN_COMPLETION_TOKENS, DEFAULT_REASONING_EFFORT, API_SERVICE_TIER } = await import('../../src/modules/ai/providers/openaiProvider.js')
+    expect([REASONING_MIN_COMPLETION_TOKENS, DEFAULT_REASONING_EFFORT, API_SERVICE_TIER]).toEqual([8000, 'low', { standard: 'default', flex: 'flex' }])
+  })
+
+  it('raises the cap and changes the effort from the stored selection, never below the floor', async () => {
+    const fetch = stubFetch()
+    await new OpenAIProvider().complete({ messages: [], model: 'gpt-6-luna', apiKey: 'k', maxTokens: 12000, reasoningEffort: 'medium' })
+    expect(bodyOf(fetch)).toMatchObject({ max_completion_tokens: 12000, reasoning_effort: 'medium' })
+  })
+})
+
+describe('HTTP errors reach the ledger with their status and masked message', () => {
+  it('passes the status and the provider message to the gate, and the key is not in it', async () => {
+    stubFetch(400, { error: { message: `Bad request, key ${CANARY} was echoed` } })
+    const result = await run({ provider: 'openai', model: 'gpt-6-luna' })
+    expect(result.ok).toBe(false)
+    const finish = gate('finish')
+    expect(finish.httpStatuses).toEqual([400])
+    expect(finish.httpErrors).toHaveLength(1)
+    expect(finish.httpErrors[0]).toMatchObject({ status: 400 })
+    expect(finish.httpErrors[0].message).toMatch(/Bad request/)
+    expect(JSON.stringify(finish)).not.toContain(CANARY)
+  })
+
+  it('a flex 429 is recorded with its status too', async () => {
+    stubFetch(429, { error: { message: 'Resource Unavailable' } })
+    await run({ provider: 'openai', model: 'gpt-6-luna', serviceTier: 'flex' })
+    expect(gate('finish')).toMatchObject({ flexUnavailable: true, httpStatuses: [429] })
+  })
+})

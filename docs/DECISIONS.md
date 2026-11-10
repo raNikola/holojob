@@ -1653,3 +1653,16 @@ Built on `main` working tree, not committed or pushed. Prices from https://devel
 - **Unchanged:** Daily 10 / Monthly 25 gate (it now uses the tier-correct cost), the `claude-code` subscription class (cost 0, `jobAnalysis` allowlist, cap 5; no tier fields), Phase 4 protections.
 - **Not built:** a Settings control for the tier (the setting is changed through `PUT /api/ai/selection`); per-ad token measurement from API usage (needs a paid call, waits for the owner's approval).
 - Tests: `tests/python/test_ai_service_tiers.py`, `tests/js/aiServiceTier.test.js` (mocked responses only).
+
+## OpenAI request parameters for reasoning models (2026-11-10, branch `ai-service-tier`)
+
+The first Standard measurement call on `gpt-6-luna` got HTTP 400 (a sampling setting) and the client retried without it. The policy now, in both paths (Node `openaiProvider.js` / `run-ai.js`, Python `llm_client.py`):
+
+- **Reasoning models** (`gpt-5*`, `gpt-6*`, `o<digit>*`; one rule on each side, `isReasoningModel` / `ai_selection.is_reasoning_model`): no `temperature`, `seed`, `max_tokens`. Determinism comes from caching by hash and code scoring, not from sampling.
+- **Sent for luna:** `model`, `messages`, `service_tier` (standard as `default`, flex as `flex`), `reasoning_effort` (default `low`), `max_completion_tokens` (the stored `maxTokens`, never below 8000 so hidden reasoning cannot leave the reply empty), and in Python `response_format` json_schema (strict, as the callers' schemas say; the loose JSON parse of the reply stays as the fallback). Node sends no `response_format`.
+- **Never sent:** `tools`, `tool_choice`, `stop`, `logprobs`, `n`, penalties, `prediction`, `verbosity`, `stream`, `user`, `metadata`, `safety_identifier`, `prompt_cache_key`, `store` (left at the provider default, so nothing is stored for retention by our request).
+- **One place per language:** Python `ai_selection.py` (`DEFAULTS["reasoningEffort"]`, `REASONING_MIN_COMPLETION_TOKENS`); Node `openaiProvider.js` (`DEFAULT_REASONING_EFFORT`, `REASONING_MIN_COMPLETION_TOKENS`). Overridable in the AI selection file: `maxTokens` (raise only) and the new `reasoningEffort` (`low`, `medium`, `high`). No UI for `reasoningEffort`.
+- **Other OpenAI models** keep `temperature: 0` and the fixed seed, and the existing "ask again without the setting a 400 names" fallback, which luna no longer needs.
+- **HTTP errors:** every non-2xx response is recorded in the result row (`httpStatuses`, `httpErrors` with status and the provider's message: keys, e-mails, phones and links removed, one line, 200 characters). A call whose every request was answered with an error status is `notBilled`: tokens 0, cost 0, so it spends nothing. A dropped connection keeps the pre-call estimate (billing is unknown). The pre-call budget check is unchanged.
+- **Prompt cache order: skipped.** The enrichment prompt puts the ad first and the fixed rules after it; reordering changes the prompt and needs a `PROMPT_VERSION` bump, which invalidates every cached enrichment and would cost paid re-extraction. `prompt_cache_key` not added.
+- Tests: `tests/python/test_ai_service_tiers.py`, `tests/js/aiServiceTier.test.js`.

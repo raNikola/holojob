@@ -102,6 +102,7 @@ export function resolveAiSettings(settings) {
     maxTokens: settings?.maxTokens,
     // Only OpenAI has service tiers; the stored selection holds the one explicit choice.
     serviceTier: provider === 'openai' ? (settings?.serviceTier || 'standard') : undefined,
+    reasoningEffort: provider === 'openai' ? settings?.reasoningEffort : undefined,
   }
   if (KEYLESS_PROVIDERS.has(provider)) {
     return { ...effective, baseUrl: provider === 'ollama' ? settings?.baseUrl : undefined, needsKey: false }
@@ -256,8 +257,12 @@ export async function runAiFeature({ feature, context, refresh = false }) {
       baseUrl: settings.baseUrl,
       featureId: feature,
       serviceTier: settings.serviceTier,
+      reasoningEffort: settings.reasoningEffort,
     }).catch(async (e) => {
-      if (ticket) await finishAiCall(ticket.id, { ok: false, error: sanitizeKey(e.message), baseUrl: settings?.baseUrl, flexUnavailable: e?.flexUnavailable === true })
+      if (ticket) {
+        const httpError = Number.isInteger(e?.status) ? { httpStatuses: [e.status], httpErrors: [{ status: e.status, message: sanitizeKey(e.message) }] } : {}
+        await finishAiCall(ticket.id, { ok: false, error: sanitizeKey(e.message), baseUrl: settings?.baseUrl, flexUnavailable: e?.flexUnavailable === true, ...httpError })
+      }
       ticket = null
       throw e
     })

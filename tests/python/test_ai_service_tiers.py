@@ -49,9 +49,9 @@ def api(tmp_path, monkeypatch):
 
     monkeypatch.setattr(requests, "post", post)
 
-    def choose(tier=None):
+    def choose(tier=None, **more):
         extra = {"serviceTier": tier} if tier else {}
-        select_provider(tmp_path, monkeypatch, "openai", MODEL, **extra)
+        select_provider(tmp_path, monkeypatch, "openai", MODEL, **extra, **more)
 
     return sent, replies, choose
 
@@ -280,3 +280,141 @@ def test_every_http_request_of_a_call_is_recorded(api):
     llm_client.complete_json("q")
     assert _result()["httpStatuses"] == [429, 500, 200]
     assert _result()["attempts"] == 3
+
+
+# --- gpt-6-luna request body: the parameters a reasoning model accepts -------------------------------
+
+SCHEMA = {"name": "facts", "strict": True, "schema": {"type": "object", "properties": {}, "additionalProperties": False}}
+NEVER_SENT = ("temperature", "seed", "max_tokens", "top_p", "tools", "tool_choice", "stop", "logprobs", "top_logprobs", "n",
+              "presence_penalty", "frequency_penalty", "prediction", "verbosity", "stream", "user", "metadata",
+              "safety_identifier", "store", "prompt_cache_key")
+
+
+def test_the_luna_body_has_exactly_the_accepted_fields(api):
+    sent, replies, choose = api
+    choose("standard")
+    replies.append(_answer())
+    llm_client.complete_json("q", schema=SCHEMA)
+    body = sent[0]
+    assert set(body) == {"model", "messages", "response_format", "service_tier", "reasoning_effort", "max_completion_tokens"}
+    assert body["model"] == MODEL and body["service_tier"] == "default"
+    assert body["reasoning_effort"] == "low" and body["max_completion_tokens"] == 8000
+    assert body["response_format"] == {"type": "json_schema", "json_schema": SCHEMA}
+    assert not any(name in body for name in NEVER_SENT)
+
+
+def test_flex_is_sent_as_flex_in_the_same_body(api):
+    sent, replies, choose = api
+    choose("flex")
+    replies.append(_answer(tier="flex"))
+    llm_client.complete_json("q")
+    assert sent[0]["service_tier"] == "flex" and "temperature" not in sent[0] and "seed" not in sent[0]
+
+
+def test_luna_needs_no_retry_without_a_sampling_setting(api):
+    sent, replies, choose = api
+    choose()
+    replies.append(_answer())
+    llm_client.complete_json("q")
+    assert len(sent) == 1 and _result()["attempts"] == 1
+    assert llm_client._REJECTED == set()
+
+
+def test_token_cap_and_effort_come_from_the_selection_with_a_floor(api):
+    sent, replies, choose = api
+    choose(maxTokens=12000, reasoningEffort="medium")
+    replies.extend([_answer(), _answer()])
+    llm_client.complete_json("q")
+    assert sent[0]["max_completion_tokens"] == 12000 and sent[0]["reasoning_effort"] == "medium"
+    choose(maxTokens=2000)  # below the floor
+    llm_client.complete_json("q")
+    assert sent[1]["max_completion_tokens"] == 8000
+
+
+def test_the_selection_validates_reasoning_effort():
+    import ai_selection
+    assert ai_selection.validate({"reasoningEffort": "extreme"})
+    assert not ai_selection.validate({"reasoningEffort": "high"})
+    assert ai_selection.DEFAULTS["reasoningEffort"] == "low"
+    assert ai_selection.REASONING_MIN_COMPLETION_TOKENS == 8000
+
+
+def test_other_openai_models_keep_the_sampling_settings_and_the_rejection_fallback(api, tmp_path, monkeypatch):
+    from conftest import permissive_ai_budget
+    sent, replies, choose = api
+    choose()
+    permissive_ai_budget(tmp_path, monkeypatch)  # a priced table for the legacy model
+    replies.extend([_Response(400, {"error": {"message": "Unsupported value: 'seed'", "param": "seed"}}), _answer()])
+    llm_client.complete_json("q", provider="openai", model="gpt-4o-legacy")
+    assert sent[0]["temperature"] == 0 and "seed" in sent[0]
+    assert "seed" not in sent[1] and "reasoning_effort" not in sent[0]
+
+
+# --- HTTP errors: the provider's message is logged (masked); a failed request spends nothing -------------
+
+def test_a_400_keeps_its_message_masked_and_spends_nothing(api):
+    sent, replies, choose = api
+    choose()
+    replies.append(_Response(400, {"error": {"message": "Bad request near 'jane.roe@corp.example' key sk-proj-AAAA****zzzz",
+                                              "code": "invalid_request_error"}}))
+    with pytest.raises(llm_client.LlmRefused, match="rejected the request"):
+        llm_client.complete_json("q")
+    row = _result()
+    assert row["httpStatuses"] == [400] and row["httpErrors"][0]["status"] == 400
+    message = row["httpErrors"][0]["message"]
+    assert "Bad request" in message and "invalid_request_error" in message
+    assert "jane.roe@corp.example" not in json.dumps(row) and "sk-proj" not in json.dumps(row) and "zzzz" not in json.dumps(row)
+    assert row["notBilled"] is True and row["cost"] == 0.0 and row["inputTokens"] == 0 and row["outputTokens"] == 0
+    assert ai_gate.totals()["today"]["cost"] == 0
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 500])
+def test_no_non_2xx_response_consumes_budget(api, status):
+    sent, replies, choose = api
+    choose()
+    replies.extend([_Response(status, {"error": {"message": "nope"}})] * 3)
+    with pytest.raises(Exception):
+        llm_client.complete_json("q")
+    assert ai_gate.totals()["today"]["cost"] == 0
+    assert _result()["notBilled"] is True
+
+
+def test_a_dropped_connection_keeps_the_estimate_because_billing_is_unknown(api, monkeypatch):
+    sent, replies, choose = api
+    choose()
+    monkeypatch.setattr(llm_client.time, "sleep", lambda s: None)
+
+    def boom(url, headers=None, json=None, timeout=None):
+        raise requests.ConnectionError("reset")
+
+    monkeypatch.setattr(requests, "post", boom)
+    with pytest.raises(Exception):
+        llm_client.complete_json("x" * 40_000)
+    row = _result()
+    assert "notBilled" not in row and row["cost"] > 0
+
+
+def test_the_pre_call_check_still_refuses_over_budget(api, tmp_path):
+    sent, replies, choose = api
+    choose()
+    (tmp_path / "ai" / "settings.json").write_text(json.dumps({"dailyLimit": 0.0000001, "monthlyLimit": 25}))
+    with pytest.raises(Exception, match="budget"):
+        llm_client.complete_json("q")
+    assert sent == []
+
+
+def test_the_gate_cli_finish_from_node_records_the_error_and_spends_nothing(api, monkeypatch, capsys):
+    """Node reports a failed request as httpStatuses / httpErrors through `ai_gate.py finish`."""
+    import io
+    sent, replies, choose = api
+    choose()
+    ticket = ai_gate.reserve("openai", MODEL, 4000, base_url="https://api.openai.com/v1", service_tier="standard")
+    payload = {"id": ticket.id, "ok": False, "error": "Bad request jane@corp.example sk-proj-AAAA****zz",
+               "baseUrl": "https://api.openai.com/v1", "httpStatuses": [400],
+               "httpErrors": [{"status": 400, "message": "Bad request jane@corp.example sk-proj-AAAA****zz"}]}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+    assert ai_gate._cli(["finish"]) == 0
+    row = _result()
+    assert row["notBilled"] is True and row["cost"] == 0.0 and row["httpStatuses"] == [400]
+    assert "jane@corp.example" not in json.dumps(row) and "sk-proj" not in json.dumps(row)
+    assert ai_gate.totals()["today"]["cost"] == 0

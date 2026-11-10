@@ -56,7 +56,7 @@ export async function reserveAiCall({ provider, model, promptChars, baseUrl, fea
 }
 
 /** Record what an allowed call used. Never rejects: the answer is already in hand. */
-export async function finishAiCall(id, { ok, inputTokens, outputTokens, error, baseUrl, cachedInputTokens, serviceTierActual, flexUnavailable } = {}) {
+export async function finishAiCall(id, { ok, inputTokens, outputTokens, error, baseUrl, cachedInputTokens, serviceTierActual, flexUnavailable, httpStatuses, httpErrors } = {}) {
   if (!id) return
   try {
     await runner('finish', {
@@ -69,6 +69,8 @@ export async function finishAiCall(id, { ok, inputTokens, outputTokens, error, b
       cachedInputTokens: Number.isInteger(cachedInputTokens) ? cachedInputTokens : null,
       serviceTierActual: serviceTierActual || null,
       flexUnavailable: flexUnavailable === true,
+      httpStatuses: Array.isArray(httpStatuses) ? httpStatuses : null,
+      httpErrors: Array.isArray(httpErrors) ? httpErrors : null,
     })
   } catch (e) {
     console.error(`AI gate: could not record the result of call ${id}: ${e.message}`)
