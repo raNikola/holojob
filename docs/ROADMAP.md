@@ -106,6 +106,10 @@ skills or domain. GitHub Issues are disabled on this repo, so the work is tracke
 Each item gets a fixture-based regression test; the Phase 1 stability test must keep passing. Related: "Recalibrate
 `TARGET_COVERAGE` and fix the flat scoring dimensions" under Later.
 
+## P1 scoring calibration (2026-11-11): Stage A done, Stage B S0-S2 (free) built
+
+Stage A measured the score against the owner's own labels (45 ads, 70 requirement lines; a small, purpose-chosen sample, not proof for all professions). Stage B decisions and the S0 (frozen test set), S1 (offline fit/confidence preview) and S2 free part (evidence-index diagnostic, dry-run estimate) tooling are recorded in [DECISIONS.md](DECISIONS.md#p1-scoring-calibration-stage-a-measured-stage-b-rules-decided-2026-11-11-branch-p1-stage-b). Next: the paid index diagnostic (about $0.03, needs the owner's explicit approval), then extraction v6, matching v3 and the exception review UX. No production scoring change is approved yet. Stale relocation lines to correct at P1 completion (D1 closed: "Yes, anywhere").
+
 ## Roadmap v2 (recorded 2026-11-04)
 
 Goal: **Scoring -> Matching -> Application Tracking.** Execution order approved by the owner and reviewed by GPT. Priorities P0 to P3. Nothing below is built unless the S table above says so. Decisions: [DECISIONS.md](DECISIONS.md#roadmap-v2-and-the-single-discovery-safety-rule-2026-11-04).
