@@ -11,8 +11,9 @@ what the code did on 2026-11-02. Where it differs from the decision, the entry s
 The app, its environment variables, compose project and container, example hostname, backup file names and the demo flag
 now use the name Holojob. Deliberately unchanged: the `job-dashboard-*` browser keys (they hold user data in the browser
 until the server is the master of that data), and the data files and folders under `data/`, which never carried the old name.
-`HOLOJOB_ALLOWED_ORIGINS` and `HOLOJOB_ENGINE_SHADOW` still accept their pre-rename names until the deployed `.env` is
-migrated; that read is removed in the second rename stage. AGPL-3.0 stays: `LICENSE` is unchanged and the app links to the
+The two settings a deployed `.env` can carry (`HOLOJOB_ALLOWED_ORIGINS`, `HOLOJOB_ENGINE_SHADOW`) no longer fall back to their
+pre-rename names (removed 2026-11-10 once `.env` was migrated); an empty origins list still turns the Host check off, and the
+server warns at start. The project folder is `/srv/holojob`. AGPL-3.0 stays: `LICENSE` is unchanged and the app links to the
 source of the running version (Settings, "About and source code").
 
 ## Activity screen (approved 2026-11-02)

@@ -30,22 +30,9 @@ export function parseAllowedOrigins(value) {
   return String(value ?? '').split(',').map(hostOf).filter(Boolean)
 }
 
-// TEMPORARY read-compat, removed once the deployed .env is migrated: the name this setting had before the rename.
-// Without it a not-yet-migrated .env would give an empty list, and an empty list switches the Host check off.
-const LEGACY_ALLOWED_ORIGINS = ['CAREER', 'OS', 'ALLOWED_ORIGINS'].join('_')
-let warnedLegacy = false
-
-/** The raw allowed-origins setting: HOLOJOB_ALLOWED_ORIGINS, else (with one warning) the pre-rename name. */
+/** The raw allowed-origins setting from .env. */
 export function allowedOriginsSetting(env = process.env) {
-  const current = env.HOLOJOB_ALLOWED_ORIGINS
-  if (current !== undefined && current !== '') return current
-  const legacy = env[LEGACY_ALLOWED_ORIGINS]
-  if (legacy === undefined || legacy === '') return current
-  if (!warnedLegacy) {
-    warnedLegacy = true
-    console.warn(`⚠ ${LEGACY_ALLOWED_ORIGINS} is the old name of HOLOJOB_ALLOWED_ORIGINS; rename it in .env`)
-  }
-  return legacy
+  return env.HOLOJOB_ALLOWED_ORIGINS
 }
 
 export function allowedOriginsFromEnv(env = process.env) {

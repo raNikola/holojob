@@ -14,11 +14,8 @@ const TEXT_EXT = new Set(['.md', '.js', '.jsx', '.ts', '.py', '.json', '.html', 
 const TEXT_NAMES = new Set(['Dockerfile', '.gitignore', '.dockerignore', '.env.example', 'LICENSE'])
 const SKIP_FILE = /^(\.env|settings\.local\.json|settings\.json\.(bak|graphify).*)$/
 
-// TEMPORARY, removed in the second rename stage once the folder itself is renamed: the folder path in docs and scripts.
-const OLD_FOLDER = ['/srv/', 'career', '-os'].join('')
-// TEMPORARY: the cutover runbook (deleted in the second stage) and the history rewrite notes (deleted after the
-// rewrite) have to name the old folder, container, host and the rewrite rules.
-const ALLOWED_FILES = new Set(['docs/CUTOVER_RUNBOOK.md', 'docs/HISTORY_REWRITE.md'])
+// TEMPORARY: the history rewrite notes (deleted after the rewrite) name the old name in the rewrite rules.
+const ALLOWED_FILES = new Set(['docs/HISTORY_REWRITE.md'])
 
 function* walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -44,7 +41,7 @@ describe('the old app name', () => {
       const rel = path.relative(ROOT, file)
       if (ALLOWED_FILES.has(rel)) continue
       fs.readFileSync(file, 'utf-8').split('\n').forEach((line, i) => {
-        if (OLD_NAME.test(line.split(OLD_FOLDER).join(''))) hits.push(`${rel}:${i + 1}`)
+        if (OLD_NAME.test(line)) hits.push(`${rel}:${i + 1}`)
       })
     }
     expect(hits, 'old app name left in these places').toEqual([])

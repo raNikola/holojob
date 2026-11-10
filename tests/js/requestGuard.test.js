@@ -205,22 +205,4 @@ describe('allowed origins from the environment', () => {
       else process.env.HOLOJOB_ALLOWED_ORIGINS = saved
     }
   })
-
-  // Read-compat for a .env that was not migrated yet (removed in the second rename stage). The old name is built from
-  // parts so no source file carries it as a literal.
-  const LEGACY = ['CAREER', 'OS', 'ALLOWED_ORIGINS'].join('_')
-
-  it('still honours the pre-rename name when the new one is unset, so the Host check stays on', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    try {
-      expect(allowedOriginsFromEnv({ [LEGACY]: 'https://a.example,http://localhost:3073' })).toEqual(['a.example', 'localhost:3073'])
-    } finally {
-      warn.mockRestore()
-    }
-  })
-
-  it('prefers HOLOJOB_ALLOWED_ORIGINS over the pre-rename name, and is empty when neither is set', () => {
-    expect(allowedOriginsFromEnv({ HOLOJOB_ALLOWED_ORIGINS: 'https://new.example', [LEGACY]: 'https://old.example' })).toEqual(['new.example'])
-    expect(allowedOriginsFromEnv({})).toEqual([])
-  })
 })

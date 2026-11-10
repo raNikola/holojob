@@ -29,10 +29,9 @@ Built, merged and deployed are three different states; this table says only what
 
 ## Rename to Holojob (2026-11-10)
 
-Stage 1 (text, prompts, environment variables with a temporary read of the pre-rename names, backups, compose project and
-container, docs, source link) is built on branch `rename-holojob`, not merged. Pending the owner: merge, the cutover to the new
-folder, container and hostname, stage 2 (remove the temporary reads, update the folder path in docs), and the Git history
-rewrite. Record: [DECISIONS.md](DECISIONS.md), "Rename to Holojob".
+Stages 1 and 2 are merged: text, prompts, environment variables (no fallback to the old names), backups, compose project and
+container, docs, source link, folder path. Pending the owner: recreate the container from the new folder (the running one still
+mounts the old path), and the Git history rewrite (`docs/HISTORY_REWRITE.md`). Record: [DECISIONS.md](DECISIONS.md), "Rename to Holojob".
 
 ## Phase 1 acceptance criteria - PROPOSED, owner to confirm
 
