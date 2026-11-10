@@ -27,6 +27,7 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { allowedOriginsSetting } from './request-guard.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const SOURCE_ROOT = path.resolve(HERE, '..')
@@ -71,7 +72,7 @@ function copyRoot({ sourceRoot, tempRoot, python }) {
 
 /** The Host the production guard accepts: the first of HOLOJOB_ALLOWED_ORIGINS (the container's .env), else the plain local address. */
 export function allowedHost(env = process.env) {
-  const first = String(env.HOLOJOB_ALLOWED_ORIGINS ?? '').split(',')[0].trim().replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, '')
+  const first = String(allowedOriginsSetting(env) ?? '').split(',')[0].trim().replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, '')
   return first || null
 }
 

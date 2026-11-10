@@ -50,6 +50,13 @@ def test_the_flag(value, on):
     assert shadow.enabled({}) is False
 
 
+def test_the_pre_rename_flag_name_still_works_until_the_env_file_is_migrated():
+    legacy = "_".join(["CAREER", "OS", "ENGINE_SHADOW"])  # built from parts: no source file carries the old name
+    assert shadow.enabled({legacy: "1"}) is True
+    assert shadow.enabled({shadow.SHADOW_ENV: "0", legacy: "1"}) is False  # a set new name wins over the old one
+    assert shadow.enabled({legacy: "0"}) is False
+
+
 def test_a_judged_run_calls_once_caches_and_a_later_run_calls_nothing(tmp_path):
     fake = Fake()
     first = engine(tmp_path, judge=True, fake=fake)

@@ -10,6 +10,7 @@ import { handleApiRoutes } from './api-handler.js'
 import { installLogMasking } from './secret-mask.js'
 import { ensureClaudeLogin } from './claude-auth.js'
 import { reconcileOnStart } from './run-rescrape.js'
+import { allowedOriginsFromEnv } from './request-guard.js'
 
 installLogMasking()
 
@@ -88,4 +89,7 @@ reconcileOnStart() // a run that died with the last server becomes interrupted; 
 
 server.listen(PORT, () => {
   console.log(`Holojob running at http://localhost:${PORT}`)
+  if (!allowedOriginsFromEnv().length) {
+    console.warn('⚠ HOLOJOB_ALLOWED_ORIGINS is not set: the request guard does not check the Host header (no DNS-rebinding protection)')
+  }
 })

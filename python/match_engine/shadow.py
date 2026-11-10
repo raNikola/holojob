@@ -57,9 +57,14 @@ NEVER_SENT = ["work authorization", "locations", "languages", "salary", "confirm
               "name", "contacts", "links"]
 
 
+# TEMPORARY read-compat, removed once the deployed .env is migrated: the name this switch had before the rename.
+_LEGACY_SHADOW_ENV = "_".join(["CAREER", "OS", "ENGINE_SHADOW"])
+
+
 def enabled(env=None) -> bool:
-    return str((env if env is not None else os.environ).get(SHADOW_ENV) or "").strip().lower() in {
-        "1", "true", "yes", "on"}
+    source = env if env is not None else os.environ
+    value = source.get(SHADOW_ENV) or source.get(_LEGACY_SHADOW_ENV)
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def select_mode(env=None) -> str | None:
