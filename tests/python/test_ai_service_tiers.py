@@ -242,3 +242,41 @@ def test_tier_mapping_matches_the_node_side():
     assert ai_gate.API_TIER == {"standard": "default", "flex": "flex"}
     assert ai_gate.api_tier("standard") == "default" and ai_gate.api_tier("flex") == "flex"
     assert ai_gate.api_tier("fast") is None and ai_gate.api_tier(None) is None
+
+
+# --- rejected key: the provider's reason is kept (masked), one request, statuses recorded -------------------
+
+def test_a_rejected_key_keeps_the_providers_reason_without_the_key_and_makes_one_request(api):
+    sent, replies, choose = api
+    choose("standard")
+    replies.extend([
+        _Response(401, {"error": {"message": "Incorrect API key provided: sk-proj-********abcd. Contact a@b.example.",
+                                  "code": "invalid_api_key"}}),
+        _answer(),
+    ])
+    with pytest.raises(llm_client.LlmUnavailable) as caught:
+        llm_client.complete_json("q")
+    text = str(caught.value)
+    assert "rejected the key (401)" in text and "Incorrect API key provided" in text and "invalid_api_key" in text
+    assert "sk-proj" not in text and "abcd" not in text and "a@b.example" not in text
+    assert len(sent) == 1
+    row = _result()
+    assert row["ok"] is False and row["httpStatuses"] == [401]
+    assert "abcd" not in row["error"] and "a@b.example" not in row["error"]
+
+
+def test_a_missing_scope_message_is_kept(api):
+    sent, replies, choose = api
+    choose()
+    replies.append(_Response(403, {"error": "You have insufficient permissions. Missing scopes: api.model.read."}))
+    with pytest.raises(llm_client.LlmUnavailable, match="Missing scopes: api.model.read"):
+        llm_client.complete_json("q")
+
+
+def test_every_http_request_of_a_call_is_recorded(api):
+    sent, replies, choose = api
+    choose("standard")
+    replies.extend([_Response(429, {}), _Response(500, {}), _answer()])
+    llm_client.complete_json("q")
+    assert _result()["httpStatuses"] == [429, 500, 200]
+    assert _result()["attempts"] == 3

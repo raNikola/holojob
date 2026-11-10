@@ -402,7 +402,8 @@ def _calls(rows: list[dict]) -> list[dict]:
         result = results.get(row.get("id"))
         if result:
             row = {**row, **{k: result[k] for k in ("inputTokens", "outputTokens", "tokensAreEstimate", "cost", "cachedInputTokens",
-                                  "serviceTierActual", "costTier", "flexUnavailable", "longContextUnpriced")
+                                  "serviceTierActual", "costTier", "flexUnavailable", "longContextUnpriced",
+                                  "httpStatuses")
                              if k in result and result[k] is not None},
                    "ok": result.get("ok"), "error": result.get("error")}
             if "costTier" in result and result.get("cost") is None:
@@ -590,7 +591,7 @@ class Ticket:
                error: str | None = None, attempts: int | None = None,
                reported_cost_usd: float | None = None, now: datetime | None = None,
                cached_input_tokens: int | None = None, service_tier_actual: str | None = None,
-               flex_unavailable: bool = False) -> None:
+               flex_unavailable: bool = False, http_statuses: list | None = None) -> None:
         if self._finished:
             return
         self._finished = True
@@ -628,6 +629,9 @@ class Ticket:
             result["cachedInputTokens"] = cached
         if flex_unavailable:
             result["flexUnavailable"] = True
+        if http_statuses:
+            # One entry per HTTP request the call made (a status code, or "connection error").
+            result["httpStatuses"] = [x if isinstance(x, int) else str(x)[:30] for x in http_statuses[:10]]
         if measured and price.get("priceKnown") and price.get("maxInputTokens") and tin > price["maxInputTokens"]:
             result["longContextUnpriced"] = True
         if attempts is not None:

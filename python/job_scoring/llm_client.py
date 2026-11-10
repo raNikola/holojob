@@ -359,6 +359,22 @@ class FlexUnavailable(LlmUnavailable):
     is the owner's choice (Settings > AI Provider)."""
 
 
+def _error_detail(response) -> str:
+    """What the provider said about a rejected request: its error message and code, secrets and personal data removed,
+    one line, at most 200 characters. For the log and the ledger; never the request."""
+    try:
+        err = response.json().get("error")
+    except (ValueError, AttributeError):
+        err = None
+    if isinstance(err, dict):
+        text = " ".join(str(err[k]) for k in ("message", "code") if err.get(k))
+    else:
+        text = str(err) if err else str(getattr(response, "text", ""))[:300]
+    # A provider may echo part of the key it was sent ("sk-proj-****abcd"): none of it is kept.
+    text = re.sub(r"sk-[\w*.\-]+", "[key]", secret_store.mask(text))
+    return claude_code.safe_error(text)
+
+
 def service_tier_for(provider_name: str, explicit: str | None = None) -> str | None:
     """The tier to request: the caller's, else the stored selection's serviceTier (standard when unset). Only OpenAI
     has tiers; every other provider gets None."""
@@ -416,12 +432,18 @@ def _http_json(provider: Provider, prompt: str, schema: dict | None, model: str,
             )
         except requests.RequestException as exc:
             last_error = safe(str(exc))[:200]
+            if usage is not None:
+                usage.setdefault("http_statuses", []).append("connection error")
             attempt += 1
             time.sleep(2.0 * attempt)
             continue
 
+        if usage is not None:
+            usage.setdefault("http_statuses", []).append(response.status_code)
         if response.status_code in (401, 403):
-            raise LlmUnavailable(f"{provider.name} rejected the key ({response.status_code})")
+            detail = _error_detail(response)
+            raise LlmUnavailable(f"{provider.name} rejected the key ({response.status_code})"
+                                 + (f": {detail}" if detail else ""))
         if response.status_code == 400 and (rejected := _rejected_setting(response.text, body)):
             # The model takes no such setting: ask again without it, and remember.
             _REJECTED.add((provider.name, model, rejected))
@@ -544,4 +566,5 @@ def _gated(provider: str, model: str, base_url: str | None, prompt: str, call, s
 def _tier_usage(usage: dict) -> dict:
     return {"cached_input_tokens": usage.get("cached_input_tokens"),
             "service_tier_actual": usage.get("service_tier_actual"),
-            "flex_unavailable": bool(usage.get("flex_unavailable"))}
+            "flex_unavailable": bool(usage.get("flex_unavailable")),
+            "http_statuses": usage.get("http_statuses")}
