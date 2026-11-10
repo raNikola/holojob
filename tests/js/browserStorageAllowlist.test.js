@@ -8,11 +8,11 @@ import {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const STORAGE_API = /\b(localStorage|sessionStorage|indexedDB)\b|document\.cookie/
-// Keys the sources name: a *_KEY constant, a literal given to getItem / setItem / removeItem, or any job-dashboard-* / holojob-* literal.
+// Keys the sources name: a *_KEY constant, a literal given to getItem / setItem / removeItem, or any job-dashboard-* / holojob-demo-* literal.
 const KEY_PATTERNS = [
   /\b[A-Z0-9_]*(?:STORAGE_)?KEY\s*=\s*['"`]([^'"`$]+)['"`]/g,
   /\.(?:getItem|setItem|removeItem)\(\s*['"`]([^'"`$]+)['"`]/g,
-  /['"`]((?:job-dashboard|holojob)-[a-z0-9-]+)['"`]/g,
+  /['"`]((?:job-dashboard|holojob-demo)-[a-z0-9-]+)['"`]/g,
 ]
 
 /** { storageFile: boolean, keys: Set } for one source text. */
