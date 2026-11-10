@@ -139,7 +139,7 @@ def test_the_estimate_makes_no_call_and_writes_nothing(out):
 
 def test_results_are_written_only_to_the_calibration_folder_with_mode_600_and_a_rerun_asks_for_nothing(out):
     model = Model()
-    assert eng.run(out, PROFILE, INTELLIGENCE, complete=model) == {"stopped": None, "asked": 3, "ok": 3, "failed": 0, "refused": 0}
+    assert eng.run(out, PROFILE, INTELLIGENCE, complete=model) == {"stopped": None, "asked": 3, "ok": 3, "failed": 0, "refused": 0, "modelCalls": 3, "retries": 0}
     assert stat.S_IMODE((out / eng.RESULTS_NAME).stat().st_mode) == 0o600
     assert sorted(f.name for f in out.iterdir()) == sorted(["review-items.json", es.FACTS_NAME, eng.RESULTS_NAME])
     again = Model()
@@ -166,10 +166,37 @@ def test_an_estimate_over_the_hard_stop_and_a_gate_refusal_send_nothing(out, mon
     assert model.prompts == []
 
 
-def test_a_confirmed_gate_fail_is_left_out_unless_asked_for(out, monkeypatch):
-    monkeypatch.setattr(eng, "cheap_gate_report", lambda job, candidate: (["role_family"], "unknown"))
-    assert eng.plan(out, PROFILE, INTELLIGENCE)["rows"] == {}
-    assert len(eng.plan(out, PROFILE, INTELLIGENCE, include_gate_failures=True)["rows"]) == 3
+def test_every_ad_is_marked_production_like_or_diagnostic_and_a_diagnostic_one_records_its_gate(out, monkeypatch):
+    fails = {"job2": ["role_family"], "job3": ["language", "work_authorization"]}
+    monkeypatch.setattr(eng, "cheap_gate_report", lambda job, candidate: (fails.get(job["title"].replace("Role ", "job"), []), "unknown"))
+    rows = eng.plan(out, PROFILE, INTELLIGENCE)["rows"]
+    assert {j: (r["mode"], r["excludedBy"]) for j, r in rows.items()} == {
+        "job1": ("production_like", []), "job2": ("diagnostic", ["role_family"]),
+        "job3": ("diagnostic", ["language", "work_authorization"])}
+    assert set(eng.plan(out, PROFILE, INTELLIGENCE, production_only=True)["rows"]) == {"job1"}
+    assert "1 production_like, 2 diagnostic" in "\n".join(eng.describe(eng.plan(out, PROFILE, INTELLIGENCE)))
+
+
+def test_the_stored_result_carries_the_mode_and_the_excluding_gate(out, monkeypatch):
+    monkeypatch.setattr(eng, "cheap_gate_report", lambda job, candidate: (["role_family"] if job["title"] == "Role 2" else [], "unknown"))
+    eng.run(out, PROFILE, INTELLIGENCE, complete=Model())
+    ads = json.loads((out / eng.RESULTS_NAME).read_text())["ads"]
+    assert (ads["job1"]["mode"], ads["job1"]["excludedBy"]) == ("production_like", [])
+    assert (ads["job2"]["mode"], ads["job2"]["excludedBy"]) == ("diagnostic", ["role_family"])
+
+
+def test_a_matcher_retry_counts_against_the_cap_and_stops_the_batch(out, monkeypatch):
+    class Bad(Model):
+        def __call__(self, prompt, **kw):
+            self.prompts.append(prompt)
+            return {"not": "the schema"}  # malformed: the matcher asks a second time
+
+    monkeypatch.setattr(eng, "HARD_STOP_USD", 0.0001)  # below the planned estimate: stops before any call
+    assert "hard stop" in eng.run(out, PROFILE, INTELLIGENCE, complete=Bad())["stopped"]
+    monkeypatch.setattr(eng, "HARD_STOP_USD", 0.25)
+    model = Bad()
+    result = eng.run(out, PROFILE, INTELLIGENCE, workers=1, complete=model)
+    assert result["failed"] == 3 and result["retries"] == 3 and result["modelCalls"] == 6
 
 
 def test_the_runner_names_no_production_state():

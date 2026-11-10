@@ -58,7 +58,7 @@ PROFILE_PATH = ROOT / "data" / "profile" / "candidate-profile.json"
 INTELLIGENCE_PATH = ROOT / "data" / "intelligence" / "candidate-intelligence.json"
 RESULTS_NAME = "engine-shadow.json"
 FEATURE = "evidence-matcher"
-HARD_STOP_USD = 0.50
+HARD_STOP_USD = 0.25  # the owner's cap for the step 7 batch; retries count against it
 CHARS_PER_TOKEN = 3.0  # low on purpose: over-counts, so the input estimate is an upper bound
 OUTPUT_PER_REQUIREMENT = 90  # reserved tokens per asked requirement (status, id, quote, strength) ...
 OUTPUT_BASE = 600  # ... plus the gates object and reasoning headroom. An assumption, not a measurement.
@@ -122,7 +122,11 @@ def _locally_settled(posting: dict, candidate: dict) -> tuple[int, int]:
     return len(reqs) - local, local
 
 
-def plan(out: Path, profile: dict, intelligence: dict, include_gate_failures: bool = False) -> dict:
+MODE_PRODUCTION = "production_like"  # no confirmed cheap-gate fail: production would send it
+MODE_DIAGNOSTIC = "diagnostic"  # production would skip it; asked anyway so gate quality and matcher quality are measured apart
+
+
+def plan(out: Path, profile: dict, intelligence: dict, production_only: bool = False) -> dict:
     items = json.loads((out / "review-items.json").read_text(encoding="utf-8"))["items"]
     facts = json.loads((out / FACTS_NAME).read_text(encoding="utf-8"))["facts"] if (out / FACTS_NAME).exists() else {}
     candidate, id_aliases = alias_unsafe_ids(build_candidate(profile, intelligence, load_confirmed_facts()), profile)
@@ -150,7 +154,7 @@ def plan(out: Path, profile: dict, intelligence: dict, include_gate_failures: bo
         failed, _ = cheap_gate_report(job, candidate)
         for gate in failed:
             gate_fails[gate] = gate_fails.get(gate, 0) + 1
-        if failed and not include_gate_failures:
+        if failed and production_only:
             skipped["gateFail"] += 1
             continue
         captured = []
@@ -165,7 +169,8 @@ def plan(out: Path, profile: dict, intelligence: dict, include_gate_failures: bo
             skipped["noRequirements"] += 1  # every requirement was settled locally: nothing to ask
             continue
         asked, local = _locally_settled(posting, candidate)
-        rows[item["jobId"]] = {"job": job, "posting": posting, "prompt": captured[0], "key": key, "asked": asked, "local": local}
+        rows[item["jobId"]] = {"mode": MODE_DIAGNOSTIC if failed else MODE_PRODUCTION, "excludedBy": list(failed),
+                               "job": job, "posting": posting, "prompt": captured[0], "key": key, "asked": asked, "local": local}
     leaks = {j: kinds for j, r in rows.items() if (kinds := owner_leaks(r["prompt"], profile))}
     price = ai_gate.classify(provider, model, selection.get("baseUrl") or None, tier=service_tier_for(provider))
     in_tokens = [tokens_of(len(r["prompt"])) for r in rows.values()]
@@ -191,7 +196,8 @@ def describe(p: dict) -> list[str]:
     local = sum(r["local"] for r in rows.values())
     sk = p["skipped"]
     lines = [
-        f"calls to make: {len(rows)} (one per ad); not sent: {sk['gateFail']} confirmed cheap-gate fail, {sk['noFacts']} without facts, "
+        f"calls to make: {len(rows)} (one per ad): {sum(1 for r in rows.values() if r['mode'] == MODE_PRODUCTION)} production_like, "
+        f"{sum(1 for r in rows.values() if r['mode'] == MODE_DIAGNOSTIC)} diagnostic (production would skip them on a confirmed gate fail); not sent: {sk['gateFail']} confirmed cheap-gate fail, {sk['noFacts']} without facts, "
         f"{sk['noRequirements']} without requirements to ask, {sk['done']} already done",
         f"model: {p['provider']}/{p['model']}, tier {p['tier']}",
         "confirmed cheap-gate fails among the ads (an ad failing two counts in both): " + (
@@ -218,8 +224,8 @@ def describe(p: dict) -> list[str]:
 
 
 def run(out: Path, profile: dict, intelligence: dict, workers: int = 4, complete=complete_json,
-        include_gate_failures: bool = False) -> dict:
-    p = plan(out, profile, intelligence, include_gate_failures)
+        production_only: bool = False) -> dict:
+    p = plan(out, profile, intelligence, production_only)
     if p["leaks"]:
         return {"stopped": "privacy scan found owner identifiers; nothing was sent", "asked": 0}
     if p["costUsd"] is None and p["rows"]:
@@ -236,11 +242,24 @@ def run(out: Path, profile: dict, intelligence: dict, workers: int = 4, complete
         return {"stopped": f"AI gate refused: {decision.reason}", "asked": 0}
     stop = threading.Event()
     counts = {"ok": 0, "failed": 0, "refused": 0}
+    spent = {"calls": 0, "usd": 0.0, "reason": None}
+    lock = threading.Lock()
+    price = p["price"]
 
     def scanned(prompt, schema=None, model=None, provider=None):
         if owner_leaks(prompt, profile):  # again, on the exact text about to leave
             stop.set()
+            spent["reason"] = "privacy scan hit on an outgoing request"
             raise GuardrailRefused("privacy scan hit on an outgoing request")
+        # Every call, a matcher retry included, is counted at its worst-case cost before it is made.
+        worst = tokens_of(len(prompt)) * price["inputPerMTok"] / 1e6 + (OUTPUT_BASE + OUTPUT_PER_REQUIREMENT * 40) * price["outputPerMTok"] / 1e6
+        with lock:
+            if spent["usd"] + worst > HARD_STOP_USD:
+                stop.set()
+                spent["reason"] = f"the next call could pass the ${HARD_STOP_USD:.2f} cap"
+                raise GuardrailRefused(spent["reason"])
+            spent["usd"] += worst
+            spent["calls"] += 1
         return complete(prompt, schema=schema, model=model, provider=provider)
 
     def one(job_id: str) -> str:
@@ -257,7 +276,8 @@ def run(out: Path, profile: dict, intelligence: dict, workers: int = 4, complete
             return "failed"
         output = outcome.output
         gates = gate_results(row["job"], p["candidate"], output["gates"], output["requirements"])
-        p["store"].put(job_id, {"cacheKey": row["key"], "at": _now(), "output": output, "gates": gates,
+        p["store"].put(job_id, {"mode": row["mode"], "excludedBy": row["excludedBy"],
+                                "cacheKey": row["key"], "at": _now(), "output": output, "gates": gates,
                                 "evidenceIdAliases": p["idAliases"],
                                 **score(output["requirements"], gates)})
         return "ok"
@@ -265,7 +285,8 @@ def run(out: Path, profile: dict, intelligence: dict, workers: int = 4, complete
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         for future in as_completed([pool.submit(one, j) for j in p["rows"]]):
             counts[future.result()] += 1
-    return {"stopped": None, "asked": len(p["rows"]), **counts}
+    return {"stopped": spent["reason"], "asked": len(p["rows"]), **counts, "modelCalls": spent["calls"],
+            "retries": max(0, spent["calls"] - counts["ok"] - counts["failed"])}
 
 
 def main(argv=None) -> int:
@@ -274,16 +295,16 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, default=STAGE_DIR)
     ap.add_argument("--yes", action="store_true", help="make the paid calls (run only)")
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--include-gate-failures", action="store_true")
+    ap.add_argument("--production-only", action="store_true", help="leave out the ads production would skip on a confirmed gate fail")
     args = ap.parse_args(argv)
     profile = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
     intelligence = json.loads(INTELLIGENCE_PATH.read_text(encoding="utf-8"))
     if args.command == "estimate" or not args.yes:
-        print("\n".join(describe(plan(args.out, profile, intelligence, args.include_gate_failures))))
+        print("\n".join(describe(plan(args.out, profile, intelligence, args.production_only))))
         if args.command == "run":
             print("nothing sent: add --yes after the estimate is approved")
         return 0
-    result = run(args.out, profile, intelligence, args.workers, include_gate_failures=args.include_gate_failures)
+    result = run(args.out, profile, intelligence, args.workers, production_only=args.production_only)
     print(json.dumps(result))
     return 1 if result.get("stopped") else 0
 
