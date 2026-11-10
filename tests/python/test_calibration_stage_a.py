@@ -108,3 +108,14 @@ def test_freeze_copies_inputs_once_and_never_touches_the_source(tmp_path):
     assert {p.name: p.read_bytes() for p in (data / "jobs").iterdir()} == before
     with pytest.raises(SystemExit):
         sa.freeze(out, data, lock=tmp_path / "lock")
+
+
+def test_diff_reading_says_when_the_rescore_reproduces_the_baseline(tmp_path):
+    rows = {"jobs": [row("1"), row("2")]}
+    for folder in ("baseline", "rescored"):
+        (tmp_path / folder).mkdir()
+        (tmp_path / folder / "scored_jobs.json").write_text(json.dumps(rows))
+    (tmp_path / "manifest.json").write_text(json.dumps({"git": {"scoringCodeChangedSinceBaseline": ["python/job_scoring/x.py"]}}))
+    result = sa.diff(tmp_path)
+    assert result["changed"] == [] and "reproduces the baseline" in result["attribution"]["reading"]
+    assert stat.S_IMODE((tmp_path / "diff.json").stat().st_mode) == 0o600

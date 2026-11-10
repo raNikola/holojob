@@ -256,10 +256,14 @@ def diff(out: Path = STAGE_DIR) -> dict:
         "intelligenceAtBaseline": (manifest.get("baseline") or {}).get("intelligenceGeneratedAt"),
         "intelligenceAtFreeze": (manifest.get("intelligenceAtFreeze") or {}).get("generatedAt"),
         "scoringCodeChangedSinceBaseline": code,
-        "reading": ("no scoring code changed since the baseline run, so every difference comes from changed inputs "
+        "reading": ("no score, label, priority, cap or dimension differs: the re-score reproduces the baseline, so "
+                    "stale inputs did not move any score" if not result["changed"] and not result["onlyBefore"]
+                    and not result["onlyAfter"] else
+                    "no scoring code changed since the baseline run, so every difference comes from changed inputs "
                     "(intelligence or job data)" if code == [] else
-                    "scoring files changed since the baseline run (listed): differences may come from logic; inspect them"
-                    if code else "unknown (git data missing)"),
+                    "files under the scoring folders changed since the baseline run (listed): inspect whether they "
+                    "affect scoring before attributing a difference to logic" if code else
+                    "unknown (git data missing)"),
     }
     _write_private(out / "diff.json", json.dumps(result, indent=2))
     return result
