@@ -8,6 +8,9 @@ COPY public ./public
 COPY scripts ./scripts
 COPY data/examples ./data/examples
 COPY src ./src
+# The commit the build is made from; the app links to the source of the running version (AGPL-3.0 section 13).
+ARG HOLOJOB_COMMIT=unknown
+ENV VITE_HOLOJOB_COMMIT=$HOLOJOB_COMMIT
 RUN npm run build
 
 # Stage 2: Runtime with Python + Node

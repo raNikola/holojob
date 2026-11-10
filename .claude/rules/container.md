@@ -22,6 +22,11 @@ paths:
   `podman cp dist holojob:/app/dist`. Python: `tar --exclude=__pycache__ -C python -cf - . | podman cp - holojob:/app/python`.
   Node `scripts/` or `src/`: the same with tar, then `podman restart holojob`. Exact commands in `docs/ARCHITECTURE.md`.
 
+- **Source offer (AGPL-3.0 section 13):** the app links to the source tree at the commit baked into the build (Settings > General,
+  and the sidebar). Build with `env HOLOJOB_COMMIT=(git rev-parse HEAD) podman-compose build`. Only deploy a commit that is
+  pushed to `origin`, and use the fast deploy only from a clean, pushed tree, so the link points at what runs. The repo must be
+  readable by the users of the deployed service before it serves anyone but the owner.
+
 Detail: `docs/ARCHITECTURE.md` (Container gotchas).
 
 ## From Conventions
