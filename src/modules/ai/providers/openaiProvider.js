@@ -10,12 +10,25 @@ export function isReasoningModel(model) {
 }
 const REASONING_MIN_COMPLETION_TOKENS = 8000
 
+// Our tier names to the API's service_tier values (standard processing is "default"), and back.
+export const API_SERVICE_TIER = { standard: 'default', flex: 'flex' }
+
+/** Flex had no capacity. Never retried here and never moved to standard: changing the tier is the owner's choice. */
+export class FlexUnavailableError extends Error {
+  constructor(status) {
+    super(`openai flex processing is unavailable right now (HTTP ${status}, no charge). Not retried and not switched to standard; choose the standard tier in Settings to continue.`)
+    this.name = 'FlexUnavailableError'
+    this.flexUnavailable = true
+  }
+}
+
 export class OpenAIProvider extends BaseProvider {
   constructor() {
     super('openai')
   }
 
-  async complete({ messages, model, temperature, maxTokens, apiKey, baseUrl }) {
+  async complete({ messages, model, temperature, maxTokens, apiKey, baseUrl, serviceTier }) {
+    if (serviceTier && !API_SERVICE_TIER[serviceTier]) throw new Error(`unknown service tier: ${serviceTier}`)
     const url = `${(baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '')}/chat/completions`
     const res = await fetch(url, {
       method: 'POST',
@@ -26,11 +39,13 @@ export class OpenAIProvider extends BaseProvider {
       body: JSON.stringify({
         model: model || DEFAULT_MODEL,
         messages,
+        ...(serviceTier ? { service_tier: API_SERVICE_TIER[serviceTier] } : {}),
         ...(isReasoningModel(model)
           ? { reasoning_effort: 'low', max_completion_tokens: Math.max(maxTokens ?? 2000, REASONING_MIN_COMPLETION_TOKENS) }
           : { temperature: temperature ?? 0.3, max_completion_tokens: maxTokens ?? 2000 }),
       }),
     })
+    if (serviceTier === 'flex' && (res.status === 429 || res.status === 503)) throw new FlexUnavailableError(res.status)
     const data = await res.json()
     if (!res.ok) throw new Error(data.error?.message || `OpenAI error: ${res.status}`)
     return {
@@ -38,6 +53,10 @@ export class OpenAIProvider extends BaseProvider {
       usage: {
         inputTokens: data.usage?.prompt_tokens || 0,
         outputTokens: data.usage?.completion_tokens || 0,
+        // prompt_tokens counts the cached tokens too; the gate bills those at the cached rate.
+        cachedInputTokens: Number.isInteger(data.usage?.prompt_tokens_details?.cached_tokens) ? data.usage.prompt_tokens_details.cached_tokens : null,
+        // The tier that actually served the call, as the API reports it (it can differ from the one asked for).
+        serviceTier: serviceTier ? (data.service_tier ?? null) : null,
       },
     }
   }

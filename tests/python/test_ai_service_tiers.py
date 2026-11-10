@@ -1,0 +1,244 @@
+"""gpt-6-luna service tiers (standard / flex): price lookup, cost math, the tier sent, the tier recorded, flex without fallback.
+
+Mocked responses only: requests.post is replaced in every test (the conftest tripwire fails any real POST).
+The prices are the shipped src/data/aiPricing.json ones.
+"""
+
+import json
+
+import pytest
+import requests
+
+import ai_gate
+import llm_client
+from conftest import select_provider
+
+MODEL = "gpt-6-luna"
+
+
+class _Response:
+    def __init__(self, status, payload):
+        self.status_code, self._payload = status, payload
+        self.ok = 200 <= status < 300
+        self.text = json.dumps(payload)
+
+    def json(self):
+        return self._payload
+
+
+def _answer(*, tier="default", prompt=200_000, cached=0, completion=100_000):
+    body = {"choices": [{"message": {"content": '{"a": 1}'}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": prompt, "completion_tokens": completion,
+                      "prompt_tokens_details": {"cached_tokens": cached}}}
+    if tier is not None:
+        body["service_tier"] = tier
+    return _Response(200, body)
+
+
+@pytest.fixture
+def api(tmp_path, monkeypatch):
+    (tmp_path / "ai").mkdir(exist_ok=True)
+    (tmp_path / "ai" / "settings.json").write_text(json.dumps({"dailyLimit": 10, "monthlyLimit": 25}))
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setattr(llm_client.time, "sleep", lambda s: None)
+    sent, replies = [], []
+
+    def post(url, headers=None, json=None, timeout=None):
+        sent.append(dict(json))
+        return replies.pop(0)
+
+    monkeypatch.setattr(requests, "post", post)
+
+    def choose(tier=None):
+        extra = {"serviceTier": tier} if tier else {}
+        select_provider(tmp_path, monkeypatch, "openai", MODEL, **extra)
+
+    return sent, replies, choose
+
+
+def _result():
+    return [r for r in ai_gate.read_ledger() if r["type"] == "result"][-1]
+
+
+def _call():
+    return [r for r in ai_gate.read_ledger() if r["type"] == "call"][-1]
+
+
+# --- price lookup ---------------------------------------------------------------
+
+def test_price_lookup_per_tier():
+    standard = ai_gate.classify("openai", MODEL, tier="standard")
+    flex = ai_gate.classify("openai", MODEL, tier="flex")
+    assert (standard["inputPerMTok"], standard["cachedInputPerMTok"], standard["outputPerMTok"]) == (0.10, 0.01, 0.50)
+    assert (flex["inputPerMTok"], flex["cachedInputPerMTok"], flex["outputPerMTok"]) == (0.05, 0.005, 0.25)
+    assert standard["priceKnown"] and flex["priceKnown"] and standard["maxInputTokens"] == 272000
+    assert standard["source"].startswith("https://developers.openai.com/api/docs/pricing")
+    assert standard["checkedAt"] == "2026-11-09"
+
+
+def test_no_tier_means_standard_and_an_unlisted_tier_is_unpriced():
+    assert ai_gate.classify("openai", MODEL)["tier"] == "standard"
+    assert ai_gate.classify("openai", MODEL, tier="fast")["priceKnown"] is False
+    # Other gpt models stay unpriced.
+    assert ai_gate.classify("openai", "gpt-6.1-sol", tier="standard")["priceKnown"] is False
+
+
+# --- cost math ------------------------------------------------------------------
+
+def test_cost_math_with_cached_tokens():
+    flex = ai_gate.classify("openai", MODEL, tier="flex")
+    # 200k prompt of which 80k cached, 100k out: 120k * 0.05 + 80k * 0.005 + 100k * 0.25 (per 1M)
+    assert ai_gate._cost(flex, 200_000, 100_000, 80_000) == pytest.approx(0.006 + 0.0004 + 0.025)
+    standard = ai_gate.classify("openai", MODEL, tier="standard")
+    assert ai_gate._cost(standard, 200_000, 100_000, 0) == pytest.approx(0.07)
+    assert ai_gate._cost(standard, 1000, 10, 5000) == pytest.approx(1000 * 0.01 / 1e6 + 10 * 0.5 / 1e6)  # cached capped
+
+
+def test_long_context_has_no_cost():
+    standard = ai_gate.classify("openai", MODEL, tier="standard")
+    assert ai_gate._cost(standard, 272_000, 10) is not None
+    assert ai_gate._cost(standard, 272_001, 10) is None
+
+
+# --- the request ------------------------------------------------------------------
+
+def test_standard_is_the_default_and_is_sent_as_default(api):
+    sent, replies, choose = api
+    choose()
+    replies.append(_answer())
+    llm_client.complete_json("q")
+    assert sent[0]["service_tier"] == "default"
+    assert _call()["serviceTierRequested"] == "standard"
+
+
+def test_flex_is_sent_when_selected(api):
+    sent, replies, choose = api
+    choose("flex")
+    replies.append(_answer(tier="flex"))
+    llm_client.complete_json("q")
+    assert sent[0]["service_tier"] == "flex"
+
+
+def test_the_selection_rejects_an_unknown_tier():
+    import ai_selection
+    assert ai_selection.validate({"serviceTier": "fast"})
+    assert not ai_selection.validate({"serviceTier": "flex"})
+    assert ai_selection.DEFAULTS["serviceTier"] == "standard"
+
+
+def test_other_providers_get_no_tier(tmp_path, monkeypatch):
+    sent = []
+    monkeypatch.setenv("GROQ_API_KEY", "test")
+    (tmp_path / "ai").mkdir(exist_ok=True)
+    (tmp_path / "ai" / "settings.json").write_text(json.dumps({"dailyLimit": 10, "monthlyLimit": 25}))
+    pricing = tmp_path / "p.json"
+    pricing.write_text(json.dumps({"currency": "USD", "entries": [
+        {"provider": "groq", "model": "*", "class": "paid", "inputPerMTok": 1, "outputPerMTok": 1, "source": "t"}]}))
+    monkeypatch.setenv("HOLOJOB_AI_PRICING", str(pricing))
+    monkeypatch.setattr(requests, "post", lambda *a, json=None, **k: sent.append(json) or _answer(tier=None))
+    llm_client.complete_json("q", provider="groq", model="m")
+    assert "service_tier" not in sent[0] and "serviceTierRequested" not in _call()
+
+
+# --- the ledger: actual tier, cached tokens, cost --------------------------------------
+
+def test_cost_is_computed_from_the_actual_tier_not_the_requested_one(api):
+    sent, replies, choose = api
+    choose("flex")
+    replies.append(_answer(tier="default", prompt=200_000, cached=0, completion=100_000))  # served as standard
+    llm_client.complete_json("q")
+    row = _result()
+    assert row["serviceTierActual"] == "default" and row["costTier"] == "standard"
+    assert _call()["serviceTierRequested"] == "flex"
+    assert row["cost"] == pytest.approx(0.07)  # standard, not the 0.035 flex would cost
+
+
+def test_flex_served_records_flex_tokens_and_cost(api):
+    sent, replies, choose = api
+    choose("flex")
+    replies.append(_answer(tier="flex", prompt=200_000, cached=80_000, completion=100_000))
+    llm_client.complete_json("q")
+    row = _result()
+    assert (row["inputTokens"], row["cachedInputTokens"], row["outputTokens"]) == (200_000, 80_000, 100_000)
+    assert row["serviceTierActual"] == "flex" and row["costTier"] == "flex"
+    assert row["cost"] == pytest.approx(0.0314)
+    assert row["tokensAreEstimate"] is False
+    merged = ai_gate._calls(ai_gate.read_ledger())[-1]
+    assert merged["serviceTierActual"] == "flex" and merged["cachedInputTokens"] == 80_000
+    assert ai_gate.totals()["today"]["cost"] == pytest.approx(0.0314)  # the budget uses the tier-correct cost
+
+
+@pytest.mark.parametrize("reported", [None, "priority", "fast"])
+def test_a_tier_we_do_not_price_leaves_the_cost_unpriced(api, reported):
+    sent, replies, choose = api
+    choose("standard")
+    replies.append(_answer(tier=reported))
+    llm_client.complete_json("q")
+    row = _result()
+    assert row["cost"] is None and row["costTier"] is None
+    assert ai_gate.totals()["today"]["unpricedPaidCalls"] == 1
+
+
+def test_a_call_that_ran_over_the_short_context_limit_is_unpriced_and_flagged(api):
+    sent, replies, choose = api
+    choose("standard")
+    replies.append(_answer(prompt=300_000))
+    llm_client.complete_json("q")
+    row = _result()
+    assert row["cost"] is None and row["longContextUnpriced"] is True
+
+
+# --- flex unavailable: clear error, no fallback --------------------------------------
+
+@pytest.mark.parametrize("status", [429, 503])
+def test_flex_unavailable_is_an_error_with_no_retry_and_no_standard_fallback(api, status):
+    sent, replies, choose = api
+    choose("flex")
+    replies.extend([_Response(status, {"error": {"message": "Resource Unavailable"}}), _answer()])
+    with pytest.raises(llm_client.FlexUnavailable, match="not switched to standard"):
+        llm_client.complete_json("q")
+    assert len(sent) == 1 and sent[0]["service_tier"] == "flex"
+    row = _result()
+    assert row["ok"] is False and row["flexUnavailable"] is True
+    assert "flex processing is unavailable" in row["error"]
+
+
+def test_a_429_on_standard_keeps_the_normal_retry(api):
+    sent, replies, choose = api
+    choose("standard")
+    replies.extend([_Response(429, {}), _answer()])
+    llm_client.complete_json("q")
+    assert [b["service_tier"] for b in sent] == ["default", "default"]
+
+
+# --- refusals --------------------------------------------------------------------
+
+def test_a_tier_without_a_price_is_refused_before_any_call(api):
+    sent, replies, choose = api
+    choose()
+    with pytest.raises(Exception, match="price unknown"):
+        llm_client.complete_json("q", provider="openai", model="gpt-6.1-sol")
+    assert sent == []
+
+
+def test_a_prompt_over_the_short_context_limit_is_refused(api):
+    sent, replies, choose = api
+    choose()
+    with pytest.raises(Exception, match="long-context prices"):
+        llm_client.complete_json("x" * (272_000 * 4 + 8))
+    assert sent == []
+    assert _call()["decision"] == "refused"
+
+
+def test_subscription_class_is_unchanged(tmp_path):
+    row, price = ai_gate._call_row("claude-code", None, 400, None, "jobAnalysis", None, None, None,
+                                   {"claudeCodeSubscription": {"enabled": True, "features": ["jobAnalysis"],
+                                                               "maxCallsDaily": 5}}, None)
+    assert price["class"] == "subscription" and row["cost"] == 0 and "serviceTierRequested" not in row
+
+
+def test_tier_mapping_matches_the_node_side():
+    """Standard goes out as "default", flex as "flex"; the same table as API_SERVICE_TIER in openaiProvider.js."""
+    assert ai_gate.API_TIER == {"standard": "default", "flex": "flex"}
+    assert ai_gate.api_tier("standard") == "default" and ai_gate.api_tier("flex") == "flex"
+    assert ai_gate.api_tier("fast") is None and ai_gate.api_tier(None) is None

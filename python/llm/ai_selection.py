@@ -41,6 +41,9 @@ DEFAULTS = {
     "model": None,
     "temperature": 0.3,
     "maxTokens": 2000,
+    # Processing tier of a model that has more than one price (OpenAI: standard or flex). One explicit setting;
+    # a feature does not pick its own. Providers without tiers ignore it.
+    "serviceTier": ai_gate.DEFAULT_TIER,
     "baseUrl": "",
     "features": {name: True for name in FEATURES},
 }
@@ -99,6 +102,8 @@ def validate(candidate, *, complete: bool = False) -> list[str]:
         errors.append("temperature must be a number from 0 to 2")
     if "maxTokens" in candidate and not (_integer(candidate["maxTokens"]) and 1 <= candidate["maxTokens"] <= MAX_TOKENS):
         errors.append(f"maxTokens must be a whole number from 1 to {MAX_TOKENS}")
+    if "serviceTier" in candidate and candidate["serviceTier"] not in ai_gate.SERVICE_TIERS:
+        errors.append(f"serviceTier must be one of: {', '.join(ai_gate.SERVICE_TIERS)}")
     if "baseUrl" in candidate:
         url = candidate["baseUrl"]
         if not isinstance(url, str) or (url and not _plain_url(url)):

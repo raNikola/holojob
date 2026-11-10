@@ -12,6 +12,7 @@ export function selectionFrom(requested) {
     model: requested.model ?? 'test-model',
     temperature: requested.temperature ?? 0.3,
     maxTokens: requested.maxTokens ?? 2000,
+    ...(requested.serviceTier ? { serviceTier: requested.serviceTier } : {}),
     baseUrl: requested.provider === 'ollama' ? requested.baseUrl ?? '' : '',
     features: {},
   }

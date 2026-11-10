@@ -30,6 +30,8 @@ automation on, a looser price) needs `"confirm": true`, else 409 with the list. 
 edits are overrides in `data/ai/pricing-overrides.json`, merged over `aiPricing.json`;
 free or priced needs a source note. No route writes or deletes ledger rows.
 
+**Service tiers** (owner-selected `serviceTier`, `standard` or `flex`, in `data/config/ai-settings.json`): an `aiPricing.json` entry may carry `tiers` (price per tier of the same model) and `maxInputTokens`. A call is priced and recorded at the tier the response reports (`serviceTierActual`), not the one requested; an unpriced tier or input over `maxInputTokens` is refused before, or left unpriced after. Flex 429 / 503 is an error, never a retry or a fallback to standard. Details: `docs/DECISIONS.md`, "AI cost layer".
+
 **Claude Code on a flat subscription** (`claudeCodeSubscription` in `data/ai/settings.json`, default off, owner decision 2026-10-29): when
 enabled, a call by provider `claude-code` for an allowlisted feature (default only `jobAnalysis`) gets class `subscription`: cost 0, not
 counted against the budget, written to the ledger, and limited by `maxCallsDaily` (default 5, in the settings timezone). Every other

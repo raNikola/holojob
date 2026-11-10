@@ -223,7 +223,7 @@ describe('the browser keeps no AI settings', () => {
   it('the form sends only the fields the server stores, a base URL only for ollama', () => {
     const form = { provider: 'openai', model: 'm', temperature: 0.5, maxTokens: 10, baseUrl: 'https://x.example', apiKey: CANARY, features: { outreach: false, bogus: true } }
     const sent = selectionFromForm(form)
-    expect(Object.keys(sent).sort()).toEqual(['baseUrl', 'features', 'maxTokens', 'model', 'provider', 'temperature'])
+    expect(Object.keys(sent).sort()).toEqual(['baseUrl', 'features', 'maxTokens', 'model', 'provider', 'serviceTier', 'temperature'])
     expect(sent.baseUrl).toBe('')
     expect(sent.features.outreach).toBe(false)
     expect(sent.features).not.toHaveProperty('bogus')

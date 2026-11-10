@@ -24,6 +24,7 @@ export const DEFAULT_AI_SETTINGS = {
   model: 'sonnet',
   temperature: 0.3,
   maxTokens: 2000,
+  serviceTier: 'standard',
   baseUrl: '',
   features: Object.fromEntries(FEATURE_KEYS.map((k) => [k, true])),
 }
@@ -58,6 +59,7 @@ export function selectionFromForm(form) {
     model: form.model,
     temperature: form.temperature,
     maxTokens: form.maxTokens,
+    serviceTier: form.serviceTier === 'flex' ? 'flex' : 'standard',
     baseUrl: form.provider === 'ollama' ? form.baseUrl || '' : '',
     features: Object.fromEntries(FEATURE_KEYS.map((k) => [k, form.features?.[k] !== false])),
   }

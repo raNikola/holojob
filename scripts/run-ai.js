@@ -95,7 +95,14 @@ export const NO_PROVIDER_MESSAGE = 'No AI provider selected (Settings > AI Provi
  */
 export function resolveAiSettings(settings) {
   const provider = settings?.provider || 'mock'
-  const effective = { provider, model: settings?.model, temperature: settings?.temperature, maxTokens: settings?.maxTokens }
+  const effective = {
+    provider,
+    model: settings?.model,
+    temperature: settings?.temperature,
+    maxTokens: settings?.maxTokens,
+    // Only OpenAI has service tiers; the stored selection holds the one explicit choice.
+    serviceTier: provider === 'openai' ? (settings?.serviceTier || 'standard') : undefined,
+  }
   if (KEYLESS_PROVIDERS.has(provider)) {
     return { ...effective, baseUrl: provider === 'ollama' ? settings?.baseUrl : undefined, needsKey: false }
   }
@@ -171,7 +178,8 @@ export async function checkAiFinding({ feature, context }) {
 function measuredTokens(usage) {
   const input = usage?.inputTokens || usage?.prompt_tokens || 0
   const output = usage?.outputTokens || usage?.completion_tokens || 0
-  return input || output ? { inputTokens: input, outputTokens: output } : { inputTokens: null, outputTokens: null }
+  const tiers = { cachedInputTokens: usage?.cachedInputTokens ?? null, serviceTierActual: usage?.serviceTier ?? null }
+  return input || output ? { inputTokens: input, outputTokens: output, ...tiers } : { inputTokens: null, outputTokens: null, ...tiers }
 }
 
 /**
@@ -232,6 +240,7 @@ export async function runAiFeature({ feature, context, refresh = false }) {
       baseUrl: settings?.baseUrl,
       feature,
       jobId: context?.job?.jobId,
+      serviceTier: settings.serviceTier,
     })
     if (!ticket.allowed) {
       return { ok: false, refused: true, error: ticket.reason || 'AI call refused by the budget gate' }
@@ -246,8 +255,9 @@ export async function runAiFeature({ feature, context, refresh = false }) {
       apiKey: settings.apiKey,
       baseUrl: settings.baseUrl,
       featureId: feature,
+      serviceTier: settings.serviceTier,
     }).catch(async (e) => {
-      if (ticket) await finishAiCall(ticket.id, { ok: false, error: sanitizeKey(e.message), baseUrl: settings?.baseUrl })
+      if (ticket) await finishAiCall(ticket.id, { ok: false, error: sanitizeKey(e.message), baseUrl: settings?.baseUrl, flexUnavailable: e?.flexUnavailable === true })
       ticket = null
       throw e
     })
