@@ -1,6 +1,9 @@
+name: holojob
+
 services:
   holojob:
     container_name: holojob
+    image: localhost/holojob:latest
     build: .
 
     restart: unless-stopped
