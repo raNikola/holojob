@@ -6,12 +6,21 @@ principles and the older owner decisions stay in [redesign/DECISIONS.md](redesig
 The date is the day the entry was recorded (2026-11-02), unless the entry names the day of the decision. "Code check" says
 what the code did on 2026-11-02. Where it differs from the decision, the entry says so and nothing has been changed yet.
 
+## Rename to Holojob (2026-11-10)
+
+The app, its environment variables, compose project and container, example hostname, backup file names and the demo flag
+now use the name Holojob. Deliberately unchanged: the `job-dashboard-*` browser keys (they hold user data in the browser
+until the server is the master of that data), and the data files and folders under `data/`, which never carried the old name.
+`HOLOJOB_ALLOWED_ORIGINS` and `HOLOJOB_ENGINE_SHADOW` still accept their pre-rename names until the deployed `.env` is
+migrated; that read is removed in the second rename stage. AGPL-3.0 stays: `LICENSE` is unchanged and the app links to the
+source of the running version (Settings, "About and source code").
+
 ## Activity screen (approved 2026-11-02)
 
-- **New screen:** named Activity, in the nav group System, built in holojob. No Runs screen exists here.
+- **New screen:** named Activity, in the nav group System, built in Holojob. No Runs screen exists here.
 - **Design reference only:** "Runs", "Search funnel", "By source", "Run history" and "Fetching is paused" come from ApplyPack, a
-  separate third-party app on the same server. No code is copied. "Fetching is paused" is ApplyPack's text, not holojob's, so
-  it is not a holojob task.
+  separate third-party app on the same server. No code is copied. "Fetching is paused" is ApplyPack's text, not Holojob's, so
+  it is not a Holojob task.
 - **Not ours:** the legacy "Search history" screen (openai gpt-4o-mini) belongs to the separate jobapply app.
 - **Slices, in order (renumbered 2026-11-03):** (1) per-source outcome and run log, including a fix so a failed board cannot close its existing ads;
   (2a / 2b / 2c) the background Re-scrape: job, lock and event log; cancel; source order and timeouts; (3) `GET /api/runs` read API (the 90-day pruning at write
@@ -1246,7 +1255,7 @@ Planning only. No application code, dependency, test or data changed, and the re
 
 **Owner decisions:**
 
-1. **Name:** keep the current app name until the owner decides otherwise. "HolyJobs" is only the epic's title; the repo says Holojob and `index.html` says Holojob.
+1. **Name:** keep the current app name until the owner decides otherwise. "HolyJobs" is only the epic's title; the app is called Holojob.
 2. **Preset:** apply the complete preset `b7CScIWmG`, colours and fonts.
 3. **Body font:** from the real CLI output, never guessed. Result: **Lora**, through `html { @apply font-serif }`, so the whole interface is serif.
 4. **Primitives:** Base UI accepted (the preset's choice, not Radix).
@@ -1375,7 +1384,7 @@ Owner decisions for Graphify adapter Milestone 1 (B0, S0, S1, S2). The adapter i
 - **D1, graphify-out/ is git-ignored; `graph.json` is not committed.** It is about 10 MB and rewritten whole on every build. It holds no personal data (no `data/` nodes, no absolute paths), but its semantic layer (about 830k tokens to build) is the one part that cannot be rebuilt for free; D4 protects it, not Git. The CLAUDE.md line that expected a committed `graph.json` came from the Graphify installer and was removed. Check: `git check-ignore graphify-out/graph.json` matches.
 - **D2, graphify-out/ is in `.dockerignore`.** The Dockerfile copies none of it and `docker-compose.yml` mounts none of it; the app needs nothing from it at build or runtime. Check: `grep -n graphify Dockerfile docker-compose.yml` finds nothing; `.dockerignore` ends with `graphify-out`.
 - **D3, the normal cycle uses no LLM.** It is `graphify update .` (AST only), then the adapter once S1 ships. `/graphify --update`, `graphify label` and `graphify cluster-only` without `--no-label` can call a model and need owner approval. Volatile docs (ROADMAP, DECISIONS, CLAUDE.md) are not added to `.graphifyignore`, which would evict their existing semantic nodes; their semantic layer may be stale until a separately approved refresh. Check: no `.graphifyignore` lists them.
-- **D4, a full backup outside the repo comes before any Graphify configuration change.** Done 2026-11-06: `~/graphify-backups/holojob-graphify-2026-11-06.tar` (all of `graphify-out/`, `.claude/settings.json`, `.claude/skills/graphify/`; 347 files), with `holojob-graphify-2026-11-06.tar.sha256` next to it, directory 700, files 600. Restore test passed: restored `graph.json` sha256 equal to the live one, all 347 files identical, `graphify query --graph` on the copy exit 0. Check: `sha256sum -c holojob-graphify-2026-11-06.tar.sha256` in that folder.
+- **D4, a full backup outside the repo comes before any Graphify configuration change.** Done 2026-11-06: `~/graphify-backups/` (tar named for the old folder, 2026-11-06) (all of `graphify-out/`, `.claude/settings.json`, `.claude/skills/graphify/`; 347 files), with its `.sha256` file next to it, directory 700, files 600. Restore test passed: restored `graph.json` sha256 equal to the live one, all 347 files identical, `graphify query --graph` on the copy exit 0. Check: `sha256sum -c <the .sha256 file>` in that folder.
 
 **Not done and not authorized:** S1, S2, S3 to S6, push, merge or deployment.
 

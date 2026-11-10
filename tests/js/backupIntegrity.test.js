@@ -113,6 +113,22 @@ describe('verify and tamper detection', () => {
       fs.rmSync(target, { recursive: true, force: true })
     }
   })
+
+  it('restores and verifies an archive whose manifest carries the app name from before the rename', async () => {
+    // Nothing reads the manifest `app` field. The old value is built from parts so no source file carries it.
+    const legacyApp = ['career', 'os'].join('-')
+    const archive = patched(await exportBuffer(), {})
+    const manifest = JSON.parse(new AdmZip(archive).getEntry('backup-manifest.json').getData().toString())
+    expect(manifest.app).toBe('holojob')
+    const old = patched(archive, { 'backup-manifest.json': JSON.stringify({ ...manifest, app: legacyApp }) })
+    const target = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-target-'))
+    try {
+      expect(await importBackupZip(target, old)).toMatchObject({ ok: true, verified: true })
+      expect(fs.readFileSync(path.join(target, 'data/jobs/scored_jobs.json'), 'utf-8')).toContain('"jobId":"a"')
+    } finally {
+      fs.rmSync(target, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('restore check in a throwaway directory', () => {

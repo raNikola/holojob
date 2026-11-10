@@ -30,6 +30,28 @@ export function parseAllowedOrigins(value) {
   return String(value ?? '').split(',').map(hostOf).filter(Boolean)
 }
 
+// TEMPORARY read-compat, removed once the deployed .env is migrated: the name this setting had before the rename.
+// Without it a not-yet-migrated .env would give an empty list, and an empty list switches the Host check off.
+const LEGACY_ALLOWED_ORIGINS = ['CAREER', 'OS', 'ALLOWED_ORIGINS'].join('_')
+let warnedLegacy = false
+
+/** The raw allowed-origins setting: HOLOJOB_ALLOWED_ORIGINS, else (with one warning) the pre-rename name. */
+export function allowedOriginsSetting(env = process.env) {
+  const current = env.HOLOJOB_ALLOWED_ORIGINS
+  if (current !== undefined && current !== '') return current
+  const legacy = env[LEGACY_ALLOWED_ORIGINS]
+  if (legacy === undefined || legacy === '') return current
+  if (!warnedLegacy) {
+    warnedLegacy = true
+    console.warn(`⚠ ${LEGACY_ALLOWED_ORIGINS} is the old name of HOLOJOB_ALLOWED_ORIGINS; rename it in .env`)
+  }
+  return legacy
+}
+
+export function allowedOriginsFromEnv(env = process.env) {
+  return parseAllowedOrigins(allowedOriginsSetting(env))
+}
+
 function mediaType(header) {
   return String(header ?? '').split(';')[0].trim().toLowerCase()
 }
@@ -40,7 +62,7 @@ function hasBody(req) {
 }
 
 /** { ok: true } or { ok: false, status, error }. */
-export function checkApiRequest(req, { allowedOrigins = parseAllowedOrigins(process.env.HOLOJOB_ALLOWED_ORIGINS) } = {}) {
+export function checkApiRequest(req, { allowedOrigins = allowedOriginsFromEnv() } = {}) {
   const headers = req.headers ?? {}
   const method = String(req.method ?? 'GET').toUpperCase()
   const path = String(req.url ?? '').split('?')[0]

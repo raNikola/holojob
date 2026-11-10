@@ -1,4 +1,4 @@
-# Holojob (formerly Holojob) — working notes
+# Holojob — working notes
 
 Personal job-hunt pipeline in Podman on a home server (DS9). Single user (DECISIONS.md principle 15): a senior/technical product manager in Niš, Serbia, no relocation, remote or near-remote work. Read `docs/redesign/DECISIONS.md` before any redesign work. Codebase map: skill `holojob-architecture`.
 
@@ -7,7 +7,7 @@ Personal job-hunt pipeline in Podman on a home server (DS9). Single user (DECISI
 - Work only inside /srv/holojob. Do not read other projects under /srv (applypack, jobapply).
 - Never print secret values (passwords, keys, tokens) from any file; refer to them by name only. Do not read `data/secrets/`.
 - Never `cat`, dump, grep out or print values from the owner's private files under `data/` (profile, intelligence incl. `atsKeywordBank`, CVs, resumes, applications, `data/cache`), not even filtered or truncated: tool output goes to the model provider. Use `.venv/bin/python scripts/inspect-private-data.py FILE` (shape, counts, hashes). Analysis scripts print counts, ids and public ad titles only.
-- Personal data never leaves the home server. Push only to `origin` (`git@github.com:raNikola/holojob.git`). `upstream` (raNikola/holojob) is fetch only (push URL `no-push`). `scripts/git-hooks/pre-push` refuses any other remote. Everything under `data/` except tracked examples, `.env`, CVs and keys stays in `.gitignore`.
+- Personal data never leaves the home server. Push only to `origin` (`git@github.com:raNikola/holojob.git`). `scripts/git-hooks/pre-push` refuses any other remote. Everything under `data/` except tracked examples, `.env`, CVs and keys stays in `.gitignore`.
 - **Never push, merge or deploy without the owner's explicit approval.** Never `git push --no-verify`.
 - The owner runs commands (builds, deploys, `--apply` scripts). Propose them; do not assume they ran. A `.env` change needs `podman-compose up -d --force-recreate`.
 - Never bypass a failing test, or change production data to make one pass.

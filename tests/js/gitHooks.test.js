@@ -26,10 +26,10 @@ describe('pre-push', () => {
 
   it.each([
     ['upstream', 'no-push'],
-    ['upstream', 'https://github.com/raNikola/holojob.git'],
-    ['https://github.com/raNikola/holojob.git', 'https://github.com/raNikola/holojob.git'],
+    ['upstream', 'https://github.com/example/other-project.git'],
+    ['https://github.com/example/other-project.git', 'https://github.com/example/other-project.git'],
     ['backup', 'git@github.com:someone/else.git'],
-    ['origin', 'https://github.com/raNikola/holojob.git'],
+    ['origin', 'https://github.com/example/other-project.git'],
     ['git@github.com:raNikola/holojob.git', 'git@github.com:raNikola/holojob.git'],
   ])('refuses %s %s, even for a tag or a deletion', (remote, url) => {
     for (const line of [`refs/tags/v1 ${SHA} refs/tags/v1 ${ZERO}\n`, `(delete) ${ZERO} refs/heads/old ${SHA}\n`]) {

@@ -788,18 +788,6 @@
    "verdict": "correct"
   },
   {
-   "doc": "docs/holojob/FLOW_AUDIT.md",
-   "token": "python/cv_analysis/run_cv_analyze.py",
-   "target": "python/cv_analysis/run_cv_analyze.py",
-   "verdict": "correct"
-  },
-  {
-   "doc": "docs/holojob/FLOW_AUDIT.md",
-   "token": "python/llm/claude_code.py",
-   "target": "python/llm/claude_code.py",
-   "verdict": "correct"
-  },
-  {
    "doc": "docs/design-system/COMPONENTS.md",
    "token": "tests/js/browserStorageAllowlist.test.js",
    "target": "tests/js/browserStorageAllowlist.test.js",

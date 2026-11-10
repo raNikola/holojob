@@ -1,7 +1,13 @@
+name: holojob
+
 services:
   holojob:
     container_name: holojob
-    build: .
+    image: localhost/holojob:latest
+    build:
+      context: .
+      args:
+        HOLOJOB_COMMIT: ${HOLOJOB_COMMIT:-unknown}
 
     restart: unless-stopped
     ports:

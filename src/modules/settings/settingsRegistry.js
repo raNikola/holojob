@@ -32,6 +32,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'demo-data', category: 'data-backups', title: 'Try with demo data', keywords: ['demo', 'sample', 'fictional'] },
   { id: 'data-paths', category: 'data-backups', title: 'Data paths', keywords: ['paths', 'files', 'data', 'locations', 'folders'] },
   { id: 'complete-profile', category: 'general', title: 'Complete your profile', keywords: ['profile', 'questionnaire', 'questions', 'unanswered', 'complete', 'skipped'] },
+  { id: 'about-source', category: 'general', title: 'About and source code', keywords: ['about', 'source', 'code', 'licence', 'license', 'agpl', 'github', 'version', 'commit'] },
   { id: 'pipeline-status', category: 'general', title: 'Pipeline API status', keywords: ['pipeline', 'api', 'status', 'health', 'offline'] },
   { id: 'cli-commands', category: 'general', title: 'Advanced — CLI commands', keywords: ['cli', 'commands', 'terminal', 'discover', 'score', 'tailor', 'advanced'] },
   { id: 'reset-profile', category: 'danger-zone', title: 'Reset profile', risky: 'delete', keywords: ['reset', 'profile', 'onboarding', 'restart', 'start over', 'questionnaire', 'cv library'] },

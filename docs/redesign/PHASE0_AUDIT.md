@@ -8,7 +8,7 @@ come from the DS9 report and `data-shapes.md`; they are quoted, not re-measured.
 
 ## 1. Headline
 
-Holojob is much further along than the public Holojob it was forked from. The
+Holojob is much further along than the public project it started from. The
 core rule of `DECISIONS.md` - the model marks facts, code computes - is already the
 rule of this repo (CLAUDE.md, "The architectural rule"), and three of its pieces
 exist:

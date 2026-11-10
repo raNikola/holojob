@@ -13,8 +13,7 @@ Author: **Nikola Randjelovic** ([@raNikola](https://github.com/raNikola) · [cv.
 
 ## Status
 
-Holojob is a fork of [Holojob](https://github.com/raNikola/holojob), heavily customized and
-now being redesigned around evidence-based matching.
+Holojob is being redesigned around evidence-based matching.
 
 - Working today: discovery, enrichment of every ad into facts, six-dimension local scoring with
   hard caps (role track, work authorization, red flags), optional LLM fit judgement, CV library
@@ -172,13 +171,15 @@ podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work dock
 - [docs/redesign/PHASE0_AUDIT.md](docs/redesign/PHASE0_AUDIT.md) - current state and module decisions
 - [docs/redesign/data-shapes.md](docs/redesign/data-shapes.md) - data files and their shapes
 - [CLAUDE.md](CLAUDE.md) - rules and conventions for the codebase
-- [docs/holojob/FLOW_AUDIT.md](docs/holojob/FLOW_AUDIT.md) - Holojob flow audit (historical)
 
-## Credits and license
+## License
 
-Holojob is built on [Holojob](https://github.com/raNikola/holojob) by its original authors and
-contributors, licensed under the [GNU Affero General Public License v3.0](LICENSE). Holojob keeps that
-license. Ideas, and in some places code, come from MIT-licensed projects listed in
-`THIRD_PARTY_NOTICES.md` when code is copied: career-ops, ApplyPack, JobSync, CareerPulse, JobApply.
+Holojob is licensed under the [GNU Affero General Public License v3.0](LICENSE). A modified version that
+users reach over a network must offer them its source: the app links to the source of the running version
+(Settings, "About and source code").
 
-Copyright (C) 2026 Nikola Randjelovic, for the changes made in Holojob.
+Copyright (C) 2026 Nikola Randjelovic, for the changes made in Holojob. Portions are copyright their original
+authors and are licensed under AGPL-3.0; authorship is recorded in the Git history.
+
+Ideas, and in some places code, come from MIT-licensed projects. Code that is copied is listed with its
+license notice in `THIRD_PARTY_NOTICES.md`.

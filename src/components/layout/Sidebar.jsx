@@ -16,6 +16,7 @@ import {
   User,
   Users,
 } from 'lucide-react'
+import { sourceUrl } from '../../modules/about/sourceInfo'
 import { useState } from 'react'
 import { MOBILE_NAV_ITEMS } from '../../modules/appNavigation'
 import { resolveNavGroups } from '../../modules/navGroups'
@@ -122,6 +123,16 @@ export default function Sidebar({ activeView, onNavigate, onOpenMore }) {
             </div>
           ))}
         </nav>
+        {!collapsed && (
+          <a
+            href={sourceUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="border-t border-stone-200 px-4 py-3 text-xs text-stone-500 hover:text-stone-900 dark:border-stone-800 dark:hover:text-stone-200"
+          >
+            Source code (AGPL-3.0)
+          </a>
+        )}
       </aside>
 
       <nav className="fixed bottom-0 left-0 right-0 z-30 flex border-t border-stone-200 bg-white/95 backdrop-blur dark:border-stone-800 dark:bg-stone-950/95 md:hidden">

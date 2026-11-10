@@ -1,19 +1,19 @@
 # Changelog
 
-All notable changes to Holojob are documented here. Entries before the fork are Holojob history.
+All notable changes to Holojob are documented here.
 
 ## [Unreleased] - Holojob
 
 ### Added
 
-- Project renamed to **Holojob** and moved to the private repo `raNikola/holojob`; Holojob stays as the `upstream` remote (fetch only).
+- Project moved to the private repo `raNikola/holojob`.
 - Redesign documents: `docs/VISION.md`, `docs/GOALS.md`, `docs/ROADMAP.md`, `docs/redesign/DECISIONS.md`, `docs/redesign/PHASE0_AUDIT.md`, `docs/redesign/data-shapes.md`.
 - Posting fixtures in `tests/fixtures/postings/` for the Phase 1 stability test.
 - `AUTHORS.md`.
 
 ### Changed
 
-- README rewritten for Holojob; the old Holojob README was folded into it (troubleshooting) and removed.
+- README rewritten for Holojob; the old README was folded into it (troubleshooting) and removed.
 - `package.json`: name `holojob`, author, repository, `private: true` (no accidental npm publish).
 
 ### Removed
@@ -27,7 +27,7 @@ All notable changes to Holojob are documented here. Entries before the fork are 
 
 - The favicon link in `index.html` pointed at a missing `/vite.svg`; it now uses `/favicon.svg`.
 
-### Inherited before the fork (DS9 customizations of Holojob)
+### Earlier work (DS9 customizations)
 
 - Serbian discovery group (LinkedIn via JobSpy, Infostud, Workable, Greenhouse, Lever, Ashby), job history ledger, LLM enrichment of ads into facts, work-authorization caps, opt-in fit judgement, salary flag, CV library and verified CV analysis. See CLAUDE.md.
 
@@ -35,7 +35,7 @@ All notable changes to Holojob are documented here. Entries before the fork are 
 
 ### Added
 
-- **Holojob** open-source release under AGPL-3.0
+- Open-source release under AGPL-3.0
 - Unified local API server (`scripts/api-handler.js` + `scripts/local-server.js`)
 - One-command setup: `npm run setup`
 - Production start: `npm run start` (build + Express server)
@@ -48,7 +48,6 @@ All notable changes to Holojob are documented here. Entries before the fork are 
 
 - Replaced `import.meta.env.DEV` gates with `/api/pipeline/health` probe — production mode has full pipeline access
 - README rewritten for OSS quick start
-- Branding updated to Holojob
 
 ### Security
 

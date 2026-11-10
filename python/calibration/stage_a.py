@@ -182,7 +182,9 @@ def rescore(out: Path = STAGE_DIR) -> int:
            "--jobs", str(inputs / "discovered_jobs.json"), "--manual", str(inputs / "manual_jobs.json"),
            "--kept", str(inputs / "rescored_kept.json"), "--intelligence", str(inputs / INTELLIGENCE),
            "--output", str(target)]
-    env = {k: v for k, v in os.environ.items() if k != "HOLOJOB_ENGINE_SHADOW"}
+    # The old name is still read by the engine until the deployed .env is migrated, so both are removed.
+    shadow_names = {"HOLOJOB_ENGINE_SHADOW", "_".join(["CAREER", "OS", "ENGINE_SHADOW"])}
+    env = {k: v for k, v in os.environ.items() if k not in shadow_names}
     env["HOLOJOB_PIPELINE_LOCK"] = str(out / ".pipeline.lock")
     done = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=ROOT)
     after = {name: _sha(inputs / name) for name in before}

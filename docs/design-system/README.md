@@ -24,7 +24,7 @@ The goal is to replace the custom frontend styling and components with shadcn/ui
 
 The redesign changes how the app looks and how its markup is built. It does not change behaviour, the backend, the APIs or the routing.
 
-**Name:** the app keeps its current name until the owner decides otherwise. The repo says Holojob and `index.html` still says Holojob. The Epic is titled "UI Redesign & Design System".
+**Name:** the app is called Holojob. The Epic is titled "UI Redesign & Design System".
 
 ## Preset and source
 
