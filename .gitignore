@@ -22,6 +22,7 @@ __pycache__/
 # Runtime data — never commit personal/job data
 data/*.json
 data/cache/
+data/calibration/
 data/resumes/
 data/profile/*.json
 data/profile/cvs/
