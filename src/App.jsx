@@ -20,6 +20,8 @@ import JobTextGate from './components/jobs/JobTextGate'
 import JobDetailsPage from './components/jobs/JobDetailsPage'
 import CalibrationReview from './components/calibration/CalibrationReview'
 import { isCalibrationHash } from './modules/calibration/calibrationClient'
+import MustReview from './components/calibration/MustReview'
+import { isMustsHash } from './modules/calibration/mustClient'
 import { useJobRoute } from './hooks/useJobRoute'
 import { useBackgroundRefresh } from './hooks/useBackgroundRefresh'
 import { closeJobPage } from './modules/jobs/jobRoute'
@@ -154,8 +156,27 @@ function useCalibrationRoute() {
   return on
 }
 
+/** The temporary must-have review: #/calibration/musts, same rules as the review route. */
+function useMustsRoute() {
+  const [on, setOn] = useState(() => isMustsHash(window.location.hash))
+  useEffect(() => {
+    const sync = () => setOn(isMustsHash(window.location.hash))
+    window.addEventListener('hashchange', sync)
+    window.addEventListener('popstate', sync)
+    return () => {
+      window.removeEventListener('hashchange', sync)
+      window.removeEventListener('popstate', sync)
+    }
+  }, [])
+  return on
+}
+
 export default function App() {
+  const musts = useMustsRoute()
   const calibration = useCalibrationRoute()
+  if (musts) {
+    return <div className="min-h-screen bg-[var(--color-surface)]"><MustReview /></div>
+  }
   if (calibration) {
     return <div className="min-h-screen bg-[var(--color-surface)]"><CalibrationReview /></div>
   }
