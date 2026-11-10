@@ -61,7 +61,7 @@ GATE_WEIGHT = IMPORTANCE_WEIGHT["must"]
 def typed_status(req: dict, sections: dict[str, int]) -> str:
     """The new status of one stored requirement. `sections` = how many entries the profile has per closed-world kind."""
     status = req["status"]
-    if status in (MET, PARTIAL):
+    if status in (MET, PARTIAL, CONTRADICTED):  # a CONTRADICTED comes from matcher_v3, already checked in code
         return status
     if status == "MISSING" and req["kind"] in CLOSED_WORLD_KINDS and sections.get(req["kind"], 0) > 0:
         return CONTRADICTED
