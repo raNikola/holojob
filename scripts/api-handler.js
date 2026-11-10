@@ -48,6 +48,7 @@ import { handleApplicationsRequest } from './application-store.js'
 import { handleJobHistoryRequest, handleJobTextsRequest } from './job-history-read.js'
 import { handleJobStateRequest } from './job-state-store.js'
 import { handleCalibrationRequest } from './calibration-review.js'
+import { handleMustRequest } from './calibration-musts.js'
 import { handleJobsAllRequest } from './job-all-read.js'
 import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
 import { getRun, listRuns } from './run-history.js'
@@ -692,6 +693,11 @@ export async function handleApiRequest(req, res) {
   }
 
   if (await handleJobStateRequest(req, res, url, { root: ROOT })) {
+    return true
+  }
+
+  // Before the review handler: that one answers 404 for any other /api/calibration/ URL.
+  if (await handleMustRequest(req, res, url, { root: ROOT })) {
     return true
   }
 
