@@ -144,8 +144,127 @@ def test_a_name_left_in_an_ad_fails_the_scan_closed(tmp_path, monkeypatch):
     assert r["leaks"] and "Zorana" not in json.dumps(r["leaks"])
 
 
-def test_the_tool_has_no_way_to_call_a_model():
-    source = open(dx.__file__, encoding="utf-8").read()
-    assert "complete_json" not in source and "requests.post" not in source and "urlopen" not in source
-    with pytest.raises(SystemExit):
-        dx.main(["run"])  # no such command
+# --- the paid run, with the model replaced --------------------------------------------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+from conftest import select_provider  # noqa: E402
+from llm_client import LlmUnavailable  # noqa: E402
+
+
+class Model:
+    def __init__(self, reply=None):
+        self.prompts, self.reply = [], reply
+
+    def __call__(self, prompt, schema=None, model=None, provider=None):
+        self.prompts.append(prompt)
+        if self.reply is not None:
+            return self.reply
+        n = prompt.split("BEGIN REQUIREMENTS")[1].split("END REQUIREMENTS")[0].count('"ref"')
+        return {"matches": [{"ref": f"r{i}", "status": "UNKNOWN", "evidence_id": None, "evidence_quote": None, "strength": 0} for i in range(1, n + 1)],
+                "gates": {g: {"quote": None} for g in ("work_authorization", "location", "language", "salary_floor", "role_family")}}
+
+
+FROZEN = {"lines": {"i01": {"probe": False, "first": {"isMust": "yes", "meets": "yes"}, "mode": "production_like"},
+                    "i02": {"probe": False, "first": {"isMust": "yes", "meets": "partial"}, "mode": "diagnostic"}}}
+SAMPLE = {"items": [{"itemId": "i01", "jobId": "ad1", "reqId": "r1a", "kind": "experience", "verdict": {"status": "MISSING"}},
+                    {"itemId": "i02", "jobId": "ad2", "reqId": "r2a", "kind": "experience", "verdict": {"status": "UNKNOWN"}}]}
+
+
+@pytest.fixture
+def stage_ready(tmp_path, monkeypatch):
+    select_provider(tmp_path, monkeypatch, "openai", "gpt-6-luna")
+    monkeypatch.setattr(dx, "load_confirmed_facts", lambda: [])
+    monkeypatch.setattr(dx, "preflight", lambda *a, **k: SimpleNamespace(allowed=True, reason=None, row={}))
+    out = tmp_path / "stage-a"
+    out.mkdir()
+    stage(out)
+    return out
+
+
+def test_run_without_yes_sends_nothing_and_does_not_even_read_the_profile(capsys):
+    assert dx.main(["run"]) == 0
+    assert "nothing sent" in capsys.readouterr().out
+
+
+def test_two_variants_one_call_per_ad_results_stored_with_mode_600_and_a_rerun_asks_for_nothing(stage_ready):
+    model = Model()
+    result = dx.run(stage_ready, PROFILE, INTELLIGENCE, FROZEN, SAMPLE, workers=1, complete=model)
+    assert result == {"stopped": None, "asked": 4, "ok": 4, "failed": 0, "refused": 0, "modelCalls": 4, "retries": 0}
+    stored = json.loads((stage_ready / dx.RESULTS_NAME).read_text())["variants"]
+    assert set(stored) == set(dx.VARIANTS) and all(set(v) == {"ad1", "ad2"} for v in stored.values())
+    assert oct((stage_ready / dx.RESULTS_NAME).stat().st_mode & 0o777) == "0o600"
+    summary_prompts = [p for p in model.prompts if "billing platform migration" in p]
+    assert len(summary_prompts) == 2  # only the summary variant carries the summary
+    assert dx.run(stage_ready, PROFILE, INTELLIGENCE, FROZEN, SAMPLE, workers=1, complete=Model())["asked"] == 0
+
+
+def test_questionnaire_answers_are_in_neither_variant(stage_ready):
+    model = Model()
+    dx.run(stage_ready, PROFILE, INTELLIGENCE, FROZEN, SAMPLE, workers=1, complete=model)
+    assert all("warehouse relocation" not in p for p in model.prompts)
+
+
+def test_a_name_in_an_ad_stops_the_whole_run_before_any_call(stage_ready):
+    ads = json.loads((stage_ready / "review-items.json").read_text())
+    ads["items"][0]["description"] += " Ask Zorana Testovic."
+    (stage_ready / "review-items.json").write_text(json.dumps(ads))
+    model = Model()
+    result = dx.run(stage_ready, PROFILE, INTELLIGENCE, FROZEN, SAMPLE, workers=1, complete=model)
+    assert "privacy scan" in result["stopped"] and model.prompts == []
+    assert not (stage_ready / dx.RESULTS_NAME).exists()
+
+
+def test_an_estimate_over_the_cap_and_a_gate_refusal_send_nothing(stage_ready, monkeypatch):
+    model = Model()
+    monkeypatch.setattr(dx, "HARD_STOP_USD", 1e-9)
+    assert "hard maximum" in dx.run(stage_ready, PROFILE, INTELLIGENCE, FROZEN, SAMPLE, complete=model)["stopped"]
+    monkeypatch.setattr(dx, "HARD_STOP_USD", 0.05)
+    monkeypatch.setattr(dx, "preflight", lambda *a, **k: SimpleNamespace(allowed=False, reason="daily budget", row={}))
+    monkeypatch.setattr(dx.ai_gate, "record_refused", lambda *a, **k: None)
+    assert "AI gate refused" in dx.run(stage_ready, PROFILE, INTELLIGENCE, FROZEN, SAMPLE, complete=model)["stopped"]
+    assert model.prompts == []
+
+
+def test_matcher_retries_count_against_the_cap_and_stop_the_batch(stage_ready, monkeypatch):
+    estimate = dx.plan_cost = None  # noqa: F841 (the estimate is read from a dry run below)
+    dry = dx.build_requests(stage_ready, PROFILE, INTELLIGENCE, [], {"ad1": {"r1a"}, "ad2": {"r2a"}})
+    one = dx.price_and_budget(dry["prompts"], dry["asked"])["costUsd"]
+    monkeypatch.setattr(dx, "HARD_STOP_USD", one * 2 * 1.2)  # the estimate for both variants passes; a retry on every call would not
+    bad = Model(reply={"not": "the schema"})  # malformed: the matcher asks again
+    result = dx.run(stage_ready, PROFILE, INTELLIGENCE, FROZEN, SAMPLE, workers=1, complete=bad)
+    assert result["stopped"] and "cap" in result["stopped"] and result["modelCalls"] < 8
+
+
+# --- reading the result ------------------------------------------------------------------------------------------
+
+
+def stored(control, summary, cited=()):
+    def entry(status, evidence=None):
+        return {"requirements": [{"id": "r1a", "status": status, "evidenceId": evidence}], "extraEvidenceIds": ["ev-sum"]}
+    return {"variants": {dx.VARIANTS[0]: {"ad1": entry(control)}, dx.VARIANTS[1]: {"ad1": entry(summary, "ev-sum" if cited else None)}}}
+
+
+@pytest.mark.parametrize("step7, control, summary, expect_noise, expect_summary", [
+    ("MISSING", "MISSING", "PARTIAL", "unchanged", "toward"),   # ran yes -> target MET: PARTIAL is nearer than MISSING
+    ("MISSING", "PARTIAL", "MET", "toward", "toward"),
+    ("PARTIAL", "PARTIAL", "MISSING", "unchanged", "away"),
+    ("MISSING", "UNKNOWN", "MISSING", "sideways", "sideways"),  # silence and absence rank together: no nearer, no farther
+])
+def test_movement_toward_or_away_from_rans_answer(tmp_path, step7, control, summary, expect_noise, expect_summary):
+    frozen = {"lines": {"i01": {"probe": False, "first": {"isMust": "yes", "meets": "yes"}, "mode": "production_like"}}}
+    sample = {"items": [{"itemId": "i01", "jobId": "ad1", "reqId": "r1a", "kind": "skill", "verdict": {"status": step7}}]}
+    (tmp_path / dx.RESULTS_NAME).write_text(json.dumps(stored(control, summary, cited=True)))
+    g = dx.analyse(tmp_path, frozen, sample)["groups"]["all 17"]
+    noise = g["step7 vs control (same evidence, same ad; only the other requirements differ)"]
+    change = g["control vs summary (what the summary changes)"]
+    assert noise[expect_noise] == 1 and change[expect_summary] == 1 and noise["n"] == change["n"] == 1
+
+
+def test_the_analysis_splits_the_two_groups_cites_the_summary_and_prints_no_text(tmp_path):
+    (tmp_path / dx.RESULTS_NAME).write_text(json.dumps(stored("MISSING", "MET", cited=True)))
+    report = dx.analyse(tmp_path, FROZEN, SAMPLE)
+    assert report["lines"] == 2 and report["summaryCitedByAnsweredLines"] == 1  # ad2 has no stored result: not run
+    assert report["notRun"] == 1 and set(report["groups"]) == {"all 17", *dx.GROUPS}
+    text = "\n".join(dx.render_analysis(report))
+    assert "does NOT measure" in text and "billing" not in text and "SECRET" not in text
