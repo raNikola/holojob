@@ -27,6 +27,13 @@ Built, merged and deployed are three different states; this table says only what
 | 4 | Interview prep from requirement statuses and the story bank; CV and cover letter tailoring behind a fact gate; market report of requirements per role family | In progress. Built and merged to `main` (2026-11-09): the protections around tailoring and applications (fact gate, identifier redaction with a fail-closed leak check, server-enforced confirm and preview, AI cover letter as a draft until accepted, fact-gate verdicts checked when a document is attached; [decision](DECISIONS.md#phase-4-protections-fact-gate-identifier-redaction-confirm-2026-11-09-branch-phase4-fact-gate)). Not built: interview prep, market report |
 | 5 | Feedback loop: conversion by channel and Fit band, calibration of Fit against real outcomes (report only, never auto-tuning) | Planned |
 
+## Rename to Holojob (2026-11-10)
+
+Stage 1 (text, prompts, environment variables with a temporary read of the pre-rename names, backups, compose project and
+container, docs, source link) is built on branch `rename-holojob`, not merged. Pending the owner: merge, the cutover to the new
+folder, container and hostname, stage 2 (remove the temporary reads, update the folder path in docs), and the Git history
+rewrite. Record: [DECISIONS.md](DECISIONS.md), "Rename to Holojob".
+
 ## Phase 1 acceptance criteria - PROPOSED, owner to confirm
 
 Status at the close-out check: criteria 3 and 4 hold; criterion 2 is covered by tests on synthetic jobs; criterion 1 has not been
@@ -449,7 +456,7 @@ Goal: one shared job database, private per-user data, shared discovery. A draft 
   already built (Manual jobs in [CLAUDE.md](../CLAUDE.md)), and the AI step stays refused because `job-import` is not in
   `claudeCodeSubscription.features`.
 
-## Inherited from Holojob
+## Inherited features
 
 Discovery across LinkedIn (JobSpy), Infostud, Workable, Greenhouse, Lever and Ashby; job
 history ledger; enrichment facts; work-authorization rules; fit judge; CV library and CV

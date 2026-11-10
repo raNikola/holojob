@@ -2,7 +2,7 @@
 
 Owner and author: Nikola Randjelovic (raNikola).
 
-Origin: fork of raNikola/holojob (AGPL-3.0), customized on DS9. The original repo is kept as the `upstream` remote for reference only.
+Origin: AGPL-3.0 code base, customized on DS9.
 
 ## Thesis
 Evidence-based job matching. The score measures evidence of what the candidate has actually done versus what a posting requires, not keyword overlap. AI marks facts with verbatim quotes; deterministic code computes every number.
@@ -26,7 +26,7 @@ Evidence-based job matching. The score measures evidence of what the candidate h
 16. Job sources are user configuration, not code. Which boards are active, which companies are watched and any source keys are edited in Settings and stored server-side under data/ (private, never in git). No source group is hard-coded as the default; the active set is the user's. companies/*.json in the repo becomes a one-time seed for migration only. Design: [SOURCES_SPEC.md](SOURCES_SPEC.md).
 
 ## Scope and rules
-- Holojob stays the base app: UI, job sources incl. Serbian sites, AI provider layer, data.
+- The existing app stays the base: UI, job sources incl. Serbian sites, AI provider layer, data.
 - Other projects are references, not code sources. Study how they solved a problem (read their code and ADRs), then design and implement our own version that fits Holojob's stack, data model and conventions, simplified or improved where we can. Copy code verbatim only for a small pure function where re-writing it adds nothing; any such copy is listed in THIRD_PARTY_NOTICES.md. DaKheera47/job-ops stays ideas-only.
 - No inline or per-file attribution comments. One THIRD_PARTY_NOTICES.md holds the MIT notice of every repo code was copied from; an entry is removed once that code is fully rewritten.
 - Code, comments and identifiers are in English.
