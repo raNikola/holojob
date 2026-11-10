@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P1 Stage A: freeze the scoring inputs, re-score the frozen copy, diff, and draw the labelling sample.
+"""P1 Stage A: freeze the scoring inputs, re-score the frozen copy, diff, and draw the review sample.
 
 Everything lives under data/calibration/stage-a/ (directories 700, files 600, never committed). Production files are
 only read: `freeze` copies them, `rescore` runs run_scoring.py on the copy with its own lock file, `diff` compares two
@@ -11,7 +11,6 @@ files of the copy. Output is counts, ids and public ad titles; no ad, profile or
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import json
 import os
@@ -29,6 +28,7 @@ for _sub in ("job_scoring", "llm"):
         sys.path.insert(0, str(ROOT / "python" / _sub))
 
 from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic  # noqa: E402
+from text_utils import normalize_text  # noqa: E402
 import pipeline_lock  # noqa: E402
 
 DATA = ROOT / "data"
@@ -42,33 +42,21 @@ SCORING_CODE = ("python/job_scoring", "python/match_engine", "src/data")
 
 FUNCTION = ("yes", "partial", "no")
 HARD_REQS = ("yes", "partial", "no", "unknown")
-OVERALL = ("0", "1", "2", "3")  # 0 irrelevant, 1 weak, 2 relevant, 3 strong
-MAIN_REASON = ("function", "required_domain_or_degree", "location", "seniority", "skills", "transferability",
-               "language", "data_quality", "cap_value", "none")
-SHEET_COLUMNS = ["n", "jobId", "title", "company", "location", "site", "jobUrl",
-                 "function", "hard_requirements", "overall", "main_reason", "note", "prefilled"]
-
-# The seven postings reviewed with the owner plus BoatBooker. Public titles and companies only. `prefill` holds
-# only what the owner's notes state unambiguously; the owner confirms or changes it in the sheet.
+OVERALL = (0, 1, 2, 3)  # 0 irrelevant, 1 weak, 2 relevant, 3 strong
+SAMPLE_SIZE = 45
+# The seven postings reviewed with the owner plus BoatBooker. Public titles and companies only; they are always in the sample.
 CASES = [
-    {"name": "construction-project-manager", "company": r"General Construction", "title": r"menad|Rukovodilac gra",
-     "prefill": {"function": "no", "overall": "0", "note": "owner note: irrelevant (construction)"}},
-    {"name": "porta-rai-project-director", "company": r"Porta Rai", "title": r"Project Director",
-     "prefill": {"function": "no", "overall": "0", "note": "owner note: irrelevant (real estate / resort construction)"}},
-    {"name": "mpg-account-executive", "company": r"MPG", "title": r"Account Executive",
-     "prefill": {"function": "no", "overall": "0", "note": "owner note: irrelevant (event marketing / BTL)"}},
-    {"name": "bambi-digital-platform-lead", "company": r"Bambi", "title": r"Lider digitalne",
-     "prefill": {"function": "yes", "note": "owner note: relevant, underestimated (digital platforms / IT)"}},
-    {"name": "enel-site-manager", "company": r"Enel", "title": r"Rukovodilac gradili",
-     "prefill": {"function": "no", "overall": "0", "note": "owner note: irrelevant (data center construction)"}},
-    {"name": "cyrillic-product-owner", "company": r"Cyrillic", "title": r"Product Owner",
-     "prefill": {"function": "yes", "note": "owner note: relevant, correctly rated"}},
-    {"name": "raiffeisen-product-manager", "company": r"Raiffeisen", "title": r"Product Manager",
-     "prefill": {"function": "yes", "hard_requirements": "no",
-                 "note": "owner note: overestimated (mandatory banking experience and economics degree)"}},
-    {"name": "boatbooker-product-manager", "company": r"FishingBooker|BoatBooker", "title": r"Product Manager",
-     "prefill": {"note": "owner note: about 6/10 (mismatch mainly on remote / location)"}},
+    {"name": "construction-project-manager", "company": r"General Construction", "title": r"menad|Rukovodilac gra"},
+    {"name": "porta-rai-project-director", "company": r"Porta Rai", "title": r"Project Director"},
+    {"name": "mpg-account-executive", "company": r"MPG", "title": r"Account Executive"},
+    {"name": "bambi-digital-platform-lead", "company": r"Bambi", "title": r"Lider digitalne"},
+    {"name": "enel-site-manager", "company": r"Enel", "title": r"Rukovodilac gradili"},
+    {"name": "cyrillic-product-owner", "company": r"Cyrillic", "title": r"Product Owner"},
+    {"name": "raiffeisen-product-manager", "company": r"Raiffeisen", "title": r"Product Manager"},
+    {"name": "boatbooker-product-manager", "company": r"FishingBooker|BoatBooker", "title": r"Product Manager"},
 ]
+# What the review screen may show of an ad. Never a score, label, cap, reason or engine field.
+REVIEW_FIELDS = ("jobId", "title", "company", "location", "site", "jobUrl", "description")
 
 _SR_WORDS = set("i u za na je se od sa koji kao ili da su kroz rad posla iskustvo znanje poslovi".split())
 _EN_WORDS = set("the and of to in for with you we our will are is on as experience work".split())
@@ -198,6 +186,8 @@ def rescore(out: Path = STAGE_DIR) -> int:
     env["HOLOJOB_PIPELINE_LOCK"] = str(out / ".pipeline.lock")
     done = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=ROOT)
     after = {name: _sha(inputs / name) for name in before}
+    if (out / ".pipeline.lock").exists():
+        os.chmod(out / ".pipeline.lock", PRIVATE_FILE_MODE)  # the lock file is created with the process default
     result = {
         "ranAt": _now(), "exitCode": done.returncode,
         # run_scoring prints counts only; kept to the last lines in case of an error.
@@ -308,53 +298,31 @@ def draw_sample(rows: list[dict], size: int, seed: int, cases: dict[str, str]) -
     return chosen
 
 
-def sample(out: Path = STAGE_DIR, size: int = 30, seed: int = 20261110) -> dict:
+def match_key(row: dict) -> str:
+    """Title and company, folded: the same ad can hold two ids, so a holdout excludes by this as well as by id."""
+    return f"{normalize_text(row.get('title') or '')}|{normalize_text(row.get('company') or '')}"
+
+
+def sample(out: Path = STAGE_DIR, size: int = SAMPLE_SIZE, seed: int = 20261110) -> dict:
+    """The review sample. The draw is sequential, so a larger size keeps every ad of a smaller one (30 -> 45)."""
     rows = _rows(_load(out / "rescored" / "scored_jobs.json"))
     cases, missing = resolve_cases(rows)
     chosen = draw_sample(rows, size, seed, cases)
-    case_by_id = {v: k for k, v in cases.items()}
-    prefill = {c["name"]: c["prefill"] for c in CASES}
-    order = [r["jobId"] for r in chosen]
-    random.Random(seed + 1).shuffle(order)  # the sheet does not group the known cases
     by_id = {r["jobId"]: r for r in chosen}
-    sheet = []
-    for n, job_id in enumerate(order, 1):
-        r = by_id[job_id]
-        pre = prefill.get(case_by_id.get(job_id), {})
-        sheet.append({"n": n, "jobId": job_id, "title": r.get("title"), "company": r.get("company"),
-                      "location": r.get("location"), "site": r.get("site"), "jobUrl": r.get("jobUrl") or "",
-                      "function": pre.get("function", ""), "hard_requirements": pre.get("hard_requirements", ""),
-                      "overall": pre.get("overall", ""), "main_reason": "", "note": pre.get("note", ""),
-                      "prefilled": "yes" if pre else ""})
-    path = out / "labeling-sheet.csv"
-    make_private_dirs(path.parent)
-    with open(path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=SHEET_COLUMNS)
-        writer.writeheader()
-        writer.writerows(sheet)
-    os.chmod(path, PRIVATE_FILE_MODE)
+    order = [r["jobId"] for r in chosen]
+    shown = list(order)
+    random.Random(seed + 1).shuffle(shown)  # the review does not group the known cases
+    items = [{k: by_id[j].get(k) or "" for k in REVIEW_FIELDS} for j in shown]
+    _write_private(out / "review-items.json", json.dumps({"version": 1, "items": items}, indent=2))
     summary = {
         "size": len(chosen), "seed": seed, "casesFound": cases, "casesMissing": missing,
         "strata": {key: dict(Counter(_features(r)[key] for r in chosen)) for key in ("band", "cap", "lang", "provider")},
     }
-    _write_private(out / "sample.json", json.dumps({**summary, "jobIds": order}, indent=2))
+    # Holdout rule: a later holdout is drawn from ads first seen after the freeze and excludes all of these.
+    exclusions = {"jobIds": sorted(order), "matchKeys": sorted({match_key(r) for r in chosen})}
+    _write_private(out / "sample.json", json.dumps(
+        {**summary, "drawOrder": order, "jobIds": shown, "holdoutExclusions": exclusions}, indent=2))
     return summary
-
-
-def load_labels(path: Path) -> tuple[list[dict], list[str]]:
-    """The filled sheet as rows plus the problems found (empty list: all valid). A row with an empty overall is incomplete."""
-    problems, rows = [], []
-    with open(path, newline="", encoding="utf-8") as handle:
-        for line in csv.DictReader(handle):
-            row = {k: (v or "").strip() for k, v in line.items()}
-            for field, allowed in (("function", FUNCTION), ("hard_requirements", HARD_REQS), ("overall", OVERALL),
-                                   ("main_reason", MAIN_REASON)):
-                if row.get(field) and row[field] not in allowed:
-                    problems.append(f"{row.get('jobId')}: {field} '{row[field]}' is not one of {', '.join(allowed)}")
-                elif not row.get(field) and field != "main_reason":
-                    problems.append(f"{row.get('jobId')}: {field} is empty")
-            rows.append(row)
-    return rows, problems
 
 
 # --- command line -------------------------------------------------------------------
@@ -377,7 +345,7 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("command", choices=("freeze", "rescore", "diff", "sample"))
     p.add_argument("--out", type=Path, default=STAGE_DIR)
-    p.add_argument("--size", type=int, default=30)
+    p.add_argument("--size", type=int, default=SAMPLE_SIZE)
     args = p.parse_args(argv)
     if args.command == "freeze":
         m = freeze(args.out)

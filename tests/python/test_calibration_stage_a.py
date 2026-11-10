@@ -1,6 +1,5 @@
 """P1 Stage A tooling on fictional ads, in a temp directory. Nothing here reads or writes the real data/."""
 
-import csv
 import json
 import stat
 
@@ -59,34 +58,31 @@ def test_sample_is_seeded_keeps_cases_and_skips_closed_ads():
     assert {r["matchLabel"] for r in a} == {"Weak", "Strong"} and {sa.cap_type(r) for r in a} == {"none", "title"}
 
 
-def test_sheet_is_blind_private_and_prefilled_only_for_cases(tmp_path):
-    rows = [row(f"j{i}", company=f"Firm{i}") for i in range(10)] + [row("case", title="Account Executive", company="MPG Plus")]
+def test_larger_sample_keeps_every_ad_of_the_smaller_one():
+    rows = [row(f"j{i}", company=f"Firm{i}", label="Weak" if i % 3 else "Strong", provider="infostud" if i % 4 else "ashby",
+                reasons=["Capped: the title matches no target role"] if i % 2 else []) for i in range(60)]
+    rows.append(row("case", title="Account Executive", company="MPG Plus"))
+    cases, _ = sa.resolve_cases(rows)
+    small = [r["jobId"] for r in sa.draw_sample(rows, 30, 11, cases)]
+    large = [r["jobId"] for r in sa.draw_sample(rows, 45, 11, cases)]
+    assert large[:30] == small and len(set(large)) == 45 and "case" in large
+
+
+def test_review_items_show_no_score_field_and_the_holdout_excludes_the_sample(tmp_path):
+    rows = [row(f"j{i}", company=f"Firm{i}", reasons=["Capped: the title matches no target role"],
+                score=40, label="Weak") for i in range(10)] + [row("case", title="Account Executive", company="MPG Plus")]
     (tmp_path / "rescored").mkdir()
     (tmp_path / "rescored" / "scored_jobs.json").write_text(json.dumps({"jobs": rows}))
     summary = sa.sample(tmp_path, size=6, seed=3)
-    sheet = tmp_path / "labeling-sheet.csv"
-    assert stat.S_IMODE(sheet.stat().st_mode) == 0o600 and stat.S_IMODE((tmp_path / "sample.json").stat().st_mode) == 0o600
-    with open(sheet, newline="", encoding="utf-8") as handle:
-        table = list(csv.DictReader(handle))
-    assert list(table[0]) == sa.SHEET_COLUMNS and len(table) == summary["size"] == 6
-    assert not {"matchScore", "matchLabel", "score"} & set(table[0])
-    pre = [t for t in table if t["prefilled"]]
-    assert [t["jobId"] for t in pre] == ["case"] and pre[0]["function"] == "no" and pre[0]["overall"] == "0"
-
-
-def test_load_labels_validates_each_judgment(tmp_path):
-    path = tmp_path / "labels.csv"
-    with open(path, "w", newline="", encoding="utf-8") as handle:
-        w = csv.DictWriter(handle, fieldnames=sa.SHEET_COLUMNS)
-        w.writeheader()
-        w.writerow({"jobId": "ok", "function": "yes", "hard_requirements": "unknown", "overall": "2", "main_reason": "skills"})
-        w.writerow({"jobId": "bad", "function": "maybe", "hard_requirements": "no", "overall": "5", "main_reason": ""})
-        w.writerow({"jobId": "empty", "function": "no", "hard_requirements": "", "overall": "0"})
-    rows, problems = sa.load_labels(path)
-    assert len(rows) == 3
-    assert any("bad: function 'maybe'" in p for p in problems) and any("bad: overall '5'" in p for p in problems)
-    assert any("empty: hard_requirements is empty" in p for p in problems)
-    assert not any(p.startswith("ok:") for p in problems)
+    for name in ("review-items.json", "sample.json"):
+        assert stat.S_IMODE((tmp_path / name).stat().st_mode) == 0o600
+    items = json.loads((tmp_path / "review-items.json").read_text())["items"]
+    assert len(items) == summary["size"] == 6 and {tuple(i) for i in items} == {sa.REVIEW_FIELDS}
+    text = (tmp_path / "review-items.json").read_text()
+    assert "matchScore" not in text and "Capped" not in text and "scoreBreakdown" not in text
+    sample = json.loads((tmp_path / "sample.json").read_text())
+    assert sorted(sample["jobIds"]) == sorted(sample["drawOrder"]) == sample["holdoutExclusions"]["jobIds"]
+    assert len(sample["holdoutExclusions"]["matchKeys"]) == 6
 
 
 def test_freeze_copies_inputs_once_and_never_touches_the_source(tmp_path):
