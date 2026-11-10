@@ -1,0 +1,179 @@
+"""Step 7 runner on a fictional profile and fictional ads, with the model replaced. No real data, no network, no production file."""
+
+import json
+import stat
+from types import SimpleNamespace
+
+import pytest
+
+from calibration import engine_sample as eng
+from calibration import enrich_sample as es
+from calibration.prelabel import owner_leaks
+from conftest import select_provider
+
+PROFILE = {
+    "basicProfile": {"fullName": "Zorana Testovic", "email": "zorana.testovic@example.test", "phone": "+381 64 123 4567",
+                     "preferredLocations": ["Atlantis"]},
+    "resume": {"parsedData": {
+        "links": ["https://zorana.example/me"],
+        "experienceDetail": [{"title": "Product Manager", "company": "Initech", "start": "2018-01", "end": "2022-06",
+                              "bullets": ["Led the billing roadmap for 40 customers",
+                                          "Reach Zorana Testovic at zorana.testovic@example.test or +381 64 123 4567 or https://zorana.example/me"]}],
+        "skills": ["SQL", "Roadmapping"], "education": ["BSc Computer Science"], "certifications": [],
+    }},
+}
+INTELLIGENCE = {"candidateSummary": {"seniorityLevel": "Senior"}, "experienceMap": {"yearsOfExperience": 9},
+                "roleStrategy": {"primaryTargetRoles": ["Product Manager"]}, "languages": ["English"]}
+
+
+def ad(n, **extra):
+    return {"jobId": f"job{n}", "title": f"Role {n}", "company": f"Firm {n}", "location": "Remote", "site": "x",
+            "jobUrl": f"https://example.test/{n}",
+            "description": f"Own the roadmap number {n}. Five years of SQL. Mail hr{n}@third-party.test.", **extra}
+
+
+def facts_for(item):
+    clean = es.sanitized(item)
+    return {"requirements": [{"id": "sql", "text": "SQL", "kind": "skill", "importance": "must",
+                              "postingQuote": "Five years of SQL"}],
+            "_fingerprint": es.job_fingerprint(clean)}
+
+
+def write(folder, items):
+    (folder / "review-items.json").write_text(json.dumps({"version": 1, "items": items}))
+    (folder / es.FACTS_NAME).write_text(json.dumps({"version": 1, "facts": {i["jobId"]: facts_for(i) for i in items}}))
+
+
+class Model:
+    def __init__(self):
+        self.prompts = []
+
+    def __call__(self, prompt, schema=None, model=None, provider=None):
+        self.prompts.append(prompt)
+        return {"matches": [], "gates": {g: {"quote": None} for g in ("work_authorization", "location", "language",
+                                                                        "salary_floor", "role_family")}}
+
+
+@pytest.fixture
+def out(tmp_path, monkeypatch):
+    select_provider(tmp_path, monkeypatch, "openai", "gpt-6-luna")
+    folder = tmp_path / "stage-a"
+    folder.mkdir()
+    write(folder, [ad(1), ad(2), ad(3)])
+    monkeypatch.setattr(eng, "load_confirmed_facts", lambda: [])
+    monkeypatch.setattr(eng, "cheap_gate_report", lambda job, candidate: ([], "unknown"))
+    monkeypatch.setattr(eng, "preflight", lambda *a, **k: SimpleNamespace(allowed=True, reason=None, row={}))
+    return folder
+
+
+# --- redaction before the scan, scan fails closed -------------------------------------------
+
+
+def test_the_owners_identifiers_in_the_cv_evidence_are_redacted_before_any_request_is_built(out):
+    p = eng.plan(out, PROFILE, INTELLIGENCE)
+    assert p["rows"] and p["leaks"] == {}
+    for row in p["rows"].values():
+        for raw in ("Zorana", "Testovic", "zorana.testovic@example.test", "381 64 123", "zorana.example", "third-party.test"):
+            assert raw not in row["prompt"]
+        assert "Led the billing roadmap" in row["prompt"]  # the evidence itself is sent
+
+
+def test_the_owners_name_in_an_ad_description_stops_the_run_before_any_call(out):
+    # The generic redaction knows no name, so the scan is what protects it.
+    write(out, [ad(1), ad(2, description="Own the roadmap. Five years of SQL. Ask Zorana Testovic.")])
+    model = Model()
+    result = eng.run(out, PROFILE, INTELLIGENCE, complete=model)
+    assert "privacy scan" in result["stopped"] and model.prompts == []
+    assert not (out / eng.RESULTS_NAME).exists()
+
+
+@pytest.mark.parametrize("secret", ["zorana.testovic@example.test", "+381 64 123 4567", "https://zorana.example/me"])
+def test_an_owner_e_mail_phone_or_link_in_a_description_is_redacted_before_the_scan(out, secret):
+    write(out, [ad(1, description=f"Own the roadmap. Five years of SQL. Write to {secret}.")])
+    p = eng.plan(out, PROFILE, INTELLIGENCE)
+    assert p["leaks"] == {} and secret not in next(iter(p["rows"].values()))["prompt"]
+
+
+def test_the_title_company_and_location_are_not_part_of_the_request(out):
+    write(out, [ad(1, title="Role for Zorana Testovic", company="zorana.testovic@example.test", location="+381 64 123 4567")])
+    p = eng.plan(out, PROFILE, INTELLIGENCE)
+    assert p["leaks"] == {} and "Zorana" not in next(iter(p["rows"].values()))["prompt"]
+
+
+def test_a_hash_id_that_looks_like_a_phone_number_is_aliased_not_allowed_through_a_looser_scan(out):
+    candidate = {"evidence": [{"id": "ev-1234567890ab", "text": "x"}, {"id": "ev-abcdefabcdef", "text": "y"}]}
+    fixed, aliases = eng.alias_unsafe_ids(candidate, PROFILE)
+    assert aliases == {"ev-cal-1": "ev-1234567890ab"}
+    assert [e["id"] for e in fixed["evidence"]] == ["ev-cal-1", "ev-abcdefabcdef"]
+    assert owner_leaks("ev-1234567890ab", PROFILE)  # the scan itself is unchanged
+
+
+def test_a_live_call_scans_the_exact_text_again_and_refuses_on_a_hit(out, monkeypatch):
+    state = {"live": False}
+    real, real_plan = eng.owner_leaks, eng.plan
+
+    def plan_then_go_live(*args, **kw):
+        result = real_plan(*args, **kw)
+        state["live"] = True  # from here on only the wrapper around the live call scans
+        return result
+
+    monkeypatch.setattr(eng, "plan", plan_then_go_live)
+    monkeypatch.setattr(eng, "owner_leaks", lambda text, profile: ["a name"] if state["live"] else real(text, profile))
+    model = Model()
+    result = eng.run(out, PROFILE, INTELLIGENCE, complete=model)
+    assert model.prompts == [] and result["ok"] == 0 and result["refused"] >= 1
+    assert real("Zorana Testovic", PROFILE)
+
+
+# --- the dry run, resume, production paths -----------------------------------------------------
+
+
+def test_the_estimate_makes_no_call_and_writes_nothing(out):
+    before = sorted(f.name for f in out.iterdir())
+    model = Model()
+    p = eng.plan(out, PROFILE, INTELLIGENCE)
+    lines = "\n".join(eng.describe(p))
+    assert "UPPER BOUND" in lines and "calls to make: 3" in lines and "3 of 3 requests pass" in lines
+    assert model.prompts == [] and sorted(f.name for f in out.iterdir()) == before
+
+
+def test_results_are_written_only_to_the_calibration_folder_with_mode_600_and_a_rerun_asks_for_nothing(out):
+    model = Model()
+    assert eng.run(out, PROFILE, INTELLIGENCE, complete=model) == {"stopped": None, "asked": 3, "ok": 3, "failed": 0, "refused": 0}
+    assert stat.S_IMODE((out / eng.RESULTS_NAME).stat().st_mode) == 0o600
+    assert sorted(f.name for f in out.iterdir()) == sorted(["review-items.json", es.FACTS_NAME, eng.RESULTS_NAME])
+    again = Model()
+    assert eng.run(out, PROFILE, INTELLIGENCE, complete=again)["asked"] == 0 and again.prompts == []
+
+
+def test_resume_asks_only_for_the_ads_not_yet_done(out):
+    eng.run(out, PROFILE, INTELLIGENCE, complete=Model())
+    data = json.loads((out / eng.RESULTS_NAME).read_text())
+    del data["ads"]["job2"]
+    (out / eng.RESULTS_NAME).write_text(json.dumps(data))
+    again = Model()
+    assert eng.run(out, PROFILE, INTELLIGENCE, complete=again)["asked"] == 1 and len(again.prompts) == 1
+
+
+def test_an_estimate_over_the_hard_stop_and_a_gate_refusal_send_nothing(out, monkeypatch):
+    model = Model()
+    monkeypatch.setattr(eng, "HARD_STOP_USD", 1e-9)
+    assert "hard stop" in eng.run(out, PROFILE, INTELLIGENCE, complete=model)["stopped"]
+    monkeypatch.setattr(eng, "HARD_STOP_USD", 0.5)
+    monkeypatch.setattr(eng, "preflight", lambda *a, **k: SimpleNamespace(allowed=False, reason="daily budget", row={}))
+    monkeypatch.setattr(eng.ai_gate, "record_refused", lambda *a, **k: None)
+    assert "AI gate refused" in eng.run(out, PROFILE, INTELLIGENCE, complete=model)["stopped"]
+    assert model.prompts == []
+
+
+def test_a_confirmed_gate_fail_is_left_out_unless_asked_for(out, monkeypatch):
+    monkeypatch.setattr(eng, "cheap_gate_report", lambda job, candidate: (["role_family"], "unknown"))
+    assert eng.plan(out, PROFILE, INTELLIGENCE)["rows"] == {}
+    assert len(eng.plan(out, PROFILE, INTELLIGENCE, include_gate_failures=True)["rows"]) == 3
+
+
+def test_the_runner_names_no_production_state():
+    src = (eng.ROOT / "python" / "calibration" / "engine_sample.py").read_text()
+    for production in ("engine.json", "scored_jobs", "discovered_jobs", "job_history", "requirement-frames", "usage-ledger"):
+        assert production not in src
+    assert "CACHE_PATH" not in src
