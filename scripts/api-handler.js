@@ -47,6 +47,7 @@ import { MAX_CV_BYTES, cvFilePath, deleteCvFile, isCvId, saveCvFile } from './cv
 import { handleApplicationsRequest } from './application-store.js'
 import { handleJobHistoryRequest, handleJobTextsRequest } from './job-history-read.js'
 import { handleJobStateRequest } from './job-state-store.js'
+import { handleCalibrationRequest } from './calibration-review.js'
 import { handleJobsAllRequest } from './job-all-read.js'
 import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
 import { getRun, listRuns } from './run-history.js'
@@ -691,6 +692,10 @@ export async function handleApiRequest(req, res) {
   }
 
   if (await handleJobStateRequest(req, res, url, { root: ROOT })) {
+    return true
+  }
+
+  if (await handleCalibrationRequest(req, res, url, { root: ROOT })) {
     return true
   }
 

@@ -18,6 +18,8 @@ import QualityDashboard from './components/quality/QualityDashboard'
 import ActivityScreen from './components/activity/ActivityScreen'
 import JobTextGate from './components/jobs/JobTextGate'
 import JobDetailsPage from './components/jobs/JobDetailsPage'
+import CalibrationReview from './components/calibration/CalibrationReview'
+import { isCalibrationHash } from './modules/calibration/calibrationClient'
 import { useJobRoute } from './hooks/useJobRoute'
 import { useBackgroundRefresh } from './hooks/useBackgroundRefresh'
 import { closeJobPage } from './modules/jobs/jobRoute'
@@ -137,7 +139,26 @@ function AppContent() {
   )
 }
 
+/** The temporary calibration review: a direct route (#/calibration), in no navigation, without the app shell. */
+function useCalibrationRoute() {
+  const [on, setOn] = useState(() => isCalibrationHash(window.location.hash))
+  useEffect(() => {
+    const sync = () => setOn(isCalibrationHash(window.location.hash))
+    window.addEventListener('hashchange', sync)
+    window.addEventListener('popstate', sync)
+    return () => {
+      window.removeEventListener('hashchange', sync)
+      window.removeEventListener('popstate', sync)
+    }
+  }, [])
+  return on
+}
+
 export default function App() {
+  const calibration = useCalibrationRoute()
+  if (calibration) {
+    return <div className="min-h-screen bg-[var(--color-surface)]"><CalibrationReview /></div>
+  }
   return (
     <ProfileProvider>
         <div className="min-h-screen bg-[var(--color-surface)]">
