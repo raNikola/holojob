@@ -16,8 +16,9 @@ const SKIP_FILE = /^(\.env|settings\.local\.json|settings\.json\.(bak|graphify).
 
 // TEMPORARY, removed in the second rename stage once the folder itself is renamed: the folder path in docs and scripts.
 const OLD_FOLDER = ['/srv/', 'career', '-os'].join('')
-// TEMPORARY, deleted with the cutover: the runbook has to name the old folder, container and host.
-const ALLOWED_FILES = new Set(['docs/CUTOVER_RUNBOOK.md'])
+// TEMPORARY: the cutover runbook (deleted in the second stage) and the history rewrite notes (deleted after the
+// rewrite) have to name the old folder, container, host and the rewrite rules.
+const ALLOWED_FILES = new Set(['docs/CUTOVER_RUNBOOK.md', 'docs/HISTORY_REWRITE.md'])
 
 function* walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
