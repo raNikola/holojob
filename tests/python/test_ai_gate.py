@@ -255,6 +255,20 @@ def test_call_limits(tmp_path, monkeypatch):
         ai_gate.reserve("openai", "m", 10, now=NOON + timedelta(days=2))
 
 
+def test_raising_the_daily_limit_continues_the_count_it_does_not_restart_it(tmp_path, monkeypatch):
+    permissive_ai_budget(tmp_path, monkeypatch, maxCallsDaily=2)
+    _reserve()
+    _reserve()
+    with pytest.raises(ai_gate.AiRefused, match=r"daily paid call limit reached \(2\)"):
+        ai_gate.reserve("openai", "m", 10, now=NOON)
+    permissive_ai_budget(tmp_path, monkeypatch, maxCallsDaily=4)  # the owner raises the limit; the ledger stays
+    assert ai_gate.totals(NOON)["today"]["paidCalls"] == 2  # the two earlier calls still count
+    _reserve()
+    _reserve()
+    with pytest.raises(ai_gate.AiRefused, match=r"daily paid call limit reached \(4\)"):
+        ai_gate.reserve("openai", "m", 10, now=NOON)
+
+
 def test_an_unfinished_call_still_counts_against_the_limit(tmp_path, monkeypatch):
     permissive_ai_budget(tmp_path, monkeypatch, maxCallsDaily=1)
     ai_gate.reserve("openai", "m", 10, now=NOON)  # in flight, or the process died
