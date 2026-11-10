@@ -30,8 +30,8 @@ Built, merged and deployed are three different states; this table says only what
 ## Rename to Holojob (2026-11-10)
 
 Stages 1 and 2 are merged: text, prompts, environment variables (no fallback to the old names), backups, compose project and
-container, docs, source link, folder path. Pending the owner: recreate the container from the new folder (the running one still
-mounts the old path), and the Git history rewrite (`docs/HISTORY_REWRITE.md`). Record: [DECISIONS.md](DECISIONS.md), "Rename to Holojob".
+container, docs, source link, folder path. The container runs from the new folder. The Git history was rewritten (the old name, a contributor's chat
+data and private calibration files are gone from it; commit hashes quoted in the docs point to the new commits). Record: [DECISIONS.md](DECISIONS.md), "Rename to Holojob".
 
 ## Phase 1 acceptance criteria - PROPOSED, owner to confirm
 

@@ -15,6 +15,9 @@ The two settings a deployed `.env` can carry (`HOLOJOB_ALLOWED_ORIGINS`, `HOLOJO
 pre-rename names (removed 2026-11-10 once `.env` was migrated); an empty origins list still turns the Host check off, and the
 server warns at start. The project folder is `/srv/holojob`. AGPL-3.0 stays: `LICENSE` is unchanged and the app links to the
 source of the running version (Settings, "About and source code").
+The Git history was rewritten on 2026-11-10 and published as a new repository: the old name replaced everywhere, `data/chat/`
+and `data/calibration/` removed, the owner's e-mail addresses and the assistant-authored commits mapped to the owner's GitHub
+noreply identity, assistant co-author trailers dropped. The authors and committers of the upstream commits are unchanged.
 
 ## Activity screen (approved 2026-11-02)
 

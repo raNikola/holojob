@@ -14,9 +14,6 @@ const TEXT_EXT = new Set(['.md', '.js', '.jsx', '.ts', '.py', '.json', '.html', 
 const TEXT_NAMES = new Set(['Dockerfile', '.gitignore', '.dockerignore', '.env.example', 'LICENSE'])
 const SKIP_FILE = /^(\.env|settings\.local\.json|settings\.json\.(bak|graphify).*)$/
 
-// TEMPORARY: the history rewrite notes (deleted after the rewrite) name the old name in the rewrite rules.
-const ALLOWED_FILES = new Set(['docs/HISTORY_REWRITE.md'])
-
 function* walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.isSymbolicLink()) continue
@@ -39,7 +36,6 @@ describe('the old app name', () => {
     const hits = []
     for (const file of walk(ROOT)) {
       const rel = path.relative(ROOT, file)
-      if (ALLOWED_FILES.has(rel)) continue
       fs.readFileSync(file, 'utf-8').split('\n').forEach((line, i) => {
         if (OLD_NAME.test(line)) hits.push(`${rel}:${i + 1}`)
       })
