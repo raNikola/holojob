@@ -307,7 +307,7 @@ Usage changes, using existing or provisional tokens:
 
 The PO's original Cyan preset was **not** the source of the reported dark-mode contrast regressions. Blue/Geist was recommended in the design discussion and then selected. No statement here characterizes the original preset as defective.
 
-Measured against the earlier snapshot in Git (`b9bb4cc`):
+Measured against the earlier snapshot in Git (`7c36cd0`):
 
 - Most pairs above use tokens that are identical in both presets (muted, input, ring, destructive), so their ratios are unchanged.
 - Dark `--primary` as text or fill fell with Blue: on background 2.72 to 2.23, on card 2.40 to 1.96, on muted 2.04 to 1.67.

@@ -307,7 +307,7 @@ Recorded from the owner's addendum. Docs only; no code changed. Backlog entries:
    Idea: three tiers (clear no / clear yes / borderline kept with a "for review" flag; AI only on a borderline title plus a short description, which needs its own approval with cost, see
    "AI in scraping"). Depends on the scoring fix and on the discard-reason data from S2. **Deferred.**
    **Code check on whether the exclude was deliberate:** `.claude/rules/scoring.md` and this file say nothing about it. The only mentions are the module docstring (one shared term list so clients do not drift)
-   and `docs/ARCHITECTURE.md` open problem 8, which says `role_filter.py` "would tighten" providers that match the whole ad. So the exclude of "project manager" was a deliberate noise cut at the time (commit `c346ad3`),
+   and `docs/ARCHITECTURE.md` open problem 8, which says `role_filter.py` "would tighten" providers that match the whole ad. So the exclude of "project manager" was a deliberate noise cut at the time (commit `f3c4196`),
    not an owner decision recorded anywhere; the owner now finds it too strict.
 3. **Infostud stays unclassified** (not snapshot-based) until its fetch coverage is confirmed; the six checks are postponed to the end. Consistent with the entry under "Scrape, import, scoring".
 4. **Process rule.** Every decision is recorded in the md files, not only in chat. The owner tests everything at the end; no merge and no production before the real-container integration check.
@@ -1155,7 +1155,7 @@ Slices in order: S0 safe writes, S1 draft contract + guarded apply, S2 TXT/MD, S
 - **Hard-coded market:** the `serbia` provider group ([ROADMAP.md](ROADMAP.md), Tech debt leftovers) and Serbian place names in
   `location_text.py`, which is also how "Confirmed from Serbia" above is read.
 - **Serbian parsing exists:** `src/data/sectionHeadings.json` has `en` and `sr` blocks and a Cyrillic transliteration, used by
-  `python/profile_import/vocabulary.py` and `src/utils/headingVocabulary.js` (commit `10bf5d3`, 2026-11-01). Kept by the
+  `python/profile_import/vocabulary.py` and `src/utils/headingVocabulary.js` (commit `b6ce860`, 2026-11-01). Kept by the
   2026-11-10 decision (exception to English-only).
 - **Serbian sites:** [redesign/DECISIONS.md](redesign/DECISIONS.md) keeps "job sources incl. Serbian sites" in scope. This
   entry is about parsing, and does not say whether those sources change.
@@ -1171,9 +1171,9 @@ Meaning today, confirmed in the code: the New badge is `job.isNew` (3 days or le
 | Agreed direction | Status on 2026-11-02 |
 |---|---|
 | Display names "Just found" and "Unreviewed", data unchanged | Done (`jobHistory.js`, `jobStatusLabel`) |
-| Warnings in the Location cell | Done (`AuthorizationBadge`, `33e5a18`) |
-| Icon actions with tooltips | Done (`JobActions`, `63f216c`) |
-| Compact rows | Done (`63f216c`) |
+| Warnings in the Location cell | Done (`AuthorizationBadge`, `3c183e2`) |
+| Icon actions with tooltips | Done (`JobActions`, `cb944c6`) |
+| Compact rows | Done (`cb944c6`) |
 | Remove the shadow badge from the table, keep it on Details | Not done: `EngineShadowBadge` is still in `JobTable.jsx` (table and cards), and is on Details |
 | Applied button goes to the tracker (a separate task) | Not done: the table button only sets `job.status` to `applied_manually` through `updateJobStatus` and writes no application |
 
@@ -1224,7 +1224,7 @@ list from 56 to 1,990 rows, cut the corpus from 55 to 8 and moved the generation
 
 Owner-approved, GPT-reviewed. Documentation only: no code, test or data changed. History above is not rewritten; where an earlier entry conflicts with this section, this section wins. The wave table is in [ROADMAP.md](ROADMAP.md#roadmap-v2-recorded-2026-11-04). Goal: Scoring -> Matching -> Application Tracking.
 
-**State:** S1 to S8b are built, deployed from a clean build and merged to main at `d44d9cd`. The "Built, not deployed" statuses in ROADMAP.md were stale and are corrected.
+**State:** S1 to S8b are built, deployed from a clean build and merged to main at `e8995ed`. The "Built, not deployed" statuses in ROADMAP.md were stale and are corrected.
 
 **Execution order:**
 

@@ -444,7 +444,7 @@ unless marked):
     protect data and must not depend on the switch.
   - **Nothing is deleted.** Turning tracking back on shows everything as it was.
 
-### 1.8 What the S1 code needed (historical; S1 is committed as `5e549a4`)
+### 1.8 What the S1 code needed (historical; S1 is committed as `6b418a1`)
 
 S1 work exists uncommitted in the working tree (section 7, S1). Against this revision:
 - **Stays:**
@@ -1328,7 +1328,7 @@ onto them as below, and nothing of the old content is dropped:
   - `invalid settings are not overwritten`;
   - `registry restore merges by key`, plus `restore without a current settings file writes the backup's`.
 - **Not in S1:** the archiver import fix in `backup-handler.js` is unrelated to the tracker. It shipped as its own commit,
-  `549d42f`.
+  `0dd6c18`.
 
 ## 8. What this plan does not do
 
@@ -1419,5 +1419,5 @@ stays as history; the new entry supersedes it.
 - the tests (6a-6f, 6h).
 
 Two follow-ups were listed here, and both are closed:
-- **The S1 code** is committed as `5e549a4` (section 1.8).
+- **The S1 code** is committed as `6b418a1` (section 1.8).
 - **The data-shapes.md update** is done: Application store in [data-shapes.md](data-shapes.md).

@@ -1,7 +1,7 @@
 # Browser storage - audit and policy
 
 Status: PLAN, 2026-10-29; **owner decisions Q1-Q8 approved 2026-10-29** (section 8, DECISIONS.md log). Step 1 below is partly shipped
-(request guard `cd0cf74`, loopback bind `766bd7b`); **Q3 revised the same day: no application login and no Caddy `basic_auth`** (accepted risk, section 5.1). Docs only in this revision: no code, no `data/` change, no AI call.
+(request guard `4ca558a`, loopback bind `4191d77`); **Q3 revised the same day: no application login and no Caddy `basic_auth`** (accepted risk, section 5.1). Docs only in this revision: no code, no `data/` change, no AI call.
 Inputs read: CLAUDE.md, DECISIONS.md (principles 13-16), SETTINGS_PLAN.md (inventory rows 4, 11, 26, 29; Privacy category),
 SOURCES_SPEC.md (ADR-0034 line), and the code: every `localStorage` / `sessionStorage` / `indexedDB` / `document.cookie` hit in
 `src/` and `scripts/`, `aiSettings.js`, `AISettingsPanel.jsx`, `aiClient.js`, `aiProviderRegistry.js`, `providers/*`,
@@ -423,10 +423,10 @@ before the pre-migration checklist (section 9) passes for the step.
 
 | # | Step | Status | Notes |
 |---|---|---|---|
-| 1 | **Network and API protection.** Request guard (JSON Content-Type, Origin / Host allowlist), backup export / restore guard and secret masking; published port on `127.0.0.1`; CSP and security headers (report-only first); `safeHref` for scraped links. **No Caddy `basic_auth` and no app login (Q3: accepted risk, 5.1).** | guard `cd0cf74` and bind `766bd7b` shipped; **CSP, `safeHref` open** | Add the Tailscale hostname to `HOLOJOB_ALLOWED_ORIGINS` if used. Checklist item 1 gates step 2. |
-| 2 | **AI keys to the server.** `scripts/secret-store.js`, `/api/secrets` routes, Privacy > Secrets screen (AI part), `run-ai.js` / `getAiStatus` / `getAiModels` use the store and ignore a body `apiKey` and `baseUrl`, key and base URL pinned, `redactSecrets` (exact value) on error paths, Gemini header, key field removed from `AISettingsPanel`, owner-triggered migration with the rotation checklist (section 4). Tests 6.2 and 6.4 ledger part. | **shipped `e793fc5`** | What it touches and what it does not: section 10; as built: section 11. |
-| 3 | **`li_at` without CLI arguments.** Same store; bridge reads the store; cookie passed to the scraper in the child's environment, never `--li-at`; request-body `liAt` and the session-file source dropped; outreach panel shows set / not set; migration. Test 6.4 (argv). | **shipped `615c5c3`** | As built: section 11a. |
-| 4 | **AI settings to the server (Q5).** Provider, model, temperature, max tokens, base URL (non-secret part), feature toggles move to `data/config/`; one source of truth for the provider (removes the `llm_client.active_provider()` duplicate); `aiSettings.js` stops using `localStorage`. | **shipped `e139c81`** | As built: section 11b. |
+| 1 | **Network and API protection.** Request guard (JSON Content-Type, Origin / Host allowlist), backup export / restore guard and secret masking; published port on `127.0.0.1`; CSP and security headers (report-only first); `safeHref` for scraped links. **No Caddy `basic_auth` and no app login (Q3: accepted risk, 5.1).** | guard `4ca558a` and bind `4191d77` shipped; **CSP, `safeHref` open** | Add the Tailscale hostname to `HOLOJOB_ALLOWED_ORIGINS` if used. Checklist item 1 gates step 2. |
+| 2 | **AI keys to the server.** `scripts/secret-store.js`, `/api/secrets` routes, Privacy > Secrets screen (AI part), `run-ai.js` / `getAiStatus` / `getAiModels` use the store and ignore a body `apiKey` and `baseUrl`, key and base URL pinned, `redactSecrets` (exact value) on error paths, Gemini header, key field removed from `AISettingsPanel`, owner-triggered migration with the rotation checklist (section 4). Tests 6.2 and 6.4 ledger part. | **shipped `0b0b030`** | What it touches and what it does not: section 10; as built: section 11. |
+| 3 | **`li_at` without CLI arguments.** Same store; bridge reads the store; cookie passed to the scraper in the child's environment, never `--li-at`; request-body `liAt` and the session-file source dropped; outreach panel shows set / not set; migration. Test 6.4 (argv). | **shipped `e252cda`** | As built: section 11a. |
+| 4 | **AI settings to the server (Q5).** Provider, model, temperature, max tokens, base URL (non-secret part), feature toggles move to `data/config/`; one source of truth for the provider (removes the `llm_client.active_provider()` duplicate); `aiSettings.js` stops using `localStorage`. | **shipped `c3fd302`** | As built: section 11b. |
 | 5 | **Profile, intelligence and jobs migration with verification (Q1).** Storage wrapper, allowlist, ESLint rule and static test (6.1) first; then per key the preview / confirm / verified-write protocol of 2.3; then the redundant stores (browser usage log, chat history, pipeline state) are removed, AI memory moves to the server, and the AI response cache is replaced by the server AI findings store (step 2b of STEP5_SERVER_MASTER_PLAN). Jobs first (file exists, applications store is the template), profile last. | open | Large; split per key. |
 | 6 | **Browser AI confirm dialog (Q8).** The nine browser AI features get the explicit confirm that shows the redacted text and the provider (principle 14), like the judge and CV analysis. | open | The next privacy task after the secrets migration (steps 2-3). |
 
@@ -435,7 +435,7 @@ before the pre-migration checklist (section 9) passes for the step.
 | # | Question | Decision |
 |---|---|---|
 | Q1 | Server as master for profile, intelligence, jobs | **Approved**, and for applications (already). The browser keeps UI state only. Migration needs a preview, confirmation and a verified write before the browser copy is removed (2.3). Reverses the "browser copy is the master" line (CLAUDE.md) and principle 15's "later". |
-| Q2 | Bind address | **127.0.0.1 behind Caddy.** Shipped in `766bd7b`. Allowed origins: `https://holojob.void,http://localhost:3073`. |
+| Q2 | Bind address | **127.0.0.1 behind Caddy.** Shipped in `4191d77`. Allowed origins: `https://holojob.void,http://localhost:3073`. |
 | Q3 | Authentication in front of the app | **No application login and no Caddy `basic_auth`** (revised 2026-10-29, replaces the earlier `basic_auth` decision). Access stays inside the home LAN; remote access only through Tailscale. Owner-accepted risk, revisited if the app is exposed outside the home network or Tailscale (5.1). The Tailscale hostname goes into `HOLOJOB_ALLOWED_ORIGINS`. |
 | Q4 | Trust boundary | **600 / 700 on `data/secrets/`, no extra encryption in v1.** Rootless podman maps container root to the host user; the file modes protect against other host users only. Revisit with multi-device access. |
 | Q5 | Non-secret AI settings, theme | **AI settings server-side; theme is the only allowlisted browser key added** (2.2). |
@@ -498,7 +498,7 @@ browser value is no longer used for keyed providers. A failed move leaves the br
 until the owner confirms the move, and after it the key is in `data/secrets/ai.json` (delete the file to clear it) and should be
 treated as rotated anyway.
 
-## 11. Step 2 as built (2026-10-29, `e793fc5`)
+## 11. Step 2 as built (2026-10-29, `0b0b030`)
 
 Follows section 10. Where the build made a choice the text left open:
 
@@ -536,7 +536,7 @@ Follows section 10. Where the build made a choice the text left open:
 Ledger note: the ledger is written by `python/llm/ai_gate.py` from what Node hands it, so the test asserts on the text handed to the gate
 (`finish`, `refuse`, `reserve`); the exact-value mask runs before that.
 
-## 11a. Step 3 as built (2026-10-29, `615c5c3`)
+## 11a. Step 3 as built (2026-10-29, `e252cda`)
 
 - **Store.** `data/secrets/linkedin.json` `{ li_at, setAt }` (700 / 600, atomic, never overwritten when unreadable); `describeSecrets()` gains
   `linkedin: { set, source, last4, setAt }`. Resolution: the store, then `LINKEDIN_LI_AT` in `.env`; both are exact-masked. Each file has its
@@ -554,7 +554,7 @@ Ledger note: the ledger is written by `python/llm/ai_gate.py` from what Node han
   already on the server asks first, the same one is refused), or Remove from this browser without moving. The outreach panel shows
   set / not set and the last 4 and has no cookie input. Deep mode now needs the ticked box, the accepted risk **and** the typed
   "I understand" (the typed sentence used to gate only the cookie field).
-- **Entry gate (restored in `e3438c8`).** The cookie input used to be disabled until the risk box was ticked and "I understand" typed; step 3
+- **Entry gate (restored in `e1be497`).** The cookie input used to be disabled until the risk box was ticked and "I understand" typed; step 3
   moved the input to Settings and dropped that. The Set / Replace form shows the warning and needs the box and the phrase again (field, Save and the
   submit handler; `linkedinConsent.js`). The move banner is not gated: that cookie was entered under the old gate.
 - **Browser.** `linkedin_li_at` stays in `TOLERATED_UNTIL_MIGRATED` (until step 5's scrub) because `src/modules/outreach/linkedinCookie.js`
@@ -572,7 +572,7 @@ Ledger note: the ledger is written by `python/llm/ai_gate.py` from what Node han
 | 3 | Secrets never in GET responses, logs or backups | Tests pass with a LinkedIn canary. The by-hand search after the real cookie is stored is the owner's (backup zip, `podman logs holojob`, and `ps` during a deep run). |
 | 4 | Every AI call passes the gate | Unchanged: this step adds no AI call. |
 
-## 11b. Step 4 as built (2026-10-29, `e139c81`)
+## 11b. Step 4 as built (2026-10-29, `c3fd302`)
 
 - **One file.** `data/config/ai-settings.json`: `provider`, `model`, `temperature` (0 to 2), `maxTokens` (1 to 200000), `baseUrl` (ollama only,
   plain http(s)), `features` (the nine toggles). Validated and written by `python/llm/ai_selection.py` (strict, atomic, an unreadable file is never

@@ -1,8 +1,8 @@
-> Dated snapshot as of commit a3b6ce8; not updated afterwards. Sections of CLAUDE.md cited below now live in [../ARCHITECTURE.md](../ARCHITECTURE.md); the current phase list is [../ROADMAP.md](../ROADMAP.md).
+> Dated snapshot as of commit b02347b; not updated afterwards. Sections of CLAUDE.md cited below now live in [../ARCHITECTURE.md](../ARCHITECTURE.md); the current phase list is [../ROADMAP.md](../ROADMAP.md).
 
 # Phase 0 audit - code side
 
-Scope: the Holojob code on `main` (commit 897c09f) measured against `DECISIONS.md`,
+Scope: the Holojob code on `main` (commit f083664) measured against `DECISIONS.md`,
 plus the ported-from sources. DS9 runtime facts (job volume, AI setup, data shapes)
 come from the DS9 report and `data-shapes.md`; they are quoted, not re-measured.
 

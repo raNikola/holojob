@@ -4,8 +4,8 @@ Status: ANALYSIS, 2026-10-29. Read-only. ROADMAP.md, code and `data/` are unchan
 
 Inputs:
 - the docs: CLAUDE.md, [../ROADMAP.md](../ROADMAP.md), [DECISIONS.md](DECISIONS.md), [PHASE0_AUDIT.md](PHASE0_AUDIT.md),
-  [TRACKER_PLAN.md](TRACKER_PLAN.md) (committed `7ff5ae0`) and [data-shapes.md](data-shapes.md);
-- the code at commit `7ff5ae0` plus the S1 work (committed afterwards as `5e549a4`), read file by file;
+  [TRACKER_PLAN.md](TRACKER_PLAN.md) (committed `4d5858f`) and [data-shapes.md](data-shapes.md);
+- the code at commit `4d5858f` plus the S1 work (committed afterwards as `6b418a1`), read file by file;
 - ApplyPack at `5b1edfe9` (the clone used for the tracker plan).
 
 ## How to read this
@@ -15,7 +15,7 @@ Inputs:
 - **PARTIAL:** some of the capability exists. The evidence says which part.
 - **PLANNED:** only in ROADMAP.md, PHASE0_AUDIT.md or TRACKER_PLAN.md.
 - **MISSING:** in no code and no plan.
-- **S1\*:** implemented in the application tracker S1 commit `5e549a4` (`scripts/application-store.js`,
+- **S1\*:** implemented in the application tracker S1 commit `6b418a1` (`scripts/application-store.js`,
   `src/modules/applications/`, `tests/js/applicationStore.test.js`, `tests/python/test_application_store_isolation.py`,
   and diffs in `scripts/api-handler.js`, `scripts/backup-handler.js`). It is committed but not counted as EXISTS: no screen uses it yet.
 
@@ -72,7 +72,7 @@ numbers". A dash means no conflict found.
    - **Mitigation:** the default provider is `mock` (`scripts/run-ai.js:76`).
    - **Not listed:** CLAUDE.md lists only CV analysis, the judge, the matcher and the known `llm_tailor.py` gap. This
      violates principle 14 whenever a real provider is selected (D3).
-4. **S1 is committed (`5e549a4`), with the revised stages.** S1\* provides the store, events, fold, duplicate rules,
+4. **S1 is committed (`6b418a1`), with the revised stages.** S1\* provides the store, events, fold, duplicate rules,
    frozen CV copies and backup merge, and also the parts of TRACKER_PLAN 1.6-1.9 that this point once listed as missing:
    - the stage registry and `settings.json`;
    - the `/move` route;
@@ -262,7 +262,7 @@ These are covered above and in Phase 1. The engine is built and in shadow
 | History | PARTIAL | The last 400-500 browser entries (`aiUsageTracker.js`, trims at 500) | none | — | — |
 | Daily and monthly budget | MISSING | — (ApplyPack: a monthly budget that **warns at 80% and 100% and never stops a call**, `prisma/schema.prisma` `aiBudgetCents`) | none | — | S |
 | Hard limit on calls and spend | MISSING | No limit in `llm_client.py` or `run-ai.js`. The target is stricter than ApplyPack | none | Required by the target: "no automation may bypass the hard limit" | M (one server-side gate in front of `llm_client.complete`, `run-ai.js` and `llm_tailor.py`) |
-| Cache overview | PARTIAL | Caches exist: browser `aiResponseCache.js` (`clearAiCache()`); `llmFacts` fingerprints (`enrich_jobs.py`); the fit cache (`FIT_CACHE_PATH`); the matcher cache (commit `287887b`). No overview screen | none | — | S |
+| Cache overview | PARTIAL | Caches exist: browser `aiResponseCache.js` (`clearAiCache()`); `llmFacts` fingerprints (`enrich_jobs.py`); the fit cache (`FIT_CACHE_PATH`); the matcher cache (commit `f6b013f`). No overview screen | none | — | S |
 | Free vs paid split | PARTIAL | `KEYLESS = {"ollama", "claude-code"}` (`llm_client.py:130`); `mock` provider in the browser. Not shown to the user | none | — | S |
 | Control over auto-run AI tasks | PARTIAL | The judge and matcher are confirm-only (`judgeBoundary.test.js`, not run; `test_below_threshold_makes_no_call`, V-test). **Enrichment in the pipeline is not** (finding 1). Browser feature toggles: `aiFeatureRegistry.js` `settings.features[...] !== false` | none | Conflicts with the target rule | S |
 
@@ -380,4 +380,4 @@ Each step uses free or offline work only. A step marked **blocked** waits for AI
 | D10 | **Offers vs tracker outcomes.** One offer record per application, with its own status, which drives `outcome_set offer_accepted` / `offer_declined` when decided; or a status only in the offer | Avoids two sources of truth |
 | D11 | **Job status vocabulary and liveness frequency.** `expired` = past `jobEndDate`; `closed` = not listed / liveness failed; `unknown` = never checked. How often liveness requests may hit boards | Network load, honesty of dates |
 | D12 | **Resume versions.** A new upload "as a new version of CV X" (lineage) vs a new CV. Does the frozen copy record the version number | Data model for module 5 |
-| D13 | **The S1 work.** Done: committed as `5e549a4`, revised per TRACKER_PLAN 1.8; the archiver fix is its own commit `549d42f` | Unblocked step 3 |
+| D13 | **The S1 work.** Done: committed as `6b418a1`, revised per TRACKER_PLAN 1.8; the archiver fix is its own commit `0dd6c18` | Unblocked step 3 |

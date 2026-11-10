@@ -1,7 +1,7 @@
 # CV parsing: known gaps
 
 Written after the heading-localization and word-boundary work on branch `import-wizard-1a`
-(commits `10bf5d3` import parser, `6c2b8a1` PDF extractor, `f448aad` docs). A record for later;
+(commits `b6ce860` import parser, `7c9cba3` PDF extractor, `0f2d4d4` docs). A record for later;
 nothing here is fixed yet.
 
 What that work did: headings and field labels for the import parser
