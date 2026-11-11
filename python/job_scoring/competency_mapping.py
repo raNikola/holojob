@@ -20,6 +20,7 @@ import threading
 from collections import Counter
 from pathlib import Path
 
+from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic
 from match_engine import competencies
 from requirement_ids import PROVISIONAL_PREFIX, assign_id, provisional_id
 
@@ -27,7 +28,8 @@ ROOT = Path(__file__).resolve().parents[2]
 ALIASES_PATH = ROOT / "data" / "competency-aliases.json"
 REMAP_PATH = ROOT / "data" / "requirement-remap.json"
 
-PENDING, REVIEWED = "pending", "reviewed"
+PENDING, REVIEWED, AUTO, DEMOTED = "pending", "reviewed", "auto", "demoted"
+GROUP_PREFIX = "grp:"  # provisional id of a group of new texts (competency_grouping.py); not on the family list
 NONE_ANSWERS = {"", "none", "null"}
 COVERS = ("whole", "part", "none")
 
@@ -94,8 +96,8 @@ def _read(path: Path) -> dict:
 
 
 def _write(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    make_private_dirs(path.parent)
+    write_text_atomic(path, json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True), PRIVATE_FILE_MODE)
 
 
 def load_remap(path: Path | None = None) -> dict[str, str]:
@@ -122,7 +124,8 @@ class Mapper:
         self.remap_path = remap_path or REMAP_PATH
         self.learned: dict[str, dict] = {
             k: v for k, v in _read(self.aliases_path).items()
-            if isinstance(v, dict) and v.get("competencyId") in self.by_id
+            if isinstance(v, dict) and (v.get("competencyId") in self.by_id
+                                        or str(v.get("competencyId")).startswith(GROUP_PREFIX))
         }
         self.remap = load_remap(self.remap_path)
         self.stats: Counter = Counter()  # what the model's suggestions came to
@@ -142,17 +145,25 @@ class Mapper:
         if key in self.seed:
             return self.seed[key]
         learned = self.learned.get(key)
-        return learned["competencyId"] if learned else None
+        return learned["competencyId"] if learned and learned.get("status") != DEMOTED else None
+
+    def link(self, text: str | None, cid: str, status: str) -> None:
+        """Store a learned link (grouping); the caller saves."""
+        with self._lock:
+            self.learned[competencies.alias_key(text)] = {"competencyId": cid, "status": status}
+            self._dirty = True
 
     def mapping_status(self, requirement: dict) -> str | None:
-        """"reviewed" (seed alias or reviewed learned alias), "pending", or None when the id is not a mapped competency."""
+        """"reviewed" (seed alias or reviewed learned alias), "auto", "pending", "demoted", or None when the id is not a mapped competency."""
         key = competencies.alias_key(requirement.get("text"))
         cid = requirement.get("id")
         if self.seed.get(key) == cid:
             return REVIEWED
         learned = self.learned.get(key)
+        if learned and learned.get("status") == DEMOTED:
+            return DEMOTED
         if learned and learned["competencyId"] == cid:
-            return REVIEWED if learned.get("status") == REVIEWED else PENDING
+            return learned["status"] if learned.get("status") in (REVIEWED, AUTO) else PENDING
         return None
 
     def _suggestion(self, requirement: dict, suggested: str | None, covers: str | None = None) -> str | None:
@@ -211,6 +222,8 @@ class Mapper:
             assigned = assign_id(requirement)
             if not assigned["provisional"]:
                 return assigned, "dictionary"
+            if (self.learned.get(competencies.alias_key(text)) or {}).get("status") == DEMOTED:
+                return assigned, "provisional"  # the owner rejected this text's link; never proposed again
             cid = self._suggestion(requirement, suggested, covers)
             if cid:
                 self.learned[competencies.alias_key(text)] = {"competencyId": cid, "status": PENDING}
