@@ -1694,3 +1694,15 @@ Owner decision: reorder the enrichment prompt (`python/job_scoring/enrich_jobs.p
   - (c) Actual: **unconfirmed** until a real call shows `cachedInputTokens` above 0 in the ledger. The one measured call recorded 0 (prompt was ad-first). Caching also needs a second call within the provider's cache lifetime.
 - **`cached_tokens` in the ledger: already recorded, no fix needed.** The result row stores `cachedInputTokens` (not `cached_tokens`) in both paths (Python `llm_client.py` -> `ai_gate.Ticket.finish`; Node `openaiProvider.js` -> `run-ai.js` -> `finishAiCall`), and the cost uses `cachedInputPerMTok`. The measured call shows `cachedInputTokens: 0`: the field works and the prompt simply was not cached. Failed calls have none (no usage). It is treated as a subset of `prompt_tokens`; a code comment in `llm_client.py` says it is not proven on a hit. No cache-write pricing.
 - **Tests:** `tests/python/test_enrichment_prompt_cache.py` (prefix identical across ads, variable text only in the tail, competency list in the prefix, version and fingerprints unchanged); cached tokens in the row and the cost: `tests/python/test_ai_service_tiers.py`, `tests/js/aiServiceTier.test.js`.
+
+## Serbian title vocabulary for the title tier: criterion pre-registered (2026-11-11, branch `serbian-title-vocab`)
+
+Owner decision: Serbian-language titles are in scope. `title_tier` (`python/job_scoring/role_tier.py`) read `src/data/roleFamilies.json` `titleRules`, which held no Serbian wording (Latin or Cyrillic), so a Serbian title fell to the default fall-through, unrelated, and was capped at 40. Project, Delivery and Technical Project Manager titles are not rejected on the name alone; they stay judged by function through the existing `llmFacts.roleTrack` rule (`productResponsibilityTitlePatterns`). The cap value, the weights and the `roleTrackEvidence` requirement do not change.
+
+**Criterion, written before any change** (baseline tiers and local scores of all 548 scored rows were recorded from the unmodified code first, in a file outside the repo; the 548 rows re-score to their stored `matchScore` on 546, which is the harness check):
+
+1. **Regression guard:** the tier of every scored row whose title has no Serbian wording is identical before and after.
+2. **No new false lifts:** no ad the owner rated 0 moves out of unrelated.
+3. **Gain:** Serbian-titled product-type ads the owner rated 2 or more leave the title cap. Reported: how many of the two known Serbian-titled capped ads (`0580933f13e88627`, `ea3d7a19fb2aba15`) do. Expected before running: `ea3d7a19fb2aba15` is a project-manager equivalent with no `llmFacts` (only 5 of 548 rows have facts), so by rule 4 it stays capped; only `0580933f13e88627` can leave.
+4. **Same rule for the Serbian project / delivery equivalents:** they go to `productResponsibilityTitlePatterns`, the branch the English ones use. Without facts they stay unrelated exactly as the English titles do; with product `roleTrack` evidence they are near. No advantage over English.
+5. **Report:** the number of Serbian-titled rows among the 548 and how many change tier. If the criterion cannot be met, stop and report.
