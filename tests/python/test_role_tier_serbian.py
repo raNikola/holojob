@@ -30,7 +30,9 @@ SERBIAN_PRODUCT = [
     "Управљање производом",
     "Lider digitalne platforme za finansije",
     "Lider proizvoda",
-    "Лидер платформе",
+    "Лидер дигиталне платформе",
+    "Лидер производа",
+    "Lider digitalnog proizvoda",
 ]
 
 # A Serbian project or delivery manager: judged by function, exactly as the English titles.
@@ -44,6 +46,8 @@ SERBIAN_PROJECT = [
     "Projektni menadžer",
     "Projektni menadzer",
     "Projekt menadžer",
+    "Projekt menadzer",
+    "Пројект менаџер",
     "Пројектни менаџер",
     "Rukovodilac projekta",
     "Руководилац пројекта",
@@ -58,6 +62,9 @@ SERBIAN_PROJECT = [
 # Serbian wording that must reach neither branch: a bare "lider" / "menadžer", other functions, production, sales.
 SERBIAN_NEITHER = [
     "Lider tima",
+    "Lider platforme",
+    "Lider platforme za plaćanja",
+    "Лидер платформе",
     "Menadžer",
     "Menadžer prodaje",
     "Menadžer proizvodnje",

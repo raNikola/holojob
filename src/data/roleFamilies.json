@@ -29,10 +29,10 @@
         "\\b(vp|vice president),?( of)?( \\w+)? product",
         "\\b(menadz\\w*|vlasnik\\w*|rukovodi(lac|oca|ocem|ocu)|voditelj\\w*|direktor\\w*) (za )?(digitaln\\w+ |softversk\\w+ )?proizvod(a|u|om)?\\b",
         "\\bupravljanj\\w* (digitaln\\w+ )?proizvod(om|ima)\\b",
-        "\\blider\\w* (digitaln\\w+ )?(proizvod(a|u|om)|platform(e|i|u|om))\\b",
-        "\\b(менаџер\\w*|власник\\w*|руководи(лац|оца|оцем|оцу)|водитељ\\w*|директор\\w*) (за )?(дигитални\\w* |софтверски\\w* )?производ(а|у|ом)?(?!\\w)",
-        "управљањ\\w* (дигитални\\w* )?производ(ом|има)(?!\\w)",
-        "лидер\\w* (дигитални\\w* )?(производ(а|у|ом)|платформ(е|и|у|ом))(?!\\w)"
+        "\\blider\\w* (proizvod(a|u|om)|digitaln\\w+ (proizvod(a|u|om)|platform(e|i|u|om)))\\b",
+        "\\b(менаџер\\w*|власник\\w*|руководи(лац|оца|оцем|оцу)|водитељ\\w*|директор\\w*) (за )?(дигитал\\w+ |софтверск\\w+ )?производ(а|у|ом)?(?!\\w)",
+        "управљањ\\w* (дигитал\\w+ )?производ(ом|има)(?!\\w)",
+        "лидер\\w* (производ(а|у|ом)|дигитал\\w+ (производ(а|у|ом)|платформ(е|и|у|ом)))(?!\\w)"
       ],
       "otherFunctionPatterns": [
         "\\bdesign(er|ers)?\\b",
@@ -53,7 +53,7 @@
         "\\bmenadz\\w* (za )?isporuk(e|u|a)\\b",
         "\\bменаџер\\w* (за )?(управљањ\\w+ )?пројек\\w+",
         "\\b(руководи(лац|оца|оцем|оцу)|водитељ\\w*) (\\w+ )?пројек\\w+",
-        "\\bпројектн\\w* менаџер",
+        "\\bпројект(н\\w*)? менаџер",
         "управљањ\\w* пројек\\w+"
       ],
       "productResponsibilityTracks": ["product_management", "product_ownership"],
