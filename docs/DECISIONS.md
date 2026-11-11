@@ -1874,6 +1874,10 @@ Spearman against the owner's `overall` level, then `hardRequirements` (text mapp
 
 Median fit, 0.3 critical at 0, against current: 39 / 32, 35 / 26, 35 / 33, 37.5 / 26.5. Ads under 0.5 confidence in the top 10 do not separate the variants at this size (the slice 3 sets have 12 ads, so the top 10 is nearly all of them). The trend is monotonic: a lower prior ranks better, and values under 0.3 were not tested. 21 and 23 ads, one labeller; a difference under about 0.05 is no difference.
 
+### Prior evaluation criterion (owner-approved 2026-11-11, written before any variant 0, 0.1 or 0.2 was run)
+
+Authoritative sets: Step 7 production-like (21 ads) and Step 7 diagnostic (23 ads). A variant passes only if its Spearman against the owner's overall is >= 0.54 on production-like AND >= 0.59 on diagnostic (the current formula baseline), with no margin and no median-fit rule. Slice 3 sets are reported only, not gating. Passing means "no regression measured on this sample", not "proven improvement". If several pass, take the smallest prior. If none passes: keep the current formula, record that no variant met the rule, and remove 0.3 as a candidate. Production Fit is not changed in any case.
+
 ### Decisions recorded while building
 
 - **Production vocabulary.** Owner decision: production writes `no` as MISSING and "not evidenced" as UNKNOWN, through one table in `verify.py`; the Stage B vocabulary stays in `matcher_v3`. Otherwise a `no` would fall out of Fit and raise the score.
