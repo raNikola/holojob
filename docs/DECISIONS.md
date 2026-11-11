@@ -1940,3 +1940,21 @@ Result on the 548 scored rows (local re-score with stored `llmFacts`, before vs 
 5. **Counts:** 3 of the 548 rows have a Serbian title (found by reading all non-target titles and a Serbian-word and Cyrillic scan); 1 changes tier. Of the owner's 45 labelled ads, 42 are among the 548; the only one changed is `0580933f13e88627`.
 
 Not measured: the owner's applications sheet (43 titles) is not on disk in this environment, so that comparison was not run; the 548-row run covers the scored titles only. Serbian project titles will lift only once their ads carry `llmFacts` with product evidence; that is a coverage question (5 of 548 rows have facts), not a vocabulary one.
+
+
+## Enrichment pilot on the owner's labelled ads: criterion pre-registered (2026-11-11, branch `competency-memory-mvp`)
+
+Question: does first-time enrichment (prompt version 6, `llmFacts`) improve the ranking of the owner's labelled ads? Context: 5 of 548 scored rows carry `llmFacts` because the pipeline's enrichment is an automation-trigger call the budget gate refuses while `automation.enabled` is false. Owner decisions: automation stays off, no change to the gate, settings or providers; pilot on the labelled ads that are among the 548 (42 of 45), hard cap USD 0.10, fit judge off; full extraction of the pending ads is not approved.
+
+**Criterion, written before the paid call.** Metrics are computed within the owner's labelled set, per mode (`production_like` and `diagnostic`, from `engine-shadow.json`, never pooled), with the same Spearman code and tie handling as before (`python/calibration/report.py` `spearman`, tied ranks averaged). The one labelled manual ad (`manual-6f64270a-...`) has no mode and is outside both mode metrics (counted separately). Scoring code and configuration are identical before and after: git sha `ab641fd`, scoring-configuration hash `f43ccadf4032dbee` (sha256 prefix over the intelligence file and `src/data` roleFamilies, scoringWeights, geography, domainAdjacency, jobRoles); the evaluation script refuses to run if the hash differs. Judge off. Pass means:
+
+- (a) Spearman against the owner's overall is not lower than baseline in either mode.
+- (b) The mean rank of ads rated 2-3 improves or is unchanged, and no ad rated 0-1 rises in rank among the 548.
+- (c) The number of ads rated 2-3 capped at 40 does not increase.
+- (d) Every new cap or lift is listed by id.
+
+Pass means "no regression measured and direction as expected", not proof: n = 42 detects only large effects. Rank among all 548 is reported for information only. The criterion is not tuned after the result.
+
+**Baseline** (local re-score with the facts now attached, no provider call; the harness reproduces the stored `matchScore` on 547 of 548 rows; saved outside the repo): `production_like` n 20, Spearman 0.428, mean rank of 2-3 ads 9.17, 0 of them capped at 40; `diagnostic` n 21, Spearman 0.307, mean rank 11.2, 4 capped at 40 (`13fbd937c26e5811`, `6dc923061b02c25a`, `b5744c9cdc6a5fa7`, `ea3d7a19fb2aba15`). None of the 42 is currently insufficient-data capped, so any movement through the sufficiency gate is not expected for them; movement can come only through the role-track and title rules.
+
+Order of events: the baseline numbers were computed locally just before this entry was committed, after the criterion was fixed in the task brief; no paid call has been made.
