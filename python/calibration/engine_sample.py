@@ -147,7 +147,7 @@ def plan(out: Path, profile: dict, intelligence: dict, production_only: bool = F
         if not reqs:
             skipped["noRequirements"] += 1
             continue
-        key = matcher.cache_key(job_fingerprint(posting), candidate["profileVersion"], None, reqs)
+        key = matcher.cache_key(job_fingerprint(posting), candidate["evidenceVersion"], None, reqs)
         if store.done(item["jobId"], key):
             skipped["done"] += 1
             continue

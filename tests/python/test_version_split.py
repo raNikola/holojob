@@ -14,8 +14,8 @@ from match_engine.shadow import ShadowEngine
 SKILL = "Roadmap planning"
 PROFILE = {"basicProfile": {}, "resume": {"parsedData": {"skills": [SKILL]}}}
 INTELLIGENCE = {"languages": ["English (fluent)"], "roleFamily": "product"}
-SQL_YES = {"competencyId": "sql", "has": True, "note": "private note"}
-SQL_NO = {"competencyId": "sql", "has": False, "note": "private note"}
+SQL_YES = {"competencyId": "sql", "answer": "yes", "qualifier": None, "note": "private note", "coveredTexts": []}
+SQL_NO = {"competencyId": "sql", "answer": "no", "qualifier": None, "note": "private note", "coveredTexts": []}
 
 
 def _req(rid, text, kind="skill"):

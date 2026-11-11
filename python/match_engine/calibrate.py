@@ -40,7 +40,7 @@ from llm_client import active_provider, judge_model  # noqa: E402
 from match_engine.constants import ENGINE_VERSION  # noqa: E402
 from match_engine.fit import score  # noqa: E402
 from match_engine.gates import gate_results  # noqa: E402
-from match_engine.matcher import cache_key, match_posting, posting_from_job  # noqa: E402
+from match_engine.matcher import cache_key, match_posting, overlay_answers, posting_from_job  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures" / "postings"
 CACHE_PATH = ROOT / "data" / "cache" / "engine-calibration.json"
@@ -81,8 +81,8 @@ def run(args) -> list[dict]:
         job["llmFacts"] = facts
         posting = posting_from_job(job)
 
-        key = cache_key(job_fingerprint(posting), candidate["profileVersion"], None, posting["facts"].get("requirements"))
-        output = matches.get(key)
+        key = cache_key(job_fingerprint(posting), candidate["evidenceVersion"], None, posting["facts"].get("requirements"))
+        output = overlay_answers(matches[key], candidate) if key in matches else None
         if output is None:
             if not args.judge:
                 rows.append({"fixture": path.name, "error": "not matched under this profile version; run with --judge"})
