@@ -170,8 +170,8 @@ def test_a_downgrade_is_reported():
 # --- confirmed facts ------------------------------------------------------------
 
 def test_confirmed_facts_override_the_model_and_are_not_asked():
-    facts = [{"competencyId": "sql", "has": True, "note": ""},
-             {"competencyId": "prov:aaaaaaaaaaaa", "has": False, "note": "B1 only"}]
+    facts = [{"competencyId": "sql", "answer": "yes", "qualifier": None, "note": "", "coveredTexts": []},
+             {"competencyId": "prov:aaaaaaaaaaaa", "answer": "no", "qualifier": None, "note": "B1 only", "coveredTexts": []}]
     # The model claims the opposite for everything; only r1 is asked.
     fake = Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0),
                        ("r3", "MET", "ev-a", GOOD, 4)))
@@ -351,7 +351,7 @@ def test_a_language_requirement_naming_no_known_language_goes_to_the_model():
 
 
 def test_a_confirmed_fact_outranks_the_language_list():
-    fact = {"competencyId": "prov:aaaaaaaaaaaa", "has": False, "note": ""}
+    fact = {"competencyId": "prov:aaaaaaaaaaaa", "answer": "no", "qualifier": None, "note": "", "coveredTexts": []}
     candidate = {**_language_candidate(["English (fluent)"]), "confirmedFacts": [fact]}
     outcome = _run(Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0))), candidate=candidate)
     assert next(r for r in outcome.output["requirements"] if r["kind"] == "language")["status"] == "MISSING"

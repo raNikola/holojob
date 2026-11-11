@@ -6,6 +6,7 @@ further than the quotes it can show. A status is only ever lowered here.
 
 from __future__ import annotations
 
+from .fact_links import fact_for
 from .normalize import quote_in
 
 STATUSES = ("MET", "PARTIAL", "MISSING", "UNKNOWN")
@@ -16,6 +17,12 @@ CLAIM_STRENGTH = 1
 # outcome with a number, but it is more than a listed skill. Calibrated with the
 # other constants in step 5 (ENGINE_CONTRACT.md, Open points 1).
 CONFIRMED_FACT_STRENGTH = 3
+# The one translation of a fact's outcome into a path's status names. Production
+# keeps MET / PARTIAL / MISSING / UNKNOWN; Stage B has its own two words.
+VOCABULARY = {
+    "production": {"contradicted": "MISSING", "not_evidenced": "UNKNOWN"},
+    "stage_b": {"contradicted": "CONTRADICTED", "not_evidenced": "NOT_EVIDENCED"},
+}
 
 
 def drop_unquoted(requirements: list[dict], description: str) -> tuple[list[dict], list[str]]:
@@ -47,17 +54,32 @@ def _resolved(req: dict, status: str, evidence_id, quote, verified: bool, streng
     }
 
 
-def apply_confirmed_fact(req: dict, fact: dict, evidence_by_id: dict[str, dict]) -> dict:
-    """A user's answer settles the requirement; the model is not asked about it."""
-    if fact["has"]:
-        evidence_id = fact.get("evidenceId") if fact.get("evidenceId") in evidence_by_id else None
-        return _resolved(req, "MET", evidence_id, None, True, CONFIRMED_FACT_STRENGTH)
-    return _resolved(req, "MISSING", None, None, True, 0)
+def _years(qualifier: dict | None) -> int | None:
+    return qualifier["value"] if qualifier and qualifier.get("kind") == "years" else None
+
+
+def apply_confirmed_fact(req: dict, fact: dict, evidence_by_id: dict[str, dict], vocabulary: str = "production") -> dict | None:
+    """The requirement as the user's answer settles it (spec 4.4), or None when the matcher's verdict stands."""
+    answer = fact["answer"]
+    if answer == "no":
+        return _resolved(req, VOCABULARY[vocabulary]["contradicted"], None, None, True, 0)
+    if answer not in ("yes", "partly"):
+        return None
+    asked, confirmed = _years(req.get("qualifier")), _years(fact.get("qualifier"))
+    if asked is not None and confirmed is None:
+        return None
+    below_level = asked is not None and confirmed < asked
+    status = "PARTIAL" if answer == "partly" or below_level else "MET"
+    evidence_id = fact.get("evidenceId") if fact.get("evidenceId") in evidence_by_id else None
+    settled = _resolved(req, status, evidence_id, None, True, CONFIRMED_FACT_STRENGTH)
+    if answer == "yes" and below_level:
+        settled["levelReason"] = f"{confirmed} year{'' if confirmed == 1 else 's'} confirmed, ad asks {asked}+"
+    return settled
 
 
 def resolve_fact(req: dict, candidate: dict, evidence_by_id: dict[str, dict]) -> dict | None:
     """The requirement as the candidate's confirmed answer settles it, or None when the matcher's verdict stands."""
-    fact = next((f for f in candidate.get("confirmedFacts") or [] if f["competencyId"] == req["id"]), None)
+    fact = fact_for(req, candidate)
     return apply_confirmed_fact(req, fact, evidence_by_id) if fact else None
 
 

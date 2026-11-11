@@ -228,25 +228,29 @@ def test_a_missing_store_is_empty(tmp_path):
 def test_store_round_trip_and_validation(tmp_path):
     path = tmp_path / "confirmed-facts.json"
     confirmed_facts.save([
-        {"competencyId": "sql", "has": True, "note": "daily, 5 years"},
-        {"competencyId": "prov:37a02fa46828", "has": False},
-        {"competencyId": "", "has": True},  # no id: dropped
-        {"competencyId": "go", "has": "yes"},  # not a boolean: dropped
+        {"competencyId": "sql", "answer": "yes", "note": "daily, 5 years"},
+        {"competencyId": "prov:37a02fa46828", "answer": "no"},
+        {"competencyId": "", "answer": "yes"},  # no id: dropped
+        {"competencyId": "go", "answer": "maybe"},  # not an answer: dropped
     ], path)
     assert json.loads(path.read_text())["version"] == confirmed_facts.STORE_VERSION
+    empty = {"qualifier": None, "answeredAt": None, "overrules": [], "coveredTexts": [], "history": []}
     assert confirmed_facts.load(path) == [
-        {"competencyId": "prov:37a02fa46828", "has": False, "note": ""},
-        {"competencyId": "sql", "has": True, "note": "daily, 5 years"},
+        {"competencyId": "prov:37a02fa46828", "answer": "no", "note": "", **empty},
+        {"competencyId": "sql", "answer": "yes", "note": "daily, 5 years", **empty},
     ]
 
 
 def test_the_last_answer_for_a_competency_wins(tmp_path):
     path = tmp_path / "confirmed-facts.json"
-    path.write_text(json.dumps({"version": 1, "facts": [
-        {"competencyId": "sql", "has": True, "note": ""},
-        {"competencyId": "sql", "has": False, "note": "never used it"},
+    path.write_text(json.dumps({"version": 2, "facts": [
+        {"competencyId": "sql", "answer": "yes", "note": ""},
+        {"competencyId": "sql", "answer": "no", "note": "never used it"},
     ]}))
-    assert confirmed_facts.load(path) == [{"competencyId": "sql", "has": False, "note": "never used it"}]
+    assert confirmed_facts.load(path) == [{
+        "competencyId": "sql", "answer": "no", "qualifier": None, "note": "never used it",
+        "answeredAt": None, "overrules": [], "coveredTexts": [], "history": [],
+    }]
 
 
 def test_the_store_lives_with_the_git_ignored_profile():

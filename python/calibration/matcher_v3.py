@@ -40,7 +40,8 @@ from match_engine import matcher  # noqa: E402
 from match_engine.constants import IMPORTANCE_WEIGHT  # noqa: E402
 from match_engine.gates import GATES, settle_language  # noqa: E402
 from match_engine.normalize import quote_in  # noqa: E402
-from match_engine.verify import CONFIRMED_FACT_STRENGTH, drop_unquoted  # noqa: E402
+from match_engine.fact_links import fact_for  # noqa: E402
+from match_engine.verify import apply_confirmed_fact, drop_unquoted  # noqa: E402
 
 PROMPT_ID = "calibration-matcher-3"
 MET, PARTIAL, NOT_EVIDENCED, CONTRADICTED = "MET", "PARTIAL", "NOT_EVIDENCED", "CONTRADICTED"
@@ -178,6 +179,18 @@ def _settled(req: dict, status: str, strength: int = 0, verified: bool = False, 
             "requirementLevel": None, "candidateLevel": None, **extra}
 
 
+def _settled_by_fact(req: dict, candidate: dict) -> dict | None:
+    """The requirement as the owner's answer settles it, in the `_settled` shape, or None when it is left to be asked."""
+    fact = fact_for(req, candidate)
+    applied = apply_confirmed_fact(req, fact, {}, vocabulary="stage_b") if fact else None
+    if applied is None:
+        return None
+    extra = {"levelReason": applied["levelReason"]} if "levelReason" in applied else {}
+    if applied["status"] == CONTRADICTED:
+        extra["ownerConfirmedAbsent"] = True
+    return _settled(req, applied["status"], applied["strength"], True, **extra)
+
+
 def prepare(posting: dict, candidate: dict, identity=None) -> dict:
     """One request for one ad, without calling anything: what is settled in code, what is asked, and the prompt.
 
@@ -186,12 +199,10 @@ def prepare(posting: dict, candidate: dict, identity=None) -> dict:
     """
     description = posting.get("description") or ""
     requirements, warnings = drop_unquoted(((posting.get("facts") or {}).get("requirements")) or [], description)
-    facts = {f["competencyId"]: f for f in candidate.get("confirmedFacts") or []}
     resolved, asked = {}, []
     for index, req in enumerate(requirements):
-        if req["id"] in facts:
-            has = facts[req["id"]]["has"]
-            resolved[index] = _settled(req, MET, CONFIRMED_FACT_STRENGTH, True) if has else _settled(req, CONTRADICTED, 0, True, ownerConfirmedAbsent=True)
+        if (by_fact := _settled_by_fact(req, candidate)) is not None:
+            resolved[index] = by_fact
             continue
         settled = settle_language(req, candidate)
         if settled is None:

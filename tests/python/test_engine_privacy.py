@@ -77,7 +77,7 @@ INTELLIGENCE = {
 }
 
 # Answers the candidate gave; the matcher never sends confirmed facts or their notes.
-CONFIRMED_FACTS = [{"competencyId": "product-management", "has": True, "note": f"ask {NAME} at {PHONE}"}]
+CONFIRMED_FACTS = [{"competencyId": "product-management", "answer": "yes", "qualifier": None, "note": f"ask {NAME} at {PHONE}", "coveredTexts": []}]
 
 DESCRIPTION = """Senior Product Manager, fully remote.
 Requirements:

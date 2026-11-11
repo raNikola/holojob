@@ -21,7 +21,8 @@ from conftest import fail_replacing
 from match_engine import competency_backup as cb
 from project_intelligence import run_project_scan
 
-FACT = {"competencyId": "sql", "has": True, "note": ""}
+FACT = {"competencyId": "sql", "answer": "yes", "qualifier": None, "note": "", "answeredAt": None,
+        "overrules": [], "coveredTexts": [], "history": []}
 
 
 def mode_of(path):
