@@ -1958,3 +1958,13 @@ Pass means "no regression measured and direction as expected", not proof: n = 42
 **Baseline** (local re-score with the facts now attached, no provider call; the harness reproduces the stored `matchScore` on 547 of 548 rows; saved outside the repo): `production_like` n 20, Spearman 0.428, mean rank of 2-3 ads 9.17, 0 of them capped at 40; `diagnostic` n 21, Spearman 0.307, mean rank 11.2, 4 capped at 40 (`13fbd937c26e5811`, `6dc923061b02c25a`, `b5744c9cdc6a5fa7`, `ea3d7a19fb2aba15`). None of the 42 is currently insufficient-data capped, so any movement through the sufficiency gate is not expected for them; movement can come only through the role-track and title rules.
 
 Order of events: the baseline numbers were computed locally just before this entry was committed, after the criterion was fixed in the task brief; no paid call has been made.
+
+
+## Enrichment pilot: ads without facts after the run, and how the verdict is reported (2026-11-11, branch `competency-memory-mvp`)
+
+Addition to the criterion above. Metrics (a)-(d) and every threshold in it are unchanged. The earlier entry did not say what happens to an ad whose extraction fails in the pilot (3 of 50 calls returned 401 in the earlier run), so this is fixed before the paid call:
+
+- **One retry of the failed ids only**, inside the same `--max-usd 0.10` cap. No second cap, no retry of ads that succeeded, no new ads.
+- **The paired comparison runs on the ads that have facts.** The number of such ads, `n`, is reported per mode next to every metric.
+- **Ads that still have no facts after the retry are excluded from the paired comparison and listed by id**, with the reason of the failure.
+- **The verdict is reported together with the effect sizes and the per-id list** (metric values before and after, and every ad whose tier, score or cap changed). A miss on (a) of a few hundredths is reported as such, not as proof of regression, with n stated beside it.
