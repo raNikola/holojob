@@ -1713,6 +1713,70 @@ Headline numbers (counts and rates only): matchScore exact band 12 of 45, Spearm
 
 **S2 paid diagnostic (run 2026-11-11, $0.0212 for 24 calls, 0 cached tokens):** 17 understated lines in 12 ads, control (existing 83-item index) and summary variant. Comparing the Step 7 full call (median 19 requirements) with a 1-3 requirement call on the same evidence changed 8 of 17 verdicts (6 toward the owner's answer, 2 away). That is not a true repeat: **pure repeat noise is unmeasured**, and an earlier note that the matcher "flips about half on a re-ask" was wrong. The closest thing to a repeat, control against the summary variant (same small question set), changed 1 of 17; that one change was away from the owner's answer, and the 5 summary sentences were cited as evidence on 0 lines. Lines were selected for being wrong, so some movement toward the owner's answer is expected by chance. The summary gave no reason to put profile text first, and the likely causes of the instability (question-set size, the vague PARTIAL boundary) are to be separated by a cause test; a complete profile is a separate, unmeasured question. Results: `data/calibration/stage-a/index-diagnostic.json` (private).
 
-**Matcher stability, slices 0-2 (2026-11-11, calibration only, production engine and prompts unchanged).** Slice 1 ($0.1031, 91 calls, 12 dev ads, current prompt): the same input twice changed the verdict level on 18 of 96 requirements (production_like) and 11 of 122 (diagnostic), above the Phase 1 target of 5%; every one of those changes involves PARTIAL. Batches of up to 6 and medium effort gave no measurable gain, so neither is used. Owner decisions for slice 2: a tighter PARTIAL (a verified quote covers a named part of the requirement, or the same thing at a lower level); low effort, full question set, no batching; a second reading that is identical, experiment only; MET against PARTIAL gives PARTIAL, flagged; positive against silence stays out of fit, flagged; a contradiction needs a verified conflicting quote and both readings. Typed absence and the level comparison (MET below the required level becomes PARTIAL, offline preview only) are built but UNVALIDATED. Two readings do not fix lines both get wrong. Built: `python/calibration/matcher_v3.py`, `v3_offline.py`. **Open conflict for the owner:** the earlier closed-world rule (absence from a listed education, certification or language section counts as CONTRADICTED) has no quote, so `matcher_v3.py` keeps such lines NOT_EVIDENCED and marks them `closedWorldAbsent` until the owner decides. **Measured risk:** replaying stored verdicts, leaving silence out of fit raises fit (production_like median 32 to 44) and breaks the ranking (Spearman 0.54 to -0.16), and under those rules a stricter PARTIAL raises fit further; slice 3 is required before any production use.
+**Matcher stability slices 0-2:** see [P1 Stage B](#p1-stage-b-matcher-stability-slices-1-and-2-2026-11-11-branch-p1-stage-b).
 
 **Not approved / not built:** any change to production scoring or the engine, the paid diagnostic (needs the owner's explicit "odobravam"), Stage B slices after S2. Location is still to be added as its own comparison parameter.
+
+## P1 Stage B: matcher stability, slices 1 and 2 (2026-11-11, branch `p1-stage-b`)
+
+Calibration only: the production engine, its prompts and production scoring are unchanged. **Read every number with its n:** a small, purpose-chosen diagnostic sample (12 or 44 ads, labelled by one person), not proof of reliability for all professions. Verdicts on one ad are not independent, so the intervals are too narrow. production_like (ads production would send) and diagnostic (ads production would skip on a confirmed gate fail) are never pooled.
+
+### Slice 1: why verdicts change (current prompt, 12 dev ads, 6 per mode)
+
+91 calls, 0 failed, 0 retries, $0.1031. Requirements whose verdict level changed (MISSING and UNKNOWN count as one level, below PARTIAL, below MET):
+
+| Comparison | production_like (n = 96) | diagnostic (n = 122) |
+|---|---|---|
+| **Pure repeat, same input twice** | **18 = 18.8%** [12-28] | **11 = 9.0%** [5-15] |
+| Stored Step 7 run against the first run | 24 = 25.0% | 16 = 13.1% |
+| Shuffled order against the two full runs | 21.9% and 17.7% | 25.4% and 27.9% |
+| Batches of up to 6 against the two full runs | 18.8% and 12.5% | 21.3% and 18.9% |
+| Medium effort against the two full runs | 25.0% and 22.9% | 25.4% and 21.3% |
+
+- Repeat noise is above the Phase 1 target (status flips at most 5%). Every repeat change involves PARTIAL (silence / PARTIAL 13 and 7; PARTIAL / MET 5 and 4; silence / MET 0).
+- An earlier note that question-set size was the likely cause is not supported. In production_like, order and batching are within noise. In diagnostic, shuffling and batching change more than a repeat, mostly downward; the cause is unknown on 6 ads.
+- Batching cost 2.6x ($0.0408 against $0.0156 for the same ads) with no measurable gain, so it is not used. Medium effort cost 54% more, added the only over-credit in production_like, and was not repeated against itself, so it is not used either.
+- Exact agreement with the owner's answers: production_like (n = 13) Step 7 8, first run 6, second run 9, shuffled 8, batched 8, medium 6; diagnostic (n = 16) 16, 14, 16, 14, 14, 14. The same input scored 6 and 9, so a difference of 3 or fewer means nothing. Credited where the owner said no: batched 0 of 11; medium 2 of 11.
+- The first prompt-cache hit in any run: the identical repeat had 97,299 of 97,335 input tokens cached and cost $0.0067 against $0.0156. Shuffled and batched calls had none.
+
+### Slice 2: the experimental matcher, offline only
+
+Owner decisions: a tighter PARTIAL (a verified quote covers a named part of the requirement, or the same thing at a lower level); low reasoning effort, full question set, no batching; an identical second reading, experiment only, never automatic in production. Two readings: MET against PARTIAL gives PARTIAL, flagged; positive against silence stays out of fit, flagged; a contradiction needs a verified conflicting quote and both readings. Typed absence (CONTRADICTED / NOT_EVIDENCED) and the level comparison (MET below the required level becomes PARTIAL, offline preview only) are built and **unvalidated**. Lines both readings get wrong are not flagged, and two readings do not fix them. Built in `python/calibration/matcher_v3.py` and `python/calibration/v3_offline.py`; neither is imported by the engine.
+
+**Effect on fit** (stored Step 7 verdicts replayed, fit before caps; each cell: median fit, mean change against the current formula, Spearman against the owner's overall level, median confidence where it was computed). The strict rows are sensitivity bounds, not predictions: stored data cannot say which PARTIALs the new wording would reject.
+
+| Scenario | production_like (21 ads) | diagnostic (23 ads) |
+|---|---|---|
+| Current formula | 32, baseline, 0.54 | 26, baseline, 0.59 |
+| Silence out of fit | 44, +14.0, -0.16, 0.72 | 41, +12.4, 0.42, 0.69 |
+| Silence out of fit, stored MISSING on education / certification / language as CONTRADICTED | 43, +11.8, 0.21 | 38, +11.0, 0.52 |
+| Plus strict proxy (PARTIAL at strength 0-1 out of fit) | 49, +16.5, -0.10, 0.68 | 44, +15.3, 0.30, 0.62 |
+| Plus strict bound (every PARTIAL out of fit) | 70, +41.0, -0.27, 0.41 | 70, +41.8, -0.41, 0.31 |
+| Current formula, PARTIAL at strength 0-1 as MISSING | 30, -0.5, 0.52 | 25, -0.7, 0.59 |
+| Current formula, every PARTIAL as MISSING | 21, -12.6, 0.45 | 12, -14.2, 0.61 |
+
+Under the new rules a stricter PARTIAL raises fit and lowers confidence, because a low-credit line leaves the denominator. The measured risk is inflated scores and a broken ranking, not lower scores. Under the current formula it lowers fit.
+
+**PARTIAL lines:** production_like 139 of 350 requirements (strength 1: 18, 2: 85, 3: 29, 4: 7); diagnostic 206 of 489 (strength 1: 26, 2: 116, 3: 53, 4: 11). On the owner's labelled real musts, PARTIAL lines by the owner's answer: production_like yes 5, partly 2 (at strength 0-1: partly 2); diagnostic partly 1, yes 1, no 1 (at strength 0-1: partly 1, no 1).
+
+**Two identical readings** (the stored repeat pair, 6 ads per mode):
+
+| | production_like | diagnostic |
+|---|---|---|
+| Requirements flagged | 18 of 96 (18.8%) | 11 of 122 (9.0%) |
+| Reasons | positive against silence 13, MET against PARTIAL 5 | 7 and 4 |
+| Review queue (at most 3 per ad, musts first) | 14 shown on 5 ads, 4 not shown | 8 shown on 4 ads, 3 not shown |
+| Owner-labelled lines, wrong | 7 of 13, of which 3 flagged, all 3 in the queue | 0 of 16 |
+| Fit against the current formula | median 43, mean +12.7 | median 32, mean +13.3 |
+
+Spearman on 6 ads is not usable and is not recorded.
+
+### What cannot be validated without a paid run
+
+Whether the tighter PARTIAL wording reduces the 9-19% repeat noise; how many PARTIAL verdicts it changes, and to what; how often CONTRADICTED is used and whether it is right; whether the level fields are stable; whether understatement improves. Levels also have no owner labels, so even a paid run can only check their consistency.
+
+### Open decisions (owner)
+
+1. **Slice 3 run.** Dev set, 24 ads, two identical readings, 48 calls, low effort: $0.0755 expected, $0.1001 upper bound, proposed hard cap $0.15; 24 of 24 prompts pass the privacy scan. Not run; needs the owner's explicit approval.
+2. **Closed-world absence.** An earlier decision counts an education, certification or language absent from a listed profile section as CONTRADICTED, but such a line has no quote, and the slice 2 rule asks for a verified conflicting quote. `matcher_v3.py` keeps it NOT_EVIDENCED and marks it `closedWorldAbsent` until the owner decides; an owner-confirmed "I do not have this" stays CONTRADICTED. The replay favours keeping the earlier rule (production_like Spearman 0.21 with it, -0.16 without).
+3. **What fit means when few requirements are settled.** Leaving silence out of fit is what inflates the scores and breaks the ranking. To be decided after slice 3, and before these rules move toward production.
