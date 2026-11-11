@@ -80,13 +80,23 @@ def test_mapping_status_values(tmp_path):
     assert (st("t1"), st("t2"), st("t3"), st("t4")) == ("auto", "pending", "demoted", None)
 
 
-def test_demoted_never_linked_again(tmp_path):
+def test_demoted_pair_never_linked_again_but_the_text_may_link_elsewhere(tmp_path):
     m = mapper(tmp_path, {"t3": {"competencyId": "acceptance-criteria", "status": "demoted"}})
-    assert m.alias_hit("t3") is None
+    assert m.alias_hit("t3") is None and m.alias_hit("t3", "acceptance-criteria") is None
     req = {"text": "t3", "kind": "skill", "importance": "must", "postingQuote": "t3"}
     out = m.resolve(req, "acceptance-criteria", "whole")
     assert out["provisional"] and m.learned["t3"]["status"] == "demoted"
-    assert cg.pool_texts([job("t3")], m, {}) == []
+    assert m.link("t3", "acceptance-criteria", "auto") is False and m.learned["t3"]["status"] == "demoted"
+    assert [i["text"] for i in cg.pool_texts([job("t3")], m, {})] == ["t3"]  # still grouped: another id is allowed
+    assert m.link("t3", "grp:other", "auto") is True
+    assert m.learned["t3"] == {"competencyId": "grp:other", "status": "auto", "demotedIds": ["acceptance-criteria"]}
+    assert m.is_demoted("t3", "acceptance-criteria") and not m.is_demoted("t3", "grp:other")
+
+
+def test_run_refuses_a_demoted_pair_and_links_another_id(tmp_path):
+    learned = {"t3": {"competencyId": "acceptance-criteria", "status": "demoted"}}
+    r, m = go(tmp_path, [job("t3")], [("same_as: acceptance-criteria", "high")], m=mapper(tmp_path, learned))
+    assert m.learned["t3"]["status"] == "demoted" and m.learned["t3"]["competencyId"] == "acceptance-criteria"
 
 
 def test_cached_not_resent_and_batch_size(tmp_path):

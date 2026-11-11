@@ -3,7 +3,7 @@
 The model answers per text: same_as an id of the family list, a group label, or none, with a confidence. It holds
 no threshold. Code decides: high + compatible kind + id on the list -> auto; a high group of new texts -> a
 deterministic provisional group id, members auto, reported as a product.json candidate (never written there);
-anything else -> pending. A demoted text is never linked again.
+anything else -> pending. A demoted text-id pair is never linked again; the same text may link to another id.
 
 The prompt holds ad requirement texts and the family's competency list only: nothing about the candidate.
 
@@ -94,7 +94,7 @@ def save_cache(cache: dict, path: Path) -> None:
 
 
 def pool_texts(jobs: list[dict], mapper: cm.Mapper, cache: dict) -> list[dict]:
-    """Requirements of open ads still `prov:` or behind a pending link, not demoted, not cached; one per normalized text."""
+    """Requirements of open ads still `prov:` or behind a pending link, not cached; one per normalized text."""
     out: dict[str, dict] = {}
     for job in jobs:
         if job.get("isClosed") or row_state.not_found(job):
@@ -104,9 +104,9 @@ def pool_texts(jobs: list[dict], mapper: cm.Mapper, cache: dict) -> list[dict]:
             if not text or key in out or _cache_key(text) in cache:
                 continue
             status = (mapper.learned.get(key) or {}).get("status")
-            if status == cm.DEMOTED or (status not in (None, cm.PENDING)) or key in mapper.seed:
+            if (status not in (None, cm.PENDING, cm.DEMOTED)) or key in mapper.seed:
                 continue
-            if str(r.get("id", "")).startswith("prov:") or status == cm.PENDING:
+            if str(r.get("id", "")).startswith("prov:") or status in (cm.PENDING, cm.DEMOTED):
                 out[key] = {"text": text, "kind": r.get("kind")}
     return list(out.values())
 
