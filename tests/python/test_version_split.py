@@ -101,6 +101,20 @@ def test_evidence_and_role_family_move_the_evidence_version():
     assert _candidate(intelligence={**INTELLIGENCE, "roleFamily": "x"})["evidenceVersion"] != base["evidenceVersion"]
 
 
+def test_a_rescore_after_an_answer_makes_no_http_call(monkeypatch):
+    import requests
+
+    def boom(*_a, **_k):
+        raise AssertionError("a provider was called")
+
+    monkeypatch.setattr(requests, "post", boom)
+    first = _candidate([SQL_YES])
+    cache = {}
+    _match(first, _model(first), cache)
+    outcome = match_posting(POSTING, _candidate([SQL_NO]), confirmed=True, provider="openai", cache=cache)  # the real complete_json, never reached
+    assert _status(outcome.output, "sql") == "MISSING"
+
+
 # --- what is asked and what is cached --------------------------------------------------
 
 def test_a_fact_does_not_stop_its_requirement_being_asked_but_a_settled_language_is_not_sent():

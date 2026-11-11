@@ -1855,9 +1855,9 @@ Planning only: no code, test or data changed, nothing scheduled. Spec: [redesign
 
 Built, committed locally, not pushed. Production `matchScore` and the shadow engine's Fit formula are unchanged. M6, M9 and M10 are not built.
 
-### The prior for Fit (slice M4, the answer to Stage B open decision 3): chosen by rule, to be reviewed
+### The prior for Fit (slice M4, Stage B open decision 3): provisional, the section 7 rule selected no variant, to be reviewed
 
-**Provisional value: prior 0.3, critical unconfirmed must at 0. No variant actually met the rule in section 7 of the spec** (Spearman at least at the current formula's level in both modes), so this is the closest one, not one that passed. Not applied anywhere: production Fit is unchanged until the owner picks.
+**Provisional value: prior 0.3, critical unconfirmed must at 0, chosen by the rule in section 7 of the spec as its closest candidate, to be reviewed. No variant met that rule** (Spearman at least at the current formula's level in both modes): on production_like Step 7 the best is 0.38 against 0.54, so the data do not yet show a prior beating the current formula. Not applied anywhere: production Fit is unchanged until the owner picks.
 
 Spearman against the owner's `overall` level, then `hardRequirements` (text mapped 0 / 1 / 2, heavily tied: treat that column as weak). Modes never pooled. Stored verdicts, no model call. The replay reproduced the recorded figures (0.54 / 0.59, -0.16 / 0.42, 0.50 to -0.20, 0.85 to 0.13).
 
@@ -1887,8 +1887,8 @@ Median fit, 0.3 critical at 0, against current: 39 / 32, 35 / 26, 35 / 33, 37.5 
 
 ### Cost
 
-M5 paid test: one run, 154 Stage A requirement texts, 2 calls, about $0.0024 in the ledger, on temporary copies; real aliases untouched. It found that the fake-model tests had missed the provider's strict schema form (fixed). 54 `auto`, 100 `pending`, 4 new groups; grouping quality was not judged (M6). The real active pool has no text to group until the ads are extracted.
+M5 paid test: one run, 154 Stage A requirement texts, 2 calls, $0.0031 billed (ledger result rows), on temporary copies; real aliases untouched. It found that the fake-model tests had missed the provider's strict schema form (fixed). 54 `auto`, 100 `pending`, 4 new groups; grouping quality was not judged (M6). The real active pool has no text to group until the ads are extracted.
 
-M8 estimate, not run, needs the owner's approval: re-extraction of 546 ads about $0.41 expected, $0.89 upper bound (output tokens assumed at 1,000 per call, unmeasured). Later re-match at the next judged run: 50 ads, about $0.07 expected, $0.08 upper bound; outside the $1.00 budget.
+M8 estimate, not run, needs the owner's approval. Re-extraction of 546 ads, from 46 measured enrichment calls (mean $0.00144, median 1,324 output tokens, p90 2,224): about $0.79 with no prompt-cache hit, about $0.48 if the cache covers the fixed 82% of the prompt. `--max-usd` counts billed result rows and reserves each call at its worst case, so a run stops at the cap and may finish fewer than 546 ads if output runs high. Later re-match at the next judged run, from 207 measured matcher calls (mean $0.0012): 50 ads, about $0.06, up to about $0.10; all 546, about $0.64 over about 11 runs. Outside the $1.00 budget. It cannot be computed from the real pool, since almost no ad is extracted yet.
 
 **Not built:** every test in the spec's list that needs M9 (frequency snapshot, queue order, each conflict rule and the conflict fixtures).
