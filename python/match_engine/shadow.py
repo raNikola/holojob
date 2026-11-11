@@ -236,6 +236,7 @@ class ShadowEngine:
             "provider": output.get("provider"),
             "model": output.get("model"),
             "fromCache": from_cache,
+            **({"staleReason": output["staleReason"]} if output.get("staleReason") else {}),
         }
 
     def apply(self, jobs: list[dict]) -> list[dict]:
@@ -254,9 +255,14 @@ class ShadowEngine:
         send = self.plan(jobs)
         sendable = [j for j in jobs if not j.get("isClosed") and not row_state.not_found(j) and self._posting(j)["facts"].get("requirements")]
         cached = sum(1 for j in sendable if self._cache_key(self._posting(j)) in self._cache)
+        # Cached answers whose language list changed since: counted locally, nothing is re-sent for them.
+        stale = sum(1 for j in sendable
+                    if (raw := self._cache.get(self._cache_key(self._posting(j)))) is not None
+                    and overlay_answers(raw, self.candidate).get("staleReason") == "languages")
         return {
             "enabled": True,
             "toSend": len(send),
+            "staleLanguages": stale,
             "cached": cached,
             "beyondLimit": len(sendable) - cached - len(send) - len(self._excluded_keys),
             "excluded": dict(self.excluded),

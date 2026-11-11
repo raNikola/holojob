@@ -348,6 +348,9 @@ def overlay_answers(raw: dict, candidate: dict) -> dict:
     A requirement the model gave no usable answer for is dropped unless an answer settles it.
     """
     output = copy.deepcopy(raw)
+    # Requirements the language list settled when this answer was made, and the list's version then.
+    was_settled = set(raw.get("languageSettled") or [])
+    list_changed = bool(raw.get("languagesVersion")) and raw["languagesVersion"] != candidate.get("languagesVersion")
     evidence_by_id = {item["id"]: item for item in candidate.get("evidence") or []}
     requirements = []
     for req in output["requirements"]:
@@ -359,6 +362,13 @@ def overlay_answers(raw: dict, candidate: dict) -> dict:
             if conflict := settled.pop("conflict", None):
                 output["warnings"].append(conflict)
             requirements.append(settled)
+        elif req["status"] is None and list_changed and req["id"] in was_settled:
+            # The old list settled it, the new one does not: unknown until it is asked again; nothing is re-sent here.
+            requirements.append({**req, "status": "UNKNOWN", "evidenceId": None, "evidenceQuote": None,
+                                 "quoteVerified": False, "strength": 0, "needsRecheck": True})
+            output["warnings"].append(f"requirement {req['id']!r} was settled by a language list that has changed "
+                                      "and is no longer settled by it: UNKNOWN, needs a recheck")
+            output["staleReason"] = "languages"
         elif req["status"] is None:
             output["warnings"].append(f"dropped requirement {req['id']!r}: the matcher gave no usable answer for it")
         else:
@@ -366,6 +376,7 @@ def overlay_answers(raw: dict, candidate: dict) -> dict:
     output["requirements"] = requirements
     output["profileVersion"] = candidate["profileVersion"]
     output["answersVersion"] = candidate["answersVersion"]
+    output["languagesVersion"] = candidate.get("languagesVersion")
     return output
 
 
@@ -414,7 +425,8 @@ def match_posting(
 
     requirements, warnings = drop_unquoted(((posting.get("facts") or {}).get("requirements")) or [], description)
     # A language the candidate's list settles is not sent: overlay_answers() settles it at every use.
-    asked = [(f"r{index + 1}", req) for index, req in enumerate(requirements) if settle_language(req, candidate) is None]
+    by_language = [req["id"] for req in requirements if settle_language(req, candidate) is not None]
+    asked = [(f"r{index + 1}", req) for index, req in enumerate(requirements) if req["id"] not in by_language]
     refs = {ref for ref, _ in asked}
 
     try:
@@ -445,6 +457,9 @@ def match_posting(
         "promptVersion": PROMPT_VERSION,
         "payloadFormat": payload_format(compact),
         "evidenceVersion": candidate["evidenceVersion"],
+        # Which requirements the language list settled, and its version: only to notice a later change (never sent).
+        "languagesVersion": candidate.get("languagesVersion"),
+        "languageSettled": by_language,
         "adFingerprint": ad_fingerprint,
         "cacheKey": key,
         "provider": provider,

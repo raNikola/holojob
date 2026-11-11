@@ -290,6 +290,15 @@ def answers_version(confirmed_facts: list[dict], gates: dict) -> str:
     return _hash({"confirmedFacts": confirmed_facts, "gates": gates})
 
 
+def languages_version(gates: dict) -> str:
+    """Hash of the candidate's language list alone (contract 6.1), order-insensitive.
+
+    Not part of evidenceVersion (a language change never invalidates a cached verdict). It is
+    recorded with a cached matcher answer so a later list change can be noticed locally.
+    """
+    return _hash({"languages": sorted({str(x).strip().lower() for x in gates.get("languages") or []})})
+
+
 def build_candidate(profile: dict, intelligence: dict, confirmed_facts: list[dict]) -> dict:
     """The engine's `candidate` input, minus nothing; `roleFamily` is null when the profile sets none."""
     evidence = build_evidence(profile, intelligence)
@@ -299,6 +308,7 @@ def build_candidate(profile: dict, intelligence: dict, confirmed_facts: list[dic
         "profileVersion": profile_version(evidence, confirmed_facts, gates, role_family),
         "evidenceVersion": evidence_version(evidence, role_family),
         "answersVersion": answers_version(confirmed_facts, gates),
+        "languagesVersion": languages_version(gates),
         "roleFamily": role_family,
         "evidence": evidence,
         "confirmedFacts": confirmed_facts,
