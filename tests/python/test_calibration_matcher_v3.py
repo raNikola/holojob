@@ -196,9 +196,9 @@ def test_a_requirement_whose_quote_is_not_in_the_ad_is_dropped_before_the_model_
 
 
 def test_confirmed_facts_are_settled_in_code_and_never_asked():
-    prepared = v3.prepare(posting(), candidate(facts=[{"competencyId": "r-1", "has": False, "note": ""}]), IDENTITY)
+    prepared = v3.prepare(posting(), candidate(facts=[{"competencyId": "r-1", "answer": "no", "qualifier": None, "note": "", "coveredTexts": []}]), IDENTITY)
     assert prepared["asked"] == [] and prepared["resolved"][0]["status"] == v3.CONTRADICTED and prepared["resolved"][0]["ownerConfirmedAbsent"]
-    yes = v3.prepare(posting(), candidate(facts=[{"competencyId": "r-1", "has": True, "note": ""}]), IDENTITY)
+    yes = v3.prepare(posting(), candidate(facts=[{"competencyId": "r-1", "answer": "yes", "qualifier": None, "note": "", "coveredTexts": []}]), IDENTITY)
     assert yes["resolved"][0]["status"] == v3.MET
 
 
