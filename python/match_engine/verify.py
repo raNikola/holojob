@@ -55,6 +55,12 @@ def apply_confirmed_fact(req: dict, fact: dict, evidence_by_id: dict[str, dict])
     return _resolved(req, "MISSING", None, None, True, 0)
 
 
+def resolve_fact(req: dict, candidate: dict, evidence_by_id: dict[str, dict]) -> dict | None:
+    """The requirement as the candidate's confirmed answer settles it, or None when the matcher's verdict stands."""
+    fact = next((f for f in candidate.get("confirmedFacts") or [] if f["competencyId"] == req["id"]), None)
+    return apply_confirmed_fact(req, fact, evidence_by_id) if fact else None
+
+
 def apply_proposal(req: dict, proposal: dict, evidence_by_id: dict[str, dict]) -> tuple[dict, str | None]:
     """(the requirement with its verified status, a warning or None).
 
