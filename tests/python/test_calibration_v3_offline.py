@@ -98,6 +98,40 @@ def test_the_replay_prints_no_text_and_writes_nothing(tmp_path):
     assert sorted(p.name for p in out.iterdir()) == before
 
 
+def test_fit_with_a_prior_gives_the_exact_value_per_variant():
+    reqs = [req(1, "MET", 3), req(2, "UNKNOWN", 0), req(3, "MISSING", 0, importance="preferred"), req(4, "UNKNOWN", 0, kind="education")]
+    # weights: MET must 3 x 9/10, two silent musts 3 each, preferred silence stays out; denominator 9
+    assert off.fit_with_prior(reqs, off.PRIORS[0]) == 48  # (2.7 + 2 x 0.27 x 3) / 9
+    assert off.fit_with_prior(reqs, off.PRIORS[1]) == 60  # (2.7 + 2 x 0.45 x 3) / 9
+    assert off.fit_with_prior(reqs, off.PRIORS[2]) == 72  # (2.7 + 2 x 0.63 x 3) / 9
+    assert off.fit_with_prior(reqs, off.PRIORS[0], critical_at_prior=False) == 39  # (2.7 + 0.81) / 9
+    assert off.fit_with_prior(reqs, off.PRIORS[1], critical_at_prior=False) == 45  # (2.7 + 1.35) / 9
+    assert off.fit_with_prior(reqs, off.PRIORS[2], critical_at_prior=False) == 51  # (2.7 + 1.89) / 9
+    assert off.fit_with_prior([req(1, "UNKNOWN", 0, importance="nice")], off.PRIORS[1]) is None
+
+
+def test_closed_world_absence_is_silence_in_every_prior_variant():
+    absent = [req(1, "MET", 3), req(2, "MISSING", 0, kind="education")]
+    assert off.fit_with_prior(absent, off.PRIORS[1], critical_at_prior=False) == 45  # counted as an unconfirmed critical must, whatever the profile lists
+    assert off.fit_with_prior([req(1, "MET", 3), {**req(2, "CONTRADICTED", 0)}], off.PRIORS[1]) == 45  # a real contradiction earns nothing and is not a prior
+
+
+def test_the_replay_reports_every_prior_variant_per_mode_on_both_verdict_sets(tmp_path):
+    out, frozen, sample = stage(tmp_path)
+    for i, ad in enumerate(frozen["ads"].values()):
+        ad["hardRequirements"] = ("no", "partial", "yes")[i % 3]
+    (out / "matcher-v3-run.json").write_text(json.dumps({"ads": {j: e for j, e in json.loads((out / "matcher-cause-test.json").read_text())["ads"].items()}, "calls": {
+        f"{n}|{r['jobId']}": {"reading": n, "jobId": r["jobId"], "requirements": {q["id"]: {**q, "kind": "skill", "importance": "must", "requirementLevel": None, "candidateLevel": None} for q in r["requirements"]}}
+        for n, arm in ((1, "full_1"), (2, "full_2")) for r in json.loads((out / "matcher-cause-test.json").read_text())["calls"].values() if r["arm"] == arm}}))
+    report = off.replay(out, frozen, sample, SECTIONS)
+    assert set(report["priors"]) == {"Step 7 verdicts", "slice 3 joined verdicts"}
+    for modes in report["priors"].values():
+        assert set(modes) == set(off.MODES)
+        assert len(modes["production_like"]["rows"]) == 2 + 6 and modes["production_like"]["rows"][off.CURRENT]["meanDelta"] == 0
+    text = "\n".join(off.render_replay(report))
+    assert "PRIOR VARIANTS" in text and "SECRET" not in text
+
+
 PROFILE = {"basicProfile": {"fullName": "Zorana Testovic", "email": "zorana.testovic@example.test", "phone": "+381 64 123 4567"},
            "resume": {"parsedData": {"links": ["https://zorana.example/me"], "experienceDetail": [
                {"title": "Analyst", "company": "Initech", "start": "2018-01", "end": "2022-06", "bullets": ["Built dashboards for finance", "Reach Zorana Testovic at zorana.testovic@example.test"]}],

@@ -21,6 +21,7 @@ import json
 import statistics
 import sys
 from collections import Counter
+from fractions import Fraction
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -37,6 +38,7 @@ from confirmed_facts import load as load_confirmed_facts  # noqa: E402
 from evidence_index import build_candidate  # noqa: E402
 from llm_client import service_tier_for  # noqa: E402
 from match_engine import matcher  # noqa: E402
+from match_engine.constants import IMPORTANCE_WEIGHT, STRENGTH_CREDIT  # noqa: E402
 from match_engine.fit import fit_value  # noqa: E402
 from redact import identity_of  # noqa: E402
 from calibration import aggregation_preview as ap  # noqa: E402
@@ -56,6 +58,13 @@ NEW_SCHEMA_OUTPUT_FACTOR = 1.4  # assumed: no call with the new schema has been 
 CACHED_INPUT_SHARE = 0.1  # OpenAI bills cached input at 10%; an identical repeat was 99.96% cached in slice 1
 READINGS = 2
 PROPOSED_CAP_USD = 0.15
+# Competency memory M4 (spec section 7): what an unconfirmed must earns, as a share of the credit for described work.
+PRIORS = (Fraction(3, 10), Fraction(1, 2), Fraction(7, 10))
+PRIOR_BASE_STRENGTH = 3
+CURRENT, SILENCE_OUT = "current formula", "silence out of fit"
+HARD_LEVEL = {"no": 0, "partial": 1, "yes": 2}
+TOP_N = 10
+LOW_CONFIDENCE = 0.5
 
 
 def _load(path: Path):
@@ -91,6 +100,56 @@ SCENARIOS = {
     "CURRENT formula + strict proxy (PARTIAL at strength 0-1 scored as MISSING)": lambda rs: _current([demote(r, LISTED_ONLY, "MISSING") for r in rs]),
     "CURRENT formula + strict bound (every PARTIAL scored as MISSING)": lambda rs: _current([demote(r, None, "MISSING") for r in rs]),
 }
+
+
+def fit_with_prior(reqs: list[dict], prior: Fraction, critical_at_prior: bool = True) -> int | None:
+    """Fit before caps with a NOT_EVIDENCED must in the denominator, earning prior x the credit of strength 3. Other silence stays out; a critical
+    unconfirmed must earns the prior or nothing. No profile sections are passed, so closed-world absence is NOT_EVIDENCED (owner decision A1)."""
+    num = den = Fraction(0)
+    for req in reqs:
+        status = ap.typed_status(req, {})
+        weight = IMPORTANCE_WEIGHT[req["importance"]]
+        if status != v3.NOT_EVIDENCED:
+            den += weight
+            num += ap._credit(req, status) * weight
+        elif req["importance"] == "must":
+            den += weight
+            if critical_at_prior or not ap.is_critical(req, status):
+                num += prior * STRENGTH_CREDIT[PRIOR_BASE_STRENGTH] * weight
+    return ap._round_half_up(100 * num / den) if den else None
+
+
+def prior_variants() -> dict:
+    variants = {SILENCE_OUT: _new}
+    for prior in PRIORS:
+        for at_prior in (True, False):
+            variants[f"prior {prior}, critical must at {'the prior' if at_prior else '0'}"] = lambda rs, p=prior, a=at_prior: fit_with_prior(rs, p, a)
+    return variants
+
+
+def prior_rows(verdicts: dict, baseline: dict, gates: dict, ads: dict) -> dict:
+    """Every variant on one mode's verdicts, against the current formula on the Step 7 verdicts of the same ads. Rank agreement with both owner labels."""
+    baseline = {j: baseline[j] for j in verdicts}
+    overall = {j: ads[j]["overall"] for j in verdicts}
+    hard = {j: HARD_LEVEL[ads[j]["hardRequirements"]] for j in verdicts if ads[j].get("hardRequirements") in HARD_LEVEL}
+    confidence = {j: float(ap.confidence_of(verdicts[j], gates[j], {})) for j in verdicts}
+    rows = {}
+    for name, fits in {CURRENT: baseline, **{n: {j: fn(verdicts[j]) for j in verdicts} for n, fn in prior_variants().items()}}.items():
+        e = effect(baseline, fits, overall)
+        known = [j for j in hard if fits[j] is not None and baseline[j] is not None]
+        rho_hard = spearman([float(hard[j]) for j in known], [float(fits[j]) for j in known]) if len(known) >= 3 else None
+        top = sorted((j for j in fits if fits[j] is not None), key=lambda j: (-fits[j], j))[:TOP_N]
+        rows[name] = {"n": e["n"], "spearmanOverall": e["spearman"], "spearmanHard": None if rho_hard is None else round(rho_hard, 2), "medianFit": e["medianFit"], "meanDelta": e["meanDelta"],
+                      "medianDelta": e["medianDelta"], "top": len(top), "lowConfidenceInTop": sum(confidence[j] < LOW_CONFIDENCE for j in top)}
+    return {"ads": len(verdicts), "hardLabels": dict(Counter(hard.values())), "rows": rows}
+
+
+def joined_slice3(doc: dict) -> dict:
+    """{jobId: [requirement]} of the slice 3 run: its two identical readings joined by the Stage B rule."""
+    read = {1: {}, 2: {}}
+    for entry in doc["calls"].values():
+        read[entry["reading"]][entry["jobId"]] = entry["requirements"]
+    return {j: list(v3.aggregate_two(read[1][j], read[2][j]).values()) for j in doc["ads"] if j in read[1] and j in read[2]}
 
 
 def effect(base: dict, new: dict, owner: dict) -> dict:
@@ -192,6 +251,15 @@ def replay(out: Path, frozen: dict, sample: dict, sections: dict | None = None) 
     if cause.exists():
         doc = _load(cause)
         report["twoReadings"] = two_reading_replay(doc["calls"], engine, doc["ads"], owner, labelled_lines(frozen, sample, doc["ads"]))
+    gates = {j: e.get("gates") or [] for j, e in engine.items()}
+    step7 = {j: e["output"]["requirements"] for j, e in engine.items() if j in owner}
+    baseline = {j: _current(reqs) for j, reqs in step7.items()}
+    of_mode = lambda mode, verdicts: {j: reqs for j, reqs in verdicts.items() if chosen[j] == mode}
+    report["priors"] = {"Step 7 verdicts": {m: prior_rows(of_mode(m, step7), baseline, gates, frozen["ads"]) for m in MODES}}
+    run3 = out / "matcher-v3-run.json"
+    if run3.exists():
+        joined = joined_slice3(_load(run3))
+        report["priors"]["slice 3 joined verdicts"] = {m: prior_rows(of_mode(m, joined), baseline, gates, frozen["ads"]) for m in MODES}
     return report
 
 
@@ -217,6 +285,12 @@ def render_replay(report: dict) -> list[str]:
         lines.append(f"  aggregation against the current formula: {fmt(t['aggregationEffect'])}")
         lines.append(f"  + strict proxy: {fmt(t['strictProxyEffect'])}")
         lines.append(f"  on {t['labelled']} labelled lines: wrong {t['wrong']}, flagged {t['wrongFlaggedAnywhere']}, inside the queue {t['wrongInQueue']}. Lines both readings got wrong are not flagged.")
+    for data, modes in report.get("priors", {}).items():
+        for mode in MODES:
+            m = modes[mode]
+            lines.append(f"\n== PRIOR VARIANTS, {data}, {mode.upper()}: {m['ads']} ads; hardRequirements labels {m['hardLabels']} (0 no, 1 partial, 2 yes: heavy ties)" + ("" if mode == MODES[0] else "  [DIAGNOSTIC ONLY]"))
+            for name, r in m["rows"].items():
+                lines.append(f"  {name}: n {r['n']}; Spearman overall {r['spearmanOverall']}, hardRequirements {r['spearmanHard']}; median fit {r['medianFit']}; change mean {r['meanDelta']} median {r['medianDelta']}; confidence under {LOW_CONFIDENCE} in top {r['top']}: {r['lowConfidenceInTop']}")
     return lines
 
 
