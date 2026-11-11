@@ -13,7 +13,7 @@ NO_CACHE = Path("/nonexistent/engine.json")
 BODY = "Product Manager.\nRequirements:\n* Hands-on SQL for analytics\n* Roadmaps\n"
 EVIDENCE = [{"id": "ev-b", "text": "Wrote SQL daily", "source": "role", "role": "PM", "start": "2020", "end": None,
              "strength": 3}]
-CANDIDATE = {"profileVersion": "pv1", "roleFamily": "product", "evidence": EVIDENCE, "confirmedFacts": [], "gates": {}}
+CANDIDATE = {"profileVersion": "pv1", "evidenceVersion": "pv1", "answersVersion": "av1", "roleFamily": "product", "evidence": EVIDENCE, "confirmedFacts": [], "gates": {}}
 LOC_CANDIDATE = {**CANDIDATE, "gates": {"allowedLocations": ["REMOTE", "EU", "RS"], "relocation": "abroad",
                                         "country": "Serbia", "workAuthorization": {"holds": [{"jurisdiction": "RS"}]}}}
 SQL = {"id": "sql", "provisional": False, "text": "SQL", "kind": "skill", "importance": "must",

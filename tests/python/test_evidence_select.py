@@ -90,7 +90,7 @@ def posting(reqs, description="We want SQL and vendor negotiation."):
 
 
 def candidate(profile_version="pv1"):
-    return {"profileVersion": profile_version, "roleFamily": "product", "evidence": EVIDENCE, "confirmedFacts": [],
+    return {"profileVersion": profile_version, "evidenceVersion": profile_version, "answersVersion": "av1", "roleFamily": "product", "evidence": EVIDENCE, "confirmedFacts": [],
             "gates": {}}
 
 

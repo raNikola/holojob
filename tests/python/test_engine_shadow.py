@@ -12,7 +12,7 @@ from match_engine.shadow import ShadowEngine
 DESCRIPTION = "Product Manager.\nRequirements:\n* Hands-on SQL for analytics\nFully remote."
 EVIDENCE = [{"id": "ev-b", "text": "Wrote SQL daily", "source": "role", "role": "PM", "start": "2020", "end": None,
              "strength": 3}]
-CANDIDATE = {"profileVersion": "pv1", "roleFamily": "product", "evidence": EVIDENCE, "confirmedFacts": [], "gates": {}}
+CANDIDATE = {"profileVersion": "pv1", "evidenceVersion": "pv1", "answersVersion": "av1", "roleFamily": "product", "evidence": EVIDENCE, "confirmedFacts": [], "gates": {}}
 REQ = {"id": "sql", "provisional": False, "text": "SQL", "kind": "skill", "importance": "must",
        "postingQuote": "Hands-on SQL"}
 

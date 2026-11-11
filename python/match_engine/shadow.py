@@ -40,7 +40,7 @@ from .constants import ENGINE_VERSION
 from .evidence_select import mode_of
 from .fit import score
 from .gates import CHEAP_GATES, PASS, cheap_gate_report, gate_results
-from .matcher import EVIDENCE_FIELDS, cache_key, match_posting, posting_from_job
+from .matcher import EVIDENCE_FIELDS, cache_key, match_posting, overlay_answers, posting_from_job
 
 ROOT = Path(__file__).resolve().parents[2]
 CACHE_PATH = ROOT / "data" / "cache" / "engine.json"
@@ -98,8 +98,9 @@ class ShadowEngine:
     def __init__(self, candidate: dict, *, judge: bool, provider: str, model: str | None,
                  cache_path: Path | None = None, limit: int | None = DEFAULT_LIMIT,
                  complete=complete_json, workers: int = 4, identity: tuple[str, list[str]] | None = None,
-                 select=None, compact=None, remap: dict[str, str] | None = None):
+                 select=None, compact=None, remap: dict[str, str] | None = None, memory=None):
         self.candidate = candidate
+        self.memory = memory
         # redact.identity_of(profile), for the matcher's redaction; never sent.
         self.identity = identity
         self.judge = judge
@@ -132,7 +133,7 @@ class ShadowEngine:
         return posting_from_job(job, self.remap)
 
     def _cache_key(self, posting: dict) -> str:
-        return cache_key(job_fingerprint(posting), self.candidate["profileVersion"], self.select,
+        return cache_key(job_fingerprint(posting), self.candidate["evidenceVersion"], self.select,
                          posting["facts"].get("requirements"))
 
     def plan(self, jobs: list[dict]) -> set:
@@ -178,9 +179,9 @@ class ShadowEngine:
             return None
         key = self._cache_key(posting)
         with self._lock:
-            output = self._cache.get(key)
-        from_cache = output is not None
-        if output is None:
+            raw = self._cache.get(key)
+        from_cache = raw is not None
+        if raw is None:
             if not self.judge:
                 self._count("uncached")
                 return None
@@ -196,9 +197,10 @@ class ShadowEngine:
             if self.refusal:
                 self._count("refused")
                 return None
+            fresh: dict[str, dict] = {}
             try:
                 outcome = match_posting(posting, self.candidate, confirmed=True, provider=self.provider,
-                                        model=self.model, complete=self._complete, identity=self.identity,
+                                        model=self.model, complete=self._complete, cache=fresh, identity=self.identity,
                                         select=self.select, compact=self.compact)
             except GuardrailRefused as exc:
                 with self._lock:
@@ -212,16 +214,21 @@ class ShadowEngine:
                       file=sys.stderr)
                 self._count("failed")
                 return {"engineVersion": ENGINE_VERSION, "error": outcome.error}
-            output = outcome.output
+            raw = fresh[key]
             with self._lock:
-                self._cache[key] = output
+                self._cache[key] = raw
+        output = overlay_answers(raw, self.candidate)
+        if self.memory is not None:
+            with self._lock:
+                self.memory.observe(posting, output)
         self._count("cached" if from_cache else "matched")
         if from_cache and self.judge:
             ai_gate.record_cache_hit(self.provider, self.model, feature="evidence-matcher", job_id=_key(job))
         gates = gate_results(job, self.candidate, output["gates"], output["requirements"])
         return {
             "engineVersion": ENGINE_VERSION,
-            **{k: output[k] for k in ("promptVersion", "profileVersion", "adFingerprint", "cacheKey")},
+            **{k: output[k] for k in ("promptVersion", "profileVersion", "evidenceVersion", "answersVersion",
+                                      "adFingerprint", "cacheKey")},
             "requirements": output["requirements"],
             "cvCoverage": None,
             **score(output["requirements"], gates),
@@ -259,6 +266,8 @@ class ShadowEngine:
         }
 
     def save(self) -> None:
+        if self.memory is not None:
+            self.memory.save()
         if not self.judge:
             return
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)

@@ -2,10 +2,10 @@
 
 Read-only and local: no model, no network, nothing written. The answer holds counts, the two profile versions (16 hex characters) and flags;
 no profile text, no job text, no file name. `profileVersion` is computed by the same code the scorer and the matcher use
-(job_scoring.evidence_index), so "changes: no" means every cached matcher answer still matches.
+(job_scoring.evidence_index). An import changes neither the confirmed facts nor the gates, so "changes: no" means every cached matcher answer still matches.
 
 Which cache depends on what (docs/DECISIONS.md, Wave 7):
-  - matcher cache (data/cache/engine.json): the key holds profileVersion, so any change of the evidence misses every entry;
+  - matcher cache (data/cache/engine.json): the key holds evidenceVersion, so any change of the evidence misses every entry;
   - fit judge cache: the intelligence digest, not the profile: unchanged until the intelligence is regenerated;
   - job-analysis findings (data/ai/findings/job): a hash that includes a profile summary; they may miss when those fields change.
 """
@@ -38,7 +38,7 @@ def _summary_inputs(profile: dict) -> dict:
 
 
 def matcher_versions(keys) -> dict[str, int]:
-    """Entries per profileVersion, from the cache key names only (`ad:profileVersion:prompt:...`)."""
+    """Entries per evidenceVersion, from the cache key names only (`ad:evidenceVersion:prompt:...`)."""
     counts: dict[str, int] = {}
     for key in keys:
         parts = str(key).split(":")
@@ -55,6 +55,8 @@ def profile_impact(before: dict, after: dict, intelligence: dict, facts: list, c
     ids_after = {e["id"] for e in cand_after["evidence"]}
     changed = cand_before["profileVersion"] != cand_after["profileVersion"]
     versions = matcher_versions(cache_keys)
+    evidence_before, evidence_after = cand_before["evidenceVersion"], cand_after["evidenceVersion"]
+    evidence_changed = evidence_before != evidence_after
     summary_changed = _summary_inputs(before) != _summary_inputs(after)
     return {
         "profileVersion": {"before": cand_before["profileVersion"], "after": cand_after["profileVersion"], "changed": changed},
@@ -64,9 +66,9 @@ def profile_impact(before: dict, after: dict, intelligence: dict, facts: list, c
         },
         "matcher": {
             "entriesTotal": sum(versions.values()),
-            "matchingNow": versions.get(cand_before["profileVersion"], 0),
-            "stopMatching": versions.get(cand_before["profileVersion"], 0) if changed else 0,
-            "alreadyMatchingAfter": versions.get(cand_after["profileVersion"], 0) if changed else 0,
+            "matchingNow": versions.get(evidence_before, 0),
+            "stopMatching": versions.get(evidence_before, 0) if evidence_changed else 0,
+            "alreadyMatchingAfter": versions.get(evidence_after, 0) if evidence_changed else 0,
         },
         "judge": {"changes": False},
         "findings": {"stored": findings_count, "mayMiss": summary_changed},

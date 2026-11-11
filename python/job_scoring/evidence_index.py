@@ -261,20 +261,33 @@ def build_gates(intelligence: dict) -> dict:
     }
 
 
+def _hash(payload: dict) -> str:
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
 def profile_version(evidence: list[dict], confirmed_facts: list[dict], gates: dict, role_family: str | None) -> str:
     """Hash of everything under `candidate` that can change a result (sections 1.1 and 6).
 
     Any change to an evidence item (text, dates, strength, order), a confirmed
     fact, a gate or the role family gives a different version.
     """
-    payload = {
+    return _hash({
         "evidence": evidence,
         "confirmedFacts": confirmed_facts,
         "gates": gates,
         "roleFamily": role_family,
-    }
-    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    })
+
+
+def evidence_version(evidence: list[dict], role_family: str | None) -> str:
+    """Hash of what a cached matcher verdict depends on (contract 6.1): the only candidate input in the cache key."""
+    return _hash({"evidence": evidence, "roleFamily": role_family})
+
+
+def answers_version(confirmed_facts: list[dict], gates: dict) -> str:
+    """Hash of what code applies on top of the cached verdicts (contract 6.1); it never invalidates them."""
+    return _hash({"confirmedFacts": confirmed_facts, "gates": gates})
 
 
 def build_candidate(profile: dict, intelligence: dict, confirmed_facts: list[dict]) -> dict:
@@ -284,6 +297,8 @@ def build_candidate(profile: dict, intelligence: dict, confirmed_facts: list[dic
     role_family = (intelligence or {}).get("roleFamily") or None
     return {
         "profileVersion": profile_version(evidence, confirmed_facts, gates, role_family),
+        "evidenceVersion": evidence_version(evidence, role_family),
+        "answersVersion": answers_version(confirmed_facts, gates),
         "roleFamily": role_family,
         "evidence": evidence,
         "confirmedFacts": confirmed_facts,

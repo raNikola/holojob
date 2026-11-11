@@ -23,7 +23,7 @@ def _profile(**parsed):
 
 
 def _version(profile, intelligence=None):
-    return build_candidate(profile, intelligence or {}, [])["profileVersion"]
+    return build_candidate(profile, intelligence or {}, [])["evidenceVersion"]
 
 
 def test_an_identical_profile_keeps_the_version_so_no_cached_answer_is_lost():
@@ -66,7 +66,8 @@ def test_a_change_reports_how_many_cached_entries_stop_matching_and_nothing_else
     a, b = _profile(), _profile(skills=["SQL", "Python"])
     va, vb = _version(a), _version(b)
     out = impact.profile_impact(a, b, {}, [], cache_keys=[f"x:{va}:p", f"y:{va}:p", f"z:{vb}:p", "odd"])
-    assert out["profileVersion"] == {"before": va, "after": vb, "changed": True}
+    assert out["profileVersion"] == {"before": build_candidate(a, {}, [])["profileVersion"],
+                                     "after": build_candidate(b, {}, [])["profileVersion"], "changed": True}
     assert out["matcher"] == {"entriesTotal": 3, "matchingNow": 2, "stopMatching": 2, "alreadyMatchingAfter": 1}
     assert out["evidence"]["added"] == 1 and out["evidence"]["removed"] == 0
     assert out["judge"] == {"changes": False}

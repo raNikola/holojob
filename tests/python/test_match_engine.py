@@ -42,7 +42,7 @@ def _posting(requirements=REQS):
 
 
 def _candidate(facts=()):
-    return {"profileVersion": "pv1", "roleFamily": "product", "evidence": EVIDENCE,
+    return {"profileVersion": "pv1", "evidenceVersion": "pv1", "answersVersion": "av1", "roleFamily": "product", "evidence": EVIDENCE,
             "confirmedFacts": list(facts), "gates": {}}
 
 
@@ -169,15 +169,15 @@ def test_a_downgrade_is_reported():
 
 # --- confirmed facts ------------------------------------------------------------
 
-def test_confirmed_facts_override_the_model_and_are_not_asked():
+def test_confirmed_facts_override_the_model_and_are_still_asked():
     facts = [{"competencyId": "sql", "has": True, "note": ""},
              {"competencyId": "prov:aaaaaaaaaaaa", "has": False, "note": "B1 only"}]
-    # The model claims the opposite for everything; only r1 is asked.
+    # The model claims the opposite for everything; every requirement is asked, the answers win in code.
     fake = Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0),
                        ("r3", "MET", "ev-a", GOOD, 4)))
     outcome = _run(fake, candidate=_candidate(facts))
     asked = fake.prompts[0].split("=== BEGIN REQUIREMENTS ===")[1].split("=== END")[0]
-    assert '"r1"' in asked and "SQL" not in asked and "Fluent English" not in asked
+    assert '"r1"' in asked and "SQL" in asked and "Fluent English" in asked
     by_id = {r["id"]: r for r in outcome.output["requirements"]}
     assert _key(by_id["sql"]) == ("MET", None, None, True, CONFIRMED_FACT_STRENGTH)
     assert _key(by_id["prov:aaaaaaaaaaaa"]) == ("MISSING", None, None, True, 0)
@@ -200,7 +200,7 @@ def test_a_full_match_with_gate_quotes_passed_through():
     assert outcome.output["requirements"][1]["strength"] == 1  # the item is a claim
     assert {"gate": "location", "quote": "Fully remote within Serbia."} in outcome.output["gates"]
     assert [g["gate"] for g in outcome.output["gates"]] == list(GATES)
-    assert cache == {outcome.output["cacheKey"]: outcome.output}
+    assert list(cache) == [outcome.output["cacheKey"]]
     # A second run is a cache hit: no call.
     assert _run(Fake(), cache=cache).output == outcome.output
 
@@ -272,14 +272,14 @@ def _language_candidate(languages, evidence=EVIDENCE):
     return {**_candidate(), "gates": {"languages": languages}, "evidence": evidence}
 
 
-def test_a_spoken_language_is_met_without_asking_the_model():
+def test_a_spoken_language_is_met_in_code_and_the_list_is_not_sent():
     fake = Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "PARTIAL", "ev-b", "SQL", 1)))
     outcome = _run(fake, candidate=_language_candidate(["Serbian (native)", "English (fluent)"]))
     english = next(r for r in outcome.output["requirements"] if r["kind"] == "language")
     assert (english["status"], english["quoteVerified"], english["evidenceQuote"]) == ("MET", True, "English (fluent)")
     assert english["evidenceId"] == "gates.languages" and english["strength"] == CONFIRMED_FACT_STRENGTH
-    # Not asked: the prompt carries r1 and r2 only, and none of the candidate's languages.
-    assert '"r3"' not in fake.prompts[0] and "Fluent English" not in fake.prompts[0].split("END JOB AD")[1]
+    # The ad's requirement is asked; none of the candidate's languages are sent.
+    assert '"r3"' in fake.prompts[0]
     assert "Serbian (native)" not in fake.prompts[0]
 
 
@@ -301,7 +301,7 @@ def _lang_run(text, languages, importance="must", evidence=EVIDENCE):
 def test_a_required_language_the_list_does_not_cover_is_missing():
     fake, outcome = _lang_run("Fluent Russian", ["Serbian (native)", "English (fluent)"])
     assert (_language(outcome)["status"], _language(outcome)["evidenceId"]) == ("MISSING", None)
-    assert '"r3"' not in fake.prompts[0]
+    assert '"r3"' in fake.prompts[0]
 
 
 @pytest.mark.parametrize("text", ["Croatian", "Bosnian", "Serbo-Croatian", "Macedonian"])
@@ -332,7 +332,7 @@ def test_an_optional_language_the_evidence_mentions_goes_to_the_model():
 
 def test_a_must_have_language_the_evidence_mentions_is_a_reported_conflict_not_a_choice():
     fake, outcome = _lang_run("Fluent English", ["German (C1)"], evidence=EVIDENCE_EN)
-    assert '"r3"' not in fake.prompts[0] and _language(outcome)["status"] == "MISSING"
+    assert '"r3"' in fake.prompts[0] and _language(outcome)["status"] == "MISSING"
     assert "conflict" not in _language(outcome)
     assert any("must-have" in w and "English" in w for w in outcome.warnings)
 

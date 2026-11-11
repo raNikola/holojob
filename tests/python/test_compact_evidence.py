@@ -74,7 +74,7 @@ def run(compact, evidence_id, quote):
     fake = Fake(evidence_id, quote)
     posting = {"id": "j", "title": "PM", "company": "X", "location": "", "description": "We need Postgres.",
                "facts": {"requirements": [REQ]}}
-    cand = {"profileVersion": "pv1", "roleFamily": "product", "evidence": EVIDENCE, "confirmedFacts": [], "gates": {}}
+    cand = {"profileVersion": "pv1", "evidenceVersion": "pv1", "answersVersion": "av1", "roleFamily": "product", "evidence": EVIDENCE, "confirmedFacts": [], "gates": {}}
     return match_posting(posting, cand, confirmed=True, provider="t", complete=fake, compact=compact), fake
 
 
@@ -96,7 +96,7 @@ def test_the_cache_key_and_versions_do_not_change_and_the_format_is_metadata_onl
     cache = {}
     posting = {"id": "j", "title": "PM", "company": "X", "location": "", "description": "We need Postgres.",
                "facts": {"requirements": [REQ]}}
-    cand = {"profileVersion": "pv1", "roleFamily": "product", "evidence": EVIDENCE, "confirmedFacts": [], "gates": {}}
+    cand = {"profileVersion": "pv1", "evidenceVersion": "pv1", "answersVersion": "av1", "roleFamily": "product", "evidence": EVIDENCE, "confirmedFacts": [], "gates": {}}
     match_posting(posting, cand, confirmed=True, provider="t", complete=Fake("ev-1", "Led the migration"), cache=cache)
     never = Fake(None, None)
     hit = match_posting(posting, cand, confirmed=True, provider="t", complete=never, cache=cache, compact=True)

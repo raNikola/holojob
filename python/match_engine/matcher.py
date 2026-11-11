@@ -20,6 +20,7 @@ posting: the caller keeps the local score, and nothing is cached.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -34,7 +35,7 @@ from requirement_frames import remap_facts
 
 from .evidence_select import mode_of, select_evidence, version_of
 from .gates import GATES, settle_language
-from .verify import STATUSES, apply_confirmed_fact, apply_proposal, drop_unquoted
+from .verify import STATUSES, apply_proposal, drop_unquoted, resolve_fact
 
 MATCH_PROMPT_VERSION = 2
 # One string for both prompts, as the contract's `promptVersion` asks.
@@ -322,8 +323,8 @@ def requirements_hash(requirements: list[dict] | None) -> str:
     return hashlib.sha256("\n".join(rows).encode("utf-8")).hexdigest()[:16]
 
 
-def cache_key(ad_fingerprint: str, profile_version: str, selected=None, requirements: list[dict] | None = None) -> str:
-    """Section 6: adFingerprint + profileVersion + promptVersion + the ad's requirement set.
+def cache_key(ad_fingerprint: str, evidence_version: str, selected=None, requirements: list[dict] | None = None) -> str:
+    """Section 6.1: adFingerprint + evidenceVersion + promptVersion + the ad's requirement set.
 
     The requirement set is part of the key: the stored result carries its own requirements[],
     so a result must never answer for an ad whose requirements (ids or texts) have changed since,
@@ -332,12 +333,40 @@ def cache_key(ad_fingerprint: str, profile_version: str, selected=None, requirem
     With per-ad evidence selection on, the selection version is appended: a result
     made from a subset of the evidence is not reused for a full-index run or the
     other way round, and the key still carries the FULL evidence version
-    (profileVersion), so any CV change invalidates every entry. `selected` is the
+    (evidenceVersion), so any CV change invalidates every entry. `selected` is the
     flag value (True / "strict" / "focused") or falsy.
     """
-    key = f"{ad_fingerprint}:{profile_version}:{PROMPT_VERSION}:{KEY_VERSION}-{requirements_hash(requirements)}"
+    key = f"{ad_fingerprint}:{evidence_version}:{PROMPT_VERSION}:{KEY_VERSION}-{requirements_hash(requirements)}"
     version = version_of(mode_of(selected))
     return f"{key}:{version}" if version else key
+
+
+def overlay_answers(raw: dict, candidate: dict) -> dict:
+    """A copy of a raw (cached) output with the candidate's current answers applied in code; no model call.
+
+    Per requirement: the confirmed fact, else the language list, else the model's verdict.
+    A requirement the model gave no usable answer for is dropped unless an answer settles it.
+    """
+    output = copy.deepcopy(raw)
+    evidence_by_id = {item["id"]: item for item in candidate.get("evidence") or []}
+    requirements = []
+    for req in output["requirements"]:
+        settled = resolve_fact(req, candidate, evidence_by_id)
+        if settled is None:
+            # Settled from candidate.gates.languages, which never goes to the provider.
+            settled = settle_language(req, candidate)
+        if settled is not None:
+            if conflict := settled.pop("conflict", None):
+                output["warnings"].append(conflict)
+            requirements.append(settled)
+        elif req["status"] is None:
+            output["warnings"].append(f"dropped requirement {req['id']!r}: the matcher gave no usable answer for it")
+        else:
+            requirements.append(req)
+    output["requirements"] = requirements
+    output["profileVersion"] = candidate["profileVersion"]
+    output["answersVersion"] = candidate["answersVersion"]
+    return output
 
 
 def match_posting(
@@ -358,7 +387,8 @@ def match_posting(
     `posting` is the contract's posting input (requirements under
     facts.requirements); `candidate` is evidence_index.build_candidate(...).
     `confirmed` must be True: it is the judged run's confirmation, passed on.
-    A successful output is stored in `cache` under cache_key(); a failure never is.
+    Every requirement that survives drop_unquoted is asked. The raw verdicts are stored in `cache` under
+    cache_key(), a failure never is; the output returned is overlay_answers() of them, on a miss and on a hit.
     `identity` is redact.identity_of(profile), for the second redaction pass;
     it is used only to strip, never sent.
     `select` (True / "strict" / "focused") sends only the evidence relevant to this ad (evidence_select.py);
@@ -374,28 +404,16 @@ def match_posting(
     description = posting.get("description") or ""
     provider = (provider or active_provider()).lower()
     ad_fingerprint = job_fingerprint(posting)
-    key = cache_key(ad_fingerprint, candidate["profileVersion"], select, (posting.get("facts") or {}).get("requirements"))
+    key = cache_key(ad_fingerprint, candidate["evidenceVersion"], select, (posting.get("facts") or {}).get("requirements"))
     if cache is not None and key in cache:
-        return MatchOutcome(posting_id, cache[key])
+        output = overlay_answers(cache[key], candidate)
+        return MatchOutcome(posting_id, output, output["warnings"])
 
     evidence = candidate.get("evidence") or []
     evidence_by_id = {item["id"]: item for item in evidence}
-    facts = {f["competencyId"]: f for f in candidate.get("confirmedFacts") or []}
 
     requirements, warnings = drop_unquoted(((posting.get("facts") or {}).get("requirements")) or [], description)
-
-    resolved: dict[int, dict] = {}
-    asked: list[tuple[str, dict]] = []
-    for index, req in enumerate(requirements):
-        if req["id"] in facts:
-            resolved[index] = apply_confirmed_fact(req, facts[req["id"]], evidence_by_id)
-        elif (settled := settle_language(req, candidate)) is not None:
-            # Settled from candidate.gates.languages, which never goes to the provider.
-            if conflict := settled.pop("conflict", None):
-                warnings.append(conflict)
-            resolved[index] = settled
-        else:
-            asked.append((f"r{index + 1}", req))
+    asked = [(f"r{index + 1}", req) for index, req in enumerate(requirements)]
 
     try:
         mode = mode_of(select)
@@ -408,30 +426,33 @@ def match_posting(
     except (LlmUnavailable, LlmRefused, SchemaViolation) as exc:
         return MatchOutcome(posting_id, None, warnings, f"no engine output for this posting: {exc}")
 
+    verdicts = []
     for ref, req in asked:
-        index = int(ref[1:]) - 1
         proposal = proposals.get(ref)
         if proposal is None:
-            warnings.append(f"dropped requirement {req['id']!r}: the matcher gave no usable answer for it")
+            # Kept without a status: an answer may still settle it (overlay_answers).
+            verdicts.append({**req, "status": None})
             continue
-        resolved[index], warning = apply_proposal(req, proposal, evidence_by_id)
+        verdict, warning = apply_proposal(req, proposal, evidence_by_id)
+        verdicts.append(verdict)
         if warning:
             warnings.append(warning)
 
-    output = {
+    raw = {
         "postingId": posting_id,
         "promptVersion": PROMPT_VERSION,
         "payloadFormat": payload_format(compact),
-        "profileVersion": candidate["profileVersion"],
+        "evidenceVersion": candidate["evidenceVersion"],
         "adFingerprint": ad_fingerprint,
         "cacheKey": key,
         "provider": provider,
         "model": model,
-        "requirements": [resolved[i] for i in sorted(resolved)],
+        "requirements": verdicts,
         # Passed through as the model gave them; checked and rolled up in step 6.
         "gates": [{"gate": gate, "quote": gate_quotes[gate]} for gate in GATES],
         "warnings": warnings,
     }
     if cache is not None:
-        cache[key] = output
-    return MatchOutcome(posting_id, output, warnings)
+        cache[key] = raw
+    output = overlay_answers(raw, candidate)
+    return MatchOutcome(posting_id, output, output["warnings"])
