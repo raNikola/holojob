@@ -63,9 +63,9 @@ Give confidence "high" or "uncertain" per text.
 Answer with one JSON object: {{"answers": [{{"n": <number>, "answer": "same_as: <id>" | "group: <label>" | "none", "confidence": "high" | "uncertain"}}]}}
 """
 
-SCHEMA = {"type": "object", "properties": {"answers": {"type": "array", "items": {"type": "object", "properties": {
-    "n": {"type": "integer"}, "answer": {"type": "string"}, "confidence": {"type": "string"}},
-    "required": ["n", "answer", "confidence"]}}}, "required": ["answers"]}
+SCHEMA = {"name": "competency_grouping", "strict": True, "schema": {"type": "object", "additionalProperties": False, "required": ["answers"], "properties": {
+    "answers": {"type": "array", "items": {"type": "object", "additionalProperties": False, "required": ["n", "answer", "confidence"], "properties": {
+        "n": {"type": "integer"}, "answer": {"type": "string"}, "confidence": {"type": "string"}}}}}}}
 
 
 def build_prompt(comps: list[dict], texts: list[str]) -> str:

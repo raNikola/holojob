@@ -136,3 +136,7 @@ def test_cache_file_mode_600(tmp_path):
     go(tmp_path, [job("alpha text")], [("same_as: acceptance-criteria", "high")])
     for name in ("cache/g.json", "aliases.json"):
         assert stat.S_IMODE((tmp_path / name).stat().st_mode) == 0o600
+
+
+def test_the_schema_is_in_the_providers_strict_form():
+    assert cg.SCHEMA["strict"] is True and cg.SCHEMA["name"] and cg.SCHEMA["schema"]["additionalProperties"] is False
