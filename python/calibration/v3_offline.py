@@ -239,7 +239,7 @@ def build_requests(out: Path, profile: dict, intelligence: dict, chosen: dict) -
         posting = matcher.posting_from_job({**sanitized(ads[job_id]), "llmFacts": facts[job_id]}, remap)
         requests[job_id] = v3.prepare(posting, candidate, identity)
     leaks = {j: kinds for j, r in requests.items() if (kinds := owner_leaks(r["prompt"], profile))}
-    return {"requests": requests, "leaks": leaks, "evidenceItems": len(candidate["evidence"]), "idAliases": len(aliases)}
+    return {"requests": requests, "leaks": leaks, "evidenceItems": len(candidate["evidence"]), "idAliases": len(aliases), "candidate": candidate}
 
 
 def estimate(requests: dict, price: dict) -> dict:

@@ -1771,11 +1771,65 @@ Under the new rules a stricter PARTIAL raises fit and lowers confidence, because
 
 Spearman on 6 ads is not usable and is not recorded.
 
-### What cannot be validated without a paid run
+### Slice 3: the experimental matcher on the dev set (24 ads, 12 per mode, two identical readings)
 
-Whether the tighter PARTIAL wording reduces the 9-19% repeat noise; how many PARTIAL verdicts it changes, and to what; how often CONTRADICTED is used and whether it is right; whether the level fields are stable; whether understatement improves. Levels also have no owner labels, so even a paid run can only check their consistency.
+48 calls, 0 failed, 0 retries, $0.0594 against a $0.15 cap; 202,165 second-reading input tokens came from the prompt cache. Low effort, full question set, no batching. Same caveats as above: 12 ads per mode, one labeller, not proof for all professions. The result is not adopted; production is unchanged.
 
-### Open decisions (owner)
+**Repeat noise** (requirements whose verdict level changed between the two identical readings; a slice 1 and a slice 3 figure on the same 12 ads are directly comparable, but each is one pair of readings and the intervals overlap):
+
+| | production_like | diagnostic |
+|---|---|---|
+| Slice 1, old prompt, the 6 ads per mode | 18 of 96 = 18.8% [12-28] | 11 of 122 = 9.0% [5-15] |
+| Slice 3, new prompt, the same ads | 9 of 96 = 9.4% [5-17] | 18 of 122 = 14.8% [10-22] |
+| Slice 3, new prompt, all 12 ads per mode | 24 of 235 = 10.2% [7-15] | 34 of 242 = 14.0% [10-19] |
+
+The tighter PARTIAL did not reliably reduce noise: lower in production_like, higher in diagnostic, and both still above the Phase 1 target of 5%. Changes now also jump between silence and MET (5 of 24 and 8 of 34), which slice 1 never showed.
+
+**PARTIAL verdicts** (old = stored Step 7 verdicts, old prompt):
+
+| | production_like | diagnostic |
+|---|---|---|
+| Old PARTIAL, of all requirements | 91 of 235 | 104 of 242 |
+| Became, in reading 1 | NOT_EVIDENCED 59, PARTIAL 23, MET 9 | NOT_EVIDENCED 63, PARTIAL 23, MET 18 |
+| Became, joined verdict of both readings | NOT_EVIDENCED 69, PARTIAL 17, MET 5 | NOT_EVIDENCED 73, PARTIAL 21, MET 10 |
+| PARTIAL in both old readings (slice 1 ads), n | 31 | 52 |
+| Those, in both new readings | NOT_EVIDENCED 21, PARTIAL 4, MET 2, mixed 4 | NOT_EVIDENCED 32, PARTIAL 7, mixed 13 |
+
+The new wording moves most old PARTIAL lines to silence, much closer to the "every PARTIAL" bound of the slice 2 replay than to its strength-1 proxy.
+
+**CONTRADICTED:** proposed once in 470 line readings (production_like), kept by the quote check, in one reading only, so 0 confirmed by both; proposed 0 times in 484 (diagnostic). None fell on a line the owner labelled, so whether it is right cannot be judged (n = 0). The 11 labelled lines the owner does not meet all ended as silence, which does not lower fit.
+
+**Against the owner's answers** (same verdict level, of the labelled real musts; accuracy, not consistency):
+
+| | production_like (n = 14) | diagnostic (n = 18) |
+|---|---|---|
+| Step 7, old prompt | 8; understated 6, overstated 0 | 17; understated 1, overstated 0 |
+| Reading 1 / reading 2 | 7 / 6; understated 7 / 8, overstated 0 / 0 | 16 / 17; understated 1 / 1, overstated 1 / 0 |
+| Joined | 6; understated 8, overstated 0 | 17; understated 1, overstated 0 |
+| Joined, wrong lines flagged | 1 of 8 | 0 of 1 |
+| Owner said no but credited | 0 of 3 | 0 of 8 |
+
+No accuracy gain, and understatement did not improve. A difference of 3 lines or fewer is within slice 1's noise.
+
+**Fit, joined verdicts against the current formula** (n = 12 ads per mode, 11 with an estimate in diagnostic): production_like median 33 to 59, Spearman 0.50 to -0.20, median confidence 0.42, labels Strong 2, Good 6, Partial 4; diagnostic median 26.5 to 49, Spearman 0.85 to 0.13, median confidence 0.56, labels Good 9, Partial 2. This is the risk the slice 2 replay predicted, now measured on real replies: with most lines silent and silence out of fit, fit rises and the ranking breaks.
+
+**Flags:** production_like 37 of 235 (15.7%), queue 27 on 12 ads, 10 not shown; diagnostic 47 of 242 (19.4%), queue 24 on 10 ads, 23 not shown. **Level fields (unvalidated, no owner labels):** requirement level set on 39 of 235 and 24 of 242, the same in both readings on 13 and 13; candidate level set on 82 and 88, the same on 54 and 48; MET downgraded 2 and 0. Levels are unstable and account for 12 and 13 of the flags. Closed-world absent: 0 and 1.
+
+### Still not validated
+
+Levels (no owner labels, and unstable). Whether CONTRADICTED is right (used once). Any effect on other professions.
+
+### Owner decisions on the points below (2026-11-11)
+
+1. **The tighter PARTIAL wording is not adopted.** The production matcher prompt stays.
+2. **Closed-world absence is NOT_EVIDENCED, not CONTRADICTED.** This replaces the earlier rule: a degree, certification or language missing from a filled profile section is not proof the candidate lacks it.
+3. **"Silence out of fit" is dropped.** Fit will count an unconfirmed must with a calibrated prior, as one number. The value comes from the replay in step 4 of the competency memory work (slice M4). Production scoring is unchanged until then.
+
+### Open decisions as they stood before the owner's decisions above
+
+1. **What to do with the tighter PARTIAL.** Slice 3 is done; the wording did not clearly reduce noise, did not improve accuracy, and moved most PARTIAL lines to silence.
+2. **Closed-world absence.** An earlier decision counts an education, certification or language absent from a listed profile section as CONTRADICTED, but such a line has no quote, and the slice 2 rule asks for a verified conflicting quote. `matcher_v3.py` keeps it NOT_EVIDENCED and marks it `closedWorldAbsent` until the owner decides; an owner-confirmed "I do not have this" stays CONTRADICTED.
+3. **What fit means when few requirements are settled.** Measured on real replies above: leaving silence out of fit inflates scores and breaks the ranking. Needs a decision before these rules move toward production.
 
 1. **Slice 3 run.** Dev set, 24 ads, two identical readings, 48 calls, low effort: $0.0755 expected, $0.1001 upper bound, proposed hard cap $0.15; 24 of 24 prompts pass the privacy scan. Not run; needs the owner's explicit approval.
 2. **Closed-world absence.** An earlier decision counts an education, certification or language absent from a listed profile section as CONTRADICTED, but such a line has no quote, and the slice 2 rule asks for a verified conflicting quote. `matcher_v3.py` keeps it NOT_EVIDENCED and marks it `closedWorldAbsent` until the owner decides; an owner-confirmed "I do not have this" stays CONTRADICTED. The replay favours keeping the earlier rule (production_like Spearman 0.21 with it, -0.16 without).
