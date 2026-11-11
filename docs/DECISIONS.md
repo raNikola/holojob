@@ -1819,7 +1819,13 @@ No accuracy gain, and understatement did not improve. A difference of 3 lines or
 
 Levels (no owner labels, and unstable). Whether CONTRADICTED is right (used once). Any effect on other professions.
 
-### Open decisions (owner)
+### Owner decisions on the points below (2026-11-11)
+
+1. **The tighter PARTIAL wording is not adopted.** The production matcher prompt stays.
+2. **Closed-world absence is NOT_EVIDENCED, not CONTRADICTED.** This replaces the earlier rule: a degree, certification or language missing from a filled profile section is not proof the candidate lacks it.
+3. **"Silence out of fit" is dropped.** Fit will count an unconfirmed must with a calibrated prior, as one number. The value comes from the replay in step 4 of the competency memory work (slice M4). Production scoring is unchanged until then.
+
+### Open decisions as they stood before the owner's decisions above
 
 1. **What to do with the tighter PARTIAL.** Slice 3 is done; the wording did not clearly reduce noise, did not improve accuracy, and moved most PARTIAL lines to silence.
 2. **Closed-world absence.** An earlier decision counts an education, certification or language absent from a listed profile section as CONTRADICTED, but such a line has no quote, and the slice 2 rule asks for a verified conflicting quote. `matcher_v3.py` keeps it NOT_EVIDENCED and marks it `closedWorldAbsent` until the owner decides; an owner-confirmed "I do not have this" stays CONTRADICTED.
