@@ -37,6 +37,17 @@ top=$(git rev-parse --show-toplevel 2>/dev/null) || die "cannot find the reposit
 # Git may export these to the hook; the checks must not inherit them.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 
+# Commits have the owner as the only author. Only commits the remote does not have yet are read:
+# history that is already pushed is not rewritten and must not block a push.
+for sha in $shas; do
+  new_commits=$(git -C "$top" rev-list "$sha" --not --remotes="$1") || die "cannot list the commits of $sha"
+  for commit in $new_commits; do
+    if git -C "$top" log -1 --format=%B "$commit" | grep -qiE 'co-authored-by:|claude-session:|generated with claude code'; then
+      die "commit ${commit%"${commit#???????}"} has an attribution line (Co-Authored-By:, Claude-Session: or Generated with Claude Code); commits have the owner as the only author"
+    fi
+  done
+done
+
 command -v podman >/dev/null 2>&1 || die "podman not found"
 [ -d "$top/node_modules" ] || die "node_modules missing (see Tests in CLAUDE.md)"
 [ -x "$top/.venv/bin/python" ] || die ".venv/bin/python missing (see Tests in CLAUDE.md)"

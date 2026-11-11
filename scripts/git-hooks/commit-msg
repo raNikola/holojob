@@ -1,0 +1,12 @@
+#!/bin/sh
+# Tracked commit-msg hook, enabled by scripts/install-git-hooks.sh (core.hooksPath).
+# Commits have the owner as the only author: a message with an attribution line is refused.
+# $1 is the file that holds the message; git's own comment lines do not count.
+set -u
+
+if grep -v '^#' "$1" | grep -qiE 'co-authored-by:|claude-session:|generated with claude code'; then
+  echo "commit-msg: refused: the message has an attribution line (Co-Authored-By:, Claude-Session: or Generated with Claude Code)." >&2
+  echo "commit-msg: commits have the owner as the only author. Remove the line and commit again." >&2
+  exit 1
+fi
+exit 0

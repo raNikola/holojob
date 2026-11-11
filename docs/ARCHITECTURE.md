@@ -461,6 +461,8 @@ in the container (it links to a Python outside the repo).
 Infostud and Workable and skip when unreachable; `-m "not network"` runs offline.
 Do not build `.venv` with Python 3.15 (pinned pandas 2.3.3 has no wheel).
 
+Commit attribution: `scripts/git-hooks/commit-msg` refuses a message with an attribution line (`Co-Authored-By:`, `Claude-Session:`, `Generated with Claude Code`), and `pre-push` refuses a push of any commit with one that the remote does not have yet. History already pushed is not rewritten and does not block a push.
+
 Pre-push hook: `sh scripts/install-git-hooks.sh` (once; sets `core.hooksPath`) enables `scripts/git-hooks/pre-push`, which runs lint, JS tests, pytest
 `-m "not network"` and build, in that order, stopping at the first failure. It checks an export of the pushed commit, not the working tree, using the repo's
 `node_modules` and `.venv`. It skips branch deletions and tag-only pushes. It first refuses every remote except `origin` at its pinned URL, deletions and tags included (`core.hooksPath` turns off `.git/hooks/pre-push`, which is no longer used).
