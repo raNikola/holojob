@@ -1903,7 +1903,7 @@ Spearman overall / hardRequirements, same replay as the table above (`python/cal
 - **`coveredTexts[]`** added to fact store v2: the texts an answer covers (A3).
 - **Years are separate from the Stage B level fields:** different scales. Only digits in the quote count, so "five years" gives no level.
 - **The evidence map stays in check mode:** written and compared, no call replaced. A repeated cached verdict is not counted as a new check.
-- **A `demoted` text** is blocked from any later link, stricter than "for that id", because the aliases shape holds one id per text.
+- **A `demoted` link is scoped to the text-id pair** (supersedes the earlier "blocked from any later link" rule, 2026-11-11). The alias entry has an optional `demotedIds` list; a legacy flat entry with `status: "demoted"` and no list blocks its own `competencyId`. The same text can link to another id; a rewritten entry keeps `demotedIds`. Model suggestions for such a text are now consulted (and counted in `stats`) before a demoted id is refused. The aliases file stays flat and backward compatible.
 - **Grouping is a manual command,** not wired into the pipeline, so no paid call runs by itself. It needs `--confirm`.
 
 ### Cost
