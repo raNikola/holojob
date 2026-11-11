@@ -1878,6 +1878,23 @@ Median fit, 0.3 critical at 0, against current: 39 / 32, 35 / 26, 35 / 33, 37.5 
 
 Authoritative sets: Step 7 production-like (21 ads) and Step 7 diagnostic (23 ads). A variant passes only if its Spearman against the owner's overall is >= 0.54 on production-like AND >= 0.59 on diagnostic (the current formula baseline), with no margin and no median-fit rule. Slice 3 sets are reported only, not gating. Passing means "no regression measured on this sample", not "proven improvement". If several pass, take the smallest prior. If none passes: keep the current formula, record that no variant met the rule, and remove 0.3 as a candidate. Production Fit is not changed in any case.
 
+### Prior evaluation result (2026-11-11, offline on stored verdicts, no model call)
+
+Spearman overall / hardRequirements, same replay as the table above (`python/calibration/v3_offline.py`). Criterion: >= 0.54 on Step 7 production-like AND >= 0.59 on Step 7 diagnostic.
+
+| Variant | Step 7 prod-like (21) | Step 7 diagnostic (23) | Slice 3 prod-like (12) | Slice 3 diagnostic (12) | Rule |
+|---|---|---|---|---|---|
+| Current formula | 0.54 / 0.64 | 0.59 / 0.13 | 0.50 / 0.56 | 0.85 / 0.14 | baseline |
+| **0** (critical at 0 or at the prior: identical) | 0.57 / 0.62 | 0.73 / 0.15 | 0.25 / 0.26 | 0.86 / 0.31 | **pass** |
+| 0.1, critical at the prior / at 0 | 0.51 / 0.56, 0.52 / 0.56 | 0.71 / 0.15 | 0.23 / 0.24, 0.36 / 0.33 | 0.84 / 0.34 | fail |
+| 0.2, critical at the prior / at 0 | 0.40 / 0.45, 0.46 / 0.50 | 0.67 / 0.15 | 0.28 / 0.26, 0.42 / 0.35 | 0.86 / 0.36, 0.84 / 0.39 | fail |
+| 0.3 (previous provisional value) | 0.26 to 0.38 | 0.57 to 0.59 | 0.18 to 0.45 | 0.79 | fail |
+
+- **Verdict:** the smallest passing prior is 0. 0.1, 0.2 and 0.3 fail production-like. **0.3 is no longer a candidate** (the "provisional 0.3" above is superseded).
+- **Prior 0 is not the current formula.** It differs in fit on 35 of 44 ads: an unconfirmed must counts in the denominator at zero credit, where the current formula drops the silence. Medians are nearly equal (32 vs 32, 25 vs 26).
+- **Passing means "no regression measured on this sample", not "proven improvement".** Slice 3 production-like is worse with prior 0 (0.25 against 0.50); it is report-only, not gating. The slice 3 ads are all inside the Step 7 sets (12 of 12 in each mode), so it is the same ads re-judged, not independent evidence. One labeller.
+- **Production Fit is unchanged.** Adopting prior 0 replaces how silence is handled in Fit; that is the owner's decision, not applied here.
+
 ### Decisions recorded while building
 
 - **Production vocabulary.** Owner decision: production writes `no` as MISSING and "not evidenced" as UNKNOWN, through one table in `verify.py`; the Stage B vocabulary stays in `matcher_v3`. Otherwise a `no` would fall out of Fit and raise the score.
