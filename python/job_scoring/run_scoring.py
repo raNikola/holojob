@@ -62,12 +62,17 @@ def _shadow_engine(profile: dict | None, intelligence: dict, judge: bool, provid
     if profile is None:
         print(f"engine (shadow): skipped, no profile at {PROFILE_PATH}", file=sys.stderr)
         return None
+    from competency_mapping import load_mapper
     from confirmed_facts import load as load_confirmed_facts
     from evidence_index import build_candidate
+    from match_engine.evidence_map import EvidenceMap
 
     candidate = build_candidate(profile, intelligence, load_confirmed_facts())
-    return shadow.ShadowEngine(candidate, judge=judge, provider=provider, model=model,
-                               identity=identity_of(profile))
+    memory = EvidenceMap(candidate, load_mapper(candidate["roleFamily"]))
+    engine = shadow.ShadowEngine(candidate, judge=judge, provider=provider, model=model,
+                                 identity=identity_of(profile), memory=memory)
+    memory.already_matched = set(engine._cache)
+    return engine
 
 
 def parse_args() -> argparse.Namespace:
