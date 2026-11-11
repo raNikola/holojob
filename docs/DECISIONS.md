@@ -1973,3 +1973,16 @@ Addition to the criterion above. Metrics (a)-(d) and every threshold in it are u
 ## Correction to the pilot criterion: which labelled ad has no mode (2026-11-11, branch `competency-memory-mvp`)
 
 The entry "Enrichment pilot on the owner's labelled ads: criterion pre-registered" says the labelled manual ad (`manual-6f64270a-...`) has no mode. That is wrong. The manual ad has the mode `production_like` and is inside the `production_like` metrics (n 20 includes it). The one labelled scored ad without a mode in `engine-shadow.json` is `8b742473ad4a5dd6`; it is outside both mode metrics and counted separately. No number in the criterion or the baseline changes: the baseline of n 20 and n 21 was already computed from `engine-shadow.json` modes. The original text is left as written.
+
+
+## Pilot evaluator: where it lives and what it reads (2026-11-11, branch `competency-memory-mvp`)
+
+The evaluation script is kept outside the repo, in `/home/ranikola/holojob-eval/` (mode 700, files 600), with the baseline: `enrich_eval.py` (sha256 `b9f4b7738b4112e07f9218bf7271579766c32b06771ab355be94426ec529dad9`), `ledger_to_facts.py` (adapter), `diag_components.py`, `baseline.json` (scoring code `ab641fd`, configuration hash `f43ccadf4032dbee`), `step1.out` (the v5 free look). It reads `data/` read-only, writes nothing there and calls no provider. Scoring logic is not touched. It aborts if `python/` or `src/` differ from `ab641fd` or the configuration hash differs.
+
+- **Attach rule:** a fact is attached only if its stored fingerprint equals the fingerprint of the current row at the fact's own prompt version; never bypassed. Two hashing rules count: raw description (production `enrich_jobs.py`, `job_fingerprint.py`) and redacted description (calibration extraction, `enrich_sample.py` `sanitized`). The v5 file in the calibration folder is of the second kind.
+- **Comparison:** primary = ads with valid attached facts, baseline recomputed on the same subset, `n` per mode; conservative = the whole labelled set with ads without valid facts unchanged. Unattached ads are listed by id.
+- **Input format:** the production extraction stores facts in the ledger (`job_history.json` `jobs[id].llmFacts`), not in a facts file and without a prompt-version field; `ledger_to_facts.py LEDGER OUT --ids-from JOBS` converts it.
+
+**Free look on the 45 v5 facts (informational, not a verdict).** 31 of the 45 attach under the strict rule; 3 are outside the scored set and 11 fail the fingerprint (the description stored now differs from the text the fact was read from: 5 to 10 scattered differing spans of equal total length, outside http(s) tokens; all 11 are `infostud` ads, as are 11 of the 12 labelled infostud ads). On the 31, 19 ads change score; in all 19 the only component that moves is `experienceMatch` (no cap, sufficiency or role-match change). Spearman fell in both modes in both variants and the mean rank of the 2-3 ads is about flat; n is too small to read a direction.
+
+**Pilot composition.** The pilot copy holds 41 labelled ads. The manual ad is not added: a row outside the ledger is read, but `enrich_jobs.py` writes facts back only to ledger entries, so the paid result would be discarded. `4b95087d0ecf7c44` is in the file but "not found by this run", so it is not read (40 calls). `8b742473ad4a5dd6` is among the pilot's ads.
