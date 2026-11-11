@@ -42,7 +42,7 @@ provider, each behind an explicit confirm (CV analysis, fit judge, evidence matc
   from the profile and intelligence and passed through `redact.py` twice (building
   the index, and again in the matcher), each time with the profile's name and links. Never sent: gates
   (work authorization, locations, languages, salary), confirmed facts or their notes,
-  name, contacts, links. Runs only in a judged scoring run with `HOLOJOB_ENGINE_SHADOW` on
+  name, contacts, links. `languagesVersion` and `languageSettled` (a hash of the language list and requirement ids) are stored in the local cache entry only, never in the request; a changed list marks a cached answer stale locally (`staleReason`), and nothing is re-sent. Runs only in a judged scoring run with `HOLOJOB_ENGINE_SHADOW` on
   (shadow mode, `match_engine/shadow.py`); the judge's confirm dialog then lists it.
   `tests/python/test_engine_privacy.py` checks all of these at `requests.post`.
 - **Fill from ad, AI step** (Add job form, `python/job_import/ad_ai.py`, `POST /api/jobs/ad/ai-preview` / `ai-extract`): sends **no candidate data**. It sends the text of one
