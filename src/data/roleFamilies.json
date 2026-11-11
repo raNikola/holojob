@@ -26,7 +26,13 @@
         "\\btpm\\b",
         "director,? (of )?product",
         "product director",
-        "\\b(vp|vice president),?( of)?( \\w+)? product"
+        "\\b(vp|vice president),?( of)?( \\w+)? product",
+        "\\b(menadz\\w*|vlasnik\\w*|rukovodi(lac|oca|ocem|ocu)|voditelj\\w*|direktor\\w*) (za )?(digitaln\\w+ |softversk\\w+ )?proizvod(a|u|om)?\\b",
+        "\\bupravljanj\\w* (digitaln\\w+ )?proizvod(om|ima)\\b",
+        "\\blider\\w* (digitaln\\w+ )?(proizvod(a|u|om)|platform(e|i|u|om))\\b",
+        "\\b(менаџер\\w*|власник\\w*|руководи(лац|оца|оцем|оцу)|водитељ\\w*|директор\\w*) (за )?(дигитални\\w* |софтверски\\w* )?производ(а|у|ом)?(?!\\w)",
+        "управљањ\\w* (дигитални\\w* )?производ(ом|има)(?!\\w)",
+        "лидер\\w* (дигитални\\w* )?(производ(а|у|ом)|платформ(е|и|у|ом))(?!\\w)"
       ],
       "otherFunctionPatterns": [
         "\\bdesign(er|ers)?\\b",
@@ -37,7 +43,19 @@
         "\\b(finance|legal|clinical|construction|facilities|supply chain)\\b",
         "\\bcustomer success\\b"
       ],
-      "productResponsibilityTitlePatterns": ["project manag", "delivery manag"],
+      "productResponsibilityTitlePatterns": [
+        "project manag",
+        "delivery manag",
+        "\\bmenadz\\w* (za )?(upravljanj\\w+ )?projek(at|ata|t|ta|te|tu|tom|tima)\\b",
+        "\\bprojekt(ni|na)? menadz",
+        "\\b(rukovodi(lac|oca|ocem|ocu)|voditelj\\w*) (\\w+ )?projek(at|ata|t|ta|tu|tom|tima)\\b",
+        "\\bupravljanj\\w* projek(at|ata|t|ta|tom|tima)\\b",
+        "\\bmenadz\\w* (za )?isporuk(e|u|a)\\b",
+        "\\bменаџер\\w* (за )?(управљањ\\w+ )?пројек\\w+",
+        "\\b(руководи(лац|оца|оцем|оцу)|водитељ\\w*) (\\w+ )?пројек\\w+",
+        "\\bпројектн\\w* менаџер",
+        "управљањ\\w* пројек\\w+"
+      ],
       "productResponsibilityTracks": ["product_management", "product_ownership"],
       "notTargetPhrases": [
         "head of product marketing",
