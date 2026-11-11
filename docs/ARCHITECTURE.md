@@ -248,7 +248,9 @@ do not state.
   `titleRules` in `src/data/roleFamilies.json`; only an unrelated title is capped, at 40,
   in `scorer.py` (`hardCapped`, a reason line). Most ads have no `llmFacts`, so this is
   what holds without enrichment. A project or delivery title is near only with
-  evidenced product responsibility. No family or no vocabulary means no cap.
+  evidenced product responsibility. No family or no vocabulary means no cap. The vocabulary
+  holds Serbian wording too (Latin with and without diacritics, Cyrillic); Serbian project and
+  delivery manager titles use the same fact rule as the English ones.
 - **work_authorization.py** gives each job one status, and scorer.py caps it
   the same way: `needs_visa_refused` 25 (the ad will not sponsor),
   `outside_allowed` 40 (a location the candidate excluded), `needs_visa_silent`
