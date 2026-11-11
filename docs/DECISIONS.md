@@ -1968,3 +1968,8 @@ Addition to the criterion above. Metrics (a)-(d) and every threshold in it are u
 - **The paired comparison runs on the ads that have facts.** The number of such ads, `n`, is reported per mode next to every metric.
 - **Ads that still have no facts after the retry are excluded from the paired comparison and listed by id**, with the reason of the failure.
 - **The verdict is reported together with the effect sizes and the per-id list** (metric values before and after, and every ad whose tier, score or cap changed). A miss on (a) of a few hundredths is reported as such, not as proof of regression, with n stated beside it.
+
+
+## Correction to the pilot criterion: which labelled ad has no mode (2026-11-11, branch `competency-memory-mvp`)
+
+The entry "Enrichment pilot on the owner's labelled ads: criterion pre-registered" says the labelled manual ad (`manual-6f64270a-...`) has no mode. That is wrong. The manual ad has the mode `production_like` and is inside the `production_like` metrics (n 20 includes it). The one labelled scored ad without a mode in `engine-shadow.json` is `8b742473ad4a5dd6`; it is outside both mode metrics and counted separately. No number in the criterion or the baseline changes: the baseline of n 20 and n 21 was already computed from `engine-shadow.json` modes. The original text is left as written.
