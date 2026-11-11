@@ -1,6 +1,6 @@
 # Competency memory MVP: spec
 
-**Status: DRAFT (revision 4), 2026-11-11. Not approved, not scheduled.** Docs only: no code, no `data/` change, no model call, no migration. Implementation starts only after the owner approves this document, the P1 Stage B open decisions are settled, and the offline experiment in section 7 has run.
+**Status: APPROVED (revision 4), 2026-11-11.** Slices M4, M1, M2, M5 started; M3, M7-M10 follow. Docs only: no code, no `data/` change, no model call, no migration. Implementation starts only after the owner approves this document, the P1 Stage B open decisions are settled, and the offline experiment in section 7 has run.
 
 **Builds on P1 Stage B.** This branch is based on `p1-stage-b`. Its verdict vocabulary, Fit / confidence rules and open decisions (`DECISIONS.md`, "P1 scoring calibration: Stage A measured, Stage B rules decided" and "P1 Stage B: matcher stability, slices 1 and 2") come first; where this spec and Stage B differ, Stage B wins and the difference is listed in 0.1. Merge order: `p1-stage-b`, then this branch.
 
@@ -312,7 +312,7 @@ Global knowledge graph and typed links; impact score; embeddings; staleness re-v
 
 | # | Question | Proposal |
 |---|---|---|
-| Q1 | Approve this spec | Open |
+| Q1 | Approve this spec | **Approved 2026-11-11** as the MVP plan; slices M4, M1, M2, M5 started |
 | Q2-Q8 | PARTIAL queue, tolerance, years, data, Stage B record, `auto` links, batch | **Decided** (section 2a) |
 | Q9 | Stage B slice 3 | **Done:** tighter PARTIAL not adopted (A8) |
-| Q10 | Drop "silence out of fit" and apply the prior in Fit itself (C1) | Open; value from M4 |
+| Q10 | Drop "silence out of fit" and apply the prior in Fit itself (C1) | **Decided 2026-11-11: yes.** The value comes from M4 |
