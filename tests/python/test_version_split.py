@@ -103,12 +103,12 @@ def test_evidence_and_role_family_move_the_evidence_version():
 
 # --- what is asked and what is cached --------------------------------------------------
 
-def test_a_fact_or_a_language_does_not_stop_its_requirement_being_asked():
+def test_a_fact_does_not_stop_its_requirement_being_asked_but_a_settled_language_is_not_sent():
     candidate = _candidate([SQL_YES])
     model = _model(candidate)
     _match(candidate, model, {})
     asked = model.prompts[0].split("=== BEGIN REQUIREMENTS ===")[1]
-    assert '"SQL"' in asked and '"Fluent English"' in asked
+    assert '"SQL"' in asked and '"Fluent English"' not in asked
     assert "private note" not in model.prompts[0] and "English (fluent)" not in model.prompts[0]
 
 
@@ -118,7 +118,7 @@ def test_the_cached_entry_holds_the_raw_verdicts_only():
     outcome = _match(candidate, _model(candidate), cache)
     assert (_status(outcome.output, "sql"), _status(outcome.output, "prov:aaaaaaaaaaaa")) == ("MET", "MET")
     raw = cache[outcome.output["cacheKey"]]
-    assert [r["status"] for r in raw["requirements"]] == ["PARTIAL", "PARTIAL", "PARTIAL"]
+    assert [r["status"] for r in raw["requirements"]] == ["PARTIAL", None, "PARTIAL"]
     assert "gates.languages" not in json.dumps(raw) and "answersVersion" not in raw
 
 
@@ -127,7 +127,7 @@ def test_the_shadow_cache_file_holds_the_raw_verdicts_only(seeded):
     engine = _engine(seeded, candidate, _no_call)
     assert engine.apply([JOB])[0]["engineShadow"]["requirements"][0]["status"] == "MET"
     raw = next(iter(json.loads((seeded / "engine.json").read_text()).values()))
-    assert [r["status"] for r in raw["requirements"]] == ["PARTIAL", "PARTIAL", "PARTIAL"]
+    assert [r["status"] for r in raw["requirements"]] == ["PARTIAL", None, "PARTIAL"]
 
 
 # --- a re-score after an answer ---------------------------------------------------------

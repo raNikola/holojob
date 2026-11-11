@@ -387,7 +387,7 @@ def match_posting(
     `posting` is the contract's posting input (requirements under
     facts.requirements); `candidate` is evidence_index.build_candidate(...).
     `confirmed` must be True: it is the judged run's confirmation, passed on.
-    Every requirement that survives drop_unquoted is asked. The raw verdicts are stored in `cache` under
+    Every requirement that survives drop_unquoted is asked, except a language settle_language() decides. The raw verdicts are stored in `cache` under
     cache_key(), a failure never is; the output returned is overlay_answers() of them, on a miss and on a hit.
     `identity` is redact.identity_of(profile), for the second redaction pass;
     it is used only to strip, never sent.
@@ -413,7 +413,9 @@ def match_posting(
     evidence_by_id = {item["id"]: item for item in evidence}
 
     requirements, warnings = drop_unquoted(((posting.get("facts") or {}).get("requirements")) or [], description)
-    asked = [(f"r{index + 1}", req) for index, req in enumerate(requirements)]
+    # A language the candidate's list settles is not sent: overlay_answers() settles it at every use.
+    asked = [(f"r{index + 1}", req) for index, req in enumerate(requirements) if settle_language(req, candidate) is None]
+    refs = {ref for ref, _ in asked}
 
     try:
         mode = mode_of(select)
@@ -427,8 +429,8 @@ def match_posting(
         return MatchOutcome(posting_id, None, warnings, f"no engine output for this posting: {exc}")
 
     verdicts = []
-    for ref, req in asked:
-        proposal = proposals.get(ref)
+    for index, req in enumerate(requirements):
+        proposal = proposals.get(f"r{index + 1}") if f"r{index + 1}" in refs else None
         if proposal is None:
             # Kept without a status: an answer may still settle it (overlay_answers).
             verdicts.append({**req, "status": None})

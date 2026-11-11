@@ -172,12 +172,12 @@ def test_a_downgrade_is_reported():
 def test_confirmed_facts_override_the_model_and_are_still_asked():
     facts = [{"competencyId": "sql", "has": True, "note": ""},
              {"competencyId": "prov:aaaaaaaaaaaa", "has": False, "note": "B1 only"}]
-    # The model claims the opposite for everything; every requirement is asked, the answers win in code.
+    # The model claims the opposite for everything; a fact's requirement is still asked, the answer wins in code.
     fake = Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0),
                        ("r3", "MET", "ev-a", GOOD, 4)))
     outcome = _run(fake, candidate=_candidate(facts))
     asked = fake.prompts[0].split("=== BEGIN REQUIREMENTS ===")[1].split("=== END")[0]
-    assert '"r1"' in asked and "SQL" in asked and "Fluent English" in asked
+    assert '"r1"' in asked and "SQL" in asked and "Fluent English" not in asked
     by_id = {r["id"]: r for r in outcome.output["requirements"]}
     assert _key(by_id["sql"]) == ("MET", None, None, True, CONFIRMED_FACT_STRENGTH)
     assert _key(by_id["prov:aaaaaaaaaaaa"]) == ("MISSING", None, None, True, 0)
@@ -272,14 +272,14 @@ def _language_candidate(languages, evidence=EVIDENCE):
     return {**_candidate(), "gates": {"languages": languages}, "evidence": evidence}
 
 
-def test_a_spoken_language_is_met_in_code_and_the_list_is_not_sent():
+def test_a_spoken_language_is_met_without_asking_the_model():
     fake = Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "PARTIAL", "ev-b", "SQL", 1)))
     outcome = _run(fake, candidate=_language_candidate(["Serbian (native)", "English (fluent)"]))
     english = next(r for r in outcome.output["requirements"] if r["kind"] == "language")
     assert (english["status"], english["quoteVerified"], english["evidenceQuote"]) == ("MET", True, "English (fluent)")
     assert english["evidenceId"] == "gates.languages" and english["strength"] == CONFIRMED_FACT_STRENGTH
-    # The ad's requirement is asked; none of the candidate's languages are sent.
-    assert '"r3"' in fake.prompts[0]
+    # Not asked: the prompt carries r1 and r2 only, and none of the candidate's languages.
+    assert '"r3"' not in fake.prompts[0] and "Fluent English" not in fake.prompts[0].split("END JOB AD")[1]
     assert "Serbian (native)" not in fake.prompts[0]
 
 
@@ -301,7 +301,7 @@ def _lang_run(text, languages, importance="must", evidence=EVIDENCE):
 def test_a_required_language_the_list_does_not_cover_is_missing():
     fake, outcome = _lang_run("Fluent Russian", ["Serbian (native)", "English (fluent)"])
     assert (_language(outcome)["status"], _language(outcome)["evidenceId"]) == ("MISSING", None)
-    assert '"r3"' in fake.prompts[0]
+    assert '"r3"' not in fake.prompts[0]
 
 
 @pytest.mark.parametrize("text", ["Croatian", "Bosnian", "Serbo-Croatian", "Macedonian"])
@@ -332,7 +332,7 @@ def test_an_optional_language_the_evidence_mentions_goes_to_the_model():
 
 def test_a_must_have_language_the_evidence_mentions_is_a_reported_conflict_not_a_choice():
     fake, outcome = _lang_run("Fluent English", ["German (C1)"], evidence=EVIDENCE_EN)
-    assert '"r3"' in fake.prompts[0] and _language(outcome)["status"] == "MISSING"
+    assert '"r3"' not in fake.prompts[0] and _language(outcome)["status"] == "MISSING"
     assert "conflict" not in _language(outcome)
     assert any("must-have" in w and "English" in w for w in outcome.warnings)
 
