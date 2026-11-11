@@ -140,18 +140,51 @@ class Mapper:
     def prompt_block(self) -> str:
         return COMPETENCIES_BLOCK.format(rows=list_rows(self.comps))
 
-    def alias_hit(self, text: str | None) -> str | None:
+    @staticmethod
+    def demoted_ids(entry: dict | None) -> set[str]:
+        """The competency ids the owner rejected for this text: `demotedIds`, plus the entry's own id when its status is demoted
+        (a flat entry written before `demotedIds` existed blocks its own pair only)."""
+        if not entry:
+            return set()
+        ids = {str(i) for i in entry.get("demotedIds") or []}
+        if entry.get("status") == DEMOTED and entry.get("competencyId"):
+            ids.add(str(entry["competencyId"]))
+        return ids
+
+    def is_demoted(self, text: str | None, cid: str | None) -> bool:
+        """True when the owner rejected exactly this text-id pair."""
+        return cid is not None and str(cid) in self.demoted_ids(self.learned.get(competencies.alias_key(text)))
+
+    def _entry(self, text: str | None, cid: str, status: str) -> dict:
+        """A learned entry for (text, cid) that keeps every id already rejected for the text."""
+        old = self.demoted_ids(self.learned.get(competencies.alias_key(text)))
+        demoted = sorted(old | {cid}) if status == DEMOTED else sorted(old - {cid})
+        entry = {"competencyId": cid, "status": status}
+        if demoted:
+            entry["demotedIds"] = demoted
+        return entry
+
+    def alias_hit(self, text: str | None, cid: str | None = None) -> str | None:
+        """The id a seed or learned alias gives the text. `cid` is the id being asked about (default: the alias's own); a demoted pair gives None."""
         key = competencies.alias_key(text)
         if key in self.seed:
             return self.seed[key]
         learned = self.learned.get(key)
-        return learned["competencyId"] if learned and learned.get("status") != DEMOTED else None
+        if not learned:
+            return None
+        demoted = self.demoted_ids(learned)
+        if (cid or learned["competencyId"]) in demoted or learned["competencyId"] in demoted:
+            return None
+        return learned["competencyId"]
 
-    def link(self, text: str | None, cid: str, status: str) -> None:
-        """Store a learned link (grouping); the caller saves."""
+    def link(self, text: str | None, cid: str, status: str) -> bool:
+        """Store a learned link (grouping); the caller saves. A demoted text-id pair is refused (returns False)."""
         with self._lock:
-            self.learned[competencies.alias_key(text)] = {"competencyId": cid, "status": status}
+            if status != DEMOTED and self.is_demoted(text, cid):
+                return False
+            self.learned[competencies.alias_key(text)] = self._entry(text, cid, status)
             self._dirty = True
+            return True
 
     def mapping_status(self, requirement: dict) -> str | None:
         """"reviewed" (seed alias or reviewed learned alias), "auto", "pending", "demoted", or None when the id is not a mapped competency."""
@@ -160,7 +193,7 @@ class Mapper:
         if self.seed.get(key) == cid:
             return REVIEWED
         learned = self.learned.get(key)
-        if learned and learned.get("status") == DEMOTED:
+        if learned and cid in self.demoted_ids(learned):
             return DEMOTED
         if learned and learned["competencyId"] == cid:
             return learned["status"] if learned.get("status") in (REVIEWED, AUTO) else PENDING
@@ -222,11 +255,11 @@ class Mapper:
             assigned = assign_id(requirement)
             if not assigned["provisional"]:
                 return assigned, "dictionary"
-            if (self.learned.get(competencies.alias_key(text)) or {}).get("status") == DEMOTED:
-                return assigned, "provisional"  # the owner rejected this text's link; never proposed again
             cid = self._suggestion(requirement, suggested, covers)
+            if cid and self.is_demoted(text, cid):
+                return assigned, "provisional"  # the owner rejected this text-id pair; never proposed again (other ids are allowed)
             if cid:
-                self.learned[competencies.alias_key(text)] = {"competencyId": cid, "status": PENDING}
+                self.learned[competencies.alias_key(text)] = self._entry(text, cid, PENDING)
                 self.picks.append((str(text), cid))
                 self._gain(text, cid)
                 self._dirty = True

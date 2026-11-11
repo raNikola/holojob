@@ -440,3 +440,49 @@ def test_dry_run_counts_the_calls_and_sends_and_writes_nothing(tmp_path, monkeyp
     assert "3 competencies" in out and "input tokens" in out
     assert jobs.read_bytes() == before_jobs and rf.FRAMES_PATH.read_bytes() == frames_before
     assert not (tmp_path / "ledger.json").exists() and not cm.ALIASES_PATH.exists()
+
+
+# --- demoted: scoped to the text-id pair ----------------------------------------------
+
+def demoted_mapper(tmp_path, entry):
+    (tmp_path / "aliases.json").write_text(json.dumps({"some odd phrase": entry}))
+    return mapper(tmp_path)
+
+
+def test_a_demoted_pair_is_blocked_and_keeps_its_demoted_ids(tmp_path):
+    m = demoted_mapper(tmp_path, {"competencyId": "map-reading", "status": "reviewed", "demotedIds": ["kazoo-playing"]})
+    assert m.alias_hit("Some odd phrase", "kazoo-playing") is None
+    assert m.mapping_status({"text": "some odd phrase", "id": "kazoo-playing"}) == cm.DEMOTED
+    out, route = m.resolve_with_route(req("some odd phrase"), "kazoo-playing", "whole")
+    assert (out["id"], route) == ("map-reading", "alias")  # the alias for another id stands; kazoo-playing never comes back
+    assert m.learned["some odd phrase"]["demotedIds"] == ["kazoo-playing"]
+
+
+def test_the_same_text_may_link_to_a_different_id_and_keeps_the_rejection(tmp_path):
+    m = demoted_mapper(tmp_path, {"competencyId": "kazoo-playing", "status": "demoted"})
+    out, route = m.resolve_with_route(req("some odd phrase"), "map-reading", "whole")
+    assert (out["id"], route) == ("map-reading", "model")
+    assert m.learned["some odd phrase"] == {"competencyId": "map-reading", "status": "pending", "demotedIds": ["kazoo-playing"]}
+    assert m.mapping_status({"text": "some odd phrase", "id": "map-reading"}) == cm.PENDING
+    assert m.mapping_status({"text": "some odd phrase", "id": "kazoo-playing"}) == cm.DEMOTED
+    assert m.alias_hit("some odd phrase") == "map-reading"
+    out, _ = m.resolve_with_route(req("some odd phrase"), "kazoo-playing", "whole")
+    assert out["id"] == "map-reading"  # the alias still wins; the rejected id never comes back
+
+
+def test_a_legacy_flat_demoted_entry_still_loads_and_blocks_its_own_pair(tmp_path):
+    m = demoted_mapper(tmp_path, {"competencyId": "kazoo-playing", "status": "demoted"})
+    assert m.learned["some odd phrase"] == {"competencyId": "kazoo-playing", "status": "demoted"}
+    assert m.alias_hit("some odd phrase") is None
+    assert m.mapping_status({"text": "some odd phrase", "id": "kazoo-playing"}) == cm.DEMOTED
+    assert m.mapping_status({"text": "some odd phrase", "id": "map-reading"}) is None
+    out, route = m.resolve_with_route(req("some odd phrase"), "kazoo-playing", "whole")
+    assert out["provisional"] and route == "provisional"
+    assert m.link("some odd phrase", "kazoo-playing", "auto") is False
+
+
+def test_a_legacy_entry_without_demoted_ids_behaves_as_before(tmp_path):
+    m = demoted_mapper(tmp_path, {"competencyId": "map-reading", "status": "auto"})
+    assert m.alias_hit("some odd phrase") == "map-reading"
+    assert m.mapping_status({"text": "some odd phrase", "id": "map-reading"}) == "auto"
+    assert not m.is_demoted("some odd phrase", "map-reading")
