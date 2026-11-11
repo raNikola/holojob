@@ -24,9 +24,11 @@ import argparse
 import copy
 import json
 import os
+import re
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -57,10 +59,14 @@ from llm_client import (  # noqa: E402
     LlmRefused,
     LlmUnavailable,
     active_provider,
+    call_target,
     complete_json,
     preflight,
+    reasoning_options,
+    service_tier_for,
 )
 import ai_gate  # noqa: E402 (on the path through llm_client)
+import ai_selection  # noqa: E402 (same)
 
 JOBS_PATH = ROOT / "data" / "jobs" / "discovered_jobs.json"
 INTELLIGENCE_PATH = ROOT / "data" / "intelligence" / "candidate-intelligence.json"
@@ -120,13 +126,19 @@ FACT_SCHEMA = {
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["text", "kind", "importance", "posting_quote", "previous_id"],
+                    "required": ["text", "kind", "importance", "posting_quote", "previous_id", "qualifier"],
                     "properties": {
                         "text": {"type": "string"},
                         "previous_id": {"type": ["string", "null"]},
                         "kind": {"type": "string", "enum": sorted(REQUIREMENT_KINDS)},
                         "importance": {"type": "string", "enum": sorted(IMPORTANCES)},
                         "posting_quote": {"type": "string"},
+                        "qualifier": {
+                            "type": ["object", "null"],
+                            "additionalProperties": False,
+                            "required": ["kind", "value"],
+                            "properties": {"kind": {"type": "string", "enum": ["years"]}, "value": {"type": "integer"}},
+                        },
                     },
                 },
             },
@@ -179,7 +191,8 @@ Return ONLY a JSON object of this exact shape, with no prose around it:
 "certification" | "language" | "other",
       "importance": "must" | "preferred" | "nice",
       "posting_quote": "<the ad's exact words that state it>",
-      "previous_id": "<the id of the same requirement in PREVIOUS REQUIREMENTS, or null>"{competency_field}
+      "previous_id": "<the id of the same requirement in PREVIOUS REQUIREMENTS, or null>",
+      "qualifier": {{"kind": "years", "value": <integer>}} | null{competency_field}
     }}
   ],
   "domain": "<one or two words for the industry, or null>",
@@ -232,7 +245,10 @@ answered elsewhere.
 
 9. posting_quote is copied character for character from the ad: the words \
 that state the requirement, with no paraphrase, no ellipsis and no added \
-words. Several items may share one quote.
+words. Several items may share one quote. qualifier is the number of years \
+the ad itself asks for THAT requirement ("5+ years of product management" is \
+{{"kind": "years", "value": 5}}), and null where the ad gives no number of \
+years for it. Never take it from another requirement or from years_required.
 
 10. kind: "skill" a tool, technology or method; "experience" years or a kind \
 of work done before; "domain" knowledge of an industry or field; \
@@ -278,6 +294,18 @@ def _previous_block(previous: list[dict] | None) -> str:
         for r in previous
     )
     return PREVIOUS_BLOCK.format(rows=rows)
+
+
+def _qualifier(value, quote: str) -> dict | None:
+    """A years qualifier the model read, kept only when it is a whole number 0-40 that the requirement's own quote states."""
+    if not isinstance(value, dict) or value.get("kind") != "years":
+        return None
+    years = value.get("value")
+    if not isinstance(years, int) or isinstance(years, bool) or not 0 <= years <= 40:
+        return None
+    if not re.search(rf"(?<!\d){years}(?!\d)", quote):
+        return None
+    return {"kind": "years", "value": years}
 
 
 def _coerce(raw: dict) -> dict:
@@ -331,6 +359,7 @@ def _coerce(raw: dict) -> dict:
                 "importance": importance,
                 "postingQuote": quote,
                 "previousId": str(item.get("previous_id") or "").strip() or None,
+                "qualifier": _qualifier(item.get("qualifier"), quote),
                 **suggestion,
             })
         return kept
@@ -420,9 +449,60 @@ def build_prompt(
     )
 
 
+UPPER_CHARS_PER_TOKEN = 3.0  # over-counts on purpose, as in calibration.matcher_cause_test
+
+
+class SpendGuard:
+    """--max-usd: refuses a call unless this run's real spend, plus calls in flight, plus this call at its true worst case fits the cap.
+
+    The smallest equivalent of calibration.matcher_cause_test.SpendGuard, which reads only the matcher's ledger rows.
+    """
+
+    def __init__(self, cap: float, price: dict, max_output_tokens: int):
+        self.cap, self.price, self.max_output = cap, price, max_output_tokens
+        self.started_at = datetime.now(timezone.utc)
+        self.in_flight, self._lock = 0.0, threading.Lock()
+
+    def worst(self, prompt: str) -> float:
+        return (len(prompt) / UPPER_CHARS_PER_TOKEN * self.price["in"] + self.max_output * self.price["out"]) / 1e6
+
+    def spent(self) -> float:
+        """Billed cost of this run's finished enrichment calls, from the ledger."""
+        rows = ai_gate.read_ledger()
+        started = {
+            r.get("id") for r in rows
+            if r.get("type") == "call" and r.get("feature") == "enrichment" and r.get("decision") == "allowed"
+            and datetime.fromisoformat(r["ts"]) >= self.started_at
+        }
+        return sum(float(r.get("cost") or 0) for r in rows if r.get("type") == "result" and r.get("id") in started)
+
+    def reserve(self, prompt: str) -> float:
+        worst = self.worst(prompt)
+        with self._lock:
+            if self.spent() + self.in_flight + worst > self.cap:
+                raise GuardrailRefused(f"the next call could pass the ${self.cap:.2f} cap")
+            self.in_flight += worst
+        return worst
+
+    def release(self, worst: float) -> None:
+        with self._lock:
+            self.in_flight -= worst
+
+
+def make_guard(cap: float, provider: str | None, model: str | None) -> SpendGuard:
+    """A guard priced for the model the run will call; an unknown price cannot be bounded, so it is refused."""
+    name, model, base_url = call_target(provider, model)
+    price = ai_gate.classify(name, model, base_url, tier=service_tier_for(name))
+    if not price.get("priceKnown"):
+        raise LlmUnavailable(f"--max-usd needs a known price for {name}/{model}")
+    selection = ai_selection.read()["selection"] or {}
+    output = reasoning_options(model).get("max_completion_tokens") or selection.get("maxTokens") or ai_selection.DEFAULTS["maxTokens"]
+    return SpendGuard(cap, {"in": price["inputPerMTok"], "out": price["outputPerMTok"]}, int(output))
+
+
 def extract(
     job: dict, model: str | None, provider: str | None, previous: list[dict] | None = None,
-    mapper: competency_mapping.Mapper | None = None,
+    mapper: competency_mapping.Mapper | None = None, guard: SpendGuard | None = None,
 ) -> dict:
     """The ad's facts; `previous` is its last requirement frame (requirement_frames.py), or None.
 
@@ -430,10 +510,15 @@ def extract(
     competencies and asks for a competencyId per requirement.
     """
     prompt = build_prompt(job, previous, mapper)
-    with ai_gate.context(feature="enrichment", job_id=job.get("jobId")):
-        facts = _coerce(
-            complete_json(prompt, schema=fact_schema(bool(mapper)), model=model, provider=provider)
-        )
+    worst = guard.reserve(prompt) if guard else 0.0
+    try:
+        with ai_gate.context(feature="enrichment", job_id=job.get("jobId")):
+            facts = _coerce(
+                complete_json(prompt, schema=fact_schema(bool(mapper)), model=model, provider=provider)
+            )
+    finally:
+        if guard:
+            guard.release(worst)
     # Ids are code's job, not the model's (ENGINE_CONTRACT.md section 2, step 2).
     facts["requirements"] = _reuse_previous(facts["requirements"], previous, mapper)
     facts["_fingerprint"] = _fingerprint(job)
@@ -476,6 +561,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=0, help="stop after N jobs")
     p.add_argument("--force", action="store_true", help="re-read cached jobs")
     p.add_argument("--workers", type=int, default=8, help="parallel calls")
+    p.add_argument("--max-usd", type=float, default=None, help="stop before a call that could take this run past this many US dollars")
     p.add_argument("--dry-run", action="store_true", help="count the ads and calls and estimate the prompt size; send nothing")
     p.add_argument(
         "--manual",
@@ -589,6 +675,11 @@ def enrich(args: argparse.Namespace) -> int:
     # pool turns a sequential pass into a parallel one. Each worker handles
     # its own job dict, so nothing is shared between threads.
     stop = threading.Event()
+    try:
+        guard = make_guard(args.max_usd, args.provider, args.model) if args.max_usd is not None and pending else None
+    except (LlmUnavailable, LlmRefused) as exc:
+        print(f"enrichment: {exc}", file=sys.stderr)
+        return 1
 
     def one(job, *rest, **kw):
         # After the first refusal no worker asks again; the rest are skipped, not refused one by one.
@@ -605,6 +696,7 @@ def enrich(args: argparse.Namespace) -> int:
             pool.submit(
                 one, job, args.model, args.provider, requirement_frames.previous_for(frames, job, remap),
                 **({"mapper": mapper} if mapper else {}),
+                **({"guard": guard} if guard else {}),
             ): (index, job)
             for index, job in pending
         }
@@ -640,6 +732,8 @@ def enrich(args: argparse.Namespace) -> int:
             )
             done += 1
 
+    if guard:
+        print(f"enrichment spend: ${guard.spent():.4f} of the ${guard.cap:.2f} cap", flush=True)
     if mapper:
         mapper.save()
         remapped += requirement_frames.apply_remap(frames, mapper.remap)
