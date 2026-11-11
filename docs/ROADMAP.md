@@ -110,6 +110,14 @@ Each item gets a fixture-based regression test; the Phase 1 stability test must 
 
 Stage A measured the score against the owner's own labels (45 ads, 70 requirement lines; a small, purpose-chosen sample, not proof for all professions). Stage B decisions and the S0 (frozen test set), S1 (offline fit/confidence preview) and S2 free part (evidence-index diagnostic, dry-run estimate) tooling are recorded in [DECISIONS.md](DECISIONS.md#p1-scoring-calibration-stage-a-measured-stage-b-rules-decided-2026-11-11-branch-p1-stage-b). Next: the paid index diagnostic (about $0.03, needs the owner's explicit approval), then extraction v6, matching v3 and the exception review UX. No production scoring change is approved yet. Stale relocation lines to correct at P1 completion (D1 closed: "Yes, anywhere").
 
+## Competency memory MVP (2026-11-11): M1-M5, M7, M8 built on branch `competency-memory-mvp`, not pushed
+
+Spec: [redesign/COMPETENCY_MEMORY_MVP_SPEC.md](redesign/COMPETENCY_MEMORY_MVP_SPEC.md). Record: DECISIONS.md, "Competency memory MVP: slices built".
+
+- [x] M4 prior variants in the Stage B replay; M1 version split; M2 fact store v2; M3 answer application; M5 batch grouping (manual command); M7 evidence map in check mode; M8 years in extraction.
+- [ ] Owner: review the prior; approve the M8 re-extraction and deploy (bump to `PROMPT_VERSION` 6 is committed, must not deploy before that); push.
+- [ ] Not started: M6 audit of `auto` links, M9 queue, conflicts and local API, M10 UI, the prior in production Fit, the Stage B bucket hold and unconfirmed flag in production.
+
 ## Roadmap v2 (recorded 2026-11-04)
 
 Goal: **Scoring -> Matching -> Application Tracking.** Execution order approved by the owner and reviewed by GPT. Priorities P0 to P3. Nothing below is built unless the S table above says so. Decisions: [DECISIONS.md](DECISIONS.md#roadmap-v2-and-the-single-discovery-safety-rule-2026-11-04).

@@ -80,5 +80,6 @@ provider, each behind an explicit confirm (CV analysis, fit judge, evidence matc
   (log, shortlog, show and `branch --format` print commit authors' names and e-mails), no `cat` or `find`; `Read(.git/**)` is denied as a second
   line. The commit count, dates and file count are computed by code (`git_stats`) and given in the prompt. `tests/python/test_project_scan_privacy.py`
   lists the allowed commands. The deny rule is the CLI's own and is not exercised by a test (that would be a paid call).
+- **Competency grouping** (`python/job_scoring/competency_grouping.py`, feature `competency-grouping`, a manual command that needs `--confirm`, default cap $0.10, not part of any pipeline run): sends requirement texts from job ads and the role family's competency list (id, definition). **No candidate data.** Answers are cached in `data/cache/competency-grouping.json` (600). The confirmed facts store, the evidence map, answers, notes, history and `overrules` are never sent.
 - **Provider error text** (`claude_code.safe_error`): output the provider returns inside an error string is cut to 200 characters with e-mails, phones and
   links removed before it reaches an error, the ledger or `llmIssues`.

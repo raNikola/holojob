@@ -418,26 +418,18 @@ deterministic settings where the provider allows: OpenAI gets temperature 0 and 
 best effort, so stability is measured with tolerances (`match_engine/stability.py`, ROADMAP.md Phase 1) and never
 assumed byte-identical. A model that rejects one of these settings is asked again without it.
 
-### 6.1 Planned: evidence and answers versions (not yet implemented)
+### 6.1 Evidence and answers versions (built 2026-11-11, branch `competency-memory-mvp`)
 
-Owner decision of 2026-10-26 ([DECISIONS.md](DECISIONS.md)). The table and cache key above describe the code as it
-is today; this subsection describes the change that is planned and is not built. Until it is, `profileVersion`
-stays one hash that covers confirmed facts and gates.
-
-`profileVersion` is split in two:
+Owner decision of 2026-10-26 ([DECISIONS.md](DECISIONS.md)). `candidate` carries two hashes next to `profileVersion`, which stays for its other readers:
 
 | Version | Covers | Invalidates cached model verdicts |
 |---|---|---|
-| `evidenceVersion` | The evidence index, the role family, `promptVersion` and `engineVersion`. | Yes. It is the only thing that does. |
+| `evidenceVersion` | The evidence index and the role family. | Yes. |
 | `answersVersion` | Confirmed facts and gate values. | No. |
 
-The cache key becomes `adFingerprint` + `evidenceVersion`. The matcher sends every requirement of the ad to the model
-and caches its verdicts under that key. Confirmed answers and gates are then applied in code on top of the cached
-verdicts at every scoring run, which costs no model call: an answer overrides a status, never a stored model answer.
-A new answer therefore changes the result but never forces a re-match. An answer applies only to a requirement that
-resolves to the same canonical competency and carries no stricter qualifier than the answer (DECISIONS.md, 2026-10-26).
-The output echoes both versions. Gate quotes come from the extraction step (which never sees the candidate), so an ad
-whose requirements all resolve locally makes no matcher call.
+The matcher cache key uses `evidenceVersion` in the place of `profileVersion`; `promptVersion`, the key version, the requirements hash and the selection version stay in it. `engineVersion` is deliberately not part of it: a scoring constant must not force a paid re-match. The matcher asks about every requirement except a language the candidate's list settles (that list never goes to the provider) and caches the raw verdicts. `overlay_answers` applies confirmed answers and languages in code at every use, on a miss and on a hit, with no model call: an answer overrides a status, never a stored model answer. An answer applies only through the seed, a reviewed link, or a text the answer covers (`fact_links.py`). The output echoes both versions.
+
+Not true yet: an ad whose requirements all resolve locally still makes a matcher call, because gate quotes come from the matcher's reply.
 
 Contract version `0.x` may change without notice. From `1.0` a change to a field or enum is a major version.
 

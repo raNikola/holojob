@@ -1837,6 +1837,8 @@ Levels (no owner labels, and unstable). Whether CONTRADICTED is right (used once
 
 ## Competency memory MVP: spec recorded as Draft (2026-11-11)
 
+**Superseded:** the spec is approved (revision 4). The separate `rankingScore` and "Fit itself is unchanged" below were replaced by owner decision Q10. Current state: "Competency memory MVP: slices built", below.
+
 Planning only: no code, test or data changed, nothing scheduled. Spec: [redesign/COMPETENCY_MEMORY_MVP_SPEC.md](redesign/COMPETENCY_MEMORY_MVP_SPEC.md), status **Draft**, not approved.
 
 **Owner decisions recorded (spec section 2):** MVP first; source priority user answer > verified CV quote > model inference; facts transfer only between equivalent competencies (seed or reviewed alias, no stricter qualifier); years of experience are a structured qualifier, not a separate competency; frequency and impact are separate signals, the MVP queue orders by frequency only; frequency is a snapshot of the active pool; re-score only active ads, with no model call; a contradiction needs two incompatible claims of comparable authority; unknown must-haves get a calibrated `RANKING_PRIOR` in a separate `rankingScore` (option C), Fit itself is unchanged; revoking a fact keeps its history; success is fewer questions without lower accuracy against a recorded baseline.
@@ -1848,3 +1850,45 @@ Planning only: no code, test or data changed, nothing scheduled. Spec: [redesign
 **Revision 2 (same day, after review):** AI batch grouping of competencies added (new link statuses `auto` and `demoted`; `auto` links carry answers only after an audit, conflict C5 with the 2026-10-26 rule); evidence proven from the CV is remembered per competency in a competency evidence map (`cv_evidenced`, ids and hashes only, starts in check mode); the experiment uses the existing 45 P1 Stage A ads with the owner's `hardRequirements` label as ground truth. Review answers to Q1-Q6 are recorded in the spec as proposals, not decisions.
 
 **Revision 3 (same day, after the Stage B record):** the spec now builds on `p1-stage-b` and uses its vocabulary (`CONTRADICTED`, `NOT_EVIDENCED`; `MISSING` retired; the unconfirmed-must flag instead of Incomplete; critical unconfirmed musts first in the queue; a fact below the required level gives PARTIAL). The evidence map learns only stable verdicts, because Stage B measured 9-19% repeat noise on the PARTIAL boundary. `rankingScore` (option C) is an offline variant in the Stage B replay and a candidate answer to Stage B open decision 3, not a production rule. Merge order: `p1-stage-b`, then this branch.
+
+## Competency memory MVP: slices built (2026-11-11, branch `competency-memory-mvp`)
+
+Built, committed locally, not pushed. Production `matchScore` and the shadow engine's Fit formula are unchanged. M6, M9 and M10 are not built.
+
+### The prior for Fit (slice M4, the answer to Stage B open decision 3): chosen by rule, to be reviewed
+
+**Provisional value: prior 0.3, critical unconfirmed must at 0. No variant actually met the rule in section 7 of the spec** (Spearman at least at the current formula's level in both modes), so this is the closest one, not one that passed. Not applied anywhere: production Fit is unchanged until the owner picks.
+
+Spearman against the owner's `overall` level, then `hardRequirements` (text mapped 0 / 1 / 2, heavily tied: treat that column as weak). Modes never pooled. Stored verdicts, no model call. The replay reproduced the recorded figures (0.54 / 0.59, -0.16 / 0.42, 0.50 to -0.20, 0.85 to 0.13).
+
+| Variant | Step 7, production_like (21) | Step 7, diagnostic (23) | Slice 3, production_like (12) | Slice 3, diagnostic (12) |
+|---|---|---|---|---|
+| Current formula | 0.54 / 0.64 | 0.59 / 0.13 | 0.50 / 0.56 | 0.85 / 0.14 |
+| Silence out of fit | -0.16 / -0.04 | 0.42 / 0.09 | -0.20 / -0.20 | 0.13 / 0.32 |
+| 0.3, critical at the prior | 0.26 / 0.34 | 0.59 / 0.12 | 0.18 / 0.19 | 0.79 / 0.39 |
+| **0.3, critical at 0** | **0.38 / 0.41** | **0.57 / 0.14** | **0.45 / 0.38** | **0.79 / 0.39** |
+| 0.5, critical at the prior | -0.19 / -0.09 | 0.34 / 0.06 | -0.01 / 0.06 | 0.53 / 0.44 |
+| 0.5, critical at 0 | 0.09 / 0.18 | 0.32 / 0.07 | 0.37 / 0.40 | 0.46 / 0.52 |
+| 0.7, critical at the prior | -0.38 / -0.31 | 0.10 / 0.09 | -0.21 / -0.13 | -0.34 / 0.19 |
+| 0.7, critical at 0 | -0.15 / -0.11 | 0.10 / 0.12 | 0.19 / 0.23 | -0.25 / 0.34 |
+
+Median fit, 0.3 critical at 0, against current: 39 / 32, 35 / 26, 35 / 33, 37.5 / 26.5. Ads under 0.5 confidence in the top 10 do not separate the variants at this size (the slice 3 sets have 12 ads, so the top 10 is nearly all of them). The trend is monotonic: a lower prior ranks better, and values under 0.3 were not tested. 21 and 23 ads, one labeller; a difference under about 0.05 is no difference.
+
+### Decisions recorded while building
+
+- **Production vocabulary.** Owner decision: production writes `no` as MISSING and "not evidenced" as UNKNOWN, through one table in `verify.py`; the Stage B vocabulary stays in `matcher_v3`. Otherwise a `no` would fall out of Fit and raise the score.
+- **`evidenceVersion` covers the evidence index and the role family only.** `promptVersion` stays in the key beside it; `engineVersion` stays out, so a scoring constant cannot force a paid re-match. Differs from contract 6.1 as first written, now corrected.
+- **Languages stay out of the request.** A language the candidate's list settles is not sent, as before the split; a fact's requirement is sent, so revoking the fact has a verdict to fall back on. If the language list later changes so that such a line needs the matcher, it is dropped with a warning until the evidence changes.
+- **`coveredTexts[]`** added to fact store v2: the texts an answer covers (A3).
+- **Years are separate from the Stage B level fields:** different scales. Only digits in the quote count, so "five years" gives no level.
+- **The evidence map stays in check mode:** written and compared, no call replaced. A repeated cached verdict is not counted as a new check.
+- **A `demoted` text** is blocked from any later link, stricter than "for that id", because the aliases shape holds one id per text.
+- **Grouping is a manual command,** not wired into the pipeline, so no paid call runs by itself. It needs `--confirm`.
+
+### Cost
+
+M5 paid test: one run, 154 Stage A requirement texts, 2 calls, about $0.0024 in the ledger, on temporary copies; real aliases untouched. It found that the fake-model tests had missed the provider's strict schema form (fixed). 54 `auto`, 100 `pending`, 4 new groups; grouping quality was not judged (M6). The real active pool has no text to group until the ads are extracted.
+
+M8 estimate, not run, needs the owner's approval: re-extraction of 546 ads about $0.41 expected, $0.89 upper bound (output tokens assumed at 1,000 per call, unmeasured). Later re-match at the next judged run: 50 ads, about $0.07 expected, $0.08 upper bound; outside the $1.00 budget.
+
+**Not built:** every test in the spec's list that needs M9 (frequency snapshot, queue order, each conflict rule and the conflict fixtures).

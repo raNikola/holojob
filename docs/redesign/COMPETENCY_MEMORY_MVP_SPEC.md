@@ -8,7 +8,7 @@ The goal in one line: Holojob groups what ads ask for, remembers what it learned
 
 Inputs: owner discussion of 2026-11-11 (ApplyPack, JobApply, JobOps, JobSync, CareerPulse; ideas only), the review of revision 1, the P1 Stage A and Stage B records, `ENGINE_CONTRACT.md` (2, 4, 5, 6.1), `DECISIONS.md` 2026-10-26 (stable requirement ids), `ROADMAP.md` Phase 1 follow-up and Phase 2, and the code named in each section. No private file under `data/` was opened.
 
-**Revision history.** 2: AI batch grouping (4.2, 3.4); remembered CV evidence as `cv_evidenced` (4.1, 3.5); experiment on the Stage A sample. 3: Stage B vocabulary (`CONTRADICTED`, `NOT_EVIDENCED`; `MISSING` retired; Incomplete label replaced by the unconfirmed-must flag); critical unconfirmed musts first in the queue; a fact below the required level gives PARTIAL; the evidence map learns only stable verdicts (repeat noise 9-19%); `rankingScore` is an offline variant only until Stage B open decision 3 is settled; the experiment replays the Stage B stored verdicts; our "contradiction" renamed **conflict** so it is not confused with the `CONTRADICTED` status. 4: owner decisions of 2026-11-11 recorded (section 2a): closed-world absence is NOT_EVIDENCED; `auto` links never carry anything without a one-click owner confirmation; batch and years settings. Stage B slice 3 results applied: the tighter PARTIAL is not adopted; "silence out of fit" breaks the ranking on real replies, so Fit must count unconfirmed musts (D9, C1 reworded).
+**Revision history.** 2: AI batch grouping (4.2, 3.4); remembered CV evidence as `cv_evidenced` (4.1, 3.5); experiment on the Stage A sample. 3: Stage B vocabulary (`CONTRADICTED`, `NOT_EVIDENCED`; `MISSING` retired; Incomplete label replaced by the unconfirmed-must flag); critical unconfirmed musts first in the queue; a fact below the required level gives PARTIAL; the evidence map learns only stable verdicts (repeat noise 9-19%); `rankingScore` is an offline variant only until Stage B open decision 3 is settled; the experiment replays the Stage B stored verdicts; our "contradiction" renamed **conflict** so it is not confused with the `CONTRADICTED` status. 4: owner decisions of 2026-11-11 recorded (section 2a): closed-world absence is NOT_EVIDENCED; `auto` links never carry anything without a one-click owner confirmation; batch and years settings. Stage B slice 3 results applied: the tighter PARTIAL is not adopted; "silence out of fit" breaks the ranking on real replies, so Fit must count unconfirmed musts (D9, C1 reworded). Corrected after the check against the code (2026-11-11): production vocabulary in 4.4, `coveredTexts[]` in 3.1, what `evidenceVersion` covers in 4.7, years separate from the Stage B levels in 3.2.
 
 ## 0. What already exists and what this adds
 
@@ -100,6 +100,7 @@ File unchanged: `data/profile/confirmed-facts.json` (private, 600). `STORE_VERSI
       "note": "",
       "answeredAt": "2026-11-11T10:00:00Z",
       "overrules": [],
+      "coveredTexts": ["writing acceptance criteria"],
       "history": [
         { "answer": "unknown", "qualifier": null, "at": "2026-10-30T09:00:00Z", "via": "queue" }
       ]
@@ -115,13 +116,14 @@ File unchanged: `data/profile/confirmed-facts.json` (private, 600). `STORE_VERSI
 | `qualifier` | `{kind: "years", value: 0-40}` or null. |
 | `note` | Owner-only, never in a payload. |
 | `overrules[]` | Evidence ids the owner overruled in a conflict (4.5). |
+| `coveredTexts[]` | The normalized requirement texts this answer covers (A3). Ad text only. |
 | `history[]` | Up to 20 previous answers; `via`: `queue`, `edit`, `revoke`, `conflict`, `cv_confirm`. |
 
 Every fact is an explicit owner confirmation, so it satisfies Stage B's "answers the owner explicitly confirmed". It is still **applied in code** (4.4), not sent to the matcher: code needs no model call for it, and nothing about the candidate's answers leaves the server.
 
 ### 3.2 Requirement level (years)
 
-Extraction gets one optional field per requirement: `qualifier: {kind: "years", value: <int>} | null`, read only from the ad's words and verified against `postingQuote`. This bumps `PROMPT_VERSION`, so stored ads are re-extracted once under the budget gate; the cost is estimated before the bump (Q4). It should share one definition with the Stage B level fields (`matcher_v3.py`), so production and calibration compare levels the same way (to align when M8 is built).
+Extraction gets one optional field per requirement: `qualifier: {kind: "years", value: <int>} | null`, read only from the ad's words and verified against `postingQuote`. This bumps `PROMPT_VERSION`, so stored ads are re-extracted once under the budget gate; the cost is estimated before the bump (Q4). It is a separate field from the Stage B level fields in `matcher_v3.py`: those are a depth scale (familiar to expert), this is an integer number of years, so they cannot share one definition. Only the rule is shared: below the required level gives PARTIAL.
 
 ### 3.3 Queue entry (computed, not stored)
 
@@ -228,6 +230,8 @@ Built after each scoring run, from the **active pool**: open ads that passed the
 
 Code, in `verify.apply_confirmed_fact`. A fact overrides the map and the matcher.
 
+**Vocabulary.** The table uses the Stage B words. Production (`match_engine`, `fit.py`) keeps MET / PARTIAL / MISSING / UNKNOWN: there `no` is written as MISSING and "not evidenced" as UNKNOWN, through one translation table in `verify.py`, so production Fit does not change. CONTRADICTED and NOT_EVIDENCED stay in the `matcher_v3` path.
+
 | Fact | Requirement with no level | Requirement with `years >= N` |
 |---|---|---|
 | `yes`, no years | `MET`, strength `CONFIRMED_FACT_STRENGTH` | Matcher verdict stands; queued as `level` |
@@ -256,7 +260,7 @@ Not conflicts: a matcher proposal against a fact; a strength 0-2 claim against a
 
 ### 4.7 Re-scoring after an answer
 
-An answer changes facts, never the evidence index, so no matcher call is needed. This needs the version split of contract 6.1: today `profileVersion` hashes the confirmed facts, so an answer would resend every affected ad. **The split is the first slice (M1).**
+An answer changes facts, never the evidence index, so no matcher call is needed. `evidenceVersion` hashes the evidence index and the role family only; `promptVersion`, the requirements hash and the selection version stay in the cache key next to it, and `engineVersion` is left out, because a scoring constant must not force a paid re-match. This needs the version split of contract 6.1: today `profileVersion` hashes the confirmed facts, so an answer would resend every affected ad. **The split is the first slice (M1).**
 
 ## 5. Scoring and display
 
@@ -302,7 +306,7 @@ Global knowledge graph and typed links; impact score; embeddings; staleness re-v
 | M5 | Batch grouping, `auto` / `demoted`, `link_confirm` | - |
 | M6 | Audit of `auto` links (quality measurement only) | M5 |
 | M7 | Evidence map in check mode, stable verdicts only | M1, M0 |
-| M8 | Level in extraction, shared with the Stage B level fields; `PROMPT_VERSION` bump | Q4 |
+| M8 | Years level in extraction (separate from the Stage B level fields, same below-level rule); `PROMPT_VERSION` bump | Q4 |
 | M9 | Queue builder, conflicts, local API | M3, M5 |
 | M10 | UI: queue, What Holojob knows about you, ad markers | M9, M7 |
 
