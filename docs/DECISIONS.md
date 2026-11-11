@@ -1933,11 +1933,11 @@ Tests: `tests/python/test_role_tier_serbian.py` (Serbian product and project tab
 
 Result on the 548 scored rows (local re-score with stored `llmFacts`, before vs after, no provider): the harness reproduces the stored `matchScore` on 546 of 548 before the change; **one row changes tier and score: `0580933f13e88627`, unrelated to near, 40 to 54 (owner rating 2).** Every other row has the same tier, `matchScore` and `hardCapped`.
 
-1. **Regression guard: met.** 0 of the 545 rows without Serbian wording changed tier, score or cap.
+1. **Regression guard: met.** 0 of the 543 rows without Serbian wording changed tier, score or cap.
 2. **No false lifts: met.** 12 labelled ads are rated 0; none moved. The Serbian-titled ad rated 0 (`e656e8ff1ef7452f`, a construction "projektni menadžer") stays unrelated and capped at 40.
 3. **Gain: 1 of 2.** `0580933f13e88627` leaves the cap. `ea3d7a19fb2aba15` ("Menadžer za upravljanje projektima", rated 2) stays at 40, as pre-registered: it is a project-manager title with no `llmFacts`, so it is judged exactly as an English project manager is until enrichment covers it.
 4. **Same rule: met.** Serbian project / delivery titles are unrelated without product `roleTrack` evidence and near with it (tested against their English twins).
-5. **Counts:** 3 of the 548 rows have a Serbian title (found by reading all non-target titles and a Serbian-word and Cyrillic scan); 1 changes tier. Of the owner's 45 labelled ads, 42 are among the 548; the only one changed is `0580933f13e88627`.
+5. **Counts:** 5 of the 548 rows have Serbian wording in the title (by a title scan: reading all non-target titles plus a Serbian-word and Cyrillic scan; the other 543 have none, which is the "no Serbian wording" set of item 1); 1 of the 5 changes tier. This partition (5 and 543) is separate from the score-unchanged counts in the result paragraph above (one row changed, the harness reproducing the stored score on 546 of 548 before the change). Of the owner's 45 labelled ads, 42 are among the 548; the only one changed is `0580933f13e88627`.
 
 Not measured: the owner's applications sheet (43 titles) is not on disk in this environment, so that comparison was not run; the 548-row run covers the scored titles only. Serbian project titles will lift only once their ads carry `llmFacts` with product evidence; that is a coverage question (5 of 548 rows have facts), not a vocabulary one.
 
