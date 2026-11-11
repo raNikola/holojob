@@ -163,3 +163,11 @@ def test_extract_without_a_guard_is_unchanged(monkeypatch):
 def test_parse_args_default_is_off():
     sys.argv = ["enrich"]
     assert enrich_jobs.parse_args().max_usd is None
+
+
+def test_after_the_bump_every_fingerprint_differs(monkeypatch):
+    ads = [AD, {**AD, "title": "Other"}, {**AD, "description": "Else"}]
+    new = [job_fingerprint.job_fingerprint(a) for a in ads]
+    monkeypatch.setattr(job_fingerprint, "PROMPT_VERSION", 5)
+    old = [job_fingerprint.job_fingerprint(a) for a in ads]
+    assert all(n != o for n, o in zip(new, old))

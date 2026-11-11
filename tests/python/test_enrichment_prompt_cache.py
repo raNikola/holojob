@@ -1,6 +1,6 @@
 """The enrichment prompt is built for prompt caching: fixed text first and identical across ads, the ad last.
 
-Only the order changed; PROMPT_VERSION stays 5, so stored facts keep their fingerprints. No model call is made.
+Only the order changed; PROMPT_VERSION was 5 (now 6, M8), so stored facts keep their fingerprints. No model call is made.
 """
 
 import enrich_jobs
@@ -53,12 +53,12 @@ def test_competency_list_is_fixed_text_before_the_ad(tmp_path):
 
 
 def test_prompt_version_is_unchanged_and_existing_fingerprints_still_match():
-    assert job_fingerprint.PROMPT_VERSION == 5
+    assert job_fingerprint.PROMPT_VERSION == 6
     ad = {**AD_A}
     # the fingerprint covers version, title, company and description only, never the prompt layout
     assert job_fingerprint.job_fingerprint(ad) == job_fingerprint.job_fingerprint({**ad, "location": "elsewhere"})
     import hashlib
-    raw = "|".join(["5", ad["title"], ad["company"], ad["description"]])
+    raw = "|".join(["6", ad["title"], ad["company"], ad["description"]])
     assert job_fingerprint.job_fingerprint(ad) == hashlib.sha1(raw.encode()).hexdigest()[:16]
     from match_engine import matcher
-    assert matcher.PROMPT_VERSION == "extract-5.match-2"
+    assert matcher.PROMPT_VERSION == "extract-6.match-2"
