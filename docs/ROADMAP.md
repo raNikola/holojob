@@ -492,3 +492,11 @@ Deferred items (known, not scheduled):
 - **Test isolation (recorded 2026-11-09, after the profile-mirror incident):** the pytest and Vitest fingerprint guards only detect a change to `data/profile`, `data/intelligence`, `data/applications`, `manual_jobs.json` and `job-state.json`; they do not prevent it, and no other `data/` folder is checked. Long term every test uses an isolated data directory and never resolves the real `data/` ([DECISIONS.md](DECISIONS.md), "Incident 2026-11-09").
 
 - [x] Profile wording (work authorization / job location blocks), preview card for them, single question numbering with confirmed-only counter, repo scan moved to the Repos step (2026-11-13; see DECISIONS).
+
+## Backlog item 11 (owner numbering, 2026-11-14)
+
+- [ ] **The scored_jobs view drops ads not seen in the latest run while the ledger keeps them open.** Seen on 32 Fit controls and on the Cyrillic Software applied ad: `data/jobs/scored_jobs.json` no longer holds them, `job_history.json` still lists them open. Not started; decide whether the view keeps `notFoundThisRun` rows (see `row_state.py`). Items 1-10 of the owner's numbering are not in the repository.
+
+- [ ] **Item 12: ads written in a language the profile does not cover are not capped.** The language cap needs a readable English text, so a German-language ad such as gvf `5aaeb781` (a real German requirement) stays uncapped; 33 non-English rows in the current set, gvf included. Separate decision, not started.
+
+**Built 2026-11-14:** language cap 25 for a confirmed required-language mismatch, plus two clause-reading fixes ([DECISIONS.md](DECISIONS.md#language-cap-25-for-a-confirmed-required-language-mismatch-and-two-clause-reading-fixes-2026-11-14-branch-competency-memory-mvp)). Re-score not run.

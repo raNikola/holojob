@@ -103,17 +103,30 @@ _NAME = {lang: re.compile(rf"\b(?:{pattern})\b") for lang, pattern in LANGUAGES.
 # one clause: "fluency in spoken and written English", "upper-intermediate
 # or higher level of English", "poznavanje engleskog jezika". A bare mention
 # ("sharpen your English skills" in a benefits list) is not a requirement.
-_ASK_BEFORE = (
-    r"fluen\w*|proficien\w*|command of|knowledge of|level of|native|exceptional|excellent|"
+_ASK_BEFORE_STRICT = (
+    r"fluen\w*|proficien\w*|native|exceptional|excellent|"
     r"advanced|intermediate|written|spoken|communicat\w*|speak\w*|"
-    r"\b[abc][12]\b|poznavanj\w*|znanj\w*|tecn\w*|(?:required|mandatory|essential|must)\W+(?:\w+\W+){0,2}$"
+    r"\b[abc][12]\b|tecn\w*|(?:required|mandatory|essential|must)\W+(?:\w+\W+){0,2}$"
 )
+# Loose markers also fit a content phrase: "knowledge of Spanish e-invoicing" is about a subject, not a language.
+_ASK_BEFORE_LOOSE = r"command of|knowledge of|level of|poznavanj\w*|znanj\w*"
+_ASK_BEFORE = _ASK_BEFORE_STRICT + "|" + _ASK_BEFORE_LOOSE
 # "required" must follow the language directly: "Spanish, where required" is about postings, not the hire.
-_ASK_AFTER = (r"written|spoken|fluen\w*|proficien\w*|level|\b[abc][12]\b|jezik\w*|native|"
-              r"^\W*(?:is\s+|are\s+)?(?:required|mandatory|essential)")
+_ASK_AFTER_STRICT = (r"written|spoken|fluen\w*|proficien\w*|\b[abc][12]\b|jezik\w*|native|"
+                     r"^\W*(?:is\s+|are\s+)?(?:required|mandatory|essential)")
+_ASK_AFTER_LOOSE = r"level"  # "French accounting firms at leadership level" is not a language level
+_ASK_AFTER = _ASK_AFTER_STRICT + "|" + _ASK_AFTER_LOOSE
+# The word right after a language name that keeps it a language: anything else ("Spanish e-invoicing",
+# "German regulation", "French accountant") makes the name a modifier of a subject, and only the strict markers can still ask.
+_LANGUAGE_FOLLOWERS = frozenset(
+    "and or ili as at in to for with on of by from is are be a an the it you we but while when where if that who "
+    "level language languages speaker speakers speaking native mother tongue fluent fluency proficiency proficient "
+    "skills skill communication written spoken verbal required mandatory essential plus advantage bonus preferred "
+    "ability knowledge ideally desirable beneficial both either also not no".split())
 # A clause that calls the language a plus is a nice-to-have, not a gate.
 _OPTIONAL = re.compile(
-    r"\b(?:plus|advantage|bonus|nice to have|preferred|desirable|prednost|an asset|beneficial|ideally|optional)\b")
+    r"\b(?:plus|advantage|bonus|nice[- ]to[- ]haves?|preferred|desirable|prednost|an asset|beneficial|ideally|optional|"
+    r"highly recommended|(?:would be )?fantastic if)\b")
 # "German or English", "English and/or Russian": any one of the named languages will do.
 _ALTERNATIVE = re.compile(r"\b(?:or|and/or|ili)\b|/")
 # Clauses are cut from the raw ad, before normalize_text collapses its line
@@ -122,9 +135,34 @@ _ALTERNATIVE = re.compile(r"\b(?:or|and/or|ili)\b|/")
 _CLAUSE_BREAK = re.compile(r"<[^>]+>|[.;!?\n\u2022]|\s[-*]\s")
 
 
+_LINE_BREAK = re.compile(r"\n|<br\s*/?>|</?(?:p|li|div|ul|ol|tr|h\d)\b[^>]*>", re.I)
+_BULLET = re.compile(r"^\W{0,3}[-*\u2022\u00b7\u25aa\u2023\u25e6]\s")
+
+
+def _is_heading(line: str, text: str) -> bool:
+    """A short line that is not a bullet or a sentence: "Nice to have (but not required)", "**What you bring**"."""
+    return bool(text) and len(text) <= 70 and len(text.split()) <= 9 and not _BULLET.match(line.strip()) \
+        and not re.search(r"[.;,!?]$", text)
+
+
+def _clauses_marked(description: str) -> list[tuple[str, bool]]:
+    """(clause, under a preferred heading): bullets below "Preferred Qualifications" or "Nice to have" are optional
+    until the next heading. A heading that does not say so ends the section."""
+    out: list[tuple[str, bool]] = []
+    under = False
+    for line in _LINE_BREAK.split(html.unescape(description or "")):
+        text = normalize_text(line)
+        if _is_heading(line, text):
+            under = bool(_OPTIONAL.search(text))
+        for part in _CLAUSE_BREAK.split(line):
+            clause = normalize_text(part)
+            if clause:
+                out.append((clause, under))
+    return out
+
+
 def _clauses(description: str) -> list[str]:
-    parts = _CLAUSE_BREAK.split(html.unescape(description or ""))
-    return [c for c in (normalize_text(p) for p in parts) if c]
+    return [clause for clause, _ in _clauses_marked(description)]
 
 
 def _languages_in(text: str) -> set[str]:
@@ -174,14 +212,19 @@ def language_demands(job: dict, requirements: list[dict] | None = None) -> list[
                 for group in ([named] if alt else [{lang} for lang in named]):
                     add(group, level)
     extracted = set().union(*demands) if demands else set()
-    for clause in (part for c in _clauses(job.get("description") or "") for part in _split_by_marker(c)):
-        optional = bool(_OPTIONAL.search(clause))
+    for clause, under_heading in ((part, under) for c, under in _clauses_marked(job.get("description") or "")
+                                  for part in _split_by_marker(c)):
+        optional = under_heading or bool(_OPTIONAL.search(clause))
         asked = set()
         for lang, name in _NAME.items():
             for match in name.finditer(clause):
                 before = clause[max(0, match.start() - 40):match.start()]
                 after = clause[match.end():match.end() + 40]
-                if re.search(_ASK_BEFORE, before) or re.search(_ASK_AFTER, after):
+                follower = re.match(r"[\s-]*([a-z]+)", clause[match.end():])
+                modifier = bool(follower) and follower.group(1) not in _LANGUAGE_FOLLOWERS
+                ask_before = _ASK_BEFORE_STRICT if modifier else _ASK_BEFORE
+                ask_after = _ASK_AFTER_STRICT if modifier else _ASK_AFTER
+                if re.search(ask_before, before) or re.search(ask_after, after):
                     asked.add(lang)
         # The extraction already says how the ad treats a language it extracted; the clause is not read again.
         named = _languages_in(clause) - extracted
@@ -334,6 +377,41 @@ def language_result(job: dict, gates: dict, requirements: list[dict] | None = No
         return UNKNOWN
     covered = covered_languages(spoken)
     return PASS if all(group & covered for group in required) else FAIL
+
+
+# A required-language cap rests on the ad's own words, so it needs a text that can be read: enough words, English
+# (the name table and the ask markers are English-centred), and not cut off. Thresholds are a first signal, unvalidated.
+LANGUAGE_MIN_WORDS = 100
+LANGUAGE_MIN_STOPWORD_RATIO = 0.12
+_STOPWORDS = frozenset(
+    "the and of to a in for with you our is are will be as on we your that this or an by at from have has can "
+    "work team about what who they their it more role experience product".split())
+_TEASER_END = re.compile(r"(\.\.\.|\u2026|\[\.\.\.\]|\[\u2026\]|read more|show more|see more)\s*$", re.I)
+
+
+def language_text_readable(job: dict) -> bool:
+    """False for an empty, short, truncated or non-English description: no language cap is read from it."""
+    text = " ".join(re.sub(r"<[^>]+>", " ", html.unescape(job.get("description") or "")).split())
+    words = text.split()
+    if len(words) < LANGUAGE_MIN_WORDS or _TEASER_END.search(text):
+        return False
+    status = f"{job.get('descriptionStatus') or ''} {job.get('descriptionSource') or ''}".lower()
+    if any(mark in status for mark in ("teaser", "trunc", "partial", "snippet", "summary")):
+        return False
+    tokens = re.findall(r"[a-zA-Z']+", text.lower())
+    return bool(tokens) and sum(t in _STOPWORDS for t in tokens) / len(tokens) >= LANGUAGE_MIN_STOPWORD_RATIO
+
+
+def uncovered_required_languages(job: dict, gates: dict, requirements: list[dict] | None = None) -> list[str]:
+    """The languages a required demand names that the profile list does not cover, "A or B" for an alternative group.
+
+    Empty unless language_result fails (a confirmed mismatch) on a text that can be read; unknown never caps.
+    """
+    if language_result(job, gates, requirements) != FAIL or not language_text_readable(job):
+        return []
+    covered = covered_languages(set(_spoken(gates)))
+    groups = [g for g, level in language_demands(job, requirements) if level == REQUIRED and not (g & covered)]
+    return sorted(" or ".join(sorted(g)) for g in groups)
 
 
 def salary_floor_result(job: dict, gates: dict) -> str:

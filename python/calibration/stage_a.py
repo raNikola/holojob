@@ -103,6 +103,8 @@ def cap_type(row: dict) -> str:
                 return "title"
             if "the ad describes" in text:
                 return "track"
+            if "the ad requires" in text:
+                return "language"
             return "authorization"
         if text.startswith("Red flag"):
             return "red_flag"

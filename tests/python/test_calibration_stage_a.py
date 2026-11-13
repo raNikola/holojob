@@ -19,6 +19,7 @@ def test_cap_type_reads_the_scorer_reason_lines():
     assert sa.cap_type(row("a", reasons=["Capped: the title matches no target role"])) == "title"
     assert sa.cap_type(row("a", reasons=["Capped: the ad describes delivery work, not a product role"])) == "track"
     assert sa.cap_type(row("a", reasons=["Capped: visa"])) == "authorization"
+    assert sa.cap_type(row("a", reasons=["Capped: the ad requires Russian, which your profile does not list"])) == "language"
     assert sa.cap_type(row("a", reasons=["Red flag: x"])) == "red_flag"
     assert sa.cap_type(row("a")) == "none"
 

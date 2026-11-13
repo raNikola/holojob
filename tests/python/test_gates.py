@@ -179,8 +179,8 @@ def test_language_uses_the_extractions_importance():
 def test_the_extraction_wins_over_the_clause_for_a_language_it_extracted():
     # "Speak Italian" reads as an ask, but the extraction marked it preferred.
     nice = [{"kind": "language", "importance": "preferred", "text": "Speak Italian",
-             "postingQuote": "Speak Italian (highly recommended)"}]
-    ad = job(description="Speak Italian (highly recommended for our Milan location)")
+             "postingQuote": "Speak Italian with our Milan colleagues"}]
+    ad = job(description="Speak Italian with our Milan colleagues")
     assert language_result(ad, SERBIAN, nice) == "unknown"
     assert language_result(ad, SERBIAN, []) == "fail"
 
@@ -324,3 +324,75 @@ def test_a_preferred_bullet_does_not_hide_a_required_language():
 def test_clauses_split_on_html_tags():
     text = "&lt;li&gt;Jira preferred&lt;/li&gt;&lt;li&gt;Fluency in English&lt;/li&gt;"
     assert required_languages(job(description=text)) == {"English"}
+
+
+# --- clause reading: headings and subject modifiers (owner decision 2026-11-14) ---
+from match_engine.gates import OPTIONAL, REQUIRED, language_demands  # noqa: E402
+
+
+def _levels(text):
+    return {tuple(sorted(g)): level for g, level in language_demands(job(description=text))}
+
+
+@pytest.mark.parametrize("heading", ["Nice to have (but not required)", "**Preferred Qualifications That Set You Apart:**",
+                                     "Nice-to-haves", "Now It Would Be Fantastic If You", "Bonus points"])
+def test_a_language_under_a_preferred_heading_is_optional(heading):
+    text = f"**Requirements**\n* Fluent English\n{heading}\n* Fluent German\n* Written and spoken Russian\n"
+    levels = _levels(text)
+    assert levels[("English",)] == REQUIRED
+    assert levels[("German",)] == OPTIONAL and levels[("Russian",)] == OPTIONAL
+    assert required_languages(job(description=text)) == {"English"}
+
+
+def test_a_requirements_heading_ends_the_preferred_section():
+    text = "Nice to have\n* Fluent French\n**Requirements:**\n* Fluent German\n* Fluent Russian\n"
+    levels = _levels(text)
+    assert levels[("French",)] == OPTIONAL
+    assert levels[("German",)] == REQUIRED and levels[("Russian",)] == REQUIRED
+
+
+def test_a_required_clause_under_a_requirements_heading_still_requires_the_language():
+    for lang in ("German", "Russian"):
+        text = f"<h3>Requirements</h3><ul><li>Fluent {lang}</li></ul>"
+        assert required_languages(job(description=text)) == {lang}
+        plain = f"What you bring\n* Fluent {lang}\n* Experience in product\n"
+        assert required_languages(job(description=plain)) == {lang}
+
+
+def test_a_heading_clause_does_not_make_a_long_sentence_a_heading():
+    text = "Fluent English is a must, and we prefer candidates who have shipped B2B products and led a team of five\n* Fluent German\n"
+    assert _levels(text)[("German",)] == REQUIRED
+
+
+@pytest.mark.parametrize("text", [
+    "* Highly recommended: Italian at B2 level",
+    "* Speak Italian (highly recommended for our Milan location)",
+    "* It would be fantastic if you spoke Italian",
+    "* Fantastic if you speak Italian",
+])
+def test_highly_recommended_and_fantastic_if_are_optional(text):
+    assert required_languages(job(description=text)) == set()
+    assert _levels(text)[("Italian",)] == OPTIONAL
+
+
+@pytest.mark.parametrize("text", [
+    "* Knowledge of regulation: spanish electronic invoicing (Verifactu)",
+    "* Deep knowledge of the residential energy system and German regulation and market roles",
+    "* Represent the voice of French accounting firms at leadership level",
+    "* Knowledge of the French accountant ecosystem",
+])
+def test_a_language_adjective_on_a_subject_noun_is_not_an_ask(text):
+    assert required_languages(job(description=text)) == set()
+
+
+@pytest.mark.parametrize("text, lang", [
+    ("* Native Spanish essential and advanced professional English. Other languages, such as Italian, are a plus.", "Spanish"),
+    ("* Knowledge of German", "German"),
+    ("* Knowledge of English and German", "German"),
+    ("* Level of Russian: B2", "Russian"),
+    ("* German level C1", "German"),
+    ("* Russian at a professional level", "Russian"),
+    ("* Fluent in English and German", "German"),
+])
+def test_real_language_asks_survive_the_subject_noun_rule(text, lang):
+    assert lang in required_languages(job(description=text))

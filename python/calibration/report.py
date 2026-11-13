@@ -61,7 +61,8 @@ def spearman(xs: list[float], ys: list[float]) -> float | None:
 def _cap(row: dict) -> str:
     for text in row.get("reasons") or []:
         if text.startswith("Capped:"):
-            return "title" if "title matches no" in text else "track" if "the ad describes" in text else "authorization"
+            return ("title" if "title matches no" in text else "track" if "the ad describes" in text
+                    else "language" if "the ad requires" in text else "authorization")
         if text.startswith("Red flag"):
             return "red_flag"
     return "none"

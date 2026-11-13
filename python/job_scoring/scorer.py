@@ -52,6 +52,21 @@ OFF_TRACK_CAP = 50
 # A title that is neither a target role nor near one (role_tier.py). The same answer as the off-track cap, read from
 # the title, so it holds for the many ads enrichment has not read. 40 keeps the ad reviewable (Weak, Maybe) and below a target-role ad held at 45 or 50.
 UNRELATED_TITLE_CAP = 40
+# A required language no profile language covers (match_engine.gates, confirmed mismatch only; owner decision 2026-11-14).
+LANGUAGE_CAP = 25
+
+
+def language_cap_names(job: dict, intelligence: dict) -> list[str]:
+    """Languages the ad requires that the profile does not list, by the engine's own gate; [] when nothing is confirmed.
+
+    The profile list is intelligence["languages"], the same input build_candidate gives the gates. Imported here:
+    match_engine.gates imports this module.
+    """
+    from match_engine import gates as engine_gates
+
+    requirements = (job.get("llmFacts") or {}).get("requirements") or None
+    return engine_gates.uncovered_required_languages(
+        job, {"languages": [str(x) for x in intelligence.get("languages") or []]}, requirements)
 
 
 def track_has_evidence(facts: dict) -> bool:
@@ -137,6 +152,10 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     if authorization_cap is not None:
         match_score = min(match_score, authorization_cap)
 
+    language_names = language_cap_names(job, intelligence)
+    if language_names:
+        match_score = min(match_score, LANGUAGE_CAP)
+
     insufficient_reasons = data_sufficiency.assess(job)
     insufficient = bool(insufficient_reasons)
     if insufficient:
@@ -168,6 +187,9 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         reasons.append(f"{authorization['location']['flag']}: {authorization['location']['reason']}")
     elif authorization["status"] in (wa.SPONSORED, wa.UNKNOWN):
         reasons.append(f"Work authorization: {authorization['reason']}")
+
+    if language_names:
+        reasons.append(f"Capped: the ad requires {' and '.join(language_names)}, which your profile does not list")
 
     if insufficient:
         reasons = [f"Insufficient data: {r}" for r in insufficient_reasons] + reasons
@@ -214,7 +236,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         # True when a hard rule applies to the job, whether or not it lowered
         # this particular score. The enhancer never lifts such a job, so caps
         # stay decided here.
-        "hardCapped": insufficient or bool(red_flags) or off_track or title_capped or authorization_cap is not None,
+        "hardCapped": insufficient or bool(red_flags) or off_track or title_capped or authorization_cap is not None
+        or bool(language_names),
     }
     return enhancer.enhance(job, result, intelligence)
 
