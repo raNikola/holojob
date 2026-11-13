@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { RefreshCw, Loader2 } from 'lucide-react'
 import Card from '../ui/Card'
-import OperationConsole from '../ui/OperationConsole'
 import QuestionField from './QuestionField'
-import { QUESTIONS, QUESTION_COUNT } from '../../data/questions'
-import { HIGH_IMPACT_QUESTION_IDS, derivedEntry, isDerivedAnswer, orderedQuestions } from '../../modules/profile/questionnaireStatus'
+import { QUESTION_COUNT } from '../../data/questions'
+import { HIGH_IMPACT_QUESTION_IDS, confirmedQuestionIds, derivedEntry, isDerivedAnswer, orderedQuestions } from '../../modules/profile/questionnaireStatus'
 import { SKILLS_DICTIONARY } from '../../data/skillsDictionary'
 import { useProfile } from '../../context/ProfileContext'
-import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
-import { useOperationLog } from '../../hooks/useOperationLog'
+import { useRepoScan } from '../../hooks/useRepoScan'
 import { ensureApiAvailable } from '../../utils/apiAvailability'
 import { joinAnswerList, parseAnswerList } from '../../utils/answerList'
 
@@ -76,23 +73,13 @@ const ORDERED_QUESTIONS = orderedQuestions()
 
 export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion }) {
   const { profile, updateProfile } = useProfile()
-  const [projectIntel, setProjectIntel] = useState(null)
   const [candidateIntel, setCandidateIntel] = useState(null)
-  const [scanning, setScanning] = useState(false)
-  const [scanMsg, setScanMsg] = useState('')
-  const scanLog = useOperationLog()
+  const { projectIntel, canScan: hasRepos } = useRepoScan(profile)
   const seeded = useRef(false)
-
-  const hasRepos = (profile.repositories?.githubLinks?.filter(Boolean).length || 0) +
-    (profile.repositories?.localRepoPaths?.filter(Boolean).length || 0) > 0
 
   // Load both intelligence files once on mount
   useEffect(() => {
-    Promise.all([
-      fetchJson('/api/projects/intelligence'),
-      fetchJson('/api/intelligence/candidate'),
-    ]).then(([proj, cand]) => {
-      if (proj) setProjectIntel(proj)
+    fetchJson('/api/intelligence/candidate').then((cand) => {
       if (cand) setCandidateIntel(cand)
     })
   }, [])
@@ -150,43 +137,10 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion 
     })
   }
 
-  const handleScanRepos = async () => {
-    setScanning(true)
-    scanLog.start('Saving profile to disk…')
-    setScanMsg('')
-    await saveProfileToDataDir(profile)
-    scanLog.append('Cloning / scanning repos with Claude Code (1–3 min)…')
-    try {
-      const res = await fetch('/api/projects/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-      const data = await res.json()
-      if (data.stdout) {
-        for (const line of data.stdout.split('\n').filter(Boolean)) scanLog.append(line)
-      }
-      if (data.stderr) {
-        for (const line of data.stderr.split('\n').filter(Boolean)) scanLog.append(line)
-      }
-      if (data.payload) {
-        setProjectIntel(data.payload)
-        seeded.current = false
-        const n = data.payload.projects?.length || 0
-        scanLog.append(`Done — ${n} repo(s) analyzed.`)
-        setScanMsg(`Scanned ${n} repo(s). Skills and projects updated.`)
-      } else {
-        setScanMsg(data.stderr || 'Scan completed.')
-        scanLog.append(data.stderr || 'Scan finished.')
-      }
-    } catch (e) {
-      setScanMsg(`Error: ${e.message}`)
-      scanLog.append(`Error: ${e.message}`)
-    } finally {
-      setScanning(false)
-      scanLog.stop()
-    }
-  }
-
   const currentQuestion = ORDERED_QUESTIONS[questionIndex]
   const highImpact = HIGH_IMPACT_QUESTION_IDS.includes(currentQuestion?.id)
-  const answeredCount = QUESTIONS.filter((q) => isNonEmpty(getAnswer(q.id))).length
+  const confirmed = new Set(confirmedQuestionIds(profile))
+  const answeredCount = confirmed.size
   const repoProjects = buildRepoProjects(projectIntel)
   const allParsedSkills = buildAutoSkills(
     profile.resume?.parsedData?.skills || [],
@@ -201,30 +155,8 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion 
           All of these are optional. Each one you answer gives matching more to go on; skip any and come back later. Role, location, remote and salary were captured on the Profile step.
         </p>
 
-        {currentQuestion?.section === 1 && hasRepos && (
-          <div className="mt-3 flex items-center gap-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 dark:border-teal-800 dark:bg-teal-900/20">
-            <button
-              type="button"
-              onClick={handleScanRepos}
-              disabled={scanning}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-60"
-            >
-              {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              {projectIntel ? 'Re-scan repos' : 'Scan GitHub repos'}
-            </button>
-            <p className="text-xs text-teal-800 dark:text-teal-300">
-              {scanMsg || (projectIntel
-                ? `Last scan: ${projectIntel.meta?.scannedAt ? new Date(projectIntel.meta.scannedAt).toLocaleDateString() : 'done'} · ${projectIntel.projects?.length || 0} repo(s)`
-                : 'Claude Code will mine your repos for skills, quantifiable metrics, and project summaries.'
-              )}
-            </p>
-            <OperationConsole
-              lines={scanLog.lines}
-              active={scanLog.active}
-              title={scanning ? 'Scanning repos…' : 'Scan log'}
-              className="mt-2 w-full"
-            />
-          </div>
+        {hasRepos && !projectIntel && (
+          <p className="mt-3 text-xs text-stone-500">Scan your repos in the Repos step to pre-fill skills.</p>
         )}
 
         <div className="mt-4">
@@ -247,7 +179,7 @@ export default function QuestionnaireForm({ questionIndex = 0, onJumpToQuestion 
       {onJumpToQuestion && (
         <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-9" role="group" aria-label="Jump to question">
           {ORDERED_QUESTIONS.map((q, i) => {
-            const answered = isNonEmpty(getAnswer(q.id))
+            const answered = confirmed.has(q.id)
             const current = i === questionIndex
             return (
               <button

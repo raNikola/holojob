@@ -9,7 +9,7 @@ import { validateProfileForIntelligence } from '../../src/modules/intelligence/i
 import { checkFinishReadiness } from '../../src/modules/profile/finishReadiness'
 import { describeAnswer } from '../../src/modules/profile/answerDisplay'
 import {
-  HIGH_IMPACT_QUESTION_IDS, answeredQuestionIds, derivedEntry, isDerivedAnswer, orderedQuestions, unansweredQuestionIds,
+  HIGH_IMPACT_QUESTION_IDS, answeredQuestionIds, confirmedQuestionIds, derivedEntry, isDerivedAnswer, orderedQuestions, unansweredQuestionIds,
 } from '../../src/modules/profile/questionnaireStatus'
 import { joinAnswerList } from '../../src/utils/answerList'
 import { STORAGE_KEY, getDefaultProfile, loadProfile } from '../../src/utils/storage'
@@ -59,6 +59,13 @@ describe('optional questionnaire', () => {
     expect(answeredQuestionIds(p)).toEqual([1, 2])
     expect(unansweredQuestionIds(p)).toHaveLength(15)
     expect(unansweredQuestionIds(p)).toContain(3)
+  })
+
+  it('counts only confirmed answers: derived-from-resume ones stay stored but do not count', () => {
+    const p = profile({ questionnaire: { answers: [...answers([1]), derivedEntry(2, 'Q2', 'A; B')] } })
+    expect(confirmedQuestionIds(p)).toEqual([1])
+    expect(answeredQuestionIds(p)).toEqual([1, 2])
+    expect(p.questionnaire.answers).toHaveLength(2)
   })
 
   it('asks the high-impact questions first and keeps every question', () => {

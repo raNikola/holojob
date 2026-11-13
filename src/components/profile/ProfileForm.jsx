@@ -9,9 +9,9 @@ import SelectField from '../ui/SelectField'
 import { useProfile } from '../../context/ProfileContext'
 import { REQUIRED_PROFILE_FIELDS, profileFieldErrors } from '../../utils/validators'
 import { LANGUAGE_PROFICIENCIES } from '../../utils/languages'
-import { AUTHORIZATION_BASES, RELOCATION_OPTIONS, REMOTE } from '../../utils/workAuthorization'
+import { AUTHORIZATION_BASES, RELOCATION_OPTIONS } from '../../utils/workAuthorization'
+import { BASIS_LABELS, JURISDICTION_OPTIONS, PLACE_OPTIONS, RELOCATION_LABELS, placeName } from '../../utils/workLabels'
 import { ROLE_FAMILY_IDS, ROLE_FAMILY_LABELS } from '../../utils/roleFamily'
-import geography from '../../data/geography.json'
 
 function ListEditor({ label, items = [], onChange, confidenceKey, confidence }) {
   const update = (index, value) => {
@@ -51,27 +51,6 @@ function ListEditor({ label, items = [], onChange, confidenceKey, confidence }) 
 }
 
 const SELECT_CLASS = 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-950 dark:text-stone-50'
-const COUNTRY_OPTIONS = geography.countries
-  .map(({ code, name }) => ({ code, name }))
-  .sort((a, b) => a.name.localeCompare(b.name))
-const REGION_OPTIONS = Object.entries(geography.regions).map(([code, region]) => ({ code, name: region.name }))
-// A right to work is held for a country, or for the EU as a whole.
-const JURISDICTION_OPTIONS = [...REGION_OPTIONS.filter((r) => r.code === 'EU'), ...COUNTRY_OPTIONS]
-const PLACE_OPTIONS = [{ code: REMOTE, name: 'Remote' }, ...REGION_OPTIONS, ...COUNTRY_OPTIONS]
-const placeName = (code) => PLACE_OPTIONS.find((option) => option.code === code)?.name || code
-
-const BASIS_LABELS = {
-  citizen: 'Citizen',
-  permanent_resident: 'Permanent resident',
-  work_permit: 'Work permit or visa',
-  other: 'Other',
-}
-const RELOCATION_LABELS = {
-  none: 'No: only my own cities, or remote',
-  abroad: 'Yes, to another country (not within my own)',
-  anywhere: 'Yes, anywhere',
-}
-
 function WorkAuthorizationEditor({ value, onChange }) {
   const holds = value?.holds || []
   const openToSponsorship = value?.openToSponsorship === true
@@ -80,9 +59,9 @@ function WorkAuthorizationEditor({ value, onChange }) {
 
   return (
     <div>
-      <span className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">Where you can work without a visa</span>
+      <span className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">Where do you already have the legal right to work without employer sponsorship?</span>
       <p className="mb-2 text-xs text-stone-500 dark:text-stone-400">
-        Leave empty and visas are not checked. For an EU passport, add &ldquo;EU / EEA / Switzerland&rdquo;.
+        Only countries where you can work without a visa or sponsorship. Leave empty and visas are not checked.
       </p>
       <div className="space-y-2">
         {holds.map((entry, i) => (
@@ -92,7 +71,7 @@ function WorkAuthorizationEditor({ value, onChange }) {
               {JURISDICTION_OPTIONS.map((o) => <option key={o.code} value={o.code}>{o.name}</option>)}
             </select>
             <select value={entry.basis} onChange={(e) => update(i, { basis: e.target.value })} className={`${SELECT_CLASS} w-56`}>
-              <option value="">Basis…</option>
+              <option value="">How?</option>
               {AUTHORIZATION_BASES.map((b) => <option key={b} value={b}>{BASIS_LABELS[b]}</option>)}
             </select>
             <button type="button" onClick={() => set({ holds: holds.filter((_, j) => j !== i) })} className="rounded-lg p-2 text-stone-400 hover:bg-stone-100 hover:text-red-500 dark:hover:bg-stone-800">
@@ -116,9 +95,9 @@ function PlacePicker({ selected = [], onChange }) {
   const available = PLACE_OPTIONS.filter((o) => !selected.includes(o.code))
   return (
     <div>
-      <span className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">Where you&rsquo;ll take a job</span>
+      <span className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">Where would you accept a job?</span>
       <p className="mb-2 text-xs text-stone-500 dark:text-stone-400">
-        Leave empty to consider every location. Jobs outside a list you set are still shown, scored low.
+        Remote counts as a place. Jobs outside this list are still shown, scored low.
       </p>
       <div className="mb-2 flex flex-wrap gap-2">
         {selected.map((code) => (
@@ -259,16 +238,24 @@ export default function ProfileForm({ showErrors = false }) {
         </div>
       </Card>
 
-      <Card title="Where you can work" description="Your right to work, whether you would move, and where you'll take a job. Scoring uses these to rank roles you can't legally take lower; nothing is hidden.">
-        <div className="space-y-6">
-          <WorkAuthorizationEditor value={bp.workAuthorization} onChange={(v) => setBasic('workAuthorization', v)} />
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300">Would you relocate for a job?</label>
-            <select value={bp.relocation || 'none'} onChange={(e) => setBasic('relocation', e.target.value)} className={SELECT_CLASS}>
-              {RELOCATION_OPTIONS.map((r) => <option key={r} value={r}>{RELOCATION_LABELS[r]}</option>)}
-            </select>
-          </div>
-          <PlacePicker selected={bp.allowedLocations || []} onChange={(v) => setBasic('allowedLocations', v)} />
+      <Card title="Where you can work" description="Your right to work, where you would take a job, and whether you would move.">
+        <div className="space-y-8">
+          <section aria-labelledby="work-authorization-title">
+            <h4 id="work-authorization-title" className="mb-3 text-sm font-semibold text-stone-800 dark:text-stone-200">Work authorization</h4>
+            <WorkAuthorizationEditor value={bp.workAuthorization} onChange={(v) => setBasic('workAuthorization', v)} />
+          </section>
+          <section aria-labelledby="job-location-title">
+            <h4 id="job-location-title" className="mb-3 text-sm font-semibold text-stone-800 dark:text-stone-200">Job location preferences</h4>
+            <div className="space-y-6">
+              <PlacePicker selected={bp.allowedLocations || []} onChange={(v) => setBasic('allowedLocations', v)} />
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300">Would you relocate for a job?</label>
+                <select value={bp.relocation || 'none'} onChange={(e) => setBasic('relocation', e.target.value)} className={SELECT_CLASS}>
+                  {RELOCATION_OPTIONS.map((r) => <option key={r} value={r}>{RELOCATION_LABELS[r]}</option>)}
+                </select>
+              </div>
+            </div>
+          </section>
         </div>
       </Card>
 

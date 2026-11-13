@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Brain, Loader2, Pencil, Upload } from 'lucide-react'
 import Card from '../ui/Card'
 import { formatLanguages } from '../../utils/languages'
+import { BASIS_LABELS, RELOCATION_LABELS, jurisdictionName, placeName } from '../../utils/workLabels'
 import Button from '../ui/Button'
 import Alert from '../ui/Alert'
 import { useProfile } from '../../context/ProfileContext'
@@ -14,7 +15,7 @@ import { VIEWS } from '../../modules/appNavigation'
 import { QUESTIONS } from '../../data/questions'
 import { describeAnswer } from '../../modules/profile/answerDisplay'
 import CompleteProfileCard from './CompleteProfileCard'
-import { answeredQuestionIds } from '../../modules/profile/questionnaireStatus'
+import { confirmedQuestionIds } from '../../modules/profile/questionnaireStatus'
 
 // Wizard steps, as numbered in OnboardingWizard.
 const RESUME_STEP = 1
@@ -42,7 +43,11 @@ export default function ProfileHome({ onNavigate }) {
   const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
 
-  const answeredCount = answeredQuestionIds(profile).length
+  const answeredCount = confirmedQuestionIds(profile).length
+  const rights = (bp.workAuthorization?.holds || [])
+    .filter((h) => h.jurisdiction)
+    .map((h) => `${jurisdictionName(h.jurisdiction)}${h.basis ? ` (${BASIS_LABELS[h.basis] || h.basis})` : ''}`)
+  const sponsorship = bp.workAuthorization?.openToSponsorship === true ? 'Yes' : 'No'
   const validation = validateProfileForIntelligence(profile)
 
   const editStep = (step) => {
@@ -109,8 +114,17 @@ export default function ProfileHome({ onNavigate }) {
           <Field label="Phone" value={bp.phone} />
           <Field label="Current role" value={bp.currentRole} />
           <Field label="Target roles" value={bp.targetRoles} />
-          <Field label="Preferred locations" value={bp.preferredLocations} />
+          <Field label="Cities you can work onsite in" value={bp.preferredLocations} />
           <Field label="Languages" value={formatLanguages(bp.languages)} />
+        </dl>
+      </Card>
+
+      <Card title="Where you can work" action={sectionEdit(PROFILE_STEP, 'where you can work')}>
+        <dl className="divide-y divide-stone-100 dark:divide-stone-800">
+          <Field label="Right to work" value={rights} />
+          <Field label="Open to sponsorship" value={sponsorship} />
+          <Field label="Would accept a job in" value={(bp.allowedLocations || []).map(placeName)} />
+          <Field label="Would relocate" value={RELOCATION_LABELS[bp.relocation || 'none']} />
         </dl>
       </Card>
 

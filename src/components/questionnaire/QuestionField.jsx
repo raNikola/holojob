@@ -5,7 +5,7 @@ import { SKILLS_DICTIONARY } from '../../data/skillsDictionary'
 import { joinAnswerList as joinAnswer, parseAnswerList as parseAnswer } from '../../utils/answerList'
 
 export default function QuestionField({ question, answer, onChange, profile, allParsedSkills = [], repoProjects = [] }) {
-  const label = `${question.id}. ${question.text}`
+  const label = question.text
   // allParsedSkills is the merged set from resume + candidate-intel + project-intel
   // Fall back to resume-only if the parent hasn't computed it yet
   const parsedSkills = allParsedSkills.length

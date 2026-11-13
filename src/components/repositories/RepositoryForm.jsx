@@ -1,5 +1,7 @@
-import { Plus, Trash2, Link2, FolderOpen } from 'lucide-react'
+import { Plus, Trash2, Link2, FolderOpen, RefreshCw, Loader2 } from 'lucide-react'
 import Card from '../ui/Card'
+import OperationConsole from '../ui/OperationConsole'
+import { useRepoScan } from '../../hooks/useRepoScan'
 import { useProfile } from '../../context/ProfileContext'
 import { isValidUrl } from '../../utils/validators'
 import { saveProfileToDataDir } from '../../modules/jobs/profileSync'
@@ -53,6 +55,9 @@ function DynamicList({ icon: Icon, label, description, items, onChange, placehol
 export default function RepositoryForm() {
   const { profile, updateProfile } = useProfile()
   const repos = profile.repositories
+  const { projectIntel, scanning, scanMsg, scanLog, scan, canScan } = useRepoScan(profile)
+  const scannedAt = projectIntel?.meta?.scannedAt
+  const repoCount = projectIntel?.projects?.length
 
   const setRepos = (field, value) => {
     // Keep empty rows while editing — blanks are filtered at consumption time.
@@ -87,6 +92,27 @@ export default function RepositoryForm() {
             placeholder="/Users/you/projects/my-app"
           />
         </div>
+      </Card>
+      <Card title="Scan repositories" description="Claude Code mines your repos for skills, metrics and project summaries, which pre-fill the questionnaire.">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={scan}
+            disabled={!canScan || scanning}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-60"
+          >
+            {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            {projectIntel ? 'Re-scan repos' : 'Scan GitHub repos'}
+          </button>
+          <p className="text-xs text-stone-600 dark:text-stone-400">
+            {scanMsg || (!canScan
+              ? 'Add a GitHub link or a local path above to enable scanning.'
+              : projectIntel && (scannedAt || repoCount != null)
+                ? `Last scan: ${[scannedAt && new Date(scannedAt).toLocaleDateString(), repoCount != null && `${repoCount} repo(s)`].filter(Boolean).join(' · ')}`
+                : '')}
+          </p>
+        </div>
+        <OperationConsole lines={scanLog.lines} active={scanLog.active} title={scanning ? 'Scanning repos…' : 'Scan log'} className="mt-2 w-full" />
       </Card>
     </div>
   )

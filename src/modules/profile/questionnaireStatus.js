@@ -33,3 +33,13 @@ export const DERIVED_FROM_RESUME = 'resume'
 export const derivedEntry = (id, question, answer) => ({ id, question, answer, source: DERIVED_FROM_RESUME })
 
 export const isDerivedAnswer = (entry) => entry?.source === DERIVED_FROM_RESUME
+
+// Answers the user typed or chose: answered and not pre-filled from the résumé.
+// Pre-filled answers stay stored and shown as suggestions but do not count.
+export function confirmedQuestionIds(profile) {
+  const answers = profile?.questionnaire?.answers || []
+  return QUESTIONS.filter((q) => {
+    const entry = answers.find((a) => a.id === q.id)
+    return hasAnswer(entry) && !isDerivedAnswer(entry)
+  }).map((q) => q.id)
+}
