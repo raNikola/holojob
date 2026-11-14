@@ -2059,3 +2059,15 @@ UI-only; storage keys, data shapes, scoring and routes unchanged. "Where you can
 **Corrected dry run** (610 open rows, facts joined from `discovered_jobs.json`, data untouched): 24 rows change from authorized to needs_visa_silent (cap 45): the 18 first built plus 6 added by the correction (Akamai Cambridge MA, BenefitHub Tampa FL, two Fivetran "Remote, ..., United States, AMER, ..." and two Nebius "Remote - United States"). Threshold 30 met; 0 changed rows in a held country. `scoringVersion` stays 1.2 (never deployed). Score effect: 23 of the 24 are lowered (one already scored 40); top 15 loses 7, top 50 loses 21, rank 50 falls from 65 to 45, rank 100 stays 45. TeamViewer (Stuttgart, remote) stays authorized: its own text states Germany, and a stated geography is read by `location_text` (unknown, "Verify location"), as before.
 
 **Known limits.** (a) `visaSponsorship` is read from the facts; rows without facts count as "not mentioned". (b) Regions and city-plus-remote are unrestricted. (c) B2B contracting is not modelled, so US remote rows sit at 45 although a contractor may not need a work permit. (d) The cap is the visa path's, so the reason text says "needs a work permit for X".
+
+## Tie-break the Jobs list by the score before caps (2026-11-14, branch `competency-memory-mvp`)
+
+**Owner decision 2026-11-14:** tie-break by pre-cap score, no ranking change otherwise. About 463 open rows sat at exactly 45 (visa cap) and their visible order was file order.
+
+**Built.** `scorer.py` stores `scoreBeforeCaps` on every row: the weighted total with no cap applied (red flag 54, off-track 50, title 40, visa 25 / 40 / 45, language 25), same pipeline and rounding as `matchScore`; no cap means it equals `matchScore`. Several caps keep the one highest value. `matchScore`, label, priority, caps and reasons are unchanged. The Jobs list default sort (Fit Score descending, open before closed; `defaultOrder` in `jobTableModel.js`) breaks equal scores by `scoreBeforeCaps` descending, then `jobId`. A row without the field (scored before the next Re-score) uses its Fit Score. Other sorts are untouched; no column or display. `scoringVersion` 1.3.
+
+**Choices.** (a) Insufficient-data rows: the data ceiling (5) is kept in the pre-cap value, since that is a state, not a band, and must not be lifted by its raw total. (b) With `--judge`, `llm_enhancer` moves `scoreBeforeCaps` with the judged score only for a row no cap lowered; a capped row keeps its local pre-cap value. (c) Unscored rows are now ordered by `jobId` instead of file order in the default sort.
+
+**Check (copy of the scored file, local scorer, no model).** 625 rows re-scored: `matchScore`, label and priority identical before and after for every row. 463 open rows tie at 45 with 31 distinct pre-cap values (52 to 84).
+
+**Known limits.** The pre-cap value excludes nothing: it is the uncapped weighted total, not a new score and not a judgement that the ad is a better fit. A visa-capped ad with a high total ranks above a visa-capped ad with a low one, but the owner cannot take either without a permit. Rows get the field only after a Re-score.

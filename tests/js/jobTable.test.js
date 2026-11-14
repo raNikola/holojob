@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import FitScore from '../../src/components/jobs/FitScore.jsx'
 import JobTable from '../../src/components/jobs/JobTable.jsx'
 import {
-  JOB_PAGE_SIZE, closedLast, everySelected, pageLimit, selectedNotShown, selectionFor, showMore, toggleAllSelected, toggleSelected,
+  JOB_PAGE_SIZE, closedLast, defaultOrder, everySelected, pageLimit, selectedNotShown, selectionFor, showMore, toggleAllSelected, toggleSelected,
 } from '../../src/modules/jobs/jobTableModel.js'
 import { getDefaultJobsState, saveJobs, updateFilters } from '../../src/modules/jobs/jobStorage.js'
 
@@ -17,7 +17,8 @@ vi.mock('../../src/components/jobs/JobTailorActions.jsx', () => ({ default: () =
 afterEach(() => vi.unstubAllGlobals())
 
 const job = (n, extra = {}) => ({ jobId: `j${n}`, title: `Ad ${n}`, company: 'Acme', location: 'Remote', jobUrl: `https://x.example/${n}`, provider: 'jobspy', status: 'new', matchScore: 50, matchLabel: 'Good', ...extra })
-const list = (count) => Array.from({ length: count }, (_, n) => job(n))
+// Equal scores are ordered by scoreBeforeCaps, so the rows carry a falling one: the list keeps its index order.
+const list = (count) => Array.from({ length: count }, (_, n) => job(n, { scoreBeforeCaps: 1000 - n }))
 const viewport = (matches) => vi.stubGlobal('matchMedia', () => ({ matches, addEventListener() {}, removeEventListener() {} }))
 const render = (jobs, props = {}) => renderToStaticMarkup(createElement(JobTable, { jobs, onStatusChange() {}, onJobSelect() {}, onToggleSelect() {}, onToggleSelectAll() {}, ...props }))
 const count = (html, text) => html.split(text).length - 1
@@ -398,5 +399,31 @@ describe('the Apply by column', () => {
   it('the phone layout has it too', () => {
     viewport(false)
     expect(render([job(1, { applyDeadline: '2026-11-08' })], { reference })).toContain('Today')
+  })
+})
+
+describe('the default order breaks score ties by the score before caps', () => {
+  const ids = (rows) => defaultOrder(rows).map((row) => row.jobId)
+
+  it('orders equal Fit Scores by scoreBeforeCaps, then by jobId', () => {
+    const rows = [job('b', { matchScore: 45, scoreBeforeCaps: 70 }), job('a', { matchScore: 45, scoreBeforeCaps: 70 }), job('c', { matchScore: 45, scoreBeforeCaps: 84 }), job('d', { matchScore: 60, scoreBeforeCaps: 60 })]
+    expect(ids(rows)).toEqual(['jd', 'jc', 'ja', 'jb'])
+  })
+
+  it('a row without the field falls back to its Fit Score', () => {
+    const rows = [job(1, { matchScore: 45 }), job(2, { matchScore: 45, scoreBeforeCaps: 60 }), job(3, { matchScore: 45, scoreBeforeCaps: 40 })]
+    expect(ids(rows)).toEqual(['j2', 'j1', 'j3'])
+  })
+
+  it('never lifts a lower Fit Score over a higher one, and keeps unscored rows last', () => {
+    const rows = [job(1, { matchScore: 44, scoreBeforeCaps: 99 }), job(2, { matchScore: undefined }), job(3, { matchScore: 45, scoreBeforeCaps: 46 })]
+    expect(ids(rows)).toEqual(['j3', 'j1', 'j2'])
+  })
+
+  it('renders the tie-break in the table', () => {
+    viewport(true)
+    const rows = [job(1, { matchScore: 45, scoreBeforeCaps: 50, title: 'Low pre-cap' }), job(2, { matchScore: 45, scoreBeforeCaps: 80, title: 'High pre-cap' })]
+    const html = render(rows)
+    expect(html.indexOf('High pre-cap')).toBeLessThan(html.indexOf('Low pre-cap'))
   })
 })

@@ -413,3 +413,10 @@ def test_a_closed_job_is_never_sent_to_the_judge(intelligence):
     unlimited = enhancer(Stub(reply("strong")))
     run_all(unlimited, results, intelligence)
     assert unlimited.counts["closed"] == 1 and unlimited.counts["judged"] == 1
+
+
+def test_scoreBeforeCaps_follows_the_judged_score_only_when_no_cap_lowered_the_row(intelligence):
+    free = enhancer(Stub(reply("strong"))).enhance(JOB, base(72, scoreBeforeCaps=72), intelligence)
+    assert free["matchScore"] == 77 and free["scoreBeforeCaps"] == 77
+    capped = enhancer(Stub(reply("strong"))).enhance(JOB, base(70, scoreBeforeCaps=84, hardCapped=True), intelligence)
+    assert capped["matchScore"] == 70 and capped["scoreBeforeCaps"] == 84

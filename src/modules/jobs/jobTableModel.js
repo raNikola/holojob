@@ -4,9 +4,21 @@
 // and no list change can reset by accident. A row's status changing rebuilds the list but keeps the key.
 
 import { isClosedAd } from './jobHistory.js'
+import { fitScoreOf, preCapScoreOf } from './matchScore.js'
 
 export const JOB_PAGE_SIZE = 100
 const NOTHING = new Set()
+
+const byId = (a, b) => (a.jobId === b.jobId ? 0 : String(a.jobId) < String(b.jobId) ? -1 : 1)
+
+/**
+ * The default order: Fit Score descending, rows with no score last; equal scores by the score before caps (descending), then by jobId.
+ * Rows without scoreBeforeCaps use their Fit Score. Only the default sort uses this: a sort the owner picked is left as it is.
+ */
+export function defaultOrder(rows) {
+  const desc = (x, y) => (x === y ? 0 : x === null ? 1 : y === null ? -1 : y - x)
+  return [...rows].sort((a, b) => desc(fitScoreOf(a), fitScoreOf(b)) || desc(preCapScoreOf(a), preCapScoreOf(b)) || byId(a, b))
+}
 
 /** Open ads before closed ones, each group in the order given. Only for the default sort: a sort the owner picked is left as it is. */
 export function closedLast(rows) {

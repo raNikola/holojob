@@ -42,6 +42,16 @@ export function fitScoreOf(job) {
   return job.matchScore
 }
 
+/**
+ * The score the row would have with no cap applied (scorer.py `scoreBeforeCaps`), or the Fit Score for a row scored before the field
+ * existed. It only breaks ties in the default Jobs order; it is never shown and decides no label or priority.
+ */
+export function preCapScoreOf(job) {
+  const fit = fitScoreOf(job)
+  if (fit === null) return null
+  return typeof job.scoreBeforeCaps === 'number' ? job.scoreBeforeCaps : fit
+}
+
 export function hasMatchScores(jobs) {
   return (jobs || []).some((j) => typeof j.matchScore === 'number' || isInsufficientData(j))
 }

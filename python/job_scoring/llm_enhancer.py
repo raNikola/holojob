@@ -448,9 +448,12 @@ class LlmFitEnhancer:
         if judged["fitReason"]:
             reason += f": {judged['fitReason']}"
 
+        # A row no cap lowered keeps scoreBeforeCaps equal to its final score; a capped row keeps its pre-cap value.
+        uncapped = base_result.get("scoreBeforeCaps") == base
         return {
             **base_result,
             "matchScore": score,
+            **({"scoreBeforeCaps": score} if uncapped else {}),
             "matchLabel": match_label(score),
             "applyRecommendation": apply_rec,
             "priority": priority(score, apply_rec, red_flags),

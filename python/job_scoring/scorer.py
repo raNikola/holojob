@@ -135,6 +135,9 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
 
     red_flags = detect_red_flags(job, intelligence)
     match_score = _weighted_total(dimensions, weights)
+    # The score with no cap applied, same pipeline and rounding. It only breaks ties in the Jobs list (owner decision 2026-11-14);
+    # nothing reads it to decide a score, label or priority.
+    score_before_caps = match_score
 
     if red_flags and match_score > 55:
         match_score = min(match_score, 54)
@@ -161,6 +164,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     if insufficient:
         # Last, after every cap: nothing the ad states supports a Fit Score, so it gets a state, not a band.
         match_score = min(match_score, data_sufficiency.SCORE_CEILING)
+        # Insufficient data is a state, not a band: such a row must not be lifted over rated rows by its raw weighted total.
+        score_before_caps = min(score_before_caps, data_sufficiency.SCORE_CEILING)
 
     breakdown = {
         k: {
@@ -208,6 +213,7 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     result = {
         **job,
         "matchScore": match_score,
+        "scoreBeforeCaps": score_before_caps,
         "matchLabel": label,
         "applyRecommendation": apply_rec,
         "priority": prio,
