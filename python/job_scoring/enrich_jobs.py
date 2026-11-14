@@ -545,6 +545,12 @@ def _dry_run(args, jobs, pending, skipped, from_ledger, outside, frames, remap, 
     return 0
 
 
+def _load_ids(path: Path) -> set[str]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    ids = data.get("ids") if isinstance(data, dict) else data
+    return {i for i in (ids or []) if isinstance(i, str)}
+
+
 class _Skipped(Exception):
     """A job not sent because the AI gate already refused an earlier one in this run."""
 
@@ -562,6 +568,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--force", action="store_true", help="re-read cached jobs")
     p.add_argument("--workers", type=int, default=8, help="parallel calls")
     p.add_argument("--max-usd", type=float, default=None, help="stop before a call that could take this run past this many US dollars")
+    p.add_argument("--ids", type=Path, default=None, help="read only the ads whose jobId is in this JSON file ({\"ids\": [...]} or a list)")
     p.add_argument("--dry-run", action="store_true", help="count the ads and calls and estimate the prompt size; send nothing")
     p.add_argument(
         "--manual",
@@ -629,9 +636,14 @@ def enrich(args: argparse.Namespace) -> int:
     if not args.read_outside_allowed and args.intelligence.exists():
         prefs = (json.loads(args.intelligence.read_text(encoding="utf-8")).get("jobFitPreferences")) or {}
 
+    only = _load_ids(args.ids) if args.ids else None
+    if only is not None:
+        print(f"--ids: {len(only)} ids, {len(only & {j.get('jobId') for j in jobs})} found in {args.jobs.name}", flush=True)
     pending: list[tuple[int, dict]] = []
     skipped = from_ledger = outside = not_active = 0
     for index, job in enumerate(jobs, start=1):
+        if only is not None and job.get("jobId") not in only:
+            continue
         cached = job.get("llmFacts") or {}
         if not args.force and cached.get("_fingerprint") == _fingerprint(job):
             skipped += 1
