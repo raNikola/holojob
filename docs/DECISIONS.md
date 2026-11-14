@@ -2115,3 +2115,18 @@ UI-only; storage keys, data shapes, scoring and routes unchanged. "Where you can
 **Simulation (upper bound, not a prediction).** On a copy, Yes to the top 5 questions (communication, verbal communication, independent work, ownership, attention to detail): 33 ads affected, all 33 change Fit (median +4, max +20, min -1), 32 ads move 5 or more places, 3 ads enter the Fit top 15. Spearman against `matchScore` stays at 0.02. Applied to every line of the answered competency whatever its verdict, as the fact store would.
 
 **Not changed:** production `matchScore`, labels, priorities, the fact store, any cache. Analysis script `matcher_analysis_1.py` and its output `matcher-analysis-1.md` are in `/home/ranikola/holojob-eval` (owner's machine).
+
+## M9/M10 cross-ad question queue parked (2026-11-14, owner decision, branch `competency-memory-mvp`)
+
+**Decision.** The current M9/M10 design (a cross-ad question queue: the owner answers one competency question and the answer applies to every ad that asks it) is parked, because its expected yield is insufficient on the measured data. This is not a rejection of the idea of learning through ads; a different design may come back later. M1-M8 stay unchanged. Prior 0 stays shadow-only. No production ranking change.
+
+**Numbers** (`matcher-analysis-2.md`, 99 ads with verdicts, free analysis of stored verdicts, no model call):
+- Scope B (UNKNOWN plus absence-MISSING): 680 distinct questions, 647 asked in one ad only. Top 10 questions resolve 8% of the unresolved musts (37 of 445), top 20 resolve 13% (57 of 445). Questions needed to resolve 25 / 50 / 75% of the musts: 75 / 186 / 297.
+- Apply-ready subset (`matchScore` above 45, n 10, 10 of the 35 open apply-ready ads): scope B has 72 questions, 70 in one ad only; 23 questions resolve 50% of the musts.
+- Scope A (UNKNOWN only), for comparison: 128 questions, 119 in one ad only; 15 / 44 / 73 questions for 25 / 50 / 75%.
+
+**Limits of these numbers.**
+- 522 of the 609 absence lines have provisional ids, so grouping is incomplete: part of the 647 one-ad questions is a grouping limit, not proof the requirements are unique. No grouping call (M5) was run on them.
+- Absence is an upper bound: an earlier sample found 17 matcher misses (MISSING while evidence existed) in 12 ads.
+- The sample is the top 100 ads by `scoreBeforeCaps`, not a sample of apply-ready ads (35 open apply-ready ads, 10 of them in the set).
+- A No answer closes a line without raising Fit: many absence lines are tool or technology skills (Terraform, cloud architecture), so answering resolves a line but may not raise Fit.
