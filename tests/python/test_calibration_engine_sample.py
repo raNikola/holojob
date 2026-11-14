@@ -204,3 +204,35 @@ def test_the_runner_names_no_production_state():
     for production in ("engine.json", "scored_jobs", "discovered_jobs", "job_history", "requirement-frames", "usage-ledger"):
         assert production not in src
     assert "CACHE_PATH" not in src
+
+
+# --- the id-list option: matcher only, on stored facts, a caller-chosen cap ---------------------------------
+
+
+def test_matcher_ids_copies_only_the_listed_ads_with_their_facts_and_never_the_unextracted(tmp_path):
+    from calibration import matcher_ids as mi
+    a, b, c, d = ad(1), ad(2), ad(3), ad(4)
+    jobs = [{**a, "llmFacts": facts_for(a)}, {**b, "llmFacts": facts_for(b)}, c, {**d, "llmFacts": {"requirements": []}}]
+    view = tmp_path / "discovered.json"
+    view.write_text(json.dumps({"jobs": jobs}))
+    before = view.read_bytes()
+    ids = tmp_path / "ids.json"
+    ids.write_text(json.dumps({"ids": ["job1", "job3", "job4", "job1", "missing"]}))
+    folder = tmp_path / "m"
+    remap = tmp_path / "remap.json"
+    remap.write_text(json.dumps({"prov:abc": "sql"}))
+    assert mi.prepare(mi.load_ids(ids), view, folder, remap) == {
+        "ids": 4, "found": 3, "prepared": 1, "noFacts": 1, "noRequirements": 1, "closedButPrepared": 0, "remapEntries": 1}
+    assert json.loads((folder / "requirement-remap.json").read_text()) == {"prov:abc": "sql"}
+    assert [i["jobId"] for i in json.loads((folder / "review-items.json").read_text())["items"]] == ["job1"]
+    assert "llmFacts" not in json.loads((folder / "review-items.json").read_text())["items"][0]
+    assert set(json.loads((folder / es.FACTS_NAME).read_text())["facts"]) == {"job1"}
+    assert stat.S_IMODE((folder / es.FACTS_NAME).stat().st_mode) == 0o600 and stat.S_IMODE(folder.stat().st_mode) == 0o700
+    assert view.read_bytes() == before
+
+
+def test_max_usd_sets_the_cap_and_the_default_stays(out, monkeypatch):
+    assert "hard stop in the runner: $0.25" in "\n".join(eng.describe(eng.plan(out, PROFILE, INTELLIGENCE)))
+    assert "hard stop in the runner: $0.40" in "\n".join(eng.describe(eng.plan(out, PROFILE, INTELLIGENCE, cap=0.4)))
+    assert "hard stop" in eng.run(out, PROFILE, INTELLIGENCE, complete=Model(), cap=1e-9)["stopped"]
+    assert eng.run(out, PROFILE, INTELLIGENCE, complete=Model(), cap=0.4)["ok"] == 3

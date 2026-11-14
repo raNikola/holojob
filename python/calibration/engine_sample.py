@@ -126,7 +126,7 @@ MODE_PRODUCTION = "production_like"  # no confirmed cheap-gate fail: production 
 MODE_DIAGNOSTIC = "diagnostic"  # production would skip it; asked anyway so gate quality and matcher quality are measured apart
 
 
-def plan(out: Path, profile: dict, intelligence: dict, production_only: bool = False) -> dict:
+def plan(out: Path, profile: dict, intelligence: dict, production_only: bool = False, cap: float | None = None) -> dict:
     items = json.loads((out / "review-items.json").read_text(encoding="utf-8"))["items"]
     facts = json.loads((out / FACTS_NAME).read_text(encoding="utf-8"))["facts"] if (out / FACTS_NAME).exists() else {}
     candidate, id_aliases = alias_unsafe_ids(build_candidate(profile, intelligence, load_confirmed_facts()), profile)
@@ -181,7 +181,7 @@ def plan(out: Path, profile: dict, intelligence: dict, production_only: bool = F
     settings = ai_gate.load_settings()
     t = ai_gate.totals(None, settings)
     return {
-        "rows": rows, "skipped": skipped, "leaks": leaks, "idAliases": id_aliases, "gateFails": gate_fails, "candidate": candidate, "identity": identity, "store": store,
+        "cap": HARD_STOP_USD if cap is None else cap, "rows": rows, "skipped": skipped, "leaks": leaks, "idAliases": id_aliases, "gateFails": gate_fails, "candidate": candidate, "identity": identity, "store": store,
         "provider": provider, "model": model, "tier": price.get("tier"), "price": price, "inTokens": in_tokens,
         "outTokens": out_tokens, "costUsd": cost, "evidenceItems": len(candidate["evidence"]),
         "budget": {"dailyLimit": settings.get("dailyLimit"), "monthlyLimit": settings.get("monthlyLimit"),
@@ -215,7 +215,7 @@ def describe(p: dict) -> list[str]:
     else:
         lines.append(f"estimated cost: ${p['costUsd']:.4f} at ${p['price']['inputPerMTok']}/{p['price']['outputPerMTok']} per 1M input/output tokens, "
                      f"no cache discount; a reply the matcher must retry (malformed once) is a second call, so the worst case is twice that")
-    lines.append(f"hard stop in the runner: ${HARD_STOP_USD:.2f}")
+    lines.append(f"hard stop in the runner: ${p['cap']:.2f}")
     lines.append(f"budget {b['currency']}: today {b['dailySpent']:.4f} of {b['dailyLimit']} (left {float(b['dailyLimit']) - b['dailySpent']:.4f}); "
                  f"this month {b['monthlySpent']:.4f} of {b['monthlyLimit']} (left {float(b['monthlyLimit']) - b['monthlySpent']:.4f})")
     lines.append(f"privacy scan: {len(rows) - len(p['leaks'])} of {len(rows)} requests pass" + (
@@ -224,14 +224,15 @@ def describe(p: dict) -> list[str]:
 
 
 def run(out: Path, profile: dict, intelligence: dict, workers: int = 4, complete=complete_json,
-        production_only: bool = False) -> dict:
-    p = plan(out, profile, intelligence, production_only)
+        production_only: bool = False, cap: float | None = None) -> dict:
+    p = plan(out, profile, intelligence, production_only, cap)
+    hard_stop = p["cap"]
     if p["leaks"]:
         return {"stopped": "privacy scan found owner identifiers; nothing was sent", "asked": 0}
     if p["costUsd"] is None and p["rows"]:
         return {"stopped": "no price for this model; nothing was sent", "asked": 0}
-    if p["costUsd"] is not None and p["costUsd"] > HARD_STOP_USD:
-        return {"stopped": f"estimate ${p['costUsd']:.4f} is over the hard stop ${HARD_STOP_USD:.2f}; nothing was sent", "asked": 0}
+    if p["costUsd"] is not None and p["costUsd"] > hard_stop:
+        return {"stopped": f"estimate ${p['costUsd']:.4f} is over the hard stop ${hard_stop:.2f}; nothing was sent", "asked": 0}
     if not p["rows"]:
         return {"stopped": None, "asked": 0, "ok": 0, "failed": 0, "refused": 0}
     os.environ[ai_gate.TRIGGER_ENV] = ai_gate.MANUAL
@@ -254,9 +255,9 @@ def run(out: Path, profile: dict, intelligence: dict, workers: int = 4, complete
         # Every call, a matcher retry included, is counted at its worst-case cost before it is made.
         worst = tokens_of(len(prompt)) * price["inputPerMTok"] / 1e6 + (OUTPUT_BASE + OUTPUT_PER_REQUIREMENT * 40) * price["outputPerMTok"] / 1e6
         with lock:
-            if spent["usd"] + worst > HARD_STOP_USD:
+            if spent["usd"] + worst > hard_stop:
                 stop.set()
-                spent["reason"] = f"the next call could pass the ${HARD_STOP_USD:.2f} cap"
+                spent["reason"] = f"the next call could pass the ${hard_stop:.2f} cap"
                 raise GuardrailRefused(spent["reason"])
             spent["usd"] += worst
             spent["calls"] += 1
@@ -295,16 +296,17 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, default=STAGE_DIR)
     ap.add_argument("--yes", action="store_true", help="make the paid calls (run only)")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--max-usd", type=float, default=None, help=f"the run's hard stop in US dollars (default {HARD_STOP_USD})")
     ap.add_argument("--production-only", action="store_true", help="leave out the ads production would skip on a confirmed gate fail")
     args = ap.parse_args(argv)
     profile = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
     intelligence = json.loads(INTELLIGENCE_PATH.read_text(encoding="utf-8"))
     if args.command == "estimate" or not args.yes:
-        print("\n".join(describe(plan(args.out, profile, intelligence, args.production_only))))
+        print("\n".join(describe(plan(args.out, profile, intelligence, args.production_only, args.max_usd))))
         if args.command == "run":
             print("nothing sent: add --yes after the estimate is approved")
         return 0
-    result = run(args.out, profile, intelligence, args.workers, production_only=args.production_only)
+    result = run(args.out, profile, intelligence, args.workers, production_only=args.production_only, cap=args.max_usd)
     print(json.dumps(result))
     return 1 if result.get("stopped") else 0
 

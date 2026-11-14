@@ -115,6 +115,7 @@ Stage A measured the score against the owner's own labels (45 ads, 70 requiremen
 Spec: [redesign/COMPETENCY_MEMORY_MVP_SPEC.md](redesign/COMPETENCY_MEMORY_MVP_SPEC.md). Record: DECISIONS.md, "Competency memory MVP: slices built".
 
 - [x] M4 prior variants in the Stage B replay; M1 version split; M2 fact store v2; M3 answer application; M5 batch grouping (manual command); M7 evidence map in check mode; M8 years in extraction.
+- [x] Matcher-only run on the top-100 ads prepared (`calibration/matcher_ids.py`, `engine_sample.py --max-usd`; estimate 0.12 to 0.33 USD, cap 0.35). Not run yet: the owner runs it, then the free analysis follows (see DECISIONS.md, "Matcher-only run on the top-100 ads").
 - [ ] Owner: review the prior; approve the M8 re-extraction and deploy (bump to `PROMPT_VERSION` 6 is committed, must not deploy before that); push.
 - [ ] Not started: M6 audit of `auto` links, M9 queue, conflicts and local API, M10 UI, the prior in production Fit, the Stage B bucket hold and unconfirmed flag in production.
 
