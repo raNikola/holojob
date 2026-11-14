@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 
 from dimensions.location_match import is_remote_job
-from geography import REMOTE, WORLDWIDE, country_of_name, covers, resolve_countries
+from geography import REMOTE, WORLDWIDE, covers, resolve_countries
 from location_text import VERIFY_FLAG, read_location
 
 AUTHORIZED = "authorized"
@@ -51,26 +51,29 @@ def job_places(job: dict) -> tuple[bool, list[str]]:
     return False, countries
 
 
-_REMOTE_WORDS = {"remote", "fully remote", "remote work", "work from home", "home office", "wfh"}
+_REMOTE_WORD = r"(?:fully\s+remote|remote(?:\s+work)?|work\s+from\s+home|home\s+office|wfh)"
+# "Remote - Germany", "Remote: Germany": a dash or colon after a remote word reads like "Remote, Germany".
+_REMOTE_THEN_PLACE = re.compile(rf"\b{_REMOTE_WORD}\s*[-\u2013\u2014:]\s*", re.IGNORECASE)
+# A region (or "worldwide") named anywhere in the location is a remote option for that region, not one country.
+_REGION_WORDS = re.compile(
+    r"\b(?:europe|european|eu|eea|emea|apac|latam|americas|north\s+america|south\s+america|latin\s+america"
+    r"|asia|africa|mena|dach|nordics?|benelux|worldwide|global|globally|anywhere|international)\b",
+    re.IGNORECASE,
+)
 
 
 def sole_board_country(job: dict) -> str | None:
-    """The one country the board's location names, when it names nothing else onsite.
+    """The one country the board's location names, however many cities or states it adds.
 
-    "Germany" and "Germany; Remote" give DE. "Berlin, Germany" (an office city),
-    "Remote - Europe" (a region) and "Amsterdam, Netherlands; Remote - Europe"
-    (a city plus a remote option) give None: only a bare country is a restriction
-    the ad itself states. Two countries give None as well.
+    "Cambridge, MA, USA", "Germany; Remote", "Remote - Germany" and two cities in one country give that
+    country. Several countries, a region only ("Remote - Europe") and a remote option for a region
+    ("Amsterdam, Netherlands; Remote - Europe") give None: the ad then does not pin the hire to one country.
     """
     location = job.get("location") or ""
-    countries = resolve_countries(location)
-    if len(countries) != 1:
+    if _REGION_WORDS.search(location):
         return None
-    for part in (p.strip() for p in re.split(r"[,;|/()]", location)):
-        if part and part.lower() not in _REMOTE_WORDS and not country_of_name(part) \
-                and not (part.isupper() and resolve_countries(part)):
-            return None
-    return countries[0]
+    countries = resolve_countries(_REMOTE_THEN_PLACE.sub("; ", location))
+    return countries[0] if len(countries) == 1 else None
 
 
 def outside_allowed_before_enrichment(job: dict, prefs: dict) -> bool:
@@ -106,9 +109,9 @@ def authorization_status(job: dict, prefs: dict) -> dict:
     location = read_location(job, allowed, remote) if allowed else None
     state = location["state"] if location else None
     board_country = sole_board_country(job)
-    if remote and not places and board_country and state != "pass":
-        # Remote by the board, no stated eligibility, and the board names one bare country: the hire lives there.
-        # An ad that states a geography itself (open worldwide, from Serbia) is read by location_text instead.
+    if remote and not places and board_country and state != "pass" and not (location or {}).get("names_place"):
+        # Remote by the board, no stated eligibility, and the board names one country: the hire lives there.
+        # An ad that states a geography itself (open worldwide, from Serbia, "Remote (EU)") is read by location_text instead.
         places = [board_country]
     elif state in ("pass", "unknown") and not remote:
         # Remote by the ad's own words: the board's office city is not where the work is done.

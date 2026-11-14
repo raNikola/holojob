@@ -136,9 +136,10 @@ def read_location(job: dict, allowed: list[str], board_remote: bool) -> dict | N
     if not signal:
         return None
 
-    def out(state: str, reason: str, quote: str | None = None) -> dict:
+    def out(state: str, reason: str, quote: str | None = None, names_place: bool = False) -> dict:
+        # names_place: the ad's own words name a country or region (work_authorization does not narrow such an ad to the board country).
         return {"state": state, "flag": VERIFY_FLAG if state == "unknown" else None, "quote": quote,
-                "reason": reason, "remote": True}
+                "reason": reason, "remote": True, "names_place": names_place}
 
     stated = text["countries"]
     places = [p for p in eligibility if p != WORLDWIDE] + stated
@@ -154,8 +155,8 @@ def read_location(job: dict, allowed: list[str], board_remote: bool) -> dict | N
         return out("fail", f"remote, but limited to {'/'.join(stated[:3])}, outside the locations you will take a job in",
                    text["remote_quote"])
     if countries:
-        return out("unknown", f"remote, limited to {'/'.join(countries[:3])}; it does not say you may live in Serbia")
+        return out("unknown", f"remote, limited to {'/'.join(countries[:3])}; it does not say you may live in Serbia", names_place=True)
     regions = [p for p in places if p in region_codes()]
     if regions or text["region"]:
-        return out("unknown", "remote or open to a region, and the ad does not say Serbia is included", text["region"])
+        return out("unknown", "remote or open to a region, and the ad does not say Serbia is included", text["region"], names_place=True)
     return out("unknown", "the ad is remote but does not say where you may live", text["remote_quote"])

@@ -107,9 +107,24 @@ def test_a_remote_ad_in_a_held_country_stays_authorized():
 
 
 @pytest.mark.parametrize("location", ["Remote - Europe", "Remote", "", "Amsterdam, Netherlands; Remote - Europe",
-                                      "Berlin, Germany", "Germany, France"])
-def test_a_remote_ad_with_a_region_a_city_or_no_place_is_not_restricted(location):
+                                      "Germany, France", "Remote - EMEA", "Berlin, Germany; Paris, France"])
+def test_a_remote_ad_with_a_region_no_place_or_several_countries_is_not_restricted(location):
     assert serbia(job(location, "remote")) == wa.AUTHORIZED
+
+
+@pytest.mark.parametrize("location", ["Cambridge, MA, USA", "Tampa, FL, USA", "Berlin, Germany", "Remote - Germany",
+                                      "Remote, Germany", "Remote: Germany", "Berlin, Germany; Munich, Germany"])
+def test_a_remote_ad_is_restricted_to_its_one_board_country_whatever_city_or_state_it_adds(location):
+    assert serbia(job(location, "remote")) == wa.NEEDS_VISA_SILENT
+
+
+def test_a_city_inside_a_held_country_stays_authorized():
+    assert serbia(job("Belgrade, Serbia", "remote")) == wa.AUTHORIZED
+    assert serbia(job("Remote - Serbia", "remote")) == wa.AUTHORIZED
+
+
+def test_a_city_in_one_country_with_stated_remote_eligibility_is_not_restricted():
+    assert serbia(job("Cambridge, MA, USA", "remote", remoteEligibility=["WORLDWIDE"])) == wa.AUTHORIZED
 
 
 def test_stated_remote_eligibility_wins_over_the_board_country():
@@ -274,3 +289,8 @@ def test_extracted_facts_are_coerced_to_known_codes():
 def test_board_spellings_of_onsite_get_the_onsite_tier():
     for spelling in ("on_site", "on-site", "onsite"):
         assert loc(job("Warsaw, Poland", spelling)) == 15
+
+
+def test_a_remote_ad_that_names_a_region_in_its_text_is_not_narrowed_to_the_board_country():
+    j = {**job("London, England, UK", "remote"), "description": "Remote (EU). Join our product team. " + "We build things. " * 10}
+    assert serbia(j) == wa.AUTHORIZED
