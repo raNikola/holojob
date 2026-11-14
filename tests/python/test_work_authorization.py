@@ -86,6 +86,57 @@ def test_remote_restricted_to_a_region_the_candidate_cannot_work_in_needs_a_visa
     assert status(job("Remote", "remote", remoteEligibility=["EU"]), workAuthorization=eu_citizen) == wa.AUTHORIZED
 
 
+# --- remote and board-country gate (owner decision 2026-11-14) -------------------------------
+
+SERBIA_BASED = {"country": "Serbia", "allowedLocations": ["RS", "REMOTE"],
+                "workAuthorization": {"holds": [{"jurisdiction": "RS", "basis": "citizen"}], "openToSponsorship": False}}
+
+
+def serbia(j):
+    return wa.authorization_status(j, {**PREFS, **SERBIA_BASED})["status"]
+
+
+def test_a_remote_ad_in_one_foreign_country_needs_a_visa_when_silent():
+    assert serbia(job("Germany", "remote")) == wa.NEEDS_VISA_SILENT
+    assert serbia(job("USA", "remote", visaSponsorship="not_offered")) == wa.NEEDS_VISA_REFUSED
+    assert serbia(job("Germany; Remote", "remote")) == wa.NEEDS_VISA_SILENT
+
+
+def test_a_remote_ad_in_a_held_country_stays_authorized():
+    assert serbia(job("Serbia", "remote")) == wa.AUTHORIZED
+
+
+@pytest.mark.parametrize("location", ["Remote - Europe", "Remote", "", "Amsterdam, Netherlands; Remote - Europe",
+                                      "Berlin, Germany", "Germany, France"])
+def test_a_remote_ad_with_a_region_a_city_or_no_place_is_not_restricted(location):
+    assert serbia(job(location, "remote")) == wa.AUTHORIZED
+
+
+def test_stated_remote_eligibility_wins_over_the_board_country():
+    assert serbia(job("Germany", "remote", remoteEligibility=["WORLDWIDE"])) == wa.AUTHORIZED
+    assert serbia(job("Germany", "remote", remoteEligibility=["US"])) == wa.NEEDS_VISA_SILENT
+
+
+def test_an_ad_that_states_a_geography_is_not_restricted_to_the_board_country():
+    j = {**job("Germany", "remote"), "description": "Remote - work from anywhere in the world. " + "We build things. " * 10}
+    assert serbia(j) == wa.AUTHORIZED
+
+
+def test_an_onsite_board_country_stays_restricted_when_the_ad_names_no_geography():
+    j = {**job("Germany", "onsite"), "description": "This is a remote role. " + "We build things. " * 10}
+    assert serbia(j) == wa.NEEDS_VISA_SILENT
+
+
+def test_an_onsite_board_country_is_cleared_when_the_ad_states_a_geography():
+    j = {**job("Germany", "onsite"), "description": "Remote - work from anywhere in the world. " + "We build things. " * 10}
+    assert serbia(j) == wa.AUTHORIZED
+
+
+def test_a_serbian_onsite_ad_that_says_remote_stays_authorized():
+    j = {**job("Serbia", "onsite"), "description": "This is a remote role. " + "We build things. " * 10}
+    assert serbia(j) == wa.AUTHORIZED
+
+
 def test_the_country_the_model_read_is_used_when_the_location_names_none():
     assert status(job("Head office", jobCountry="DE")) == wa.NEEDS_VISA_SILENT
 

@@ -500,3 +500,5 @@ Deferred items (known, not scheduled):
 - [ ] **Item 12: ads written in a language the profile does not cover are not capped.** The language cap needs a readable English text, so a German-language ad such as gvf `5aaeb781` (a real German requirement) stays uncapped; 33 non-English rows in the current set, gvf included. Separate decision, not started.
 
 **Built 2026-11-14:** language cap 25 for a confirmed required-language mismatch, plus two clause-reading fixes ([DECISIONS.md](DECISIONS.md#language-cap-25-for-a-confirmed-required-language-mismatch-and-two-clause-reading-fixes-2026-11-14-branch-competency-memory-mvp)). Re-score not run.
+
+**Built 2026-11-14:** language cap 25 (above) and the remote and board-country eligibility gate ([DECISIONS.md](DECISIONS.md#eligibility-gate-for-remote-and-board-country-ads-2026-11-14-branch-competency-memory-mvp)): 18 rows would change to 45, scoringVersion 1.2. Re-score not run. **Open:** B2B contracting is not modelled; non-English ads (Item 12); remote rows with a region only stay unrestricted.
