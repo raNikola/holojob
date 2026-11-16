@@ -9,7 +9,9 @@ const BADGES = {
 
 export function authorizationBadge(job) {
   const badge = BADGES[job?.workAuthorization?.status]
-  if (badge) return { ...badge, reason: job.workAuthorization.reason || '' }
+  // An ad the extraction pass never read says nothing about sponsorship: the visa is unverified, not required.
+  const unread = job?.workAuthorization?.status === 'needs_visa_silent' && job.workAuthorization.basis === 'not_read'
+  if (badge) return { ...badge, ...(unread ? { label: 'Visa unverified' } : {}), reason: job.workAuthorization.reason || '' }
   // Remote or open to a region, but the ad never says where you may live: a flag, not a cap.
   const location = job?.workAuthorization?.location
   return location?.flag ? { label: location.flag, variant: 'medium', reason: location.reason || '' } : null

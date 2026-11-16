@@ -94,7 +94,7 @@ def test_extracted_remote_eligibility_keeps_its_work_permit_reading():
 
 
 def test_a_refused_visa_stays_stricter_than_the_location_cap():
-    job = ad(description="Remote, UK only.", remote=True, remoteEligibility=["GB"], visaSponsorship="not_offered")
+    job = ad(description="Remote, UK only.", remote=True, remoteEligibility=["GB"], visaSponsorship="not_offered", visaEvidence="We do not sponsor visas.")
     assert read(job)["status"] == wa.NEEDS_VISA_REFUSED
 
 

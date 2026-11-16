@@ -252,9 +252,9 @@ do not state.
   holds Serbian wording too (Latin with and without diacritics, Cyrillic); Serbian project and
   delivery manager titles use the same fact rule as the English ones.
 - **work_authorization.py** gives each job one status, and scorer.py caps it
-  the same way: `needs_visa_refused` 25 (the ad will not sponsor),
+  the same way: `needs_visa_refused` 25 (the ad's own quote refuses sponsorship; a quote that only requires a right to work is silent),
   `outside_allowed` 40 (a location the candidate excluded), `needs_visa_silent`
-  45 (the ad does not mention sponsorship; Weak, still reviewable).
+  45 (the ad does not address sponsorship, or was never read: `basis` `not_read`; Weak, still reviewable).
   When `allowedLocations` is set, `location_text.py` also reads the board's remote flag and
   the stored description (no model): no remote signal and a place outside the list is
   `outside_allowed` as before; a remote signal with a geography the ad states and the

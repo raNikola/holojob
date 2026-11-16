@@ -8,6 +8,8 @@ describe('work authorization on the job list', () => {
   it('badges only the statuses worth a human look', () => {
     expect(authorizationBadge(job('needs_visa_refused')).label).toBe('No visa')
     expect(authorizationBadge(job('needs_visa_silent')).label).toBe('Needs visa')
+    const unread = { ...job('needs_visa_silent'), workAuthorization: { status: 'needs_visa_silent', basis: 'not_read', reason: 'why' } }
+    expect(authorizationBadge(unread).label).toBe('Visa unverified')
     expect(authorizationBadge(job('authorized'))).toBeNull()
     expect(authorizationBadge({})).toBeNull()
   })

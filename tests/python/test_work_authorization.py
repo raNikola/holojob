@@ -67,7 +67,7 @@ def test_an_ad_silent_on_sponsorship_needs_a_visa():
 
 
 def test_an_ad_refusing_sponsorship_is_refused():
-    assert status(job("Berlin, Germany", visaSponsorship="not_offered")) == wa.NEEDS_VISA_REFUSED
+    assert status(job("Berlin, Germany", visaSponsorship="not_offered", visaEvidence="We do not sponsor visas.")) == wa.NEEDS_VISA_REFUSED
 
 
 def test_sponsorship_offered_to_a_candidate_not_open_to_it_is_refused():
@@ -98,7 +98,7 @@ def serbia(j):
 
 def test_a_remote_ad_in_one_foreign_country_needs_a_visa_when_silent():
     assert serbia(job("Germany", "remote")) == wa.NEEDS_VISA_SILENT
-    assert serbia(job("USA", "remote", visaSponsorship="not_offered")) == wa.NEEDS_VISA_REFUSED
+    assert serbia(job("USA", "remote", visaSponsorship="not_offered", visaEvidence="We do not sponsor visas.")) == wa.NEEDS_VISA_REFUSED
     assert serbia(job("Germany; Remote", "remote")) == wa.NEEDS_VISA_SILENT
 
 
@@ -210,7 +210,7 @@ def full_job(location, **facts):
 
 @pytest.mark.parametrize(
     "facts,status_,cap",
-    [({"visaSponsorship": "not_offered"}, wa.NEEDS_VISA_REFUSED, 25),
+    [({"visaSponsorship": "not_offered", "visaEvidence": "We are unable to sponsor visas."}, wa.NEEDS_VISA_REFUSED, 25),
      ({}, wa.NEEDS_VISA_SILENT, 45)],
 )
 def test_visa_statuses_cap_the_score_and_say_why(intelligence, facts, status_, cap):

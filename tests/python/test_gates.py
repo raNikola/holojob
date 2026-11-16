@@ -58,7 +58,7 @@ def test_work_authorization_pass_when_sponsored_and_open_to_it():
 @pytest.mark.parametrize("sponsorship", ["not_offered", "offered"])
 def test_work_authorization_fail_when_a_visa_is_needed_and_not_available(sponsorship):
     # "offered" fails too: the candidate is not open to sponsored roles.
-    j = job("Berlin, Germany", {"visaSponsorship": sponsorship})
+    j = job("Berlin, Germany", {"visaSponsorship": sponsorship, "visaEvidence": "We do not sponsor visas."})
     assert work_authorization_result(j, cand_gates()) == "fail"
 
 

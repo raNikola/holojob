@@ -25,6 +25,37 @@ NEEDS_VISA_SILENT = "needs_visa_silent"
 OUTSIDE_ALLOWED = "outside_allowed"
 UNKNOWN = "unknown"
 
+# Was the ad read by the extraction pass? "not_read": no llmFacts, so every visa statement is unverified.
+AD_READ = "ad_read"
+NOT_READ = "not_read"
+
+# What a quote must show before "not_offered" counts as a refusal: sponsorship, a visa or a permit refused or
+# excluded. A quote that only requires an existing right to work ("must be authorized to work in X") refuses nothing.
+_STOP = r"[^.;!?]"
+_NEG = r"(?:\bnot\b|n't\b|\bcannot\b|\bcan\s+not\b|\bunable\b|\bnever\b|\bno\s+longer\b|\bineligible\b)"
+_SPONSOR = r"sponsor\w*"
+_PERMIT = r"(?:visas?|work\s+permits?|work\s+authori[sz]ation|employment\s+authori[sz]ation|immigration)"
+_REFUSAL_PATTERNS = [re.compile(p) for p in (
+    # "do not sponsor", "unable to sponsor", "not eligible for ... sponsorship", "must not require sponsorship"
+    rf"{_NEG}{_STOP}{{0,60}}?\b{_SPONSOR}",
+    # "do not provide visa support", "cannot offer work permits": a need / require / have / hold in between is a candidate duty.
+    rf"{_NEG}(?:(?!\b(?:need|needs|require|requires|required|have|has|hold|holds)\b){_STOP}){{0,60}}?\b{_PERMIT}",
+    # "no visa sponsorship available", "no sponsorship", "no visa support"
+    rf"\bno\b(?:\s+[\w-]+){{0,3}}?\s+(?:{_SPONSOR}|visa\s+(?:support|assistance))",
+    # "without the need for ... sponsored work authorization", "without sponsorship"
+    rf"\bwithout\b{_STOP}{{0,60}}?\b{_SPONSOR}",
+    # "sponsorship is not available", "visa sponsorship unavailable"
+    rf"\b{_SPONSOR}(?:\s+[\w-]+){{0,3}}?[\s:,-]+(?:not|unavailable)\b|\b{_SPONSOR}\s+\w*n't\b",
+    # "require sponsorship now or in the future"
+    rf"\b(?:requir\w+|need\w*){_STOP}{{0,40}}?{_SPONSOR}{_STOP}{{0,40}}?\b(?:now\s+or\s+in\s+the\s+future|in\s+the\s+future|at\s+any\s+time)",
+)]
+
+
+def refuses_sponsorship(evidence: str | None) -> bool:
+    """True when the ad's own quote refuses or excludes sponsorship, a visa or a work permit."""
+    text = re.sub(r"\s+", " ", str(evidence or "").lower().replace("\u2019", "'")).strip()
+    return bool(text) and any(p.search(text) for p in _REFUSAL_PATTERNS)
+
 
 def _holds(prefs: dict) -> list[str]:
     auth = prefs.get("workAuthorization") or {}
@@ -124,7 +155,7 @@ def authorization_status(job: dict, prefs: dict) -> dict:
     place = "remote" if remote and not restricted else shown or "unknown"
 
     def result(status: str, reason: str) -> dict:
-        found = {"status": status, "place": place, "reason": reason}
+        found = {"status": status, "place": place, "reason": reason, "basis": AD_READ if facts else NOT_READ}
         if location:
             found["location"] = {k: location[k] for k in ("state", "flag", "quote", "reason")}
         return found
@@ -170,6 +201,11 @@ def _visa_result(facts, prefs, restricted, result, place="unknown"):
         if open_to_sponsorship:
             return result(SPONSORED, f"needs a work permit for {place}; the ad offers sponsorship")
         return result(NEEDS_VISA_REFUSED, f"needs a work permit for {place}; you are not open to sponsored roles")
-    if sponsorship == "not_offered":
+    if sponsorship == "not_offered" and refuses_sponsorship(facts.get("visaEvidence")):
         return result(NEEDS_VISA_REFUSED, f"needs a work permit for {place} and the ad does not sponsor one")
+    if not facts:
+        return result(NEEDS_VISA_SILENT, f"needs a work permit for {place}; ad not read: sponsorship unverified")
+    if sponsorship == "not_offered" and str(facts.get("visaEvidence") or "").strip():
+        # The quote asks for an existing right to work; it does not say sponsorship is refused.
+        return result(NEEDS_VISA_SILENT, f"needs a work permit for {place}; requires an existing right to work; sponsorship not addressed")
     return result(NEEDS_VISA_SILENT, f"needs a work permit for {place}; the ad does not mention sponsorship")

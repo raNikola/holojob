@@ -6,7 +6,8 @@ so every "Product Manager" came out one step above a senior candidate and the
 dimension returned the same number for almost every job.
 
 Where the extraction pass has read the ad (llmFacts), its stated seniority
-and years are used. The title ladder is the fallback, and it no longer treats
+is used. Years are never compared: the candidate's total professional years
+say nothing about an ad's "N years in product management" (scoringVersion 1.4). The title ladder is the fallback, and it no longer treats
 role nouns as levels.
 """
 
@@ -102,18 +103,5 @@ def score_experience_match(job: dict, intelligence: dict) -> tuple[int, list[str
     else:
         score, reason = _level_score(job_level, candidate_level, source)
         reasons.append(reason)
-
-    required = facts.get("yearsRequired")
-    if isinstance(required, int):
-        if required > candidate_years + 1:
-            score -= 25
-            reasons.append(f"Asks for {required} years against {candidate_years}")
-        elif required <= 3 and candidate_years >= 8:
-            # Not a disqualifier, but a junior brief usually pays like one.
-            score -= 10
-            reasons.append(f"Asks for only {required} years")
-        else:
-            score += 5
-            reasons.append(f"Meets the stated {required} years")
 
     return max(FLOOR, min(CEILING, int(score))), reasons
