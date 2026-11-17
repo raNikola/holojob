@@ -109,7 +109,7 @@ def render(result: dict, heading: str = "## 3. Gate confusion on the owner's lab
            f"{result['present']} of the {result['labelled']} frozen labelled ads were scored"
            + (f"; not found anywhere (ids): {', '.join(f'`{i}`' for i in result['missingIds'])}" if result["missingIds"] else "")
            + f". {result['scoredFromLedger']} of them have left the job list and were scored from the history ledger the way a kept ad is "
-           "(outside the term-rarity corpus, so no other ad's score moves; the stored extraction facts on the ledger entry are carried since the ledger_row fix, so their visa check is `ad_read` where the ledger holds facts).",
+           "(outside the term-rarity corpus, so no other ad's score moves; extraction facts are carried when the ledger entry holds them (since the ledger_row fix); where it holds none the visa check is `not_read`).",
            f"Eligibility basis: {result['eligibilityBasis']}. Regression use only: a cell is a count, not a target; no threshold is suggested. "
            "Small, purpose-chosen sample, one labeller.", ""]
     for gate, counts in result["eligibilityByGate"].items():

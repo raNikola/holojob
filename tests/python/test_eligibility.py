@@ -218,3 +218,37 @@ def test_the_kept_ad_rescore_goes_through_the_same_local_path(tmp_path, monkeypa
     assert code == 0 and seen
     # the ledger fix: the kept ad is scored from its stored facts, so it is read and its refusal is found
     assert body["job"]["eligibility"]["state"] == el.REFUSED and body["job"]["scoringVersion"] == "1.5"
+
+
+# --- a Not read row has matchScore None: no reader may fail on it ---------------------------------------------------
+
+def _not_read_run(tmp_path, monkeypatch, capsys, extra=()):
+    jobs_file = _harness(tmp_path, monkeypatch)
+    empty = {**ad(), "jobId": "empty", "description": "", "llmFacts": None}
+    jobs_file.write_text(json.dumps({"meta": {"sourceRunId": "run"}, "jobs": [ad(), empty]}))
+    monkeypatch.setenv(shadow.SHADOW_ENV, "1")
+    output = tmp_path / "scored.json"
+    monkeypatch.setattr(sys, "argv", ["run_scoring.py", "--intelligence", str(tmp_path / "intel.json"), "--jobs", str(jobs_file),
+                                      "--manual", str(tmp_path / "manual_jobs.json"), "--output", str(output), *extra])
+    code = run_scoring.main()
+    return code, output, capsys.readouterr()
+
+
+def test_a_not_read_row_goes_through_a_full_run_with_the_shadow_engine_on(tmp_path, monkeypatch, capsys):
+    code, output, captured = _not_read_run(tmp_path, monkeypatch, capsys)
+    assert code == 0 and "skipped after an error" not in captured.err  # the shadow engine's failure is silent otherwise
+    doc = json.loads(output.read_text())
+    empty = next(r for r in doc["jobs"] if r["jobId"] == "empty")
+    assert empty["matchScore"] is None and empty["readStatus"] == "not_read" and "error" not in doc["meta"]["engineShadow"]
+    assert doc["meta"]["summary"]["notRead"] == 1
+
+
+def test_a_not_read_row_goes_through_judge_preview(tmp_path, monkeypatch, capsys):
+    code, _, captured = _not_read_run(tmp_path, monkeypatch, capsys, extra=("--judge-preview", "--judge-provider", "test"))
+    assert code == 0 and "skipped after an error" not in captured.err
+    assert json.loads(captured.out.strip().splitlines()[-1])["eligible"] >= 0
+
+
+def test_min_score_drops_a_not_read_row_without_failing(tmp_path, monkeypatch, capsys):
+    code, output, _ = _not_read_run(tmp_path, monkeypatch, capsys, extra=("--min-score", "10"))
+    assert code == 0 and "empty" not in {r["jobId"] for r in json.loads(output.read_text())["jobs"]}  # no score is below any minimum

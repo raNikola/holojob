@@ -196,6 +196,9 @@ def summarize(args, steps: list[dict], enrich_line: str | None, share: float | N
         jobs = scored.get("jobs") or []
         bands = Counter()
         for j in jobs:
+            if j.get("dataStatus") == "not_read":  # no Fit Score, so no band
+                bands["Not read"] += 1
+                continue
             score = j.get("matchScore") or 0
             bands[next(label for floor, label in SCORE_BANDS if score >= floor)] += 1
         live = [j for j in jobs if not j.get("isClosed")]
@@ -204,6 +207,7 @@ def summarize(args, steps: list[dict], enrich_line: str | None, share: float | N
             "labels": (scored.get("meta") or {}).get("summary") or {},
             "priority": dict(Counter(j.get("priority") for j in jobs)),
             "scoreBands": {label: bands[label] for _, label in SCORE_BANDS},
+            "notRead": bands["Not read"],
             "workAuthorization": dict(Counter((j.get("workAuthorization") or {}).get("status") for j in jobs)),
             "hardCapped": sum(1 for j in jobs if j.get("hardCapped")),
             "applyNow": sum(1 for j in live if j.get("priority") == "P1"),

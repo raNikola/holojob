@@ -71,10 +71,10 @@ def main(argv=None) -> int:
     os.chmod(a.out, 0o600)
     print(f"rows {len(rows)}, eligible {eligible}, left out {why}, selected {len(chosen)}")
     if chosen:
-        print(f"scoreBeforeCaps {chosen[0]['scoreBeforeCaps']} .. {chosen[-1]['scoreBeforeCaps']}; "
-              f"matchScore {min(j['matchScore'] for j in chosen)} .. {max(j['matchScore'] for j in chosen)}")
+        print(f"scoreBeforeCaps {chosen[0]['scoreBeforeCaps'] or 0} .. {chosen[-1]['scoreBeforeCaps'] or 0}; "
+              f"matchScore {min(j['matchScore'] or 0 for j in chosen)} .. {max(j['matchScore'] or 0 for j in chosen)}")
     for rank, j in enumerate(chosen[:10], 1):
-        print(f"{rank:>3}  {j['scoreBeforeCaps']:>5}  {j['matchScore']:>3}  {(j.get('title') or '')[:70]} | {(j.get('company') or '')[:30]}")
+        print(f"{rank:>3}  {j['scoreBeforeCaps'] or 0:>5}  {j['matchScore'] or 0:>3}  {(j.get('title') or '')[:70]} | {(j.get('company') or '')[:30]}")
     return 0
 
 

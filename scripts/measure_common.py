@@ -141,6 +141,8 @@ def snapshot_rows(rows: list[dict]) -> dict:
             "eligibility": (row.get("eligibility") or {}).get("state"), "scoringVersion": row.get("scoringVersion"), "authStatus": auth.get("status"), "authBasis": auth.get("basis"),
             "capsFired": sorted(fired), "capsBinding": sorted(binding),
             "manual": bool(row.get("manualEntry")),
+            "judgeAdjustment": (row.get("llmFit") or {}).get("adjustment") or 0, "profileGuard": row.get("profileGuard"),
+            "hardCapped": bool(row.get("hardCapped")),
         }
     return out
 
