@@ -86,6 +86,18 @@ def test_single_words_and_nouns_never_decide(text):
     assert rm.classify(text)["class"] is None
 
 
+@pytest.mark.parametrize("text", ["Monitor Slack channels", "Manage programming languages", "Run serverless workloads", "Maintain the apiary", "Own programmatic advertising"])
+def test_an_object_phrase_is_a_whole_phrase_with_an_optional_plural_only(text):
+    assert rm.classify(text)["class"] is None
+
+
+@pytest.mark.parametrize("text,cls", [("Define user stories", "product"), ("Track cross team dependencies", "program"), ("Run scrum ceremonies", "program"),
+                                      ("Manage facilities", "operations"), ("Contribute to the repositories", "engineering"), ("Design APIs", "engineering"),
+                                      ("Monitor SLAs", "operations")])
+def test_irregular_plurals_are_listed(text, cls):
+    assert rm.classify(text)["class"] == cls
+
+
 def test_irregular_and_inflected_verbs():
     assert rm.classify("Ran the program reviews")["class"] == "program"
     assert rm.classify("Led product discovery")["class"] == "product"

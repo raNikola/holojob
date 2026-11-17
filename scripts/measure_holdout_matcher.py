@@ -81,7 +81,10 @@ def responsibility_requirements(responsibilities: list[dict]) -> list[dict]:
 
 def facts_from_extract7(scratch: Path, items: list[dict], facts: dict) -> tuple[list[dict], dict, dict]:
     """The scratch ads (their extract-6 facts keep the gate fields) with `requirements` replaced by the extract-7 responsibilities."""
-    doc = json.loads((scratch / "extract7" / "facts.json").read_text(encoding="utf-8"))["facts"]
+    path = scratch / "extract7" / "facts.json"
+    if not path.exists():
+        raise SystemExit(f"no {path}: run scripts/measure_holdout_extract7.py --confirm first (the owner's paid read)")
+    doc = json.loads(path.read_text(encoding="utf-8"))["facts"]
     out_items, out_facts, none = [], {}, 0
     for item in items:
         rows = responsibility_requirements((doc.get(item["jobId"]) or {}).get("responsibilities"))

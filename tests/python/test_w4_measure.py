@@ -63,16 +63,17 @@ def mix(fit, available=True, insufficient=False):
 
 def test_bar_pass_fail_tie_and_not_evaluable():
     nebius = rmx.BAR_SKIP_IDS[0]
-    apply_ids = ["a", "b", "c", "monzo"]
-    ok = {"a": mix(80), "b": mix(70), "c": mix(60), "monzo": None, nebius: mix(40)}
-    assert rmx.evaluate_bar(ok, apply_ids)["verdict"] == "pass"
-    assert rmx.evaluate_bar(ok, apply_ids)["unreadable"] == ["monzo"]
-    tie = {**ok, "c": mix(40)}
-    assert rmx.evaluate_bar(tie, apply_ids)["verdict"] == "fail"
-    assert rmx.evaluate_bar({**ok, nebius: None}, apply_ids)["verdict"] == "not evaluable"
-    assert rmx.evaluate_bar({**ok, nebius: mix(None, available=False, insufficient=True)}, apply_ids)["verdict"] == "not evaluable"
-    # an APPLY ad with an insufficient role part is unreadable, not a pass
-    assert rmx.evaluate_bar({**ok, "a": mix(90, insufficient=True)}, apply_ids)["unreadable"] == ["a", "monzo"]
+    amazon, cambia, people = rmx.BAR_APPLY_IDS
+    ok = {amazon: mix(80), cambia: mix(70), people: mix(60), "32e10d568d711667": None, nebius: mix(40)}  # Monzo is Not read and not in the bar
+    assert rmx.evaluate_bar(ok)["verdict"] == "pass"
+    assert rmx.evaluate_bar({**ok, people: mix(40)})["verdict"] == "fail"  # a tie is a fail
+    assert rmx.evaluate_bar({**ok, people: mix(30)})["belowOrTied"] == [(people, nebius)]
+    # any of the three APPLY ads, or Nebius, without a defined and sufficient Role Fit: not evaluable, never a pass on the others
+    assert rmx.evaluate_bar({**ok, amazon: None}) == {"verdict": "not evaluable", "unreadable": [amazon], "belowOrTied": []}
+    assert rmx.evaluate_bar({**ok, amazon: mix(None, available=False, insufficient=True)})["verdict"] == "not evaluable"
+    assert rmx.evaluate_bar({**ok, cambia: mix(90, insufficient=True)})["unreadable"] == [cambia]
+    assert rmx.evaluate_bar({**ok, nebius: None})["verdict"] == "not evaluable"
+    assert rmx.evaluate_bar({})["verdict"] == "not evaluable"
 
 
 def test_role_mix_tool_needs_the_owner_read(tmp_path, capsys):
@@ -81,11 +82,14 @@ def test_role_mix_tool_needs_the_owner_read(tmp_path, capsys):
 
 
 def test_role_mix_tool_prints_counts_and_verdicts_not_text(tmp_path, capsys):
+    amazon, cambia, people = rmx.BAR_APPLY_IDS
     ratings = tmp_path / "r.md"
-    ratings.write_text("""| rank | verdict | id | company / title | primary driver | reason |
+    ratings.write_text(f"""| rank | verdict | id | company / title | primary driver | reason |
 |---|---|---|---|---|---|
-| 1 | apply | aaaaaaaaaaaaaaaa | Acme, TPM | FIT | SECRET REASON |
-| 2 | skip | 2fa17cc182518736 | Nebius, Backend | FIT | SECRET REASON TWO |
+| 1 | apply | {amazon} | Amazon, TPM | FIT | SECRET REASON |
+| 2 | apply | {cambia} | Cambia, TPM | FIT | SECRET REASON |
+| 3 | apply | {people} | People, PO | FIT | SECRET REASON |
+| 4 | skip | 2fa17cc182518736 | Nebius, Backend | FIT | SECRET REASON TWO |
 
 ## Success criterion
 
@@ -96,13 +100,15 @@ APPROVED
 3. x
 4. y
 """)
+    resp = lambda t: {"responsibilities": [{"text": t, "postingQuote": "q"}]}  # noqa: E731
     (tmp_path / "s" / "extract7").mkdir(parents=True)
     (tmp_path / "s" / "extract7" / "facts.json").write_text(json.dumps({"facts": {
-        "aaaaaaaaaaaaaaaa": {"responsibilities": [{"text": "Own the product roadmap SECRET TEXT", "postingQuote": "q"}]},
-        "2fa17cc182518736": {"responsibilities": [{"text": "Write code for backend services", "postingQuote": "q"}]}}}))
+        amazon: resp("Own the product roadmap SECRET TEXT"), cambia: resp("Manage programs SECRET TEXT"), people: resp("Own the product roadmap"),
+        "2fa17cc182518736": resp("Write code for backend services")}}))
     assert rmx.main(["--scratch", str(tmp_path / "s"), "--ratings", str(ratings)]) == 0
     out = capsys.readouterr().out
     assert "**PASS**" in out and "SECRET" not in out and "eng.code" in out
+    assert "not in the bar" in out and "domain" not in out.split("pre-registered bar")[1]  # no role/domain label on a skip
 
 
 # --- matcher over responsibilities ----------------------------------------------------------------------------------
@@ -159,3 +165,37 @@ def test_det_stability_is_none_without_the_key_and_the_cli_prints_it(tmp_path, c
                              "detUnitKeys": {"a": [det(("sql", "must")), det(("sql", "must"))]}}))
     assert ms.main([str(p)]) == 0
     assert "d: keys" in capsys.readouterr().out
+
+
+def test_matcher_accepts_responsibility_rows_and_they_map_back_to_their_r_keys(tmp_path):
+    import test_engine_shadow as t
+    from match_engine import fit21
+    from match_engine.shadow import ShadowEngine
+
+    resp = [{"text": "Run sprint planning", "postingQuote": "Hands-on SQL"}, {"text": "Own the roadmap", "postingQuote": "Fully remote"}]
+    rows = hm.responsibility_requirements(resp + [{"text": "Not in the ad", "postingQuote": "words the ad never says"}])
+    asked = {}
+
+    def complete(prompt, schema=None, model=None, provider=None):
+        asked["refs"] = [r for r in ("r1", "r2", "r3") if f'"{r}"' in prompt]
+        return {"matches": [{"ref": "r1", "status": "MET", "evidence_id": "ev-b", "evidence_quote": "Wrote SQL daily", "strength": 3},
+                            {"ref": "r2", "status": "PARTIAL", "evidence_id": "ev-b", "evidence_quote": "Wrote SQL daily", "strength": 2}],
+                "gates": {g: {"quote": None} for g in t.GATES}}
+
+    job = t.job("j1", 70, requirements=rows)
+    eng = ShadowEngine(t.CANDIDATE, judge=True, provider="test", model="m", cache_path=tmp_path / "engine.json", complete=complete, workers=1)
+    out = eng.apply([job])[0]["engineShadow"]
+    # both quoted rows were actually asked (not settled locally, not filtered for being nice / experience); a row whose quote the ad
+    # does not contain is dropped before the model sees it (verify.drop_unquoted), so it never becomes a unit
+    assert asked["refs"] == ["r1", "r2"]
+    answered = out["requirements"]
+    assert len(answered) == 2 and all(r["postingQuote"] for r in answered)
+    units = fit21.responsibility_units(answered)
+    assert sorted(u["id"] for u in units) == sorted(fit21.quote_key(r["postingQuote"], "r") for r in resp)
+    assert {u["status"] for u in units} == {"MET", "PARTIAL"}
+
+
+def test_responsibilities_mode_without_the_owner_read_is_a_clear_error(tmp_path):
+    with pytest.raises(SystemExit) as err:
+        hm.facts_from_extract7(tmp_path, [], {})
+    assert "measure_holdout_extract7" in str(err.value)

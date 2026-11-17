@@ -31,20 +31,21 @@ DEFAULT_SCRATCH = mc.EVAL_DIR / "holdout-scratch-data"
 DEFAULT_RATINGS = mc.EVAL_DIR / "holdout-ratings-v1-2026-11-17.md"
 DEFAULT_IDS = mc.EVAL_DIR / "holdout-ids-18.json"
 BAR_SKIP_IDS = ("2fa17cc182518736",)  # Nebius: the owner's reason names a hands-on engineering role, outside the PM path
+BAR_APPLY_IDS = ("ce8fde082b683d2c", "24f71a25e9635e0b", "daed437b652435e6")  # Amazon, Cambia, People's Partnership; Monzo (Not read) is not in the bar
 
 
-def evaluate_bar(mixes: dict, apply_ids: list[str], bar_skip_ids=BAR_SKIP_IDS) -> dict:
-    """mixes: {jobId: role_mix(...) or None (not read)}. {"verdict": pass|fail|not evaluable, "readable", "unreadable", "belowOrTied"}."""
+def evaluate_bar(mixes: dict, apply_ids=BAR_APPLY_IDS, bar_skip_ids=BAR_SKIP_IDS) -> dict:
+    """mixes: {jobId: role_mix(...) or None (not read)}. The bar of the plan (section 5): all three readable APPLY ads strictly above Nebius.
+    {"verdict": pass|fail|not evaluable, "unreadable": [ids without a defined, sufficient Role Fit], "belowOrTied": [(apply, skip)]}.
+    Any of the three APPLY ads or any bar skip without a defined, not-insufficient Role Fit makes it "not evaluable", never a pass."""
     def value(i):
         m = mixes.get(i)
         return m["roleFit"] if m and m["available"] and not m["insufficient"] else None
-    readable = [i for i in apply_ids if value(i) is not None]
-    unreadable = [i for i in apply_ids if value(i) is None]
-    skip_values = {i: value(i) for i in bar_skip_ids}
-    if not readable or any(v is None for v in skip_values.values()):
-        return {"verdict": "not evaluable", "readable": readable, "unreadable": unreadable, "belowOrTied": []}
-    bad = [(a, s) for a in readable for s in bar_skip_ids if not value(a) > skip_values[s]]
-    return {"verdict": "fail" if bad else "pass", "readable": readable, "unreadable": unreadable, "belowOrTied": bad}
+    unreadable = [i for i in (*apply_ids, *bar_skip_ids) if value(i) is None]
+    if unreadable:
+        return {"verdict": "not evaluable", "unreadable": unreadable, "belowOrTied": []}
+    bad = [(a, s) for a in apply_ids for s in bar_skip_ids if not value(a) > value(s)]
+    return {"verdict": "fail" if bad else "pass", "unreadable": [], "belowOrTied": bad}
 
 
 def main(argv=None) -> int:
@@ -76,12 +77,11 @@ def main(argv=None) -> int:
     for r in ratings:
         if mixes[r["id"]]:
             print(f"  {r['id']}: {mixes[r['id']]['cuesFired']}")
-    apply_ids = [r["id"] for r in ratings if r["verdict"] == "apply"]
-    bar = evaluate_bar(mixes, apply_ids)
-    print(f"\npre-registered bar (APPLY strictly above {', '.join(BAR_SKIP_IDS)}): **{bar['verdict'].upper()}**; readable APPLY {bar['readable']}; "
-          f"unreadable {bar['unreadable']}; at or below the bar skip: {bar['belowOrTied']}")
+    bar = evaluate_bar(mixes)
+    print(f"\npre-registered bar (APPLY {', '.join(BAR_APPLY_IDS)} strictly above {', '.join(BAR_SKIP_IDS)}): **{bar['verdict'].upper()}**; "
+          f"without a defined Role Fit: {bar['unreadable']}; at or below the bar skip: {bar['belowOrTied']}")
     others = [i for i in fit_skip if i not in BAR_SKIP_IDS]
-    print(f"FIT skips the role mix is not expected to separate (domain or qualification gaps; not counted as failures): {', '.join(others)}")
+    print(f"FIT skips that are not in the bar (see w4-plan.md section 5; not counted as failures): {', '.join(others)}")
     return 0
 
 

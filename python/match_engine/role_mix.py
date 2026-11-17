@@ -1,6 +1,6 @@
 """Role mix of an ad's responsibilities, by deterministic verb + object cues. Code only, no model. SHADOW ONLY (Fit 2.1, `engineShadow.fit21.role`).
 
-The cue lists below are the ones declared in ~/holojob-eval/w4-plan.md section 3 BEFORE any measurement (verbs read as base forms, A1.5).
+The cue lists below are the ones declared in ~/holojob-eval/w4-plan.md section 3 BEFORE any measurement (verbs read as base forms, A1.5; objects are whole phrases with an optional plural s, irregular plurals listed).
 A cue family is a pair (verbs, objects) and fires only when an inflected verb is followed, within three words, by one of its object
 phrases: "engineering", "product" or "delivery" on their own never fire anything, and a noun such as "developer", "manager" or
 "leadership" is not a verb. A responsibility's class is the class with the strictly highest number of fired families; a tie is
@@ -47,7 +47,7 @@ ONE_SYLLABLE = {"run", "set", "ship", "plan", "rack", "commit", "cable"}
 _FAMILIES = (
     ("product", "product.roadmap",
      "own define drive shape set lead build develop maintain prioritize prioritise",
-     "product roadmap|product strategy|product vision|roadmap|product backlog|backlog|product requirement|user stor|product discovery|product lifecycle|product priorit"),
+     "product roadmap|product strategy|product vision|roadmap|product backlog|backlog|product requirement|user story|user stories|product discovery|product lifecycle|product priority|product priorities"),
     ("product", "product.customer",
      "conduct run gather translate synthesize synthesise analyze analyse interview understand identify",
      "customer need|customer feedback|customer problem|customer insight|customer interview|user research|user need|user feedback|market research|market need"),
@@ -59,22 +59,22 @@ _FAMILIES = (
      "product launch|new product|product feature|go to market|product release"),
     ("program", "program.delivery",
      "manage lead drive coordinate run oversee own plan track deliver",
-     "program delivery|program|programme|technical program|cross functional program|project plan|project schedule|project timeline|delivery timeline|release schedule|release plan|milestone|cross team dependenc|dependenc|program risk|project risk|risks and dependenc|cross functional team"),
+     "program delivery|program|programme|technical program|cross functional program|project plan|project schedule|project timeline|delivery timeline|release schedule|release plan|milestone|cross team dependency|cross team dependencies|dependency|dependencies|program risk|project risk|risks and dependencies|risk and dependency|cross functional team"),
     ("program", "program.ceremonies",
      "facilitate run lead conduct",
-     "sprint planning|scrum ceremon|agile ceremon|retrospective|stand up|standup|program review|status meeting|steering committee"),
+     "sprint planning|scrum ceremony|scrum ceremonies|agile ceremony|agile ceremonies|retrospective|stand up|standup|program review|status meeting|steering committee"),
     ("program", "program.reporting",
      "report communicate provide escalate manage",
      "program status|project status|status update|status report|stakeholder expectation|executive update|risks and issue"),
     ("program", "program.process",
      "establish drive define improve implement",
-     "delivery process|program governance|project governance|agile practice|delivery cadence|release process|planning process"),
+     "delivery process|delivery processes|program governance|project governance|agile practice|delivery cadence|release process|release processes|planning process|planning processes"),
     ("engineering", "eng.code",
      "write develop design build implement architect review debug refactor optimize optimise",
      "code|software|backend service|backend system|microservice|api|distributed system|system architecture|software architecture|data pipeline|unit test|pull request|code review|production code|algorithm|database|scalable system|technical architecture"),
     ("engineering", "eng.codebase",
      "contribute commit work",
-     "codebase|code base|repositor"),
+     "codebase|code base|repository|repositories"),
     ("engineering", "eng.mentor",
      "mentor coach",
      "engineer|software engineer|backend engineer|developer|engineering team"),
@@ -83,15 +83,15 @@ _FAMILIES = (
      "production incident|incident|production issue|outage|system uptime|service level|sla|support ticket|customer ticket|service request|on call rotation|on call"),
     ("operations", "ops.physical",
      "install commission rack cable inspect procure source order maintain manage",
-     "hardware|server|rack|equipment|network equipment|machinery|component|material|data center equipment|data center operation|facilit|inventory|supply chain|logistic|warehouse|production line|manufacturing operation|plant operation|field operation|maintenance schedule"),
+     "hardware|server|rack|equipment|network equipment|machinery|component|material|data center equipment|data center operation|facility|facilities|inventory|inventories|supply chain|logistics|warehouse|production line|manufacturing operation|plant operation|field operation|maintenance schedule"),
 )
 
 
 def _compile(verbs: str, objects: str) -> re.Pattern:
     forms = sorted({f for v in verbs.split() for f in _forms(v)}, key=len, reverse=True)
-    # Object entries are phrase stems: an optional plural / suffix tail is allowed on the last word only ("user stor" = story, stories).
+    # Object entries are whole phrases with an optional plural s ("api" matches apis, never apiary; "sla" never slack); irregular plurals are listed.
     objs = "|".join(re.escape(o).replace(r"\ ", " ") for o in objects.split("|"))
-    return re.compile(rf"\b(?:{'|'.join(forms)})\b(?: \w+){{0,3}}? (?:{objs})\w*\b")
+    return re.compile(rf"\b(?:{'|'.join(forms)})\b(?: \w+){{0,3}}? (?:{objs})s?\b")
 
 
 FAMILIES = tuple((cls, name, _compile(verbs, objects)) for cls, name, verbs, objects in _FAMILIES)
