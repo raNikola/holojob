@@ -39,6 +39,7 @@ import ai_gate  # noqa: E402 (on the path through llm_client)
 from .constants import ENGINE_VERSION
 from .evidence_select import mode_of
 from .fit import score
+from .fit2 import UnitResolver, fit2
 from .gates import CHEAP_GATES, PASS, cheap_gate_report, gate_results
 from .matcher import EVIDENCE_FIELDS, cache_key, match_posting, overlay_answers, posting_from_job
 
@@ -98,7 +99,7 @@ class ShadowEngine:
     def __init__(self, candidate: dict, *, judge: bool, provider: str, model: str | None,
                  cache_path: Path | None = None, limit: int | None = DEFAULT_LIMIT,
                  complete=complete_json, workers: int = 4, identity: tuple[str, list[str]] | None = None,
-                 select=None, compact=None, remap: dict[str, str] | None = None, memory=None):
+                 select=None, compact=None, remap: dict[str, str] | None = None, memory=None, unit_resolver=None):
         self.candidate = candidate
         self.memory = memory
         # redact.identity_of(profile), for the matcher's redaction; never sent.
@@ -108,6 +109,8 @@ class ShadowEngine:
         self.compact = compact_enabled() if compact is None else bool(compact)
         # prov: id -> canonical id (data/requirement-remap.json), applied to every ad's requirements when read.
         self.remap = load_remap() if remap is None else remap
+        # Fit 2.0 (shadow, nested under engineShadow.fit2): units resolved by code from the line text, never from stored ids.
+        self.units = unit_resolver or UnitResolver.default()
         self.provider = provider
         self.model = model
         self.cache_path = cache_path or CACHE_PATH
@@ -232,6 +235,7 @@ class ShadowEngine:
             "requirements": output["requirements"],
             "cvCoverage": None,
             **score(output["requirements"], gates),
+            "fit2": fit2(output["requirements"], self.units, (job.get("llmFacts") or {}).get("responsibilities")),
             "warnings": output.get("warnings") or [],
             "provider": output.get("provider"),
             "model": output.get("model"),

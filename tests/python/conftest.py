@@ -53,6 +53,9 @@ def _competency_files_in_tmp(tmp_path, monkeypatch):
 
     monkeypatch.setattr(competency_mapping, "ALIASES_PATH", tmp_path / "competency-aliases.json")
     monkeypatch.setattr(competency_mapping, "REMAP_PATH", tmp_path / "requirement-remap.json")
+    from match_engine import fit2
+
+    monkeypatch.setattr(fit2, "LEARNED_ALIASES_PATH", tmp_path / "competency-aliases.json")
 
 
 @pytest.fixture(autouse=True)

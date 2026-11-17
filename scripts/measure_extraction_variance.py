@@ -94,6 +94,30 @@ def unit_keys_by_ad(runs_by_ad: dict) -> dict:
     return {i: [unit_keys(f) for f in runs] for i, runs in runs_by_ad.items() if runs}
 
 
+def det_unit_keys(facts: dict, resolver) -> dict:
+    """Fit 2.0's deterministic units of one pass (python/match_engine/fit2.py): {"units": [{"key": "d:<id>", "importance", "kind"}],
+    "unmapped": {"must": n, "other": n}}. The id comes from the requirement text by code, never from the extractor's id, so two
+    passes that word one requirement differently still share the key. Holds no ad text."""
+    best: dict[str, dict] = {}
+    unmapped = {"must": 0, "other": 0}
+    for r in facts.get("requirements") or []:
+        cid, _ = resolver.resolve(r.get("text"), r.get("kind"))
+        if cid is None:
+            unmapped["must" if r.get("importance") == "must" else "other"] += 1
+            continue
+        unit = {"key": f"d:{cid}", "importance": r.get("importance"), "kind": r.get("kind")}
+        have = best.get(unit["key"])
+        if have is None or _IMPORTANCE_RANK.get(unit["importance"], -1) > _IMPORTANCE_RANK.get(have["importance"], -1):
+            best[unit["key"]] = unit
+    return {"units": [best[k] for k in sorted(best)], "unmapped": unmapped}
+
+
+def det_unit_keys_by_ad(runs_by_ad: dict) -> dict:
+    from match_engine.fit2 import UnitResolver
+    resolver = UnitResolver.default()
+    return {i: [det_unit_keys(f, resolver) for f in runs] for i, runs in runs_by_ad.items() if runs}
+
+
 def responsibility_keys(facts: dict) -> list[dict]:
     """One entry per responsibility of one pass (prompt 7): {"key": "r:<12 hex of sha256 of the normalised quote>"}. A separate class
     from the requirement units: a responsibility is what the person will do, not what they must have. Holds no ad text."""
@@ -308,6 +332,7 @@ def main(argv=None) -> int:
     if args.out:
         mc.write_private(args.out, json.dumps({"meta": meta, "report": report, "unitKeysVersion": UNIT_KEYS_VERSION,
                                               "unitKeys": unit_keys_by_ad(results),
+                                              "detUnitKeysVersion": 1, "detUnitKeys": det_unit_keys_by_ad(results),
                                               **({"responsibilityKeys": responsibility_keys_by_ad(results)} if args.prompt == 7 else {})}, indent=1))
     return 0
 
