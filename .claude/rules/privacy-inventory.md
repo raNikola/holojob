@@ -45,6 +45,7 @@ provider, each behind an explicit confirm (CV analysis, fit judge, evidence matc
   name, contacts, links. `languagesVersion` and `languageSettled` (a hash of the language list and requirement ids) are stored in the local cache entry only, never in the request; a changed list marks a cached answer stale locally (`staleReason`), and nothing is re-sent. Runs only in a judged scoring run with `HOLOJOB_ENGINE_SHADOW` on
   (shadow mode, `match_engine/shadow.py`); the judge's confirm dialog then lists it.
   `tests/python/test_engine_privacy.py` checks all of these at `requests.post`.
+  `scripts/measure_holdout_matcher.py` is one more caller of `calibration/engine_sample.py` (same payload, same scan, same gate and confirm), pointed at a scratch data dir; it sends nothing without `--confirm` and `--max-usd`.
 - **Fill from ad, AI step** (Add job form, `python/job_import/ad_ai.py`, `POST /api/jobs/ad/ai-preview` / `ai-extract`): sends **no candidate data**. It sends the text of one
   job page the server itself fetched (held in the Node process behind a token, never taken from the browser), with the owner's name, every e-mail address, phone number and link
   removed by `redact.py` (the profile's name and links read server-side; a final check fails closed if anything of the owner's is left), plus a fixed instruction naming only the
