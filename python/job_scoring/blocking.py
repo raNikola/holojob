@@ -5,7 +5,10 @@ the profile already expresses:
 
   sponsorship_refused  eligibility.py state "sponsorship_refused" (a refusing quote found in the ad, or a right to work required outside
                        the authorized countries; B2B wording keeps it unknown)
-  language             the ad REQUIRES a language the profile does not list (language_gap_names: required demands only; nice-to-have never)
+  language             the ad REQUIRES a language the profile's declared list does not cover, AND the extraction's postingQuote for that
+                       demand is found in the ad's own description. Anything less is "unconfirmed": a flag beside the score, never Blocked
+                       (Step 2c). With no declared language list the check is dormant: every required language shows as unconfirmed.
+                       The extraction carries no required proficiency level, so only presence on the list is compared.
   location             the ad names a place outside the profile's allowedLocations, or states a geography outside them
 
 Location is a state: "in" / "outside" / "unknown" (None when the profile sets no allowedLocations: dormant). A bare "Remote" with no
@@ -40,6 +43,46 @@ def location_state(job: dict, prefs: dict) -> dict | None:
     if loc and loc["state"] == "pass":
         return {"state": IN, "reason": loc["reason"]}
     return {"state": UNKNOWN, "reason": "the ad names no country, so the location was not checked"}
+
+
+UNCONFIRMED_NO_LIST = "no_declared_languages"
+UNCONFIRMED_NO_QUOTE = "no_quote"  # the extraction holds no must-have quote for it (read from the ad's clauses, or unread)
+UNCONFIRMED_QUOTE_NOT_IN_AD = "quote_not_in_ad"
+
+
+def language_state(job: dict, intelligence: dict) -> dict:
+    """{"blocking": [names], "unconfirmed": [{"language", "why"}], "listDeclared": bool} for the languages the ad requires.
+
+    A required demand the declared list does not cover (close relatives count; an "A or B" group is covered by one) is blocking
+    only when a must-have language requirement of the extraction names it with a postingQuote found in the ad's description
+    (eligibility.quote_in_text). Otherwise unconfirmed: a demand read from the ad's clauses has no quote, an unread ad has no
+    extraction, and an empty list declares nothing. An ad whose text cannot be read (gates.language_text_readable) says nothing.
+    """
+    from match_engine import gates as g
+
+    declared = [str(x) for x in intelligence.get("languages") or []]
+    spoken = set(g._spoken({"languages": declared}))
+    out = {"blocking": [], "unconfirmed": [], "listDeclared": bool(spoken)}
+    if not g.language_text_readable(job):
+        return out
+    requirements = (job.get("llmFacts") or {}).get("requirements") or None
+    covered = g.covered_languages(spoken)
+    quotes = g.must_language_quotes(requirements)
+    description = job.get("description") or ""
+    for group, level in g.language_demands(job, requirements):
+        if level != g.REQUIRED or group & covered:
+            continue
+        name = " or ".join(sorted(group))
+        if not spoken:
+            out["unconfirmed"].append({"language": name, "why": UNCONFIRMED_NO_LIST})
+        elif any(eligibility.quote_in_text(q, description) for q in quotes.get(group, [])):
+            out["blocking"].append(name)
+        else:
+            why = UNCONFIRMED_QUOTE_NOT_IN_AD if quotes.get(group) else UNCONFIRMED_NO_QUOTE
+            out["unconfirmed"].append({"language": name, "why": why})
+    out["blocking"].sort()
+    out["unconfirmed"].sort(key=lambda u: u["language"])
+    return out
 
 
 def blockers(eligible: dict | None, language_names: list[str], location: dict | None) -> list[dict]:

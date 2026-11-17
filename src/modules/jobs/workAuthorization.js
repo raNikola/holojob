@@ -17,6 +17,9 @@ export function eligibilityBadges(job) {
   const out = []
   const blockers = job?.blockedBy || []
   if (blockers.length) out.push({ label: 'Blocked', variant: 'warn', reason: blockers.map((b) => b.text).join('. ') })
+  // Step 2c: a required language the ad may ask for but that was not confirmed (no quote in the ad, or no declared language list). A flag, never Blocked.
+  const unconfirmed = job?.languageState?.unconfirmed || []
+  if (unconfirmed.length) out.push({ label: 'Language unconfirmed', variant: 'medium', reason: unconfirmed.map((u) => u.language).join(', ') })
   const eligibility = job?.eligibility
   if (eligibility?.state && ELIGIBILITY_LABELS[eligibility.state]) {
     out.push({ label: ELIGIBILITY_LABELS[eligibility.state], variant: ELIGIBILITY_VARIANTS[eligibility.state], reason: eligibility.reason || '' })

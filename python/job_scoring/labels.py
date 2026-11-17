@@ -63,3 +63,14 @@ def verdict(score: int, red_flags: list[str], blocked_by: list | None = None) ->
         return BLOCKED_LABEL, BLOCKED_LABEL
     apply_rec = apply_recommendation(score, red_flags)
     return apply_rec, priority(score, apply_rec, red_flags)
+
+
+def blocked_from(score: int, red_flags: list[str], blocked_by: list | None) -> dict | None:
+    """What the verdict would be with no blocker: {"applyRecommendation", "priority"} for a blocked ad, else None.
+
+    Stored on the row so the original verdict is never lost; with the blockers gone, `verdict` returns exactly this.
+    """
+    if not blocked_by:
+        return None
+    apply_rec, prio = verdict(score, red_flags)
+    return {"applyRecommendation": apply_rec, "priority": prio}

@@ -27,4 +27,10 @@ describe('Blocked (Step 2b)', () => {
     expect(ordered).toHaveLength(3)
     expect(closedLast(ordered).map((r) => r.jobId)).toEqual(['c', 'a', 'b'])
   })
+
+  it('shows an unconfirmed language as a flag, not as Blocked (Step 2c)', () => {
+    const row = { ...free('u', 80), languageState: { blocking: [], unconfirmed: [{ language: 'German', why: 'quote_not_in_ad' }] } }
+    expect(eligibilityBadges(row).map((b) => b.label)).toEqual(['Language unconfirmed'])
+    expect(eligibilityBadges({ ...free('u', 80), languageState: { blocking: [], unconfirmed: [] } })).toEqual([])
+  })
 })

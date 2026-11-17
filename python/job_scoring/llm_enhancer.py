@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Protocol
 
 from enrich_jobs import MAX_DESCRIPTION_CHARS
-from labels import match_label, verdict
+from labels import blocked_from, match_label, verdict
 from llm_client import GuardrailRefused, LlmRefused, LlmUnavailable, complete_json
 import ai_gate  # noqa: E402 (on the path through llm_client)
 
@@ -457,6 +457,7 @@ class LlmFitEnhancer:
             "matchLabel": match_label(score),
             "applyRecommendation": apply_rec,
             "priority": prio,
+            "blockedFrom": blocked_from(score, red_flags, base_result.get("blockedBy")),
             "reasons": [*(base_result.get("reasons") or []), reason],
             "llmFit": {
                 **judged,

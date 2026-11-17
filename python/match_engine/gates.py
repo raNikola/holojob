@@ -185,6 +185,27 @@ def _split_by_marker(clause: str) -> list[str]:
     return out
 
 
+def _requirement_groups(req: dict) -> list[frozenset]:
+    """The alternative groups one kind-language requirement names: one group for "A or B", else one per language."""
+    if req.get("kind") != "language":
+        return []
+    text = normalize_text(f"{req.get('text') or ''} {req.get('postingQuote') or ''}")
+    named = _languages_in(text)
+    if not named:
+        return []
+    return [frozenset(named)] if _ALTERNATIVE.search(text) else [frozenset({lang}) for lang in named]
+
+
+def must_language_quotes(requirements: list[dict] | None) -> dict[frozenset, list[str]]:
+    """The extraction's postingQuote for each must-have language group: {group: [quote, ...]}. The caller checks a quote against the ad."""
+    out: dict[frozenset, list[str]] = {}
+    for req in requirements or []:
+        if req.get("importance") == "must" and req.get("postingQuote"):
+            for group in _requirement_groups(req):
+                out.setdefault(group, []).append(str(req["postingQuote"]))
+    return out
+
+
 def language_demands(job: dict, requirements: list[dict] | None = None) -> list[tuple[frozenset, str]]:
     """What the ad asks for in languages: [(alternatives, level)], level required, optional or mentioned.
 
@@ -204,13 +225,8 @@ def language_demands(job: dict, requirements: list[dict] | None = None) -> list[
             demands[group] = level
 
     for req in requirements or []:
-        if req.get("kind") == "language":
-            named = _languages_in(normalize_text(f"{req.get('text') or ''} {req.get('postingQuote') or ''}"))
-            if named:
-                level = REQUIRED if req.get("importance") == "must" else OPTIONAL
-                alt = _ALTERNATIVE.search(normalize_text(f"{req.get('text') or ''} {req.get('postingQuote') or ''}"))
-                for group in ([named] if alt else [{lang} for lang in named]):
-                    add(group, level)
+        for group in _requirement_groups(req):
+            add(group, REQUIRED if req.get("importance") == "must" else OPTIONAL)
     extracted = set().union(*demands) if demands else set()
     for clause, under_heading in ((part, under) for c, under in _clauses_marked(job.get("description") or "")
                                   for part in _split_by_marker(c)):

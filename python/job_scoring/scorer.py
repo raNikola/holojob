@@ -12,7 +12,7 @@ from dimensions.industry_match import score_industry_match_detail
 from dimensions.location_match import score_location_match
 from dimensions.role_match import score_role_match
 from dimensions.skill_match import score_skill_match
-from labels import INSUFFICIENT_APPLY, INSUFFICIENT_PRIORITY, NOT_READ_LABEL, match_label, verdict
+from labels import INSUFFICIENT_APPLY, INSUFFICIENT_PRIORITY, NOT_READ_LABEL, blocked_from, match_label, verdict
 import data_sufficiency
 import blocking
 import eligibility
@@ -63,6 +63,13 @@ OFF_TRACK_CAP = 50
 # A title that is neither a target role nor near one (role_tier.py). The same answer as the off-track cap, read from
 # the title, so it holds for the many ads enrichment has not read. 40 keeps the ad reviewable (Weak, Maybe) and below a target-role ad held at 45 or 50.
 UNRELATED_TITLE_CAP = 40
+
+
+LANGUAGE_UNCONFIRMED_WHY = {
+    blocking.UNCONFIRMED_NO_LIST: "your profile lists no languages",
+    blocking.UNCONFIRMED_NO_QUOTE: "the read holds no quote of it",
+    blocking.UNCONFIRMED_QUOTE_NOT_IN_AD: "its quote was not found in the ad",
+}
 
 
 def language_gap_names(job: dict, intelligence: dict) -> list[str]:
@@ -154,7 +161,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     eligible = eligibility.assess(job, prefs)
     language_names = language_gap_names(job, intelligence)
     location_state = blocking.location_state(job, prefs)
-    blocked_by = blocking.blockers(eligible, language_names, location_state)
+    language_state = blocking.language_state(job, intelligence)
+    blocked_by = blocking.blockers(eligible, language_state["blocking"], location_state)
 
     no_stack = not any(_skill_bank(intelligence))
     if no_stack:
@@ -198,6 +206,9 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         reasons.append("Blocked: " + "; ".join(b["text"] for b in blocked_by))
     if language_names:
         reasons.append(f"Language: the ad requires {' and '.join(language_names)}, which your profile does not list")
+    if language_state["unconfirmed"]:
+        reasons.append("Language unconfirmed: " + "; ".join(
+            f"the ad may require {u['language']} ({LANGUAGE_UNCONFIRMED_WHY[u['why']]})" for u in language_state["unconfirmed"]))
 
     if not_read:
         reasons = [f"Not read: {r}" for r in read_reasons] + reasons
@@ -229,8 +240,10 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         "insufficientReasons": read_reasons,
         "eligibility": eligible,
         "languageGap": language_names,
+        "languageState": language_state,
         "locationState": location_state,
         "blockedBy": blocked_by,
+        "blockedFrom": None if not_read else blocked_from(match_score, red_flags, blocked_by),
         "profileGuard": "no_profile_stack" if no_stack else None,
         "confidence": confidence,
         "roleMatch": role_score,

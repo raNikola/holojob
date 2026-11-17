@@ -179,3 +179,86 @@ def test_rescore_blocks_without_a_model_call(tmp_path, monkeypatch):
     row = json.loads(output.read_text())["jobs"][0]
     assert row["priority"] == "Blocked" and row["applyRecommendation"] == "Blocked" and row["blockedBy"][0]["kind"] == "sponsorship_refused"
     assert row["scoringVersion"] == "1.5"
+
+
+# --- Step 2c: language blocks must be confirmed; the original verdict is kept ------------------------------------------
+
+GERMAN_JOB = dict(requirements=GERMAN, extra=PADDING + " Fluent German required.")
+
+
+def lang_scored(job, languages):
+    return score_job(job, {**STACK, "languages": languages, "jobFitPreferences": prefs()})
+
+
+def test_a_confirmed_language_demand_needs_a_quote_found_in_the_ad():
+    quoted = lang_scored(ad("Warsaw, Poland", **GERMAN_JOB), STACK["languages"])
+    assert quoted["languageState"]["blocking"] == ["German"] and [b["kind"] for b in quoted["blockedBy"]] == ["language"]
+    invented = [{**GERMAN[0], "postingQuote": "Fluent German is mandatory for this team"}]
+    r = lang_scored(ad("Warsaw, Poland", requirements=invented, extra=PADDING + " Fluent German required."), STACK["languages"])
+    assert r["languageState"]["blocking"] == [] and r["blockedBy"] == []
+    assert r["languageState"]["unconfirmed"] == [{"language": "German", "why": blocking.UNCONFIRMED_QUOTE_NOT_IN_AD}]
+    assert any(x.startswith("Language unconfirmed:") for x in r["reasons"])
+    assert r["blockedFrom"] is None and r["applyRecommendation"] != labels.BLOCKED_LABEL
+
+
+def test_a_demand_read_only_from_the_ad_clauses_has_no_quote_and_is_unconfirmed():
+    r = lang_scored(ad("Warsaw, Poland", extra=PADDING + " Fluent German required."), STACK["languages"])
+    assert r["languageState"]["blocking"] == [] and r["blockedBy"] == []
+    assert r["languageState"]["unconfirmed"] == [{"language": "German", "why": blocking.UNCONFIRMED_NO_QUOTE}]
+
+
+def test_an_empty_declared_language_list_makes_the_block_dormant():
+    r = lang_scored(ad("Warsaw, Poland", **GERMAN_JOB), [])
+    assert r["languageState"]["listDeclared"] is False and r["languageState"]["blocking"] == [] and r["blockedBy"] == []
+    assert r["languageState"]["unconfirmed"] == [{"language": "German", "why": blocking.UNCONFIRMED_NO_LIST}]
+    assert r["applyRecommendation"] != labels.BLOCKED_LABEL
+
+
+def test_an_alternative_one_declared_language_covers_is_no_blocker_and_no_flag():
+    alt = [{**GERMAN[0], "text": "Fluent German or English required", "postingQuote": "Fluent German or English required"}]
+    r = lang_scored(ad("Warsaw, Poland", requirements=alt, extra=PADDING + " Fluent German or English required."), STACK["languages"])
+    assert r["blockedBy"] == [] and r["languageState"]["unconfirmed"] == []
+
+
+def _unblocked(job, languages, monkeypatch):
+    monkeypatch.setattr(blocking, "blockers", lambda *a, **k: [])
+    return lang_scored(job, languages)
+
+
+@pytest.mark.parametrize("make", [
+    lambda: ad("Warsaw, Poland", **GERMAN_JOB),
+    lambda: refusing(REFUSAL),
+    lambda: refusing(REFUSAL, extra=PADDING + " Fluent German required.", requirements=GERMAN),
+], ids=["language", "sponsorship", "both"])
+def test_blocked_from_equals_what_the_code_computes_with_no_blocker(make, monkeypatch):
+    blocked = lang_scored(make(), STACK["languages"])
+    assert blocked["blockedBy"] and blocked["priority"] == labels.BLOCKED_LABEL
+    free = _unblocked(make(), STACK["languages"], monkeypatch)
+    assert free["blockedBy"] == [] and free["blockedFrom"] is None
+    assert blocked["blockedFrom"] == {"applyRecommendation": free["applyRecommendation"], "priority": free["priority"]}
+    assert blocked["matchScore"] == free["matchScore"] and blocked["scoreBeforeCaps"] == free["scoreBeforeCaps"]
+
+
+def test_after_a_profile_edit_the_verdict_is_the_stored_original():
+    job = ad("Warsaw, Poland", **GERMAN_JOB)
+    before = lang_scored(job, STACK["languages"])
+    after = lang_scored(job, [*STACK["languages"], "German (fluent)"])
+    assert after["blockedBy"] == [] and after["blockedFrom"] is None
+    assert before["blockedFrom"] == {"applyRecommendation": after["applyRecommendation"], "priority": after["priority"]}
+
+
+@pytest.mark.parametrize("score", [0, 39, 40, 54, 55, 69, 70, 75, 100])
+@pytest.mark.parametrize("flags", [[], ["Relocation required"]])
+def test_blocked_from_is_the_unblocked_verdict_for_every_score(score, flags):
+    assert labels.blocked_from(score, flags, None) is None
+    assert labels.blocked_from(score, flags, [{"kind": "language"}]) == dict(zip(("applyRecommendation", "priority"), labels.verdict(score, flags)))
+
+
+def test_the_fit_judge_path_keeps_the_original_verdict_of_a_blocked_ad():
+    import llm_enhancer
+    intelligence = json.loads((FIXTURES / "candidate-intelligence.json").read_text(encoding="utf-8"))
+    row = {**scored(refusing(REFUSAL)), "matchScore": 70, "scoreBeforeCaps": 70, "hardCapped": False}
+    answer = {"fit": "strong", "fit_reason": "x", "requirements": [{"requirement": "a", "status": "met", "evidence": "b"}],
+              "missing": [], "dealbreakers": []}
+    out = llm_enhancer.LlmFitEnhancer("openai", "gpt-4o", threshold=0, complete=lambda *a, **k: answer).enhance(refusing(REFUSAL), row, intelligence)
+    assert out["blockedFrom"] == dict(zip(("applyRecommendation", "priority"), labels.verdict(75, out["redFlags"])))
