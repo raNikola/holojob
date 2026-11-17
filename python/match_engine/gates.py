@@ -283,7 +283,7 @@ def settle_language(req: dict, candidate: dict) -> dict | None:
     language name only, not the level. MET when the requirement is covered
     (every language it names, or any one of them when they are alternatives),
     credited as the candidate's own statement (CONFIRMED_FACT_STRENGTH).
-    Not covered: MISSING, whatever the importance; a CV item that mentions
+    Not covered: CONTRADICTED (settled in code), whatever the importance; a CV item that mentions
     the language hands an optional requirement to the matcher as before, and
     for a must-have it is a conflict (the gate fails the ad) that is reported
     in `conflict`, not decided. UNKNOWN when the candidate lists no languages
@@ -310,11 +310,11 @@ def settle_language(req: dict, candidate: dict) -> dict | None:
     if lacking & mentioned:
         if req.get("importance") != "must":
             return None
-        missing = _resolved(req, "MISSING", None, None, False, 0)
+        missing = _resolved(req, "CONTRADICTED", None, None, False, 0)
         missing["conflict"] = (f"language requirement {req.get('id')!r} is must-have and not covered by the profile's "
                                f"languages, but a CV item mentions {', '.join(sorted(lacking & mentioned))}")
         return missing
-    return _resolved(req, "MISSING", None, None, False, 0)
+    return _resolved(req, "CONTRADICTED", None, None, False, 0)
 
 
 def _prefs(gates: dict) -> dict:

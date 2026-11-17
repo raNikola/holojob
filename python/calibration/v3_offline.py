@@ -84,8 +84,12 @@ def demote(req: dict, max_strength: int | None, to: str) -> dict:
 
 
 def _current(reqs: list[dict]) -> int | None:
-    """The engine's own Fit formula on stored statuses, before caps. None when nothing is settled."""
-    return fit_value(reqs) if any(r["status"] in ("MET", "PARTIAL", "MISSING") for r in reqs) else None
+    """The engine's own Fit formula on stored statuses, before caps. None when nothing is settled.
+
+    This reads the formula as it was through engine 0.2.0, which the stored data belongs to: a stored MISSING counted as unmet
+    (since 0.3.0 the engine calls that NOT_EVIDENCED and counts it for nothing)."""
+    reqs = [{**r, "status": "CONTRADICTED"} if r["status"] == "MISSING" else r for r in reqs]
+    return fit_value(reqs) if any(r["status"] in ("MET", "PARTIAL", "CONTRADICTED") for r in reqs) else None
 
 
 def _new(reqs: list[dict]) -> int | None:

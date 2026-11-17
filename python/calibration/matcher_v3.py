@@ -210,7 +210,7 @@ def prepare(posting: dict, candidate: dict, identity=None) -> dict:
         elif settled["status"] == "MET":
             resolved[index] = _settled(req, MET, settled["strength"], True)
         else:
-            resolved[index] = _settled(req, NOT_EVIDENCED, closedWorldAbsent=settled["status"] == "MISSING")
+            resolved[index] = _settled(req, NOT_EVIDENCED, closedWorldAbsent=settled["status"] in ("MISSING", "CONTRADICTED"))
     return {"prompt": build_prompt(description, asked, candidate.get("evidence") or [], identity), "asked": asked, "resolved": resolved,
             "requirements": requirements, "description": description, "warnings": warnings}
 

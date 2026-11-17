@@ -112,7 +112,7 @@ def test_a_rescore_after_an_answer_makes_no_http_call(monkeypatch):
     cache = {}
     _match(first, _model(first), cache)
     outcome = match_posting(POSTING, _candidate([SQL_NO]), confirmed=True, provider="openai", cache=cache)  # the real complete_json, never reached
-    assert _status(outcome.output, "sql") == "MISSING"
+    assert _status(outcome.output, "sql") == "CONTRADICTED"
 
 
 # --- what is asked and what is cached --------------------------------------------------
@@ -155,7 +155,7 @@ def test_a_changed_fact_through_match_posting_makes_no_call():
     after = _candidate([SQL_NO])
     second = _match(after, _no_call, cache)
     assert second.output["cacheKey"] == first.output["cacheKey"]
-    assert _status(second.output, "sql") == "MISSING"
+    assert _status(second.output, "sql") == "CONTRADICTED"
     assert second.output["answersVersion"] == after["answersVersion"] != first.output["answersVersion"]
     assert second.output["profileVersion"] == after["profileVersion"]
     assert second.output["evidenceVersion"] == first.output["evidenceVersion"] == after["evidenceVersion"]
@@ -167,7 +167,7 @@ def test_a_changed_fact_through_the_shadow_engine_makes_no_call(seeded, judge):
     after = _candidate([SQL_NO])
     engine = _engine(seeded, after, _no_call, judge=judge)
     shadow = engine.apply([JOB])[0]["engineShadow"]
-    assert shadow["fromCache"] is True and _status(shadow, "sql") == "MISSING"
+    assert shadow["fromCache"] is True and _status(shadow, "sql") == "CONTRADICTED"
     assert (shadow["evidenceVersion"], shadow["answersVersion"]) == (after["evidenceVersion"], after["answersVersion"])
     assert engine.plan([JOB]) == set()
 
@@ -236,4 +236,4 @@ def test_memory_sees_a_fresh_match_too(tmp_path):
     memory = Memory()
     candidate = _candidate([SQL_NO])
     _engine(tmp_path, candidate, _model(candidate), judge=True, memory=memory).apply([JOB])
-    assert memory.observed == [("a", "MISSING")]
+    assert memory.observed == [("a", "CONTRADICTED")]

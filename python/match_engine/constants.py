@@ -13,7 +13,9 @@ arithmetic and the same inputs always round the same way (see fit.py).
 
 from fractions import Fraction as F
 
-ENGINE_VERSION = "0.2.0"
+# 0.3.0: status split (CONTRADICTED / NOT_EVIDENCED; only CONTRADICTED is unmet) and the specificity weight (a generic
+# requirement weighs 0, specificity.py). Shadow only: nothing here reaches matchScore.
+ENGINE_VERSION = "0.3.0"
 
 # Credit a requirement earns per evidence strength 0-4 (section 4.3), the same
 # for every requirement: none, claim, contextual, demonstrated, with outcome.

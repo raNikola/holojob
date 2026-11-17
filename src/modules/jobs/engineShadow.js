@@ -21,7 +21,10 @@ export const BUCKET = {
 export const STATUS = {
   MET: { mark: '✓', className: 'text-emerald-700 dark:text-emerald-400' },
   PARTIAL: { mark: '◐', className: 'text-amber-700 dark:text-amber-400' },
-  MISSING: { mark: '✗', className: 'text-red-700 dark:text-red-400' },
+  CONTRADICTED: { mark: '✗', className: 'text-red-700 dark:text-red-400' },
+  // Nothing in the profile speaks for it: not held against the candidate (engine 0.3.0). Rows stored by 0.2.x say MISSING for the same thing.
+  NOT_EVIDENCED: { mark: '–', className: 'text-stone-500' },
+  MISSING: { mark: '–', className: 'text-stone-500' },
   UNKNOWN: { mark: '?', className: 'text-stone-500' },
 }
 

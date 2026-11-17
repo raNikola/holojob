@@ -85,14 +85,14 @@ def test_fit_empty_is_0():
 
 
 def test_fit_all_missing_is_0():
-    assert fit_value([req("MISSING"), req("MISSING", "nice")]) == 0
+    assert fit_value([req("CONTRADICTED"), req("CONTRADICTED", "nice")]) == 0
 
 
 def test_fit_mixed():
     reqs = [
         req("MET", "must", 4),         # 1     x 3 = 3
         req("PARTIAL", "must", 2),     # 0.25  x 3 = 0.75
-        req("MISSING", "preferred"),   # 0     x 2 = 0
+        req("CONTRADICTED", "preferred"),   # 0     x 2 = 0
         req("MET", "nice", 3),         # 0.9   x 1 = 0.9
         req("UNKNOWN", "must"),        # not counted
     ]
@@ -101,13 +101,13 @@ def test_fit_mixed():
 
 
 def test_unknown_changes_neither_numerator_nor_denominator():
-    base = [req("MET", "must", 4), req("MISSING", "must")]
+    base = [req("MET", "must", 4), req("CONTRADICTED", "must")]
     assert fit_value(base) == fit_value(base + [req("UNKNOWN", "must"), req("UNKNOWN", "nice")]) == 50
 
 
 def test_fit_rounds_half_up():
-    # MET must at strength 4 (3) + MET nice at 1 (0.25) + 6 MISSING nice: 3.25 / 10 = 32.5 -> 33
-    reqs = [req("MET", "must", 4), req("MET", "nice", 1)] + [req("MISSING", "nice") for _ in range(6)]
+    # MET must at strength 4 (3) + MET nice at 1 (0.25) + 6 CONTRADICTED nice: 3.25 / 10 = 32.5 -> 33
+    reqs = [req("MET", "must", 4), req("MET", "nice", 1)] + [req("CONTRADICTED", "nice") for _ in range(6)]
     assert fit_value(reqs) == 33
 
 
@@ -117,7 +117,7 @@ def test_confidence_counts_verified_met_partial_and_any_missing():
     reqs = [
         req("MET", "must"),                         # 3 verified
         req("PARTIAL", "preferred", verified=False),  # 2 not verified
-        req("MISSING", "nice"),                     # 1 verified, no quote needed
+        req("CONTRADICTED", "nice"),                     # 1 verified, no quote needed
         req("UNKNOWN", "must"),                     # 3 not verified
     ]
     assert confidence_value(reqs, []) == Fraction(4, 9)
@@ -213,13 +213,13 @@ def test_threshold_boundaries_follow_the_constants(monkeypatch):
 
 def test_counts():
     reqs = [
-        req("MET", "must"), req("PARTIAL", "must"), req("MISSING", "must"), req("MISSING", "must"),
+        req("MET", "must"), req("PARTIAL", "must"), req("CONTRADICTED", "must"), req("CONTRADICTED", "must"),
         req("UNKNOWN", "must"),
         req("MET", "preferred"), req("UNKNOWN", "preferred"),
-        req("MISSING", "nice"), req("UNKNOWN", "nice"),
+        req("CONTRADICTED", "nice"), req("UNKNOWN", "nice"),
     ]
     assert counts_of(reqs, PASS5) == {
-        "mustMet": 1, "mustTotal": 5, "preferredMet": 1, "preferredTotal": 2, "unknown": 3, "blockers": 2,
+        "mustMet": 1, "mustTotal": 5, "preferredMet": 1, "preferredTotal": 2, "unknown": 3, "notEvidenced": 0, "blockers": 2,
     }
 
 
@@ -229,7 +229,7 @@ def test_questions_one_per_unknown_in_order_templated_by_kind():
         req("MET"),
         req("UNKNOWN", "nice", kind="language", text="German (B2)."),
         req("UNKNOWN", "preferred", kind="experience", text="5+ years in fintech"),
-        req("MISSING"),
+        req("CONTRADICTED"),
         req("UNKNOWN", kind="weird", text="A thing"),
     ]
     assert questions_for(reqs, PASS5) == [
@@ -298,7 +298,7 @@ def test_one_verified_quote_lifts_the_unverified_cap():
 
 def test_all_missing_lists_the_unverified_cap():
     # MISSING carries no quote, so nothing is verified; Fit is 0 under the cap anyway.
-    result = score([req("MISSING"), req("MISSING")], PASS5)
+    result = score([req("CONTRADICTED"), req("CONTRADICTED")], PASS5)
     assert (result["fit"], result["caps"]) == (0, ["no_verified_evidence"])
 
 
@@ -358,7 +358,7 @@ def test_one_fail_on_any_gate_blocks(gate):
 
 
 def test_failed_gates_join_blockers():
-    reqs = [req("MET"), req("MISSING")]
+    reqs = [req("MET"), req("CONTRADICTED")]
     assert counts_of(reqs, gates(location="fail", language="fail"))["blockers"] == 3
     assert counts_of(reqs, gates(location="unknown"))["blockers"] == 1
 
@@ -374,8 +374,8 @@ def test_blocked_strong_or_good_becomes_partial(fit_reqs, unblocked):
 
 def test_blocked_partial_weak_and_incomplete_stay():
     blocked = gates(location="fail")
-    partial = [req("MET", strength=2), req("MISSING", "nice")]  # Fit 38
-    weak = [req("MET", strength=1), req("MISSING")]          # Fit 13
+    partial = [req("MET", strength=2), req("CONTRADICTED", "nice")]  # Fit 38
+    weak = [req("MET", strength=1), req("CONTRADICTED")]          # Fit 13
     incomplete = [req("UNKNOWN"), req("UNKNOWN")]
     assert [score(r, blocked)["label"] for r in (partial, weak, incomplete)] == ["Partial", "Weak", "Incomplete"]
 

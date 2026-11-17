@@ -94,6 +94,21 @@ def unit_keys_by_ad(runs_by_ad: dict) -> dict:
     return {i: [unit_keys(f) for f in runs] for i, runs in runs_by_ad.items() if runs}
 
 
+def responsibility_keys(facts: dict) -> list[dict]:
+    """One entry per responsibility of one pass (prompt 7): {"key": "r:<12 hex of sha256 of the normalised quote>"}. A separate class
+    from the requirement units: a responsibility is what the person will do, not what they must have. Holds no ad text."""
+    keys = set()
+    for r in facts.get("responsibilities") or []:
+        norm = normalize_quote(r.get("postingQuote"))
+        if norm:
+            keys.add("r:" + hashlib.sha256(norm.encode("utf-8")).hexdigest()[:12])
+    return [{"key": k} for k in sorted(keys)]
+
+
+def responsibility_keys_by_ad(runs_by_ad: dict) -> dict:
+    return {i: [responsibility_keys(f) for f in runs] for i, runs in runs_by_ad.items() if runs}
+
+
 def flip_report(runs_by_ad: dict) -> dict:
     """runs_by_ad: {jobId: [facts, ...]}. Ads with fewer than two successful passes are listed, not counted."""
     sigs = {i: [signature(f) for f in runs] for i, runs in runs_by_ad.items() if len(runs) >= 2}
@@ -115,7 +130,7 @@ def flip_report(runs_by_ad: dict) -> dict:
 
 # --- estimate -----------------------------------------------------------------------------------------------------
 
-def estimate(jobs: list[dict], runs: int, provider, model, previous_for=None, mapper=None) -> dict:
+def estimate(jobs: list[dict], runs: int, provider, model, previous_for=None, mapper=None, responsibilities: bool = False) -> dict:
     """Prompt-size and price estimate. Imports are local so `--help` and the tests need no provider set-up. Calls nothing."""
     import ai_gate
     import enrich_jobs
@@ -135,7 +150,7 @@ def estimate(jobs: list[dict], runs: int, provider, model, previous_for=None, ma
         return {"priceKnown": False, "provider": name, "model": resolved_model}
     selection = selection or {}
     max_out = int(reasoning_options(resolved_model).get("max_completion_tokens") or selection.get("maxTokens") or ai_selection.DEFAULTS["maxTokens"])
-    chars = [len(enrich_jobs.build_prompt(j, previous_for(j) if previous_for else None, mapper)) for j in jobs]
+    chars = [len(enrich_jobs.build_prompt(j, previous_for(j) if previous_for else None, mapper, responsibilities)) for j in jobs]
     in_typical = sum(chars) / 4 * runs  # characters / 4, as enrich_jobs --dry-run states it
     in_worst = sum(chars) / enrich_jobs.UPPER_CHARS_PER_TOKEN * runs
     calls = len(jobs) * runs
@@ -175,7 +190,7 @@ def read_ids(path: Path) -> list[str]:
     return out
 
 
-def run_extractions(jobs, runs, provider, model, guard, workers, previous_for, mapper) -> tuple[dict, dict]:
+def run_extractions(jobs, runs, provider, model, guard, workers, previous_for, mapper, responsibilities=False) -> tuple[dict, dict]:
     import enrich_jobs
     from llm_client import GuardrailRefused, LlmRefused, LlmUnavailable
 
@@ -184,7 +199,8 @@ def run_extractions(jobs, runs, provider, model, guard, workers, previous_for, m
 
     def one(job):
         try:
-            return job["jobId"], enrich_jobs.extract(job, model, provider, previous_for(job) if previous_for else None, mapper, guard)
+            return job["jobId"], enrich_jobs.extract(job, model, provider, previous_for(job) if previous_for else None, mapper, guard,
+                                                       **({"responsibilities": True} if responsibilities else {}))
         except GuardrailRefused:
             return job["jobId"], "refused"
         except (LlmUnavailable, LlmRefused):
@@ -216,6 +232,8 @@ def main(argv=None) -> int:
     p.add_argument("--runs", type=int, default=5)
     p.add_argument("--max-usd", type=float, required=True)
     p.add_argument("--previous-frames", choices=("none", "production"), default="none")
+    p.add_argument("--prompt", type=int, choices=(6, 7), default=6,
+                   help="extraction prompt: 6 is the pipeline's; 7 also lists responsibilities (opt-in, never changes the pipeline)")
     p.add_argument("--provider", default=None)
     p.add_argument("--model", default=None)
     p.add_argument("--workers", type=int, default=4)
@@ -254,7 +272,7 @@ def main(argv=None) -> int:
         previous_for = lambda job: requirement_frames.previous_for(frames, job, remap)  # noqa: E731
 
     try:
-        est = estimate(jobs, args.runs, args.provider, args.model, previous_for, mapper)
+        est = estimate(jobs, args.runs, args.provider, args.model, previous_for, mapper, args.prompt == 7)
     except LlmUnavailable as exc:
         print(f"cannot price the run, so nothing is called: {exc}", file=sys.stderr)
         return 1
@@ -281,7 +299,7 @@ def main(argv=None) -> int:
     except (LlmUnavailable, LlmRefused) as exc:
         print(f"spend guard refused: {exc}", file=sys.stderr)
         return 1
-    results, failures = run_extractions(jobs, args.runs, args.provider, args.model, guard, args.workers, previous_for, mapper)
+    results, failures = run_extractions(jobs, args.runs, args.provider, args.model, guard, args.workers, previous_for, mapper, args.prompt == 7)
     report = flip_report(results)
     meta = {"ads": len(jobs), "runs": args.runs, "previousFrames": args.previous_frames, "provider": est["provider"], "model": est["model"],
             "failures": failures, "spentUsd": round(guard.spent(), 4), "maxUsd": args.max_usd}
@@ -289,7 +307,8 @@ def main(argv=None) -> int:
     print(f"spent ${meta['spentUsd']:.4f} of the ${args.max_usd:.2f} cap")
     if args.out:
         mc.write_private(args.out, json.dumps({"meta": meta, "report": report, "unitKeysVersion": UNIT_KEYS_VERSION,
-                                              "unitKeys": unit_keys_by_ad(results)}, indent=1))
+                                              "unitKeys": unit_keys_by_ad(results),
+                                              **({"responsibilityKeys": responsibility_keys_by_ad(results)} if args.prompt == 7 else {})}, indent=1))
     return 0
 
 

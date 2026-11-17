@@ -27,13 +27,18 @@ import statistics
 import sys
 from pathlib import Path
 
-SPECIFIC_KINDS = frozenset({"skill", "domain", "certification", "language"})
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+from match_engine.specificity import SPECIFIC_KINDS, is_specific  # noqa: E402,F401  the one rule, shared with the engine
+
 BUCKETS = (("1.0", 1.0, None), ("0.8-<1.0", 0.8, 1.0), ("0.6-<0.8", 0.6, 0.8), ("0.4-<0.6", 0.4, 0.6), ("<0.4", None, 0.4))
 VERSION_WANTED = 1
 
 
 def is_specific_must(unit: dict) -> bool:
-    return unit.get("importance") == "must" and (bool(unit.get("canonical")) or unit.get("kind") in SPECIFIC_KINDS)
+    """A must unit that the specificity rule (python/match_engine/specificity.py) keeps."""
+    key = unit.get("key") or ""
+    competency_id = key[2:] if key.startswith("c:") else None
+    return unit.get("importance") == "must" and is_specific(unit.get("kind"), competency_id, bool(unit.get("canonical")))
 
 
 def jaccard(a: set, b: set) -> float | None:
@@ -97,8 +102,29 @@ def stability(unit_keys: dict) -> dict:
     return out
 
 
+def responsibility_stability(doc: dict) -> dict | None:
+    """The responsibilities class (extract-7 runs only): Jaccard overlap of the passes' responsibility keys, a separate class from
+    the requirement units. None when the file has none (an extract-6 run)."""
+    keys = doc.get("responsibilityKeys")
+    if not isinstance(keys, dict) or not keys:
+        return None
+    means, undefined = {}, []
+    for job_id, passes in sorted(keys.items()):
+        res = ad_overlap(passes) if len(passes) >= 2 else None
+        if res is None:
+            undefined.append(job_id)
+        else:
+            means[job_id] = res["mean"]
+    return {**distribution(means), "adsUndefined": len(undefined), "undefinedIds": undefined,
+            "lowestIds": [i for i, _ in sorted(means.items(), key=lambda kv: (kv[1], kv[0]))[:5]]}
+
+
+def read_doc(path: Path) -> dict:
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
 def load(path: Path) -> dict:
-    doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    doc = read_doc(path)
     keys = doc.get("unitKeys")
     if not isinstance(keys, dict) or not keys:
         raise ValueError("no unitKeys in this file: it was written before the stability tool existed; re-run "
@@ -125,17 +151,53 @@ def render(report: dict) -> list[str]:
     return out
 
 
+def causes(unit_keys: dict) -> dict:
+    """INFORMATIONAL, never a criterion: why specific-must overlap is low, per ad. Per ad: mean units per pass split into
+    canonical (c:) and quote-keyed (q:) units, and the mean pairwise overlap of each part on its own. A low q-only
+    overlap with a high c-only overlap says the same competency is asked but the extractor quotes it differently."""
+    out = {}
+    for job_id, passes in sorted(unit_keys.items()):
+        if len(passes) < 2:
+            continue
+        row = {"unitsPerPass": round(sum(sum(1 for u in p if is_specific_must(u)) for p in passes) / len(passes), 1)}
+        for name, prefix in (("canonical", "c:"), ("quoteKeyed", "q:")):
+            keep = lambda u, prefix=prefix: is_specific_must(u) and u["key"].startswith(prefix)  # noqa: E731
+            row[name + "PerPass"] = round(sum(sum(1 for u in p if keep(u)) for p in passes) / len(passes), 1)
+            res = ad_overlap(passes, keep)
+            row[name + "Overlap"] = None if res is None else round(res["mean"], 3)
+        out[job_id] = row
+    return out
+
+
+def render_causes(rows: dict) -> list[str]:
+    out = ["### causes (informational, not a criterion)", "| ad | specific musts/pass | canonical/pass | overlap | quote-keyed/pass | overlap |", "|---|---:|---:|---:|---:|---:|"]
+    for job_id, r in rows.items():
+        out.append(f"| {job_id} | {r['unitsPerPass']} | {r['canonicalPerPass']} | {r['canonicalOverlap']} | {r['quoteKeyedPerPass']} | {r['quoteKeyedOverlap']} |")
+    return out + [""]
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("variance", type=Path)
     p.add_argument("--json", action="store_true")
+    p.add_argument("--causes", action="store_true", help="add the informational per-ad breakdown (canonical vs quote-keyed units)")
     args = p.parse_args(argv)
     try:
-        report = stability(load(args.variance))
+        keys = load(args.variance)
+        report = stability(keys)
     except (OSError, ValueError) as exc:
         print(f"cannot read {args.variance}: {exc}", file=sys.stderr)
         return 2
-    print(json.dumps(report, indent=1) if args.json else "\n".join(render(report)))
+    if args.causes:
+        report["causes"] = causes(keys)
+    if (resp := responsibility_stability(read_doc(args.variance))) is not None:
+        report["responsibilities"] = resp
+    if args.json:
+        print(json.dumps(report, indent=1))
+    else:
+        extra = [] if "responsibilities" not in report else [
+            "### responsibilities (extract-7, separate class)", json.dumps(report["responsibilities"]), ""]
+        print("\n".join(render(report) + (render_causes(report["causes"]) if args.causes else []) + extra))
     return 0
 
 

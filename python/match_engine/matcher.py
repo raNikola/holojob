@@ -35,7 +35,7 @@ from requirement_frames import remap_facts
 
 from .evidence_select import mode_of, select_evidence, version_of
 from .gates import GATES, settle_language
-from .verify import STATUSES, apply_proposal, drop_unquoted, resolve_fact
+from .verify import STATUSES, apply_proposal, drop_unquoted, output_status, resolve_fact
 
 MATCH_PROMPT_VERSION = 2
 # One string for both prompts, as the contract's `promptVersion` asks.
@@ -372,7 +372,8 @@ def overlay_answers(raw: dict, candidate: dict) -> dict:
         elif req["status"] is None:
             output["warnings"].append(f"dropped requirement {req['id']!r}: the matcher gave no usable answer for it")
         else:
-            requirements.append(req)
+            # The cached answer keeps the model's MISSING; the output says what it means (verify.output_status).
+            requirements.append({**req, "status": output_status(req["status"])})
     output["requirements"] = requirements
     output["profileVersion"] = candidate["profileVersion"]
     output["answersVersion"] = candidate["answersVersion"]

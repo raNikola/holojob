@@ -35,9 +35,11 @@ from .constants import (
     UNVERIFIED_FIT_CAP,
 )
 from .gates import bucket_for
+from .specificity import requirement_is_specific
+from .verify import CONTRADICTED, NOT_EVIDENCED
 
 # The statuses that enter the coverage denominator (section 4.1).
-SETTLED = ("MET", "PARTIAL", "MISSING")
+SETTLED = ("MET", "PARTIAL", CONTRADICTED)
 
 QUESTION_TEMPLATES = {
     "skill": "Have you worked with {text}?",
@@ -73,11 +75,22 @@ def credit(req: dict) -> Fraction:
 
 
 def _weight(req: dict) -> Fraction:
-    return IMPORTANCE_WEIGHT[req["importance"]]
+    """The importance weight; 0 for a generic requirement (specificity.py, decision Q3)."""
+    return IMPORTANCE_WEIGHT[req["importance"]] if requirement_is_specific(req) else Fraction(0)
+
+
+def _not_judged(req: dict) -> bool:
+    """UNKNOWN and NOT_EVIDENCED: nothing found for it, and nothing is held against the candidate."""
+    return req["status"] in ("UNKNOWN", NOT_EVIDENCED)
+
+
+def normalized(requirements: list[dict]) -> list[dict]:
+    """A stored output of an engine before 0.3.0 says MISSING for what is now NOT_EVIDENCED (an inferred absence)."""
+    return [{**r, "status": NOT_EVIDENCED} if r["status"] == "MISSING" else r for r in requirements]
 
 
 def fit_value(requirements: list[dict]) -> int:
-    """Weighted credit of MET, PARTIAL and MISSING over their weight; UNKNOWN is in neither. 0 when none."""
+    """Weighted credit of MET, PARTIAL and CONTRADICTED over their weight; UNKNOWN and NOT_EVIDENCED are in neither. 0 when none."""
     settled = [r for r in requirements if r["status"] in SETTLED]
     weight = sum((_weight(r) for r in settled), Fraction(0))
     if not weight:
@@ -112,8 +125,8 @@ def capped_fit(fit: int, caps: list[str]) -> int:
 
 
 def _verified(req: dict) -> bool:
-    """A status that rests on something checked: a quoted MET/PARTIAL, or a MISSING (which needs no quote)."""
-    if req["status"] == "MISSING":
+    """A status that rests on something checked: a quoted MET/PARTIAL, or a CONTRADICTED (settled in code, needs no quote)."""
+    if req["status"] == CONTRADICTED:
         return True
     return req["status"] in ("MET", "PARTIAL") and req.get("quoteVerified") is True
 
@@ -141,8 +154,9 @@ def counts_of(requirements: list[dict], gates: list[dict]) -> dict:
         "mustTotal": len(musts),
         "preferredMet": sum(r["status"] == "MET" for r in preferred),
         "preferredTotal": len(preferred),
-        "unknown": sum(r["status"] == "UNKNOWN" for r in requirements),
-        "blockers": sum(r["status"] == "MISSING" for r in musts) + sum(g["result"] == "fail" for g in gates),
+        "unknown": sum(_not_judged(r) for r in requirements),
+        "notEvidenced": sum(r["status"] == NOT_EVIDENCED for r in requirements),
+        "blockers": sum(r["status"] == CONTRADICTED for r in musts) + sum(g["result"] == "fail" for g in gates),
     }
 
 
@@ -154,7 +168,7 @@ def questions_for(requirements: list[dict], gates: list[dict]) -> list[dict]:
             "question": QUESTION_TEMPLATES.get(r["kind"], QUESTION_TEMPLATES["other"]).format(text=r["text"].rstrip(".?! ")),
         }
         for r in requirements
-        if r["status"] == "UNKNOWN"
+        if _not_judged(r)
     ] + [
         {"competencyId": g["gate"], "question": GATE_QUESTIONS[g["gate"]]}
         for g in gates
@@ -164,12 +178,14 @@ def questions_for(requirements: list[dict], gates: list[dict]) -> list[dict]:
 
 def incomplete(requirements: list[dict], confidence: Fraction, counts: dict) -> bool:
     """Section 5.3's two thresholds, plus section 5.1: nothing settled at all is always Incomplete."""
-    if not any(r["status"] in SETTLED for r in requirements):
+    if not any(r["status"] in SETTLED and _weight(r) for r in requirements):
         return True
     if confidence < MIN_CONFIDENCE:
         return True
-    unknown_musts = sum(r["status"] == "UNKNOWN" and r["importance"] == "must" for r in requirements)
-    ratio = Fraction(unknown_musts, counts["mustTotal"]) if counts["mustTotal"] else Fraction(0)
+    # Generic musts weigh 0 and stay out of both sides of the ratio.
+    musts = [r for r in requirements if r["importance"] == "must" and _weight(r)]
+    unknown_musts = sum(_not_judged(r) for r in musts)
+    ratio = Fraction(unknown_musts, len(musts)) if musts else Fraction(0)
     return ratio > MAX_UNKNOWN_MUST_RATIO
 
 
@@ -196,6 +212,7 @@ def score(requirements: list[dict], gates: list[dict]) -> dict:
     gates.gate_results(), all five. `label` is the contract's enum;
     `labelText` is its display form.
     """
+    requirements = normalized(requirements)
     counts = counts_of(requirements, gates)
     questions = questions_for(requirements, gates)
     caps = caps_for(requirements, gates)

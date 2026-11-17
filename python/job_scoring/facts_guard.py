@@ -7,6 +7,8 @@ role track). Nothing is repaired or guessed; a row whose facts fail the check is
 
 from __future__ import annotations
 
+from job_fingerprint import job_fingerprint
+
 _STR_OR_NONE = ("visaEvidence", "jobCountry", "workModeEvidence", "roleTrackEvidence", "domain")
 _STR = ("visaSponsorship", "roleTrack", "workMode", "seniority")
 _LISTS = ("requirements", "remoteEligibility", "mustHaves", "niceToHaves", "listingFlags")
@@ -29,6 +31,21 @@ def facts_shape_ok(facts) -> bool:
     if facts.get("visaSponsorship") is not None and facts["visaSponsorship"] not in VISA_VALUES:
         return False
     return all(isinstance(r, dict) for r in facts.get("requirements") or [])
+
+
+def read_freshness(job: dict) -> str:
+    """Whether the stored read still belongs to this ad and this extraction prompt: no model, no read.
+
+    "none" (no read), "fresh" (the read's `_fingerprint` is the ad's current one, prompt version included), "stale" (the ad's
+    text or the prompt version changed since the read) or "unversioned" (a read that carries no fingerprint). Scoring keeps
+    using a stale read, as before: this only says so. Only enrich_jobs.py ever makes a read, and only for a missing or stale one.
+    """
+    facts = job.get("llmFacts")
+    if not facts:
+        return "none"
+    if not facts.get("_fingerprint"):
+        return "unversioned"
+    return "fresh" if facts["_fingerprint"] == job_fingerprint(job) else "stale"
 
 
 def guard_job(job: dict) -> dict:

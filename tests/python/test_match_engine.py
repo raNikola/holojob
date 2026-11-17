@@ -180,7 +180,7 @@ def test_confirmed_facts_override_the_model_and_are_still_asked():
     assert '"r1"' in asked and "SQL" in asked and "Fluent English" not in asked
     by_id = {r["id"]: r for r in outcome.output["requirements"]}
     assert _key(by_id["sql"]) == ("MET", None, None, True, CONFIRMED_FACT_STRENGTH)
-    assert _key(by_id["prov:aaaaaaaaaaaa"]) == ("MISSING", None, None, True, 0)
+    assert _key(by_id["prov:aaaaaaaaaaaa"]) == ("CONTRADICTED", None, None, True, 0)
     assert _key(by_id["product-management"]) == ("MET", "ev-a", GOOD, True, 4)
     # Output keeps the ad's requirement order.
     assert list(by_id) == ["product-management", "sql", "prov:aaaaaaaaaaaa"]
@@ -300,7 +300,7 @@ def _lang_run(text, languages, importance="must", evidence=EVIDENCE):
 
 def test_a_required_language_the_list_does_not_cover_is_missing():
     fake, outcome = _lang_run("Fluent Russian", ["Serbian (native)", "English (fluent)"])
-    assert (_language(outcome)["status"], _language(outcome)["evidenceId"]) == ("MISSING", None)
+    assert (_language(outcome)["status"], _language(outcome)["evidenceId"]) == ("CONTRADICTED", None)
     assert '"r3"' not in fake.prompts[0]
 
 
@@ -313,12 +313,12 @@ def test_a_relative_of_a_spoken_language_is_met(text):
 
 def test_alternatives_are_met_when_one_is_covered():
     assert _lang_run("German or English", ["English (fluent)"])[1].output["requirements"][2]["status"] == "MET"
-    assert _lang_run("German or French", ["English (fluent)"])[1].output["requirements"][2]["status"] == "MISSING"
+    assert _lang_run("German or French", ["English (fluent)"])[1].output["requirements"][2]["status"] == "CONTRADICTED"
 
 
 def test_an_optional_language_not_covered_is_missing_like_any_optional_requirement():
     _, outcome = _lang_run("German is a plus", ["English (fluent)"], importance="nice")
-    assert _language(outcome)["status"] == "MISSING" and _language(outcome)["importance"] == "nice"
+    assert _language(outcome)["status"] == "CONTRADICTED" and _language(outcome)["importance"] == "nice"
 
 
 EVIDENCE_EN = EVIDENCE + [{"id": "ev-c", "text": "Ran workshops in English for UK clients.", "source": "role",
@@ -332,7 +332,7 @@ def test_an_optional_language_the_evidence_mentions_goes_to_the_model():
 
 def test_a_must_have_language_the_evidence_mentions_is_a_reported_conflict_not_a_choice():
     fake, outcome = _lang_run("Fluent English", ["German (C1)"], evidence=EVIDENCE_EN)
-    assert '"r3"' not in fake.prompts[0] and _language(outcome)["status"] == "MISSING"
+    assert '"r3"' not in fake.prompts[0] and _language(outcome)["status"] == "CONTRADICTED"
     assert "conflict" not in _language(outcome)
     assert any("must-have" in w and "English" in w for w in outcome.warnings)
 
@@ -354,7 +354,7 @@ def test_a_confirmed_fact_outranks_the_language_list():
     fact = {"competencyId": "prov:aaaaaaaaaaaa", "answer": "no", "qualifier": None, "note": "", "coveredTexts": []}
     candidate = {**_language_candidate(["English (fluent)"]), "confirmedFacts": [fact]}
     outcome = _run(Fake(_reply(("r1", "MET", "ev-a", GOOD, 4), ("r2", "MISSING", None, None, 0))), candidate=candidate)
-    assert next(r for r in outcome.output["requirements"] if r["kind"] == "language")["status"] == "MISSING"
+    assert next(r for r in outcome.output["requirements"] if r["kind"] == "language")["status"] == "CONTRADICTED"
 
 
 def test_the_prompt_draws_the_missing_unknown_line_from_the_contract():

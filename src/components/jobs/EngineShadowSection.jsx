@@ -67,7 +67,7 @@ function Requirement({ r }) {
   )
 }
 
-const STATUS_ORDER = { MISSING: 0, UNKNOWN: 1, PARTIAL: 2, MET: 3 }
+const STATUS_ORDER = { CONTRADICTED: 0, NOT_EVIDENCED: 1, MISSING: 1, UNKNOWN: 2, PARTIAL: 3, MET: 4 }
 const IMPORTANCE_ORDER = { must: 0, preferred: 1, nice: 2 }
 
 /** The drawer's read-only view of job.engineShadow: verdict, gates, every requirement. */

@@ -17,7 +17,7 @@ import data_sufficiency
 import blocking
 import eligibility
 from dimensions.skill_match import _bank as _skill_bank
-from facts_guard import guard_job
+from facts_guard import guard_job, read_freshness
 from llm_enhancer import NoOpEnhancer
 from red_flags import detect_red_flags
 from corpus import build_idf
@@ -224,6 +224,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         # "not_read": no Fit Score. "sufficient": scored (readStatus tells read from insufficient_evidence).
         "dataStatus": data_sufficiency.NOT_READ if not_read else "sufficient",
         "readStatus": read_state,
+        # none / fresh / stale / unversioned: whether the stored read still matches this ad and prompt version (display only).
+        "readFreshness": read_freshness(job),
         "insufficientReasons": read_reasons,
         "eligibility": eligible,
         "languageGap": language_names,

@@ -102,18 +102,18 @@ def test_a_qualifier_of_another_kind_is_no_level():
 
 
 @pytest.mark.parametrize("req", [REQ, LEVELLED])
-@pytest.mark.parametrize("vocabulary,status", [("production", "MISSING"), ("stage_b", "CONTRADICTED")])
+@pytest.mark.parametrize("vocabulary,status", [("production", "CONTRADICTED"), ("stage_b", "CONTRADICTED")])
 def test_no_goes_through_the_vocabulary(req, vocabulary, status):
     out = apply(req, fact("no"), vocabulary)
     assert (out["status"], out["strength"], out["quoteVerified"]) == (status, 0, True)
 
 
 def test_no_is_production_vocabulary_by_default():
-    assert verify.apply_confirmed_fact(REQ, fact("no"), {})["status"] == "MISSING"
+    assert verify.apply_confirmed_fact(REQ, fact("no"), {})["status"] == "CONTRADICTED"
 
 
 def test_the_translation_table_and_the_reply_statuses():
-    assert verify.VOCABULARY["production"] == {"contradicted": "MISSING", "not_evidenced": "UNKNOWN"}
+    assert verify.VOCABULARY["production"] == {"contradicted": "CONTRADICTED", "not_evidenced": "NOT_EVIDENCED"}
     assert verify.VOCABULARY["stage_b"] == {"contradicted": "CONTRADICTED", "not_evidenced": "NOT_EVIDENCED"}
     assert verify.STATUSES == ("MET", "PARTIAL", "MISSING", "UNKNOWN")
 

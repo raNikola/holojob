@@ -9,7 +9,12 @@ from __future__ import annotations
 from .fact_links import fact_for
 from .normalize import quote_in
 
+# What the model may propose (and what a cached raw answer holds). The engine's output says CONTRADICTED / NOT_EVIDENCED
+# instead of MISSING: see output_status().
 STATUSES = ("MET", "PARTIAL", "MISSING", "UNKNOWN")
+CONTRADICTED, NOT_EVIDENCED = "CONTRADICTED", "NOT_EVIDENCED"
+# Output statuses. Only CONTRADICTED counts as unmet; NOT_EVIDENCED (the evidence says nothing for it) and UNKNOWN move nothing.
+OUTPUT_STATUSES = ("MET", "PARTIAL", CONTRADICTED, NOT_EVIDENCED, "UNKNOWN")
 # One step down for a MET or PARTIAL whose evidence quote does not check out.
 DOWNGRADE = {"MET": "PARTIAL", "PARTIAL": "UNKNOWN"}
 CLAIM_STRENGTH = 1
@@ -18,11 +23,18 @@ CLAIM_STRENGTH = 1
 # other constants in step 5 (ENGINE_CONTRACT.md, Open points 1).
 CONFIRMED_FACT_STRENGTH = 3
 # The one translation of a fact's outcome into a path's status names. Production
-# keeps MET / PARTIAL / MISSING / UNKNOWN; Stage B has its own two words.
+# has used the same two words since engine 0.3.0 (before: MISSING / UNKNOWN).
 VOCABULARY = {
-    "production": {"contradicted": "MISSING", "not_evidenced": "UNKNOWN"},
+    "production": {"contradicted": "CONTRADICTED", "not_evidenced": "NOT_EVIDENCED"},
     "stage_b": {"contradicted": "CONTRADICTED", "not_evidenced": "NOT_EVIDENCED"},
 }
+
+
+def output_status(status: str | None) -> str | None:
+    """A model or stored status as the engine reports it: a bare MISSING is an absence the model inferred (no
+    conflicting quote), so NOT_EVIDENCED. A contradiction comes only from code: a confirmed "no", a language the
+    profile's list settles."""
+    return NOT_EVIDENCED if status == "MISSING" else status
 
 
 def drop_unquoted(requirements: list[dict], description: str) -> tuple[list[dict], list[str]]:

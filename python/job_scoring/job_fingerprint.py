@@ -19,10 +19,11 @@ PROMPT_VERSION = 6
 MAX_DESCRIPTION_CHARS = 9000
 
 
-def job_fingerprint(job: dict) -> str:
+def job_fingerprint(job: dict, prompt_version: int | None = None) -> str:
+    """`prompt_version` is for an opt-in prompt (extract-7, enrich_jobs.RESPONSIBILITIES_PROMPT_VERSION); the pipeline never passes it."""
     raw = "|".join(
         [
-            str(PROMPT_VERSION),
+            str(PROMPT_VERSION if prompt_version is None else prompt_version),
             job.get("title") or "",
             job.get("company") or "",
             (job.get("description") or "")[:MAX_DESCRIPTION_CHARS],
