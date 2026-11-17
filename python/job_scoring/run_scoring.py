@@ -82,7 +82,8 @@ def _shadow_engine(profile: dict | None, intelligence: dict, judge: bool, provid
     candidate = build_candidate(profile, intelligence, load_confirmed_facts())
     memory = EvidenceMap(candidate, load_mapper(candidate["roleFamily"]))
     engine = shadow.ShadowEngine(candidate, judge=judge, provider=provider, model=model,
-                                 identity=identity_of(profile), memory=memory)
+                                 identity=identity_of(profile), memory=memory,
+                                 role_family=intelligence.get("roleFamily"))
     memory.already_matched = set(engine._cache)
     return engine
 

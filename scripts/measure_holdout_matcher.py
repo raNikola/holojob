@@ -12,6 +12,10 @@ estimate and the hard cap, and stops.
                 sits inside, the real data dir. Facts are read from its ledger (job_history.json) and view; a copy of the real
                 requirement remap is the only thing read from the real data dir.
 --out DIR       default <scratch>/matcher: review-items.json, enrichment-facts.json, requirement-remap.json, engine-shadow.json.
+--responsibilities  the matcher over the RESPONSIBILITIES (W4): each responsibility of <scratch>/extract7/facts.json (measure_holdout_extract7.py)
+                is sent as one requirement row (kind experience, importance nice, its own quote), no prompt change. The default --out is then
+                <scratch>/matcher-resp, never <scratch>/matcher: that folder is the step-2 input and is not overwritten. Rows map back to
+                their r:<hash> unit key through postingQuote (match_engine.fit21.quote_key).
 --max-usd X     required; the runner's hard stop (engine_sample counts every call at its worst case).
 
 It runs python/calibration/engine_sample.py (match_posting only: not the fit judge, no score, no label, no production cache) with
@@ -61,10 +65,41 @@ def facts_from_scratch(scratch: Path, ids: list[str]) -> tuple[list[dict], dict,
     return items, facts, counts
 
 
-def prepare(scratch: Path, out: Path, ids: list[str], real_data: Path) -> dict:
+def responsibility_requirements(responsibilities: list[dict]) -> list[dict]:
+    """Each responsibility as a requirement row for the matcher: kind experience, importance nice, provisional id from its text."""
+    from requirement_ids import provisional_id
+    rows, seen = [], set()
+    for r in responsibilities or []:
+        text, quote = (r.get("text") or "").strip(), r.get("postingQuote")
+        if not text or not quote or text in seen:
+            continue
+        seen.add(text)
+        rows.append({"id": provisional_id(text), "text": text, "kind": "experience", "importance": "nice", "postingQuote": quote,
+                     "qualifier": None, "provisional": True})
+    return rows
+
+
+def facts_from_extract7(scratch: Path, items: list[dict], facts: dict) -> tuple[list[dict], dict, dict]:
+    """The scratch ads (their extract-6 facts keep the gate fields) with `requirements` replaced by the extract-7 responsibilities."""
+    doc = json.loads((scratch / "extract7" / "facts.json").read_text(encoding="utf-8"))["facts"]
+    out_items, out_facts, none = [], {}, 0
+    for item in items:
+        rows = responsibility_requirements((doc.get(item["jobId"]) or {}).get("responsibilities"))
+        if not rows:
+            none += 1
+            continue
+        out_items.append(item)
+        out_facts[item["jobId"]] = {**facts[item["jobId"]], "requirements": rows}
+    return out_items, out_facts, {"noResponsibilities": none, "responsibilityRows": sum(len(f["requirements"]) for f in out_facts.values())}
+
+
+def prepare(scratch: Path, out: Path, ids: list[str], real_data: Path, responsibilities: bool = False) -> dict:
     from calibration.enrich_sample import FACTS_NAME
     from competency_mapping import load_remap
     items, facts, counts = facts_from_scratch(scratch, ids)
+    if responsibilities:
+        items, facts, extra = facts_from_extract7(scratch, items, facts)
+        counts = {**counts, **extra, "prepared": len(items)}
     mc.write_private(out / "review-items.json", json.dumps({"version": 1, "items": items}, ensure_ascii=False))
     mc.write_private(out / FACTS_NAME, json.dumps({"version": 1, "facts": facts}, ensure_ascii=False))
     remap = load_remap(real_data / "requirement-remap.json")
@@ -78,6 +113,7 @@ def main(argv=None) -> int:
     p.add_argument("--scratch", type=Path, default=DEFAULT_SCRATCH)
     p.add_argument("--out", type=Path, default=None)
     p.add_argument("--max-usd", type=float, required=True)
+    p.add_argument("--responsibilities", action="store_true", help="ask the matcher about the extract-7 responsibilities (default --out <scratch>/matcher-resp)")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--data-dir", type=Path, default=None, help="the real data dir (only the remap and, for a run, the key store)")
     p.add_argument("--confirm", action="store_true", help="REQUIRED to call the provider")
@@ -90,7 +126,10 @@ def main(argv=None) -> int:
     if scratch == real or real in scratch.parents:
         print("the scratch dir is, or sits inside, the real data dir: refused", file=sys.stderr)
         return 2
-    out = (args.out or scratch / "matcher").resolve()
+    out = (args.out or scratch / ("matcher-resp" if args.responsibilities else "matcher")).resolve()
+    if args.responsibilities and out == (scratch / "matcher").resolve():
+        print("--responsibilities must not write to <scratch>/matcher (the step-2 input): refused", file=sys.stderr)
+        return 2
     if real in out.parents or out == real:
         print("--out is inside the real data dir: refused", file=sys.stderr)
         return 2
@@ -111,7 +150,7 @@ def main(argv=None) -> int:
 
     ids = json.loads(args.ids.read_text(encoding="utf-8"))
     ids = ids.get("ids") if isinstance(ids, dict) else ids
-    counts = prepare(scratch, out, list(dict.fromkeys(i for i in ids or [] if isinstance(i, str))), real)
+    counts = prepare(scratch, out, list(dict.fromkeys(i for i in ids or [] if isinstance(i, str))), real, args.responsibilities)
     print(json.dumps({"prepared": counts, "out": str(out)}))
     profile = json.loads(es.PROFILE_PATH.read_text(encoding="utf-8"))
     intelligence = json.loads(es.INTELLIGENCE_PATH.read_text(encoding="utf-8"))

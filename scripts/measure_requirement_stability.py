@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
-from match_engine.specificity import SPECIFIC_KINDS, is_specific  # noqa: E402,F401  the one rule, shared with the engine
+from match_engine.specificity import GENERIC_COMPETENCY_IDS, SPECIFIC_KINDS, is_specific  # noqa: E402,F401  the one rule, shared with the engine
 
 BUCKETS = (("1.0", 1.0, None), ("0.8-<1.0", 0.8, 1.0), ("0.6-<0.8", 0.6, 0.8), ("0.4-<0.6", 0.4, 0.6), ("<0.4", None, 0.4))
 VERSION_WANTED = 1
@@ -119,6 +119,39 @@ def responsibility_stability(doc: dict) -> dict | None:
             "lowestIds": [i for i, _ in sorted(means.items(), key=lambda kv: (kv[1], kv[0]))[:5]]}
 
 
+def det_stability(doc: dict) -> dict | None:
+    """The d: class (W3/W4): Fit 2.0/2.1's deterministic units, from `detUnitKeys` = {jobId: [per pass {"units": [{key, importance, kind}],
+    "unmapped": {"must": n, "other": n}}]} (a dict per pass, not a list). Jaccard overlap of the d:<id> keys for all units and for non-generic
+    must units, plus the per-ad share of must lines left unmapped (unmapped must / (must units + unmapped must)). None when the file has none."""
+    keys = doc.get("detUnitKeys")
+    if not isinstance(keys, dict) or not keys:
+        return None
+    passes_of = {i: [p.get("units") or [] for p in passes] for i, passes in keys.items()}
+    classes = {}
+    for name, keep in (("allUnits", lambda u: True),
+                       ("nonGenericMustUnits", lambda u: u.get("importance") == "must" and u["key"][2:] not in GENERIC_COMPETENCY_IDS)):
+        means, undefined = {}, []
+        for job_id, passes in sorted(passes_of.items()):
+            res = ad_overlap(passes, keep) if len(passes) >= 2 else None
+            if res is None:
+                undefined.append(job_id)
+            else:
+                means[job_id] = res["mean"]
+        classes[name] = {**distribution(means), "adsUndefined": len(undefined), "undefinedIds": undefined,
+                         "lowestIds": [i for i, _ in sorted(means.items(), key=lambda kv: (kv[1], kv[0]))[:5]]}
+    shares = {}
+    for job_id, passes in sorted(keys.items()):
+        vals = []
+        for p in passes:
+            must_units = sum(1 for u in p.get("units") or [] if u.get("importance") == "must" and u["key"][2:] not in GENERIC_COMPETENCY_IDS)
+            unmapped = (p.get("unmapped") or {}).get("must", 0)
+            if must_units + unmapped:
+                vals.append(unmapped / (must_units + unmapped))
+        if vals:
+            shares[job_id] = sum(vals) / len(vals)
+    return {"classes": classes, "unmappedMustShare": {**distribution(shares), "ads": len(shares)}}
+
+
 def read_doc(path: Path) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
@@ -192,11 +225,15 @@ def main(argv=None) -> int:
         report["causes"] = causes(keys)
     if (resp := responsibility_stability(read_doc(args.variance))) is not None:
         report["responsibilities"] = resp
+    if (det := det_stability(read_doc(args.variance))) is not None:
+        report["deterministic"] = det
     if args.json:
         print(json.dumps(report, indent=1))
     else:
         extra = [] if "responsibilities" not in report else [
             "### responsibilities (extract-7, separate class)", json.dumps(report["responsibilities"]), ""]
+        if "deterministic" in report:
+            extra += ["### deterministic units (d: keys, Fit 2.0/2.1 resolver, separate class)", json.dumps(report["deterministic"]), ""]
         print("\n".join(render(report) + (render_causes(report["causes"]) if args.causes else []) + extra))
     return 0
 
