@@ -18,15 +18,19 @@ Package B delivered it written and dry-run tested; the owner runs it.
 --confirm          required to make any call. Also needs a provider selected in Settings and a price known to the gate.
 
 It uses enrich_jobs.extract() only: nothing is written to the ledger, the job list, the requirement frames or the competency
-cache. The result file (mode 600) holds counts, ids and field names; never evidence text or posting quotes.
+cache. The result file (mode 600) holds counts, ids and field names; never evidence text or posting quotes. It also keeps, per ad and
+pass, the requirement unit keys (a canonical competency id, or a short hash of the normalised quote) that
+scripts/measure_requirement_stability.py reads.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import itertools
 import json
 import os
+import re
 import sys
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -49,6 +53,45 @@ def signature(facts: dict) -> dict:
     out["mustCount"] = sum(1 for r in reqs if r.get("importance") == "must")
     out["kindImportanceMix"] = tuple(sorted(Counter((r.get("kind"), r.get("importance")) for r in reqs).items(), key=str))
     return out
+
+
+UNIT_KEYS_VERSION = 1
+_IMPORTANCE_RANK = {"must": 2, "preferred": 1, "nice": 0}
+
+
+def normalize_quote(quote: str | None) -> str:
+    """Lower-case, punctuation to spaces, whitespace collapsed: the same sentence read twice gives the same string."""
+    return " ".join(re.sub(r"[^\w]+", " ", (quote or "").lower()).split())
+
+
+def unit_keys(facts: dict) -> list[dict]:
+    """One entry per requirement unit of one pass: {"key", "canonical", "kind", "importance"}. Holds no ad text.
+
+    key = "c:<competency id>" when the requirement resolved to a canonical competency (requirement `provisional` false),
+    else "q:<first 12 hex of sha256 of the normalised posting quote>". A unit seen twice in one pass is kept once at its
+    highest importance (design note rule 1), so a split line cannot inflate the set. The hash keeps the quote's words out of
+    the result file; two passes that quote the same sentence share a key.
+    """
+    best: dict[str, dict] = {}
+    for r in facts.get("requirements") or []:
+        canonical = bool(r.get("id")) and r.get("provisional") is False
+        norm = normalize_quote(r.get("postingQuote"))
+        if canonical:
+            key = f"c:{r['id']}"
+        elif norm:
+            key = "q:" + hashlib.sha256(norm.encode("utf-8")).hexdigest()[:12]
+        else:
+            continue
+        unit = {"key": key, "canonical": canonical, "kind": r.get("kind"), "importance": r.get("importance")}
+        have = best.get(key)
+        if have is None or _IMPORTANCE_RANK.get(unit["importance"], -1) > _IMPORTANCE_RANK.get(have["importance"], -1):
+            best[key] = unit
+    return [best[k] for k in sorted(best)]
+
+
+def unit_keys_by_ad(runs_by_ad: dict) -> dict:
+    """{jobId: [one unit list per successful pass]}, for the stability tool."""
+    return {i: [unit_keys(f) for f in runs] for i, runs in runs_by_ad.items() if runs}
 
 
 def flip_report(runs_by_ad: dict) -> dict:
@@ -245,7 +288,8 @@ def main(argv=None) -> int:
     print("\n".join(render(report, meta)))
     print(f"spent ${meta['spentUsd']:.4f} of the ${args.max_usd:.2f} cap")
     if args.out:
-        mc.write_private(args.out, json.dumps({"meta": meta, "report": report}, indent=1))
+        mc.write_private(args.out, json.dumps({"meta": meta, "report": report, "unitKeysVersion": UNIT_KEYS_VERSION,
+                                              "unitKeys": unit_keys_by_ad(results)}, indent=1))
     return 0
 
 
