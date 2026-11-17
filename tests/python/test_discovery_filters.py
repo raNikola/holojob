@@ -103,15 +103,15 @@ def serbian_intelligence():
 
 @pytest.mark.parametrize("make", [_greenhouse, _lever, _ashby], ids=["greenhouse", "lever", "ashby"])
 @pytest.mark.parametrize("location", [ONSITE_BERLIN, ONSITE_AUSTIN])
-def test_an_onsite_job_abroad_reaches_scoring_and_is_capped_there(make, location, serbian_intelligence):
+def test_an_onsite_job_abroad_reaches_scoring_and_is_not_capped_for_its_visa(make, location, serbian_intelligence):
     relocating = make(location).fetch_jobs(TERMS, RELOCATING, REMOTE, "Serbia")
     assert len(relocating) == 1, "dropped at discovery instead of reaching scoring"
 
     job = {**relocating[0], "workMode": "onsite", "llmFacts": {"roleTrack": "product_management"}}
     scored = score_job(job, serbian_intelligence)
     assert scored["workAuthorization"]["status"] == "needs_visa_silent"
-    assert scored["matchScore"] <= 45 and scored["hardCapped"] is True
-    assert any(r.startswith("Capped: needs a work permit") for r in scored["reasons"])
+    # scoringVersion 1.5: the visa is an eligibility state beside the score, not a cap
+    assert scored["matchScore"] == scored["scoreBeforeCaps"] and scored["hardCapped"] is False
 
     assert make(location).fetch_jobs(TERMS, HOME, REMOTE, "Serbia") == []
 

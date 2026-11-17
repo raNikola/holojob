@@ -181,11 +181,12 @@ def test_the_row_equals_the_one_a_full_rescore_writes(env, monkeypatch, capsys):
     assert env.full_rescore()[MANUAL_ID] == env.rows()[MANUAL_ID]
 
 
-def test_a_junk_description_is_insufficient_data_not_a_middling_score(env, monkeypatch, capsys):
+def test_a_junk_description_is_insufficient_evidence_with_low_confidence(env, monkeypatch, capsys):
     assert env.add(_manual(description="asdf qwerty lorem"), monkeypatch, capsys)[0] == 0
     row = env.rows()[MANUAL_ID]
-    assert row["dataStatus"] == "insufficient" and row["matchScore"] <= 5
-    assert row["matchLabel"] == "Insufficient data" and row["insufficientReasons"]
+    # a readable ad with nothing extracted: Insufficient evidence, shown beside a score that is no longer capped at 5
+    assert row["readStatus"] == "insufficient_evidence" and row["dataStatus"] == "sufficient" and row["matchScore"] > 5
+    assert row["confidence"]["level"] == "low"
 
 
 def test_missing_location_stays_unknown_and_is_never_capped_as_outside(env, monkeypatch, capsys):

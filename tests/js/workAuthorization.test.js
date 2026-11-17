@@ -16,12 +16,17 @@ describe('normalizers', () => {
         holds: [{ jurisdiction: 'pl', basis: 'citizen' }, { jurisdiction: '', basis: 'other' }, { jurisdiction: 'EU', basis: 'nope' }],
         openToSponsorship: true,
       }),
-    ).toEqual({ holds: [{ jurisdiction: 'PL', basis: 'citizen' }, { jurisdiction: 'EU', basis: '' }], openToSponsorship: true })
+    ).toEqual({ holds: [{ jurisdiction: 'PL', basis: 'citizen' }, { jurisdiction: 'EU', basis: '' }], openToSponsorship: true, b2bAvailable: false })
+  })
+
+  it('keep the contractor (B2B) flag only when it is exactly true', () => {
+    expect(normalizeWorkAuthorization({ holds: [], b2bAvailable: true }).b2bAvailable).toBe(true)
+    for (const bad of ['true', 1, null, undefined]) expect(normalizeWorkAuthorization({ holds: [], b2bAvailable: bad }).b2bAvailable).toBe(false)
   })
 
   it('read anything missing or malformed as nothing set, never a default place', () => {
     for (const bad of [undefined, null, 'PL', { holds: 'PL' }]) {
-      expect(normalizeWorkAuthorization(bad)).toEqual({ holds: [], openToSponsorship: false })
+      expect(normalizeWorkAuthorization(bad)).toEqual({ holds: [], openToSponsorship: false, b2bAvailable: false })
     }
     expect(normalizeAllowedLocations(undefined)).toEqual([])
     expect(normalizeAllowedLocations(['europe', 'REMOTE', 'europe', 3])).toEqual(['EUROPE', 'REMOTE'])
@@ -52,14 +57,14 @@ describe('generateCandidateIntelligence', () => {
       },
     }
     const prefs = generateCandidateIntelligence(profile).jobFitPreferences
-    expect(prefs.workAuthorization).toEqual({ holds: [{ jurisdiction: 'PL', basis: 'citizen' }], openToSponsorship: true })
+    expect(prefs.workAuthorization).toEqual({ holds: [{ jurisdiction: 'PL', basis: 'citizen' }], openToSponsorship: true, b2bAvailable: false })
     expect(prefs.allowedLocations).toEqual([])
     expect(prefs.relocation).toBe('abroad')
   })
 
   it('gives empty values, not assumptions, for a profile without them', () => {
     const prefs = generateCandidateIntelligence(sampleProfile).jobFitPreferences
-    expect(prefs.workAuthorization).toEqual({ holds: [], openToSponsorship: false })
+    expect(prefs.workAuthorization).toEqual({ holds: [], openToSponsorship: false, b2bAvailable: false })
     expect(prefs.allowedLocations).toEqual([])
     expect(prefs.relocation).toBe('none')
   })
@@ -79,7 +84,7 @@ describe('loadProfile', () => {
 
   it('defaults to nothing set', () => {
     const bp = getDefaultProfile().basicProfile
-    expect(bp.workAuthorization).toEqual({ holds: [], openToSponsorship: false })
+    expect(bp.workAuthorization).toEqual({ holds: [], openToSponsorship: false, b2bAvailable: false })
     expect(bp.allowedLocations).toEqual([])
     expect(bp.relocation).toBe('none')
   })
@@ -88,7 +93,7 @@ describe('loadProfile', () => {
     const { workAuthorization, allowedLocations, relocation, ...old } = getDefaultProfile().basicProfile
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...getDefaultProfile(), basicProfile: { ...old, fullName: 'Jo' } }))
     const bp = loadProfile().basicProfile
-    expect(bp.workAuthorization).toEqual({ holds: [], openToSponsorship: false })
+    expect(bp.workAuthorization).toEqual({ holds: [], openToSponsorship: false, b2bAvailable: false })
     expect(bp.allowedLocations).toEqual([])
     expect(bp.relocation).toBe('none')
     expect(bp.fullName).toBe('Jo')

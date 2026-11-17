@@ -251,10 +251,14 @@ do not state.
   evidenced product responsibility. No family or no vocabulary means no cap. The vocabulary
   holds Serbian wording too (Latin with and without diacritics, Cyrillic); Serbian project and
   delivery manager titles use the same fact rule as the English ones.
-- **work_authorization.py** gives each job one status, and scorer.py caps it
-  the same way: `needs_visa_refused` 25 (the ad's own quote refuses sponsorship; a quote that only requires a right to work is silent),
-  `outside_allowed` 40 (a location the candidate excluded), `needs_visa_silent`
-  45 (the ad does not address sponsorship, or was never read: `basis` `not_read`; Weak, still reviewable).
+- **eligibility.py** (scoringVersion 1.5) is the work-authorization state beside the score, never inside it: `authorized` (the profile lists
+  the ad's country), `sponsorship_offered`, `sponsorship_refused` and `unknown` ("Unconfirmed"). An ad statement counts only with a quote that
+  is found in the ad's own text; a refusing quote refuses, a quote that only requires a right to work blocks only when the ad's country is
+  outside the authorized countries, silence and unread ads are unknown, and B2B / employer-of-record / contractor wording in the ad (found by
+  code) keeps an ad from being blocked when the profile says B2B is available. No authorized country in the profile means the check is
+  dormant (`eligibility: null`). The 25 / 40 / 45 visa caps and the language cap (25) were removed from `matchScore` in 1.5.
+- **work_authorization.py** still resolves where the work is done (`resolve_places`) and the location status the shadow engine's gates read
+  (`needs_visa_*` statuses there are display and gate input only; nothing caps on them).
   When `allowedLocations` is set, `location_text.py` also reads the board's remote flag and
   the stored description (no model): no remote signal and a place outside the list is
   `outside_allowed` as before; a remote signal with a geography the ad states and the
@@ -264,7 +268,7 @@ do not state.
   confidence only; "Serbia", "Balkans" or "worldwide" stated is `pass`. "Remote" alone never
   means available from Serbia. Benefit lines ("fully remote workers") and a hybrid mention
   are not a remote signal. An unknown location gets no ranking boost.
-  `authorized`, `sponsored` and `unknown` are not capped, and nothing is ever
+  `outside_allowed` is shown as "Outside your places" and is not capped (1.5); nothing is ever
   hidden. The candidate's side is `jobFitPreferences.workAuthorization`
   (where they may work without sponsorship, and whether they are open to a
   sponsored role) and `allowedLocations`, all edited in the profile form.

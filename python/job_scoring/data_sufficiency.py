@@ -1,38 +1,32 @@
-"""Whether an ad says enough to be scored at all.
+"""Read status: did the ad give the scorer anything to read? (Step 2, scoringVersion 1.5; replaces the cap-5 rule.)
 
-A junk or near-empty description used to score about 44, because every dimension has a neutral baseline for
-"not stated". Neutral is right for one missing fact, not for an ad that states nothing. An ad without enough
-information gets the explicit state "Insufficient data" instead of a Fit Score.
+Two statuses, neither a length threshold:
 
-The length thresholds are only a first signal. A short ad that carries real role or requirement information
-is NOT insufficient: extracted requirements (llmFacts), or enough distinct terms and at least two cues of
-a concrete duty or requirement, are enough.
+  not_read               the description is empty or unreadable (no word in it). Nothing about the ad is known, so
+                         there is no Fit Score at all: every dimension would only be a neutral baseline. The row is shown
+                         in its own group and the keyword score is not presented as comparable to a rated ad's.
+  insufficient_evidence  the description is readable but no usable requirement was extracted from it (no facts, or facts
+                         with an empty requirement list). A status shown beside the score, with low confidence; it does
+                         not change the score. Extraction, not the length of the text, is what is missing.
+
+Anything else is `read`. An ad known to be cut off at source (Infostud `descriptionStatus`) is still read, with a
+low-confidence reason (owner decision, Wave 5).
 """
 
 from __future__ import annotations
 
 from text_utils import normalize_text, term_tokens
 
-MIN_CHARS = 80  # the same line as the "Thin job description" red flag
-MIN_TERMS = 30  # distinct meaningful terms of a full description
-MIN_SHORT_TERMS = 12  # a short ad needs at least this many distinct terms ...
-MIN_SHORT_CUES = 2  # ... and this many duty / requirement cues to count as informative
 LOW_CONFIDENCE_CHARS = 400  # below this a scored ad is shown with a low-confidence reason
 
-CUES = (
-    "responsib", "requir", "experience", "you will", "you'll", "years", "skills", "qualif", "must",
-    "own ", "manage", "lead", "build", "develop", "design", "define", "drive", "deliver", "collaborat",
-    "stakeholder", "roadmap", "strategy", "analy", "ownership",
-)
-
-# Wave 5 (owner decision): an ad whose description is known to be cut off (Infostud `descriptionStatus`) is shown with a
-# low-confidence reason, not as Insufficient Data. Setting this to True is the one-line switch to the stricter rule.
-INCOMPLETE_DESCRIPTION_IS_INSUFFICIENT = False
 INCOMPLETE_STATUSES = ("teaser", "failed", "source_truncated")  # mirrors providers/infostud_description.INCOMPLETE
 INCOMPLETE_REASON = "Description incomplete (ad text cut off at source)"
 
-STATE = "insufficient"
-SCORE_CEILING = 5
+READ = "read"
+INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+NOT_READ = "not_read"
+# dataStatus on a row: "sufficient" for read and insufficient_evidence (they keep a Fit Score), "not_read" for no score.
+STATE = NOT_READ
 
 
 def _requirements(job: dict) -> list:
@@ -46,35 +40,18 @@ def description_incomplete(job: dict) -> bool:
 
 
 def metrics(job: dict) -> dict:
-    desc = normalize_text(job.get("description") or "")
-    return {
-        "chars": len(desc),
-        "terms": len(term_tokens(desc)),
-        "cues": sum(1 for cue in CUES if cue in desc),
-        "requirements": len(_requirements(job)),
-    }
+    desc = normalize_text(job.get("description") if isinstance(job.get("description"), str) else "")
+    return {"chars": len(desc), "terms": len(term_tokens(desc)), "requirements": len(_requirements(job))}
 
 
-def assess(job: dict) -> list[str]:
-    """Reasons the ad cannot be scored; an empty list means it can."""
+def read_status(job: dict) -> tuple[str, list[str]]:
+    """(status, reasons) for one ad."""
     m = metrics(job)
-    if INCOMPLETE_DESCRIPTION_IS_INSUFFICIENT and description_incomplete(job):
-        return [INCOMPLETE_REASON]
-    if m["requirements"]:
-        return []
-    if m["chars"] >= MIN_CHARS and m["terms"] >= MIN_TERMS:
-        return []
-    if m["terms"] >= MIN_SHORT_TERMS and m["cues"] >= MIN_SHORT_CUES:
-        return []
-    reasons = []
-    if m["chars"] < MIN_CHARS:
-        reasons.append(f"Description too short to judge ({m['chars']} characters)")
-    elif m["terms"] < MIN_SHORT_TERMS:
-        reasons.append(f"Description has too little content ({m['terms']} distinct terms)")
-    else:
-        reasons.append("Description names no concrete duties or requirements")
-    reasons.append("No requirements could be read from the ad")
-    return reasons
+    if not m["terms"]:
+        return NOT_READ, ["The description is empty or could not be read"]
+    if not m["requirements"]:
+        return INSUFFICIENT_EVIDENCE, ["No requirements or responsibilities could be read from the ad"]
+    return READ, []
 
 
 def low_confidence(job: dict, *, location_stated: bool, seniority_stated: bool, has_keyword_bank: bool) -> list[str]:

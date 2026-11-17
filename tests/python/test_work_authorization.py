@@ -10,7 +10,7 @@ import work_authorization as wa
 from dimensions.location_match import score_location_match
 from enrich_jobs import _coerce
 from geography import country_of_name, covers, resolve_countries, resolve_country
-from scorer import WORK_AUTHORIZATION_CAPS, score_job, score_jobs
+from scorer import score_job, score_jobs
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -209,23 +209,25 @@ def full_job(location, **facts):
 
 
 @pytest.mark.parametrize(
-    "facts,status_,cap",
-    [({"visaSponsorship": "not_offered", "visaEvidence": "We are unable to sponsor visas."}, wa.NEEDS_VISA_REFUSED, 25),
-     ({}, wa.NEEDS_VISA_SILENT, 45)],
+    "facts,status_",
+    [({"visaSponsorship": "not_offered", "visaEvidence": "We are unable to sponsor visas."}, wa.NEEDS_VISA_REFUSED),
+     ({}, wa.NEEDS_VISA_SILENT)],
 )
-def test_visa_statuses_cap_the_score_and_say_why(intelligence, facts, status_, cap):
+def test_visa_statuses_no_longer_cap_the_score(intelligence, facts, status_):
+    """scoringVersion 1.5: the visa is an eligibility state beside the score (test_eligibility.py), never inside it."""
     result = score_job(full_job("Berlin, Germany", **facts), intelligence)
     assert result["workAuthorization"]["status"] == status_
-    assert result["matchScore"] <= cap == WORK_AUTHORIZATION_CAPS[status_]
-    assert result["hardCapped"] is True
-    assert any(r.startswith("Capped: needs a work permit for DE") for r in result["reasons"])
+    assert result["matchScore"] == result["scoreBeforeCaps"]
+    assert result["hardCapped"] is False
+    assert not any(r.startswith("Capped: needs a work permit") for r in result["reasons"])
 
 
-def test_an_excluded_location_is_capped_at_40(intelligence):
+def test_an_excluded_location_is_a_state_not_a_cap(intelligence):
     intel = copy.deepcopy(intelligence)
     intel["jobFitPreferences"]["allowedLocations"] = ["EUROPE"]
     result = score_job(full_job("Austin, United States", visaSponsorship="offered"), intel)
-    assert result["workAuthorization"]["status"] == wa.OUTSIDE_ALLOWED and result["matchScore"] <= 40
+    assert result["workAuthorization"]["status"] == wa.OUTSIDE_ALLOWED and result["matchScore"] == result["scoreBeforeCaps"]
+    assert any(r.startswith("Location:") for r in result["reasons"])
 
 
 def test_sponsored_and_authorized_jobs_are_not_capped(intelligence):

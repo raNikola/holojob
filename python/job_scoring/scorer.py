@@ -12,8 +12,11 @@ from dimensions.industry_match import score_industry_match_detail
 from dimensions.location_match import score_location_match
 from dimensions.role_match import score_role_match
 from dimensions.skill_match import score_skill_match
-from labels import INSUFFICIENT_APPLY, INSUFFICIENT_LABEL, INSUFFICIENT_PRIORITY, apply_recommendation, match_label, priority
+from labels import INSUFFICIENT_APPLY, INSUFFICIENT_PRIORITY, NOT_READ_LABEL, apply_recommendation, match_label, priority
 import data_sufficiency
+import eligibility
+from dimensions.skill_match import _bank as _skill_bank
+from facts_guard import guard_job
 from llm_enhancer import NoOpEnhancer
 from red_flags import detect_red_flags
 from corpus import build_idf
@@ -27,6 +30,13 @@ from role_tier import ROLE_FAMILIES, UNRELATED, title_tier
 # intelligence generator (src/modules/intelligence/candidateIntelligenceEngine.js).
 WEIGHTS_FILE = Path(__file__).resolve().parents[2] / "src" / "data" / "scoringWeights.json"
 DEFAULT_WEIGHTS = json.loads(WEIGHTS_FILE.read_text(encoding="utf-8"))
+
+# Stamped on every scored row. 1.5: the visa caps (25 / 40 / 45) and the language cap are gone from matchScore and
+# shown as eligibility states beside it; "Not read" ads get no Fit Score and the cap-5 insufficient rule is replaced by
+# read status; a profile with no skills gets no score above 50; extraction facts of an unknown shape count as no facts.
+SCORING_VERSION = "1.5"
+# A profile with no skill stack scores every ad on neutral baselines: capped, with a marker (never a confident score).
+NO_PROFILE_STACK_CAP = 50
 
 
 def resolve_weights(saved: dict | None) -> dict:
@@ -52,12 +62,11 @@ OFF_TRACK_CAP = 50
 # A title that is neither a target role nor near one (role_tier.py). The same answer as the off-track cap, read from
 # the title, so it holds for the many ads enrichment has not read. 40 keeps the ad reviewable (Weak, Maybe) and below a target-role ad held at 45 or 50.
 UNRELATED_TITLE_CAP = 40
-# A required language no profile language covers (match_engine.gates, confirmed mismatch only; owner decision 2026-11-14).
-LANGUAGE_CAP = 25
 
 
-def language_cap_names(job: dict, intelligence: dict) -> list[str]:
+def language_gap_names(job: dict, intelligence: dict) -> list[str]:
     """Languages the ad requires that the profile does not list, by the engine's own gate; [] when nothing is confirmed.
+    A fact shown beside the score (row `languageGap`); it no longer lowers it (scoringVersion 1.5).
 
     The profile list is intelligence["languages"], the same input build_candidate gives the gates. Imported here:
     match_engine.gates imports this module.
@@ -88,20 +97,6 @@ def accepted_tracks(intelligence: dict) -> tuple[str | None, set[str] | None]:
         raise ValueError(f"Unknown role family {family!r}; known: {', '.join(sorted(ROLE_FAMILIES))}")
     return family, set(ROLE_FAMILIES[family]["acceptedRoleTracks"])
 
-# A job the candidate may not legally take, or that sits outside the locations
-# they chose, is capped the same way: never hidden, never argued down by
-# weights. Statuses come from work_authorization.py; these numbers are what
-# each costs. 25 is Reject (the ad refuses sponsorship); 45 is Weak and stays
-# reviewable (the ad is silent, and many employers sponsor when asked); 40 is
-# a location the candidate excluded themselves. Sponsored, authorized and
-# unknown are not capped.
-WORK_AUTHORIZATION_CAPS = {
-    wa.NEEDS_VISA_REFUSED: 25,
-    wa.OUTSIDE_ALLOWED: 40,
-    wa.NEEDS_VISA_SILENT: 45,
-}
-
-
 def _weighted_total(dimensions: dict[str, int], weights: dict[str, int]) -> int:
     total_w = sum(weights.values()) or 100
     score = sum(dimensions[k] * weights.get(k, 0) for k in dimensions) / total_w
@@ -109,6 +104,8 @@ def _weighted_total(dimensions: dict[str, int], weights: dict[str, int]) -> int:
 
 
 def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
+    # Facts of a shape the scorer does not know are no facts (facts_guard.py): never a confident wrong fact.
+    job = guard_job(job)
     weights = resolve_weights(intelligence.get("scoringWeights"))
     enhancer = enhancer or NoOpEnhancer()
 
@@ -150,22 +147,22 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     if title_capped:
         match_score = min(match_score, UNRELATED_TITLE_CAP)
 
-    authorization = wa.authorization_status(job, intelligence.get("jobFitPreferences") or {})
-    authorization_cap = WORK_AUTHORIZATION_CAPS.get(authorization["status"])
-    if authorization_cap is not None:
-        match_score = min(match_score, authorization_cap)
+    # Eligibility and the language gap are facts shown beside the score; neither lowers it (scoringVersion 1.5).
+    prefs = intelligence.get("jobFitPreferences") or {}
+    authorization = wa.authorization_status(job, prefs)  # location state and the shadow engine's gates; no cap reads it
+    eligible = eligibility.assess(job, prefs)
+    language_names = language_gap_names(job, intelligence)
 
-    language_names = language_cap_names(job, intelligence)
-    if language_names:
-        match_score = min(match_score, LANGUAGE_CAP)
+    no_stack = not any(_skill_bank(intelligence))
+    if no_stack:
+        match_score = min(match_score, NO_PROFILE_STACK_CAP)
 
-    insufficient_reasons = data_sufficiency.assess(job)
-    insufficient = bool(insufficient_reasons)
-    if insufficient:
-        # Last, after every cap: nothing the ad states supports a Fit Score, so it gets a state, not a band.
-        match_score = min(match_score, data_sufficiency.SCORE_CEILING)
-        # Insufficient data is a state, not a band: such a row must not be lifted over rated rows by its raw weighted total.
-        score_before_caps = min(score_before_caps, data_sufficiency.SCORE_CEILING)
+    read_state, read_reasons = data_sufficiency.read_status(job)
+    not_read = read_state == data_sufficiency.NOT_READ
+    if not_read:
+        # Nothing about the ad is known: no Fit Score, and the weighted baseline is not kept as a comparable number.
+        match_score = None
+        score_before_caps = None
 
     breakdown = {
         k: {
@@ -185,21 +182,22 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         reasons.append(f"Capped: the title matches no {family} target role")
     if red_flags:
         reasons.extend([f"Red flag: {f}" for f in red_flags])
-    if authorization_cap is not None:
-        reasons.append(f"Capped: {authorization['reason']}")
+    if no_stack:
+        reasons.append(f"Capped: no profile stack (no skills or keyword bank in the profile), so no score above {NO_PROFILE_STACK_CAP}")
+    if eligible:
+        reasons.append(f"Work authorization: {eligible['label']}: {eligible['reason']}")
+    if authorization["status"] == wa.OUTSIDE_ALLOWED:
+        reasons.append(f"Location: {authorization['reason']}")
     elif (authorization.get("location") or {}).get("flag"):
         # Remote or open to a region, but the ad never says Serbia is included: a flag, not a cost.
         reasons.append(f"{authorization['location']['flag']}: {authorization['location']['reason']}")
-    elif authorization["status"] in (wa.SPONSORED, wa.UNKNOWN):
-        reasons.append(f"Work authorization: {authorization['reason']}")
-
     if language_names:
-        reasons.append(f"Capped: the ad requires {' and '.join(language_names)}, which your profile does not list")
+        reasons.append(f"Language: the ad requires {' and '.join(language_names)}, which your profile does not list")
 
-    if insufficient:
-        reasons = [f"Insufficient data: {r}" for r in insufficient_reasons] + reasons
-        confidence = {"level": "none", "reasons": insufficient_reasons}
-        apply_rec, label, prio = INSUFFICIENT_APPLY, INSUFFICIENT_LABEL, INSUFFICIENT_PRIORITY
+    if not_read:
+        reasons = [f"Not read: {r}" for r in read_reasons] + reasons
+        confidence = {"level": "none", "reasons": read_reasons}
+        apply_rec, label, prio = INSUFFICIENT_APPLY, NOT_READ_LABEL, INSUFFICIENT_PRIORITY
     else:
         low = data_sufficiency.low_confidence(
             job,
@@ -217,8 +215,14 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         "matchLabel": label,
         "applyRecommendation": apply_rec,
         "priority": prio,
-        "dataStatus": data_sufficiency.STATE if insufficient else "sufficient",
-        "insufficientReasons": insufficient_reasons,
+        "scoringVersion": SCORING_VERSION,
+        # "not_read": no Fit Score. "sufficient": scored (readStatus tells read from insufficient_evidence).
+        "dataStatus": data_sufficiency.NOT_READ if not_read else "sufficient",
+        "readStatus": read_state,
+        "insufficientReasons": read_reasons,
+        "eligibility": eligible,
+        "languageGap": language_names,
+        "profileGuard": "no_profile_stack" if no_stack else None,
         "confidence": confidence,
         "roleMatch": role_score,
         "skillMatch": skill_score,
@@ -242,8 +246,7 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         # True when a hard rule applies to the job, whether or not it lowered
         # this particular score. The enhancer never lifts such a job, so caps
         # stay decided here.
-        "hardCapped": insufficient or bool(red_flags) or off_track or title_capped or authorization_cap is not None
-        or bool(language_names),
+        "hardCapped": not_read or bool(red_flags) or off_track or title_capped or no_stack,
     }
     return enhancer.enhance(job, result, intelligence)
 

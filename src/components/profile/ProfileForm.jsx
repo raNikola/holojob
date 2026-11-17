@@ -54,14 +54,15 @@ const SELECT_CLASS = 'w-full rounded-lg border border-stone-300 px-3 py-2 text-s
 function WorkAuthorizationEditor({ value, onChange }) {
   const holds = value?.holds || []
   const openToSponsorship = value?.openToSponsorship === true
-  const set = (patch) => onChange({ holds, openToSponsorship, ...patch })
+  const b2bAvailable = value?.b2bAvailable === true
+  const set = (patch) => onChange({ holds, openToSponsorship, b2bAvailable, ...patch })
   const update = (index, patch) => set({ holds: holds.map((h, i) => (i === index ? { ...h, ...patch } : h)) })
 
   return (
     <div>
       <span className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">Where do you already have the legal right to work without employer sponsorship?</span>
       <p className="mb-2 text-xs text-stone-500 dark:text-stone-400">
-        Only countries where you can work without a visa or sponsorship. Leave empty and visas are not checked.
+        Only countries where you can work without a visa or sponsorship. Leave empty and the work-authorization state is not shown on any ad.
       </p>
       <div className="space-y-2">
         {holds.map((entry, i) => (
@@ -86,6 +87,10 @@ function WorkAuthorizationEditor({ value, onChange }) {
       <label className="mt-3 flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
         <input type="checkbox" checked={openToSponsorship} onChange={(e) => set({ openToSponsorship: e.target.checked })} className="rounded border-stone-300 text-teal-600" />
         Open to roles that sponsor a work permit
+      </label>
+      <label className="mt-2 flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
+        <input type="checkbox" checked={b2bAvailable} onChange={(e) => set({ b2bAvailable: e.target.checked })} className="rounded border-stone-300 text-teal-600" />
+        Available to work as a contractor (B2B or through an employer of record)
       </label>
     </div>
   )

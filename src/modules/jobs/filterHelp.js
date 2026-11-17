@@ -13,5 +13,5 @@ export const FILTER_HELP = {
   salary: 'The pay the scorer read from the ad, in EUR per month. A job matches when its pay range overlaps yours; a single figure must lie inside it. Jobs with no readable pay follow “Include jobs without salary”.',
   hideNoLongerListed: 'Hides jobs that have disappeared from the source since they were last seen. Jobs whose status is unknown stay, and so do jobs outside your places or needing a visa.',
   showOffList: 'Also lists jobs absent from current results that you worked on: a status, AI insights, generated documents, outreach or tracking keep them in this browser. It does not mean the ad closed. They are never scored and return to the list if a later run finds them.',
-  hideNeedsVisa: 'Hides jobs the work-authorization check marked “No visa” (the ad refuses sponsorship) or “Needs visa” (the ad says nothing). Other jobs stay.',
+  hideNeedsVisa: 'Hides jobs whose work-authorization state is “Sponsorship refused” (the ad refuses to sponsor a permit, or requires a right to work you do not hold, with a quote from the ad). “Unconfirmed” jobs stay: silence is not refusal.',
 }

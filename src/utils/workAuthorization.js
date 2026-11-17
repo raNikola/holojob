@@ -21,7 +21,7 @@ const code = (value) => (typeof value === 'string' ? value.trim().toUpperCase() 
 
 /**
  * @param {unknown} value
- * @returns {{ holds: { jurisdiction: string, basis: string }[], openToSponsorship: boolean }}
+ * @returns {{ holds: { jurisdiction: string, basis: string }[], openToSponsorship: boolean, b2bAvailable: boolean }}
  */
 export function normalizeWorkAuthorization(value) {
   const holds = Array.isArray(value?.holds) ? value.holds : []
@@ -33,6 +33,8 @@ export function normalizeWorkAuthorization(value) {
       }))
       .filter((entry) => entry.jurisdiction),
     openToSponsorship: value?.openToSponsorship === true,
+    // Can work as a contractor (B2B / employer of record): an ad that accepts it is not shown as blocked (eligibility.py).
+    b2bAvailable: value?.b2bAvailable === true,
   }
 }
 

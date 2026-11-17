@@ -33,7 +33,7 @@ def facts_state(row: dict) -> str:
 
 def snapshot(rows: list[dict], meta: dict) -> dict:
     """Every count of item 1 for one set of scored rows."""
-    rated = [r for r in rows if r.get("dataStatus") != "insufficient"]
+    rated = [r for r in rows if r.get("dataStatus") not in mc.NOT_READ_STATUSES]
     fired, binding = {c: 0 for c in mc.CAP_ORDER}, {c: 0 for c in mc.CAP_ORDER}
     for row in rows:
         f, b = mc.caps_of(row)
@@ -59,7 +59,7 @@ def snapshot(rows: list[dict], meta: dict) -> dict:
         "workAuthorizationStatus": mc.tally(statuses),
         "readBasis": mc.tally(mc.auth_of(r).get("basis") or "(no basis field)" for r in rows),
         "notRead": sum(1 for r in rows if mc.auth_of(r).get("basis") == "not_read"),
-        "insufficientData": sum(1 for r in rows if r.get("dataStatus") == "insufficient"),
+        "insufficientData": sum(1 for r in rows if r.get("dataStatus") in mc.NOT_READ_STATUSES),
         "silentVisa": {"total": len(silent), "byBasis": mc.tally(mc.auth_of(r).get("basis") or "(no basis field)" for r in silent)},
         "extractionFacts": mc.tally(facts_state(r) for r in rows),
         "aiEnrichmentField": mc.tally(r.get("aiEnrichment") or "(unset)" for r in rows),
@@ -112,7 +112,7 @@ def render(result: dict) -> list[str]:
             row("ads total", s["adsTotal"], c["adsTotal"]),
             row("ads by scoringVersion", json.dumps(s["adsByScoringVersion"]), json.dumps(c["adsByScoringVersion"])),
             row("rated ads (not insufficient data)", s["ratedAds"], c["ratedAds"]), ""]
-    bands = ["Excellent", "Strong", "Good", "Weak", "Reject", mc.INSUFFICIENT]
+    bands = ["Excellent", "Strong", "Good", "Weak", "Reject", mc.INSUFFICIENT, mc.NOT_READ]
     out += table("Score bands (labels; insufficient data is a state, not a band)", "bands", bands + [b for b in set(s["bands"]) | set(c["bands"]) if b not in bands])
     for title, key in (("Largest tie groups, final score, rated ads (score: count)", "largestTieGroups"),
                        ("Largest tie groups, score before caps, rated ads (score: count)", "largestTieGroupsBeforeCaps")):

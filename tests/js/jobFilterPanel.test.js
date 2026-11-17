@@ -124,9 +124,9 @@ describe('Hide jobs no longer listed is independent of eligibility gates', () =>
     { jobId: 'null', isClosed: null },
     { jobId: 'closed', isClosed: true },
     { jobId: 'outside', isClosed: false, workAuthorization: { status: 'outside_allowed' } },
-    { jobId: 'visa', workAuthorization: { status: 'needs_visa_silent' } },
-    { jobId: 'refused', workAuthorization: { status: 'needs_visa_refused' }, priority: 'Reject', matchScore: 0 },
-    { jobId: 'closed-visa', isClosed: true, workAuthorization: { status: 'needs_visa_silent' } },
+    { jobId: 'visa', eligibility: { state: 'unknown' } },
+    { jobId: 'refused', eligibility: { state: 'sponsorship_refused' }, priority: 'Reject', matchScore: 0 },
+    { jobId: 'closed-visa', isClosed: true, eligibility: { state: 'sponsorship_refused' } },
   ]
 
   it('removes only jobs that disappeared from the source', () => {
@@ -136,7 +136,7 @@ describe('Hide jobs no longer listed is independent of eligibility gates', () =>
   })
 
   it('leaves jobs outside your places or needing a visa to their own filter', () => {
-    expect(ids(filterJobs(list, { hideNoLongerListed: true, hideNeedsVisa: true }))).toEqual(['open', 'unknown', 'null', 'outside'])
-    expect(ids(filterJobs(list, { hideNeedsVisa: true }))).toEqual(['open', 'unknown', 'null', 'closed', 'outside'])
+    expect(ids(filterJobs(list, { hideNoLongerListed: true, hideNeedsVisa: true }))).toEqual(['open', 'unknown', 'null', 'outside', 'visa'])
+    expect(ids(filterJobs(list, { hideNeedsVisa: true }))).toEqual(['open', 'unknown', 'null', 'closed', 'outside', 'visa'])
   })
 })

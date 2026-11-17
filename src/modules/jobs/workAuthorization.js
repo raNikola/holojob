@@ -1,20 +1,33 @@
-export const NEEDS_VISA_STATUSES = new Set(['needs_visa_refused', 'needs_visa_silent'])
-
-const BADGES = {
-  needs_visa_refused: { label: 'No visa', variant: 'warn' },
-  needs_visa_silent: { label: 'Needs visa', variant: 'medium' },
-  outside_allowed: { label: 'Outside your places', variant: 'warn' },
-  sponsored: { label: 'Sponsored', variant: 'high' },
+// Eligibility (python/job_scoring/eligibility.py): a state beside the score, never inside it. null = dormant (no authorized country in the profile).
+export const ELIGIBILITY_LABELS = {
+  authorized: 'Authorized',
+  sponsorship_offered: 'Sponsorship offered',
+  sponsorship_refused: 'Sponsorship refused',
+  unknown: 'Unconfirmed',
 }
+const ELIGIBILITY_VARIANTS = { authorized: 'high', sponsorship_offered: 'high', sponsorship_refused: 'warn', unknown: 'medium' }
 
-export function authorizationBadge(job) {
-  const badge = BADGES[job?.workAuthorization?.status]
-  // An ad the extraction pass never read says nothing about sponsorship: the visa is unverified, not required.
-  const unread = job?.workAuthorization?.status === 'needs_visa_silent' && job.workAuthorization.basis === 'not_read'
-  if (badge) return { ...badge, ...(unread ? { label: 'Visa unverified' } : {}), reason: job.workAuthorization.reason || '' }
-  // Remote or open to a region, but the ad never says where you may live: a flag, not a cap.
-  const location = job?.workAuthorization?.location
-  return location?.flag ? { label: location.flag, variant: 'medium', reason: location.reason || '' } : null
+/** Hide-needs-visa filter: the ads whose eligibility is "Sponsorship refused". */
+export const isBlockedByVisa = (job) => job?.eligibility?.state === 'sponsorship_refused'
+
+const READ_BADGES = { insufficient_evidence: { label: 'Insufficient evidence', variant: 'medium' } }
+
+/** Text badges for one row: eligibility, read status, and the location state. Each says why in its tooltip. */
+export function eligibilityBadges(job) {
+  const out = []
+  const eligibility = job?.eligibility
+  if (eligibility?.state && ELIGIBILITY_LABELS[eligibility.state]) {
+    out.push({ label: ELIGIBILITY_LABELS[eligibility.state], variant: ELIGIBILITY_VARIANTS[eligibility.state], reason: eligibility.reason || '' })
+  }
+  const read = READ_BADGES[job?.readStatus]
+  if (read) out.push({ ...read, reason: (job.confidence?.reasons || []).join('. ') })
+  if (job?.workAuthorization?.status === 'outside_allowed') {
+    out.push({ label: 'Outside your places', variant: 'warn', reason: job.workAuthorization.reason || '' })
+  } else if (job?.workAuthorization?.location?.flag) {
+    // Remote or open to a region, but the ad never says where you may live: a flag, not a cap.
+    out.push({ label: job.workAuthorization.location.flag, variant: 'medium', reason: job.workAuthorization.location.reason || '' })
+  }
+  return out
 }
 
 export const isCapReason = (reason) => reason.startsWith('Capped:')

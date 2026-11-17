@@ -49,10 +49,10 @@ def test_the_rule_agrees_with_the_status_scoring_reaches_without_facts():
     assert wa.outside_allowed_before_enrichment(j, ALLOWED)
 
 
-def test_a_skipped_ad_is_still_capped_by_scoring(intelligence_with_allowed):
+def test_a_skipped_ad_still_gets_its_location_state_from_scoring(intelligence_with_allowed):
     scored = score_job(job("London, England, UK"), intelligence_with_allowed)
     assert scored["workAuthorization"]["status"] == wa.OUTSIDE_ALLOWED
-    assert scored["matchScore"] <= 40 and scored["hardCapped"]
+    assert scored["matchScore"] == scored["scoreBeforeCaps"]  # a state, no cap (1.5)
 
 
 @pytest.fixture

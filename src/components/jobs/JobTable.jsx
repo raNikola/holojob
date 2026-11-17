@@ -1,14 +1,14 @@
-import { useMemo, useRef, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import { Bookmark, CircleDot, ExternalLink, SquareCheckBig, X } from 'lucide-react'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { JOB_PAGE_SIZE, everySelected, closedLast, defaultOrder, pageLimit, selectedNotShown, showMore } from '../../modules/jobs/jobTableModel'
+import { JOB_PAGE_SIZE, everySelected, closedLast, defaultOrder, notReadFirst, pageLimit, selectedNotShown, showMore } from '../../modules/jobs/jobTableModel'
 import { SERVER_ONLY_NOTE, classBadges, rowKind, selectableIds } from '../../modules/jobs/jobListView'
 import KeepAdButton from './KeepAdButton'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
-import { fitScoreOf, hasMatchScores } from '../../modules/jobs/matchScore'
+import { fitScoreOf, hasMatchScores, isNotRead } from '../../modules/jobs/matchScore'
 import { displayLocation } from '../../modules/jobs/locationDisplay'
 import { historyBadges } from '../../modules/jobs/jobHistory'
 import { APPROXIMATE_SALARY_NOTE, approximateMonthlyEur, salaryBadges, statedSalary } from '../../modules/jobs/jobSalary'
@@ -22,6 +22,15 @@ import { sortRows } from '../../modules/tableSort'
 import { PRIORITIES } from '../../modules/jobs/matchScore'
 import { dayOf, deadlineSortValue, deadlineStatus } from '../../modules/jobs/jobDeadline'
 import { jobStatusLabel } from '../../modules/jobs/manualJob'
+
+/** The heading above row `index` in the default order: Not read ads are a group of their own (no Fit Score), the rated ones follow. */
+function groupHeading(grouped, rows, index) {
+  if (!grouped) return null
+  const notRead = isNotRead(rows[index])
+  if (notRead && (index === 0 || !isNotRead(rows[index - 1]))) return 'Not read: the description is empty or unreadable, so there is no Fit Score'
+  if (!notRead && index > 0 && isNotRead(rows[index - 1])) return 'Rated ads'
+  return null
+}
 
 const COLUMNS = {
   score: { type: 'number', value: (j) => fitScoreOf(j) }, // insufficient data has no score: it sorts with the unscored, last either way
@@ -267,7 +276,7 @@ export default function JobTable({
   const isDesktop = useMediaQuery(DESKTOP, true)
   // The whole list is sorted first; only then is a batch taken from it. The list's other uses read the whole list too.
   const jobs = useMemo(() => {
-    if (sort === DEFAULT_SORT) return closedLast(defaultOrder(unsortedJobs)) // by identity: any click replaces it, even back to the same column
+    if (sort === DEFAULT_SORT) return notReadFirst(closedLast(defaultOrder(unsortedJobs))) // by identity: any click replaces it, even back to the same column
     return sortRows(unsortedJobs, sort, columnsOn(today))
   }, [unsortedJobs, sort, today])
   const pageKey = `${filterKey}|${sort.key}|${sort.dir}`
@@ -327,9 +336,12 @@ export default function JobTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
-            {visibleJobs.map((job) => (
+            {visibleJobs.map((job, index) => (
+              <Fragment key={job.jobId}>
+              {groupHeading(sort === DEFAULT_SORT, visibleJobs, index) && (
+                <tr className="bg-stone-50 dark:bg-stone-900"><th colSpan={12} className="px-3 py-1.5 text-left text-xs font-medium text-stone-600 dark:text-stone-400">{groupHeading(sort === DEFAULT_SORT, visibleJobs, index)}</th></tr>
+              )}
               <tr
-                key={job.jobId}
                 className={`${rowKind(job) === 'filtered' ? '' : 'cursor-pointer '}bg-white hover:bg-stone-50 dark:bg-stone-950 dark:hover:bg-stone-900`}
                 onClick={rowKind(job) === 'filtered' ? undefined : () => onJobSelect?.(job)}
               >
@@ -370,15 +382,19 @@ export default function JobTable({
                   {rowKind(job) === 'server' && <div className="mt-1"><KeepAdButton row={job} /></div>}
                 </td>
               </tr>
+              </Fragment>
             ))}
           </tbody>
         </table>
       </div>
       ) : (
       <div className="space-y-3">
-        {visibleJobs.map((job) => (
+        {visibleJobs.map((job, index) => (
+          <Fragment key={job.jobId}>
+          {groupHeading(sort === DEFAULT_SORT, visibleJobs, index) && (
+            <p className="px-1 text-xs font-medium text-stone-600 dark:text-stone-400">{groupHeading(sort === DEFAULT_SORT, visibleJobs, index)}</p>
+          )}
           <JobCard
-            key={job.jobId}
             job={job}
             onStatusChange={onStatusChange}
             onApply={onApply}
@@ -392,6 +408,7 @@ export default function JobTable({
             classView={classView}
             onAddFromRow={onAddFromRow}
           />
+          </Fragment>
         ))}
       </div>
       )}

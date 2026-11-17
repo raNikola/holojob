@@ -7,7 +7,7 @@ import JobTailorActions from './JobTailorActions'
 import ApplicationTrackerPanel from './ApplicationTrackerPanel'
 import JobAIToolsPanel, { AiToolsSection } from '../ai/JobAIToolsPanel'
 import RelatedContactsPanel from '../outreach/RelatedContactsPanel'
-import { hasMatchScores, isInsufficientData } from '../../modules/jobs/matchScore'
+import { hasMatchScores, isInsufficientData, isNotRead } from '../../modules/jobs/matchScore'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { isCapReason } from '../../modules/jobs/workAuthorization'
 import AuthorizationBadge from './AuthorizationBadge'
@@ -70,7 +70,7 @@ export function ConfidenceNote({ job }) {
   if (!reasons?.length) return null
   return (
     <div className="rounded-lg border border-amber-300 bg-amber-50/60 p-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-200">
-      <p className="font-medium">{insufficient ? 'Insufficient data: no Fit Score. Paste more of the ad and score again.' : 'Low confidence in this score'}</p>
+      <p className="font-medium">{insufficient ? (isNotRead(job) ? 'Not read: no Fit Score. Paste the ad text and score again.' : 'Insufficient data: no Fit Score. Paste more of the ad and score again.') : 'Low confidence in this score'}</p>
       <ul className="ml-4 list-disc">{reasons.map((r) => <li key={r}>{r}</li>)}</ul>
     </div>
   )

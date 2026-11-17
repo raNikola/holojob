@@ -30,8 +30,14 @@ if str(ROOT / "python") not in sys.path:
 import work_authorization as wa  # noqa: E402
 import view_guard  # noqa: E402
 from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic  # noqa: E402
-from scorer import LANGUAGE_CAP, OFF_TRACK_CAP, UNRELATED_TITLE_CAP, WORK_AUTHORIZATION_CAPS  # noqa: E402
-import data_sufficiency  # noqa: E402
+from scorer import OFF_TRACK_CAP, UNRELATED_TITLE_CAP  # noqa: E402
+
+# Caps scoringVersion 1.4 and older rows carry. Step 2 (1.5) removed them from scorer.py; the numbers stay here, frozen,
+# so a baseline snapshot or a stored 1.4 file can still be read and a changed ad classified by what capped it before.
+LANGUAGE_CAP = 25
+WORK_AUTHORIZATION_CAPS = {wa.NEEDS_VISA_REFUSED: 25, wa.OUTSIDE_ALLOWED: 40, wa.NEEDS_VISA_SILENT: 45}
+LEGACY_INSUFFICIENT_CEILING = 5
+NOT_READ_STATUSES = ("insufficient", "not_read")  # dataStatus: the 1.4 "insufficient" state and the 1.5 "not_read" state
 
 EVAL_DIR = Path("/home/ranikola/holojob-eval")
 REPORT_PATH = EVAL_DIR / "package-b-report.md"
@@ -39,6 +45,7 @@ SNAPSHOT_PATH = EVAL_DIR / "package-b-snapshot.json"
 
 RED_FLAG_CAP = 54  # scorer.score_job: `if red_flags and match_score > 55: min(match_score, 54)`; not a named constant there
 INSUFFICIENT = "Insufficient data"
+NOT_READ = "Not read"
 
 # The "Capped: ..." reason texts score_job writes. No cap field is stored on a row, so the three caps without a status of
 # their own are read from these prefixes; tests/python/test_package_b_measure.py checks they still exist in scorer.py.
@@ -53,7 +60,7 @@ CAP_VALUES = {
     "unrelated_title": UNRELATED_TITLE_CAP,
     "language": LANGUAGE_CAP,
     **{f"visa:{status}": value for status, value in WORK_AUTHORIZATION_CAPS.items()},
-    "insufficient_data": data_sufficiency.SCORE_CEILING,
+    "insufficient_data": LEGACY_INSUFFICIENT_CEILING,
 }
 CAP_ORDER = list(CAP_VALUES)
 
@@ -99,7 +106,7 @@ def caps_of(row: dict) -> tuple[set, set]:
     """
     reasons = [r for r in row.get("reasons") or [] if isinstance(r, str)]
     fired = set()
-    if row.get("dataStatus") == data_sufficiency.STATE:
+    if row.get("dataStatus") in NOT_READ_STATUSES:
         fired.add("insufficient_data")
     if row.get("redFlags") and (row.get("scoreBeforeCaps") or 0) > 55:
         fired.add("red_flag")
@@ -110,7 +117,7 @@ def caps_of(row: dict) -> tuple[set, set]:
     if any(r.startswith(LANGUAGE_PREFIX) for r in reasons):
         fired.add("language")
     status = auth_of(row).get("status")
-    if status in WORK_AUTHORIZATION_CAPS:
+    if status in WORK_AUTHORIZATION_CAPS and not row.get("scoringVersion"):  # a 1.5 row is stamped; no visa cap exists for it
         fired.add(f"visa:{status}")
     before, score = row.get("scoreBeforeCaps"), row.get("matchScore")
     binding = set()
@@ -130,7 +137,8 @@ def snapshot_rows(rows: list[dict]) -> dict:
         auth = auth_of(row)
         out[row["jobId"]] = {
             "score": row.get("matchScore"), "band": band_of(row), "scoreBeforeCaps": row.get("scoreBeforeCaps"),
-            "dataStatus": row.get("dataStatus"), "authStatus": auth.get("status"), "authBasis": auth.get("basis"),
+            "dataStatus": row.get("dataStatus"), "readStatus": row.get("readStatus"),
+            "eligibility": (row.get("eligibility") or {}).get("state"), "scoringVersion": row.get("scoringVersion"), "authStatus": auth.get("status"), "authBasis": auth.get("basis"),
             "capsFired": sorted(fired), "capsBinding": sorted(binding),
             "manual": bool(row.get("manualEntry")),
         }

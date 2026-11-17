@@ -131,9 +131,12 @@ def outside_allowed_before_enrichment(job: dict, prefs: dict) -> bool:
     return not any(covers(a, p) for a in allowed if a != REMOTE for p in restricted)
 
 
-def authorization_status(job: dict, prefs: dict) -> dict:
-    """{"status", "place", "reason"} for one job against the candidate's rights."""
-    facts = job.get("llmFacts") or {}
+def resolve_places(job: dict, prefs: dict) -> dict:
+    """Where the work is legally done, after the ad's own words and the board's country are weighed.
+
+    {"remote", "restricted" (country codes), "place" (display), "location" (location_text read or None), "allowed"}.
+    Shared by authorization_status and eligibility.py, so both read the same place.
+    """
     remote, places = job_places(job)
     # The candidate's own location set, only when they chose to set one.
     allowed = [str(a).upper() for a in prefs.get("allowedLocations") or [] if a]
@@ -153,6 +156,14 @@ def authorization_status(job: dict, prefs: dict) -> dict:
     restricted = [p for p in places if p != WORLDWIDE]
     shown = "/".join(restricted[:3]) + (f" +{len(restricted) - 3} more" if len(restricted) > 3 else "")
     place = "remote" if remote and not restricted else shown or "unknown"
+    return {"remote": remote, "restricted": restricted, "place": place, "location": location, "allowed": allowed}
+
+
+def authorization_status(job: dict, prefs: dict) -> dict:
+    """{"status", "place", "reason"} for one job against the candidate's rights."""
+    facts = job.get("llmFacts") or {}
+    found = resolve_places(job, prefs)
+    remote, restricted, place, location, allowed = (found[k] for k in ("remote", "restricted", "place", "location", "allowed"))
 
     def result(status: str, reason: str) -> dict:
         found = {"status": status, "place": place, "reason": reason, "basis": AD_READ if facts else NOT_READ}

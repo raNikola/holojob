@@ -1,9 +1,13 @@
 import Badge from '../ui/Badge'
-import { authorizationBadge } from '../../modules/jobs/workAuthorization'
+import { eligibilityBadges } from '../../modules/jobs/workAuthorization'
 
-/** The eligibility warning ("Outside your places", "Needs visa", ...), shown under the location. */
+/** The eligibility state, the read status and the location flag ("Unconfirmed", "Insufficient evidence", "Outside your places", ...), as text badges under the location. */
 export default function AuthorizationBadge({ job }) {
-  const badge = authorizationBadge(job)
-  if (!badge) return null
-  return <div className="mt-1"><span title={badge.reason}><Badge variant={badge.variant}>{badge.label}</Badge></span></div>
+  const badges = eligibilityBadges(job)
+  if (!badges.length) return null
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {badges.map((badge) => <span key={badge.label} title={badge.reason}><Badge variant={badge.variant}>{badge.label}</Badge></span>)}
+    </div>
+  )
 }

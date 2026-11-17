@@ -1,5 +1,5 @@
 import { fitScoreOf } from './matchScore.js'
-import { NEEDS_VISA_STATUSES } from './workAuthorization.js'
+import { isBlockedByVisa } from './workAuthorization.js'
 import { describeRange, matchesSalary, salaryRangeOf } from './salaryFilter.js'
 import geography from '../../data/geography.json'
 
@@ -124,7 +124,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     if (!matchesSalary(job.salaryMonthlyEur, salaryRange, salaryIncludeUnknown !== false)) return false
     if (remoteOnly && !job.isRemote) return false
     if (hideNoLongerListed && isNoLongerListed(job)) return false
-    if (hideNeedsVisa && NEEDS_VISA_STATUSES.has(job.workAuthorization?.status)) return false
+    if (hideNeedsVisa && isBlockedByVisa(job)) return false
     if (sites.size && !sites.has((job.site || '').toLowerCase())) return false
     if (providers.size && !providers.has(providerOf(job).toLowerCase())) return false
     if (companies.size && !companies.has(companyParts(job.company).key)) return false

@@ -32,8 +32,16 @@ export const INSUFFICIENT_LABEL = 'Insufficient data'
 export const INSUFFICIENT_PRIORITY = 'Unrated'
 export const INSUFFICIENT_APPLY = 'Not assessed'
 
+export const NOT_READ_LABEL = 'Not read'
+
+/** scoringVersion 1.5: the description is empty or unreadable. No Fit Score; the row is listed in its own group (scorer.py `readStatus`). */
+export function isNotRead(job) {
+  return job?.readStatus === 'not_read' || job?.dataStatus === 'not_read' || job?.matchLabel === NOT_READ_LABEL
+}
+
+/** No Fit Score: a 1.4 "Insufficient data" row (older stored file) or a 1.5 "Not read" row. */
 export function isInsufficientData(job) {
-  return job?.dataStatus === 'insufficient' || job?.matchLabel === INSUFFICIENT_LABEL
+  return job?.dataStatus === 'insufficient' || job?.matchLabel === INSUFFICIENT_LABEL || isNotRead(job)
 }
 
 /** The Fit Score as a number, or null when there is none (unscored, or insufficient data). Sort, filter and averages read this. */

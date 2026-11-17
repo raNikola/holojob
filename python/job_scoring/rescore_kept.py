@@ -46,7 +46,10 @@ def run(job_id: str, *, intelligence: Path, jobs: Path, manual: Path, scored: Pa
         rows = discovered.get("jobs") if isinstance(discovered, dict) else discovered
         rows = manual_jobs.with_manual(list(rows or []), manual_jobs.load(manual))
         rows = kept_ads.with_kept(rows, job_history.ledger_path(jobs), kept)
-        scored_rows = score_jobs(rows, json.loads(intelligence.read_text(encoding="utf-8")))
+        import run_scoring  # noqa: PLC0415
+
+        # The one Re-score path: cached judgements re-applied, a model call raises (run_scoring.local_enhancer).
+        scored_rows = score_jobs(rows, json.loads(intelligence.read_text(encoding="utf-8")), run_scoring.local_enhancer(run_scoring.identity_of(run_scoring._load_profile())))
         row = next((r for r in scored_rows if r.get("jobId") == job_id), None)
         if row is None:
             return 4, {"ok": False, "error": "not_in_history"}

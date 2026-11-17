@@ -33,7 +33,7 @@ import manual_jobs  # noqa: E402
 import pipeline_lock  # noqa: E402
 import view_guard  # noqa: E402
 import job_history  # noqa: E402
-from scorer import resolve_weights, score_jobs  # noqa: E402
+from scorer import SCORING_VERSION, resolve_weights, score_jobs  # noqa: E402
 from match_engine import shadow  # noqa: E402
 from redact import identity_of  # noqa: E402 (on the path through llm_enhancer)
 
@@ -49,6 +49,18 @@ LOCAL_PROVIDERS = {"ollama"}
 
 def _no_network(*_args, **_kwargs):
     raise RuntimeError("a cache-only run must never call the model")
+
+
+def local_enhancer(identity=None, provider=None, model=None, threshold=DEFAULT_THRESHOLD):
+    """The enhancer of every Re-score: judgements already in the cache are re-applied, and a model call raises.
+
+    The one Re-score path (Re-score, a kept ad's Re-score and the measurement tools all score through it): nothing is
+    sent, and a cached judgement is not thrown away. `provider` is only the cache key, read without requiring a selection.
+    """
+    provider = provider or peek_provider()
+    model = model or (judge_model(provider) if provider else None)
+    return LlmFitEnhancer(provider, model, threshold=threshold, cache_path=FIT_CACHE_PATH,
+                          complete=_no_network, cache_only=True, identity=identity)
 
 
 def _load_profile() -> dict | None:
@@ -192,10 +204,7 @@ def score(args: argparse.Namespace) -> int:
         # Local scoring: judgements already in the cache are re-applied, so a
         # re-score does not throw them away. Nothing is sent: the model call is
         # replaced with one that raises.
-        enhancer = LlmFitEnhancer(
-            provider, model, threshold=args.judge_threshold, cache_path=FIT_CACHE_PATH,
-            complete=_no_network, cache_only=True, identity=identity,
-        )
+        enhancer = local_enhancer(identity, provider, model, args.judge_threshold)
 
     scored = score_jobs(jobs, intelligence, enhancer, workers=args.workers)
     c = enhancer.counts
@@ -266,7 +275,7 @@ def score(args: argparse.Namespace) -> int:
         print(f"judge: re-applied {c['cached']} cached judgements (no calls made)")
     if args.min_score > 0:
         # Nothing is hidden: a hand-entered job stays whatever its score.
-        scored = [j for j in scored if j.get("manualEntry") or j.get("matchScore", 0) >= args.min_score]
+        scored = [j for j in scored if j.get("manualEntry") or (j.get("matchScore") or 0) >= args.min_score]
 
     # A job scored without the ad facts (enrichment refused by the AI gate, skipped,
     # failed, or the ad lies outside the allowed places) is marked, never hidden:
@@ -285,7 +294,9 @@ def score(args: argparse.Namespace) -> int:
             # The run-log record of the discovery run these jobs came from. A Re-score has its own sourceRunId and the
             # same discoveryRunId, so several scorings can point at one record. None: hand-entered jobs only, or an older file.
             "discoveryRunId": (discovered.get("meta") or {}).get("sourceRunId") if isinstance(discovered, dict) else None,
-            "scoringVersion": "1.4",  # 1.1: language cap 25; 1.2: remote and board-country ads restricted to the board country; 1.3: scoreBeforeCaps (list tie-break only); 1.4: visa refusal needs a refusing quote, ad_read / not_read basis, no years comparison
+            # Also stamped on every row. 1.1: language cap 25; 1.2: remote and board-country ads restricted to the board country; 1.3: scoreBeforeCaps (list tie-break only);
+            # 1.4: visa refusal needs a refusing quote, ad_read / not_read basis, no years comparison; 1.5: no visa or language cap, eligibility states, read status, no-profile-stack guard
+            "scoringVersion": SCORING_VERSION,
             "intelligenceGeneratedAt": (intelligence.get("meta") or {}).get("generatedAt"),
             "discoveryGeneratedAt": (discovered.get("meta") or {}).get("generatedAt") if isinstance(discovered, dict) else None,
             "weights": weights,
@@ -302,7 +313,9 @@ def score(args: argparse.Namespace) -> int:
                 "good": labels.get("Good", 0),
                 "weak": labels.get("Weak", 0),
                 "reject": labels.get("Reject", 0),
-                "insufficient": sum(1 for j in scored if j.get("dataStatus") == "insufficient"),
+                "insufficient": sum(1 for j in scored if j.get("dataStatus") in ("insufficient", "not_read")),
+                "notRead": sum(1 for j in scored if j.get("readStatus") == "not_read"),
+                "insufficientEvidence": sum(1 for j in scored if j.get("readStatus") == "insufficient_evidence"),
             },
         },
         "jobs": scored,

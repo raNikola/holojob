@@ -7,7 +7,7 @@ import pytest
 
 import scorer
 import work_authorization as wa
-from scorer import (LANGUAGE_CAP, OFF_TRACK_CAP, UNRELATED_TITLE_CAP, WORK_AUTHORIZATION_CAPS, score_job)
+from scorer import NO_PROFILE_STACK_CAP, OFF_TRACK_CAP, UNRELATED_TITLE_CAP, score_job
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 BODY = ("Own the product roadmap and discovery for our platform. You will work with the team on what customers "
@@ -36,7 +36,7 @@ def force(monkeypatch, *, flags=False, title=None, track=False, visa=None, langu
         monkeypatch.setattr(scorer, "accepted_tracks", lambda i: ("product", {"some_other_track"}))
     status = {"status": visa or wa.AUTHORIZED, "reason": "r", "location": {}}
     monkeypatch.setattr(wa, "authorization_status", lambda j, p: status)
-    monkeypatch.setattr(scorer, "language_cap_names", lambda j, i: ["Russian"] if language else [])
+    monkeypatch.setattr(scorer, "language_gap_names", lambda j, i: ["Russian"] if language else [])
 
 
 def test_an_uncapped_row_has_scoreBeforeCaps_equal_to_matchScore(intelligence, job, monkeypatch):
@@ -55,10 +55,6 @@ CAP_CASES = [
     ("title 40", dict(title=True), UNRELATED_TITLE_CAP),
     ("track 50", dict(track=True), OFF_TRACK_CAP),
     ("red flag 54", dict(flags=True), 54),
-    ("visa refused 25", dict(visa=wa.NEEDS_VISA_REFUSED), WORK_AUTHORIZATION_CAPS[wa.NEEDS_VISA_REFUSED]),
-    ("outside allowed 40", dict(visa=wa.OUTSIDE_ALLOWED), WORK_AUTHORIZATION_CAPS[wa.OUTSIDE_ALLOWED]),
-    ("visa silent 45", dict(visa=wa.NEEDS_VISA_SILENT), WORK_AUTHORIZATION_CAPS[wa.NEEDS_VISA_SILENT]),
-    ("language 25", dict(language=True), LANGUAGE_CAP),
 ]
 
 
@@ -76,20 +72,40 @@ def test_each_cap_lowers_matchScore_but_keeps_the_pre_cap_score(intelligence, jo
 def test_several_caps_keep_the_highest_uncapped_value(intelligence, job, monkeypatch):
     force(monkeypatch)
     free = score_job(job, intelligence)["matchScore"]
-    force(monkeypatch, flags=True, title=True, visa=wa.NEEDS_VISA_REFUSED, language=True)
+    force(monkeypatch, flags=True, title=True, track=True)
     r = score_job(job, intelligence)
-    assert r["matchScore"] == 25 and r["scoreBeforeCaps"] == free
+    assert r["matchScore"] == UNRELATED_TITLE_CAP and r["scoreBeforeCaps"] == free
+
+
+@pytest.mark.parametrize("visa", [wa.NEEDS_VISA_REFUSED, wa.OUTSIDE_ALLOWED, wa.NEEDS_VISA_SILENT])
+def test_visa_status_and_language_gap_no_longer_lower_the_score(intelligence, job, monkeypatch, visa):
+    """scoringVersion 1.5: the same facts are states beside the score, never inside it."""
+    force(monkeypatch)
+    free = score_job(job, intelligence)["matchScore"]
+    force(monkeypatch, visa=visa, language=True)
+    r = score_job(job, intelligence)
+    assert r["matchScore"] == free == r["scoreBeforeCaps"] and r["languageGap"] == ["Russian"]
+    assert r["hardCapped"] is False
 
 
 def test_caps_do_not_change_matchScore_label_or_priority(intelligence, job, monkeypatch):
     """The new field is read by nothing in the score: label and priority are those of matchScore alone."""
-    force(monkeypatch, visa=wa.NEEDS_VISA_SILENT)
+    force(monkeypatch, flags=True)
     r = score_job(job, intelligence)
     assert r["matchLabel"] == scorer.match_label(r["matchScore"])
 
 
-def test_insufficient_data_pre_cap_never_exceeds_the_data_ceiling(intelligence, job, monkeypatch):
+def test_a_not_read_ad_has_no_score_and_no_pre_cap_score(intelligence, job, monkeypatch):
     force(monkeypatch)
-    monkeypatch.setattr(scorer.data_sufficiency, "assess", lambda j: ["no text"])
-    r = score_job(job, intelligence)
-    assert r["scoreBeforeCaps"] <= scorer.data_sufficiency.SCORE_CEILING and r["matchScore"] <= scorer.data_sufficiency.SCORE_CEILING
+    r = score_job({**job, "description": "", "llmFacts": None}, intelligence)
+    assert r["matchScore"] is None and r["scoreBeforeCaps"] is None
+    assert r["readStatus"] == "not_read" and r["dataStatus"] == "not_read" and r["matchLabel"] == "Not read"
+
+
+def test_a_profile_with_no_skill_stack_gets_no_score_above_50_and_a_marker(intelligence, job, monkeypatch):
+    force(monkeypatch)
+    blank = {k: v for k, v in intelligence.items() if k not in ("atsKeywordBank", "skillsMap")}
+    r = score_job(job, blank)
+    assert r["matchScore"] <= NO_PROFILE_STACK_CAP and r["profileGuard"] == "no_profile_stack" and r["hardCapped"] is True
+    assert any("no profile stack" in x for x in r["reasons"])
+    assert score_job(job, intelligence)["profileGuard"] is None

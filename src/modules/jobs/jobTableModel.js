@@ -4,7 +4,7 @@
 // and no list change can reset by accident. A row's status changing rebuilds the list but keeps the key.
 
 import { isClosedAd } from './jobHistory.js'
-import { fitScoreOf, preCapScoreOf } from './matchScore.js'
+import { fitScoreOf, isNotRead, preCapScoreOf } from './matchScore.js'
 
 export const JOB_PAGE_SIZE = 100
 const NOTHING = new Set()
@@ -23,6 +23,14 @@ export function defaultOrder(rows) {
 /** Open ads before closed ones, each group in the order given. Only for the default sort: a sort the owner picked is left as it is. */
 export function closedLast(rows) {
   return [...rows.filter((row) => !isClosedAd(row)), ...rows.filter(isClosedAd)]
+}
+
+/**
+ * Not-read ads (no description, so no Fit Score) as their own group ahead of the rated ones, each group in the order given.
+ * Only for the default sort. They are not sorted to the bottom as if they were the lowest score: they have none.
+ */
+export function notReadFirst(rows) {
+  return [...rows.filter(isNotRead), ...rows.filter((row) => !isNotRead(row))]
 }
 
 /** How many rows are shown under `key`: paging is `{ key, limit }`, and the key holds the filters and the sort. */

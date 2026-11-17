@@ -52,7 +52,8 @@ def row(**kw):
 
 def test_the_cap_reason_prefixes_still_exist_in_the_scorer():
     source = (Path(mc.ROOT) / "python" / "job_scoring" / "scorer.py").read_text(encoding="utf-8")
-    for prefix in (mc.OFF_TRACK_PREFIX, mc.TITLE_PREFIX, mc.LANGUAGE_PREFIX):
+    # LANGUAGE_PREFIX is a 1.4 reason, kept in measure_common only to read frozen snapshots; scoringVersion 1.5 has no language cap.
+    for prefix in (mc.OFF_TRACK_PREFIX, mc.TITLE_PREFIX):
         assert f'f"{prefix}' in source or f'"{prefix}' in source, prefix
 
 

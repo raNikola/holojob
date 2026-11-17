@@ -22,7 +22,10 @@ LISTED = {"jobId": "listed1", "title": "Product Owner", "company": "Acme", "loca
 
 
 @pytest.fixture
-def env(tmp_path):
+def env(tmp_path, monkeypatch):
+    # The Re-score reads the profile (for the redaction identity) and the judge cache; both stay in the temp dir.
+    monkeypatch.setattr(run_scoring, "PROFILE_PATH", tmp_path / "profile.json")
+    monkeypatch.setattr(run_scoring, "FIT_CACHE_PATH", tmp_path / "llm_fit.json")
     d = tmp_path / "jobs"
     d.mkdir()
     jobs = d / "discovered_jobs.json"

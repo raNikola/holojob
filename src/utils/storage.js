@@ -20,7 +20,7 @@ export function getDefaultProfile() {
       remotePreference: '', salaryExpectation: '',
       minSalaryEur: null, desiredSalaryMinEur: null, desiredSalaryMaxEur: null,
       languages: [],
-      workAuthorization: { holds: [], openToSponsorship: false },
+      workAuthorization: { holds: [], openToSponsorship: false, b2bAvailable: false },
       allowedLocations: [],
       relocation: 'none',
       roleFamily: '',

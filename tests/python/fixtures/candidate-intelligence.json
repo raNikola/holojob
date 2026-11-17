@@ -1,5 +1,6 @@
 {
   "languages": ["Serbian (native)", "English (fluent)"],
+  "skillsMap": {"product": ["roadmap", "discovery", "stakeholder management"]},
   "roleStrategy": {
     "primaryTargetRoles": [
       "Technical Product Manager",

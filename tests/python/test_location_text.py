@@ -25,18 +25,21 @@ def read(job):
     return wa.authorization_status(job, PREFS)
 
 
-def test_london_onsite_is_outside_and_capped():
+def test_london_onsite_is_outside_and_shown_as_a_location_state():
     result = read(ad(description="Based in our London office, five days a week."))
     assert result["status"] == wa.OUTSIDE_ALLOWED and "location" not in result
-    scored = score_job(ad(description="Based in our London office, five days a week."), {"jobFitPreferences": PREFS})
-    assert scored["matchScore"] <= 40
+    scored = score_job(ad(description="Based in our London office, five days a week."), {"jobFitPreferences": PREFS, "skillsMap": {"p": ["roadmap"]}})
+    assert scored["matchScore"] == scored["scoreBeforeCaps"]  # no cap since scoringVersion 1.5
+    assert any(r.startswith("Location:") for r in scored["reasons"])
 
 
-def test_remote_uk_only_is_outside_and_capped():
+def test_remote_uk_only_is_outside_and_shown_as_a_location_state():
     job = ad(description="Remote. This role is open to UK only.", remote=True)
     result = read(job)
     assert result["status"] == wa.OUTSIDE_ALLOWED and result["location"]["state"] == "fail"
-    assert score_job(job, {"jobFitPreferences": PREFS})["matchScore"] <= 40
+    scored = score_job(job, {"jobFitPreferences": PREFS, "skillsMap": {"p": ["roadmap"]}})
+    assert scored["workAuthorization"]["status"] == wa.OUTSIDE_ALLOWED and any(r.startswith("Location:") for r in scored["reasons"])
+    assert not any("outside the locations" in r for r in scored["reasons"] if r.startswith("Capped"))  # no location cap (1.5)
 
 
 def test_remote_eu_is_unknown_with_a_flag_and_no_cap():
@@ -44,7 +47,7 @@ def test_remote_eu_is_unknown_with_a_flag_and_no_cap():
     result = read(job)
     assert result["location"]["state"] == "unknown" and result["location"]["flag"] == "Verify location"
     assert result["status"] != wa.OUTSIDE_ALLOWED
-    scored = score_job(job, {"jobFitPreferences": PREFS})
+    scored = score_job(job, {"jobFitPreferences": PREFS, "skillsMap": {"p": ["roadmap"]}})
     assert any(r.startswith("Verify location") for r in scored["reasons"])
     assert not any(r.startswith("Capped") for r in scored["reasons"])
 
@@ -112,6 +115,6 @@ def test_remote_alone_never_passes_the_location_gate():
 
 
 def test_unknown_location_does_not_change_the_score():
-    unknown = score_job(ad(description="Remote role.", remote=True), {"jobFitPreferences": PREFS})
-    passed = score_job(ad(description="Remote role, open worldwide.", remote=True), {"jobFitPreferences": PREFS})
+    unknown = score_job(ad(description="Remote role.", remote=True), {"jobFitPreferences": PREFS, "skillsMap": {"p": ["roadmap"]}})
+    passed = score_job(ad(description="Remote role, open worldwide.", remote=True), {"jobFitPreferences": PREFS, "skillsMap": {"p": ["roadmap"]}})
     assert unknown["matchScore"] == passed["matchScore"]

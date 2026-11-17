@@ -58,7 +58,7 @@ def eligibility(row: dict, candidate) -> tuple[str, dict]:
 
 
 def system_band(row: dict) -> str:
-    return mc.INSUFFICIENT if row.get("dataStatus") == "insufficient" else mc.band_of(row)
+    return mc.INSUFFICIENT if row.get("dataStatus") in mc.NOT_READ_STATUSES else mc.band_of(row)
 
 
 def crosstab(pairs: list[tuple[str, str]], rows_order: list[str], cols_order: list[str]) -> dict:
@@ -78,7 +78,7 @@ def build(frozen: dict, rows_by_id: dict, candidate) -> dict:
         bands[i] = system_band(rows_by_id[i])
     hard_values = sorted({labelled[i]["hardRequirements"] for i in present}, key=str)
     overall_values = sorted({labelled[i]["overall"] for i in present})
-    band_order = ["Excellent", "Strong", "Good", "Weak", "Reject", mc.INSUFFICIENT]
+    band_order = ["Excellent", "Strong", "Good", "Weak", "Reject", mc.INSUFFICIENT, mc.NOT_READ]
     gate_tables = {g: mc.tally(per_gate[i].get(g) for i in present if g in per_gate[i]) for g in ELIGIBILITY_GATES}
     return {
         "labelled": len(labelled), "present": len(present), "missingIds": missing,
@@ -109,7 +109,7 @@ def render(result: dict, heading: str = "## 3. Gate confusion on the owner's lab
            f"{result['present']} of the {result['labelled']} frozen labelled ads were scored"
            + (f"; not found anywhere (ids): {', '.join(f'`{i}`' for i in result['missingIds'])}" if result["missingIds"] else "")
            + f". {result['scoredFromLedger']} of them have left the job list and were scored from the history ledger the way a kept ad is "
-           "(outside the term-rarity corpus, so no other ad's score moves; no extraction facts carried, so their visa check is `not_read`).",
+           "(outside the term-rarity corpus, so no other ad's score moves; the stored extraction facts on the ledger entry are carried since the ledger_row fix, so their visa check is `ad_read` where the ledger holds facts).",
            f"Eligibility basis: {result['eligibilityBasis']}. Regression use only: a cell is a count, not a target; no threshold is suggested. "
            "Small, purpose-chosen sample, one labeller.", ""]
     for gate, counts in result["eligibilityByGate"].items():

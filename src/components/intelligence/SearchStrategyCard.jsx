@@ -19,12 +19,16 @@ function WorkAuthorizationSummary({ prefs }) {
         <div>
           <dt className="text-xs text-stone-500">Work without a visa in</dt>
           <dd className="text-stone-800 dark:text-stone-200">
-            {holds.length ? holds.map((h) => `${name(h.jurisdiction)}${h.basis ? ` (${h.basis.replace('_', ' ')})` : ''}`).join(', ') : 'Not set: visas are not checked'}
+            {holds.length ? holds.map((h) => `${name(h.jurisdiction)}${h.basis ? ` (${h.basis.replace('_', ' ')})` : ''}`).join(', ') : 'Not set: no work-authorization state is shown'}
           </dd>
         </div>
         <div>
           <dt className="text-xs text-stone-500">Sponsored roles</dt>
           <dd className="text-stone-800 dark:text-stone-200">{auth.openToSponsorship ? 'Open to them' : 'Not open to them'}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-stone-500">Contractor (B2B / employer of record)</dt>
+          <dd className="text-stone-800 dark:text-stone-200">{auth.b2bAvailable ? 'Available' : 'Not available'}</dd>
         </div>
         <div>
           <dt className="text-xs text-stone-500">Relocation</dt>
