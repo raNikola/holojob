@@ -79,6 +79,16 @@ def test_listed_ads_score_the_same_with_a_registered_ad(env):
     assert json.dumps(alone[0], sort_keys=True) == json.dumps(mixed[0], sort_keys=True)
 
 
+def test_a_ledger_row_carries_the_entrys_stored_facts_like_the_list_view():
+    facts = {"requirements": [{"text": "x"}], "_fingerprint": "f"}
+    ledger = {"jobs": {"a": {"job": dict(KEPT), "llmFacts": facts}, "b": {"job": dict(KEPT)},
+                       "c": {"job": dict(KEPT), "llmFacts": "not a dict"}}}
+    assert kept_ads.ledger_row(ledger, "a")["llmFacts"] == facts
+    assert "llmFacts" not in kept_ads.ledger_row(ledger, "b")  # no facts stays no facts
+    assert "llmFacts" not in kept_ads.ledger_row(ledger, "c")  # an unknown shape is no facts, never wrong facts
+    assert kept_ads.ledger_row(ledger, "a")[kept_ads.MARK] is True
+
+
 def test_prune_drops_ids_that_are_no_longer_kept_and_have_no_application(env):
     for i in ("kept1", "listed1", "old"):
         kept_ads.add(i, env["kept"])

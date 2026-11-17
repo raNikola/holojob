@@ -60,12 +60,20 @@ def prune(keep_ids: set[str], path: Path = KEPT_PATH) -> list[str]:
 
 
 def ledger_row(ledger: dict, job_id: str) -> dict | None:
-    """The ad as the ledger holds it, marked, or None. A row only the ledger holds is not part of any view."""
+    """The ad as the ledger holds it, marked, or None. A row only the ledger holds is not part of any view.
+
+    The stored extraction facts sit on the entry, not on its job snapshot; the list view merges them in
+    (job_history, `record["llmFacts"] = entry["llmFacts"]`), so this does too. Without them a kept ad was scored as unread.
+    """
     entry = (ledger.get("jobs") or {}).get(job_id)
     job = entry.get("job") if isinstance(entry, dict) else None
     if not isinstance(job, dict):
         return None
-    return {**job, "jobId": job_id, MARK: True}
+    row = {**job, "jobId": job_id, MARK: True}
+    facts = entry.get("llmFacts")
+    if isinstance(facts, dict) and facts:
+        row["llmFacts"] = facts
+    return row
 
 
 def with_kept(jobs: list[dict], ledger_file: Path, path: Path = KEPT_PATH) -> list[dict]:
