@@ -143,6 +143,9 @@ def snapshot_rows(rows: list[dict]) -> dict:
             "manual": bool(row.get("manualEntry")),
             "judgeAdjustment": (row.get("llmFit") or {}).get("adjustment") or 0, "profileGuard": row.get("profileGuard"),
             "hardCapped": bool(row.get("hardCapped")),
+            "applyRecommendation": row.get("applyRecommendation"), "priority": row.get("priority"),
+            "blockedKinds": sorted(b.get("kind") for b in row.get("blockedBy") or []),
+            "locationState": (row.get("locationState") or {}).get("state"),
         }
     return out
 

@@ -3,7 +3,7 @@ import { Bookmark, CircleDot, ExternalLink, SquareCheckBig, X } from 'lucide-rea
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { JOB_PAGE_SIZE, everySelected, closedLast, defaultOrder, notReadFirst, pageLimit, selectedNotShown, showMore } from '../../modules/jobs/jobTableModel'
+import { JOB_PAGE_SIZE, everySelected, blockedLast, closedLast, defaultOrder, notReadFirst, pageLimit, selectedNotShown, showMore } from '../../modules/jobs/jobTableModel'
 import { SERVER_ONLY_NOTE, classBadges, rowKind, selectableIds } from '../../modules/jobs/jobListView'
 import KeepAdButton from './KeepAdButton'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
@@ -276,7 +276,7 @@ export default function JobTable({
   const isDesktop = useMediaQuery(DESKTOP, true)
   // The whole list is sorted first; only then is a batch taken from it. The list's other uses read the whole list too.
   const jobs = useMemo(() => {
-    if (sort === DEFAULT_SORT) return notReadFirst(closedLast(defaultOrder(unsortedJobs))) // by identity: any click replaces it, even back to the same column
+    if (sort === DEFAULT_SORT) return notReadFirst(closedLast(blockedLast(defaultOrder(unsortedJobs)))) // by identity: any click replaces it, even back to the same column
     return sortRows(unsortedJobs, sort, columnsOn(today))
   }, [unsortedJobs, sort, today])
   const pageKey = `${filterKey}|${sort.key}|${sort.dir}`

@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Protocol
 
 from enrich_jobs import MAX_DESCRIPTION_CHARS
-from labels import apply_recommendation, match_label, priority
+from labels import match_label, verdict
 from llm_client import GuardrailRefused, LlmRefused, LlmUnavailable, complete_json
 import ai_gate  # noqa: E402 (on the path through llm_client)
 
@@ -441,7 +441,7 @@ class LlmFitEnhancer:
         score = max(0, min(base + adjustment, ceiling))
 
         red_flags = base_result.get("redFlags") or []
-        apply_rec = apply_recommendation(score, red_flags)
+        apply_rec, prio = verdict(score, red_flags, base_result.get("blockedBy"))
         reason = f"LLM fit: {judged['fit']} ({score - base:+d})"
         if judged["dealbreakers"]:
             reason += f", dealbreaker: {judged['dealbreakers'][0]}"
@@ -456,7 +456,7 @@ class LlmFitEnhancer:
             **({"scoreBeforeCaps": score} if uncapped else {}),
             "matchLabel": match_label(score),
             "applyRecommendation": apply_rec,
-            "priority": priority(score, apply_rec, red_flags),
+            "priority": prio,
             "reasons": [*(base_result.get("reasons") or []), reason],
             "llmFit": {
                 **judged,

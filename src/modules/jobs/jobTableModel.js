@@ -33,6 +33,12 @@ export function notReadFirst(rows) {
   return [...rows.filter(isNotRead), ...rows.filter((row) => !isNotRead(row))]
 }
 
+/** Ads with a blocking fact (`blockedBy`, python/job_scoring/blocking.py) after the others, each group in the order given. Only for the default sort; nothing is hidden. */
+export function blockedLast(rows) {
+  const blocked = (row) => (row?.blockedBy || []).length > 0
+  return [...rows.filter((row) => !blocked(row)), ...rows.filter(blocked)]
+}
+
 /** How many rows are shown under `key`: paging is `{ key, limit }`, and the key holds the filters and the sort. */
 export function pageLimit(paging, key) {
   return paging?.key === key ? paging.limit : JOB_PAGE_SIZE

@@ -19,6 +19,8 @@ INSUFFICIENT_LABEL = "Insufficient data"  # scoringVersion 1.4 and older rows on
 NOT_READ_LABEL = "Not read"
 INSUFFICIENT_PRIORITY = "Unrated"
 INSUFFICIENT_APPLY = "Not assessed"
+# A blocked ad (blocking.py) keeps its Fit number and band; its verdict is this state, never Apply or P1.
+BLOCKED_LABEL = "Blocked"
 
 
 def match_label(score: int) -> str:
@@ -53,3 +55,11 @@ def priority(score: int, apply_rec: str, red_flags: list[str]) -> str:
     if score >= 55:
         return "P2"
     return "P3"
+
+
+def verdict(score: int, red_flags: list[str], blocked_by: list | None = None) -> tuple[str, str]:
+    """(applyRecommendation, priority). A blocked ad is "Blocked" in both; the number and band are not touched."""
+    if blocked_by:
+        return BLOCKED_LABEL, BLOCKED_LABEL
+    apply_rec = apply_recommendation(score, red_flags)
+    return apply_rec, priority(score, apply_rec, red_flags)

@@ -31,6 +31,8 @@ export const APPLY_VARIANT = {
 export const INSUFFICIENT_LABEL = 'Insufficient data'
 export const INSUFFICIENT_PRIORITY = 'Unrated'
 export const INSUFFICIENT_APPLY = 'Not assessed'
+/** scoringVersion 1.5 (Step 2b): the verdict of an ad with a blocking fact (python/job_scoring/blocking.py). It keeps its Fit Score; the "Blocked" badge says why. */
+export const BLOCKED = 'Blocked'
 
 export const NOT_READ_LABEL = 'Not read'
 

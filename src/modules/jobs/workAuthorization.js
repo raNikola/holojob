@@ -15,6 +15,8 @@ const READ_BADGES = { insufficient_evidence: { label: 'Insufficient evidence', v
 /** Text badges for one row: eligibility, read status, and the location state. Each says why in its tooltip. */
 export function eligibilityBadges(job) {
   const out = []
+  const blockers = job?.blockedBy || []
+  if (blockers.length) out.push({ label: 'Blocked', variant: 'warn', reason: blockers.map((b) => b.text).join('. ') })
   const eligibility = job?.eligibility
   if (eligibility?.state && ELIGIBILITY_LABELS[eligibility.state]) {
     out.push({ label: ELIGIBILITY_LABELS[eligibility.state], variant: ELIGIBILITY_VARIANTS[eligibility.state], reason: eligibility.reason || '' })

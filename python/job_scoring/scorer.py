@@ -12,8 +12,9 @@ from dimensions.industry_match import score_industry_match_detail
 from dimensions.location_match import score_location_match
 from dimensions.role_match import score_role_match
 from dimensions.skill_match import score_skill_match
-from labels import INSUFFICIENT_APPLY, INSUFFICIENT_PRIORITY, NOT_READ_LABEL, apply_recommendation, match_label, priority
+from labels import INSUFFICIENT_APPLY, INSUFFICIENT_PRIORITY, NOT_READ_LABEL, match_label, verdict
 import data_sufficiency
+import blocking
 import eligibility
 from dimensions.skill_match import _bank as _skill_bank
 from facts_guard import guard_job
@@ -152,6 +153,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     authorization = wa.authorization_status(job, prefs)  # location state and the shadow engine's gates; no cap reads it
     eligible = eligibility.assess(job, prefs)
     language_names = language_gap_names(job, intelligence)
+    location_state = blocking.location_state(job, prefs)
+    blocked_by = blocking.blockers(eligible, language_names, location_state)
 
     no_stack = not any(_skill_bank(intelligence))
     if no_stack:
@@ -191,6 +194,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     elif (authorization.get("location") or {}).get("flag"):
         # Remote or open to a region, but the ad never says Serbia is included: a flag, not a cost.
         reasons.append(f"{authorization['location']['flag']}: {authorization['location']['reason']}")
+    if blocked_by:
+        reasons.append("Blocked: " + "; ".join(b["text"] for b in blocked_by))
     if language_names:
         reasons.append(f"Language: the ad requires {' and '.join(language_names)}, which your profile does not list")
 
@@ -206,8 +211,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
             has_keyword_bank="No keyword bank in intelligence" not in skill_reasons,
         )
         confidence = {"level": "low" if low else "normal", "reasons": low}
-        apply_rec = apply_recommendation(match_score, red_flags)
-        label, prio = match_label(match_score), priority(match_score, apply_rec, red_flags)
+        apply_rec, prio = verdict(match_score, red_flags, blocked_by)
+        label = match_label(match_score)
     result = {
         **job,
         "matchScore": match_score,
@@ -222,6 +227,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         "insufficientReasons": read_reasons,
         "eligibility": eligible,
         "languageGap": language_names,
+        "locationState": location_state,
+        "blockedBy": blocked_by,
         "profileGuard": "no_profile_stack" if no_stack else None,
         "confidence": confidence,
         "roleMatch": role_score,
