@@ -69,6 +69,7 @@ LANGUAGE_UNCONFIRMED_WHY = {
     blocking.UNCONFIRMED_NO_LIST: "your profile lists no languages",
     blocking.UNCONFIRMED_NO_QUOTE: "the read holds no quote of it",
     blocking.UNCONFIRMED_QUOTE_NOT_IN_AD: "its quote was not found in the ad",
+    blocking.UNCONFIRMED_SOFTENED: "the ad itself calls it a plus or preferred",
 }
 
 

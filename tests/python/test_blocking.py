@@ -262,3 +262,43 @@ def test_the_fit_judge_path_keeps_the_original_verdict_of_a_blocked_ad():
               "missing": [], "dealbreakers": []}
     out = llm_enhancer.LlmFitEnhancer("openai", "gpt-4o", threshold=0, complete=lambda *a, **k: answer).enhance(refusing(REFUSAL), row, intelligence)
     assert out["blockedFrom"] == dict(zip(("applyRecommendation", "priority"), labels.verdict(75, out["redFlags"])))
+
+
+# --- Step 2d: a softened language demand never blocks (audit of the 72 Blocked rows, 2026-11-18) -----------------------
+
+def _must(quote):
+    return [{**GERMAN[0], "text": quote, "postingQuote": quote}]
+
+
+@pytest.mark.parametrize("quote", [
+    "Excellent communication skills in English (German is a plus)",
+    "Fluent in English, fluent in German is beneficial; additional languages are advantageous.",
+    "Fluency in English, both written and spoken; proficiency in German is a strong plus.",
+    "Fluency in English; German language skills are a plus",
+    "German preferred",
+    "Nice to have: fluent German",
+])
+def test_a_must_have_the_ad_itself_softens_is_unconfirmed_never_blocked(quote):
+    r = lang_scored(ad("Warsaw, Poland", requirements=_must(quote), extra=PADDING + " " + quote), STACK["languages"])
+    assert r["languageState"]["blocking"] == [] and r["blockedBy"] == []
+    assert r["languageState"]["unconfirmed"] == [{"language": "German", "why": blocking.UNCONFIRMED_SOFTENED}]
+    assert r["blockedFrom"] is None and r["applyRecommendation"] != labels.BLOCKED_LABEL
+
+
+def test_a_softening_word_next_to_the_quote_in_the_same_line_unconfirms_it():
+    job = ad("Warsaw, Poland", requirements=_must("Fluent German"), extra=PADDING + " * Nice to have: Fluent German\n* Roadmaps")
+    assert lang_scored(job, STACK["languages"])["languageState"]["unconfirmed"][0]["why"] == blocking.UNCONFIRMED_SOFTENED
+
+
+HARD = "Fluent German (required, as you will work in a German-speaking team)"
+
+
+@pytest.mark.parametrize("after", [
+    " and English at C1 level, both written and spoken Nice to Have Experience in B2B",
+    ".\n* Media experience is a plus",
+    ". **Preferred Qualifications** * Roadmaps",
+])
+def test_a_softening_word_in_another_requirement_does_not_unconfirm_a_hard_demand(after):
+    job = ad("Warsaw, Poland", requirements=_must(HARD), extra=PADDING + " " + HARD + after)
+    r = lang_scored(job, STACK["languages"])
+    assert r["languageState"]["blocking"] == ["German"] and [b["kind"] for b in r["blockedBy"]] == ["language"]
