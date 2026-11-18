@@ -27,8 +27,10 @@ import measure_fit3 as m3  # noqa: E402
 TOP = 6
 MAX_FLIPS, MIN_MEDIAN_OVERLAP, MIN_CORE_SHARE, MAX_MISSING_QUOTES = 2, 0.80, 0.90, 0.25
 NOT_AVAILABLE = "not available"
-A3_ROLE_SKIPS = ("Nebius", "VinDynamics")  # plan Addendum A3 (the owner's grouping of the seven FIT-skips)
-A3_INDUSTRIAL_SKIPS = ("Form Energy", "HII", "Severn Trent", "Oracle", "Parker")
+# plan Addendum A3 (the owner's grouping of the seven FIT-skips), by AD ID: a company substring would also catch an unlabelled ad of the same company
+# (a second Parker Hannifin ad) and would miss HII, whose ad is listed under "Mission Technologies".
+A3_ROLE_SKIPS = ("2fa17cc182518736", "eaf90020f3972fbf")  # Nebius, VinDynamics
+A3_INDUSTRIAL_SKIPS = ("9d5ee2382acb3645", "8f172015daaa95d5", "9967eaab850fda8f", "664acae40131f612", "eab67da902f48fbf")  # Form Energy, HII, Severn Trent, Oracle, Parker TPM
 
 
 def load_ads(scratch: Path, ids: list[str]) -> dict[str, dict]:
@@ -141,7 +143,7 @@ def b5(p, ads, labels, candidate_industries, candidate_level):
         crit1 = top >= 3
 
         def inverted(group):  # A3, reporting only: APPLY/SKIP pairs inverted (a tie counts as above) out of the pairs of this group
-            skips = [i for n in group for i in match_company(ads, n) if i in keys]
+            skips = [i for i in group if i in skip_ids and i in keys]
             return {"inverted": sum(1 for s in skips for a in pairable if a != s and keys[s] <= keys[a]), "pairs": len(skips) * len(pairable),
                     "skipsAboveApply": sorted(s for s in skips if any(keys[s] <= keys[a] for a in pairable if a != s))}
         out[variant] = {"applyInTop6": top, "of": len(apply_ids), "applyInsufficientOrNoText": len(apply_ids) - len(pairable),
@@ -149,7 +151,25 @@ def b5(p, ads, labels, candidate_industries, candidate_level):
                         "criterion1": crit1, "criterion2": not above,
                         "a3Split": {"roleOrRequirementSkips": inverted(A3_ROLE_SKIPS), "industrialSkips": inverted(A3_INDUSTRIAL_SKIPS)},
                         "verdict": "PASS (PRELIMINARY)" if crit1 and not above else "FAIL (PRELIMINARY)"}
+    out["perAd"] = per_ad(rows, ads, apply_ids, skip_ids)
     out["verdict"] = "see v0 / v1, none selected"
+    return out
+
+
+def per_ad(rows, ads, apply_ids, skip_ids):
+    """Report-only table, one line per ad: label, role class, why it is Insufficient (all reasons), and its rank in the ranked group for v0 / v1 (A3 split of
+    the seven skips included). An ad that has no stored classification is not in `rows` and is listed by the caller as absent."""
+    from match_engine import fit3
+    applies = {i for ids in apply_ids.values() for i in ids}
+    ranks = {v: {r["id"]: n + 1 for n, r in enumerate(fit3.rank(rows, v)["ranked"])} for v in fit3.VARIANTS}
+    out = []
+    for r in sorted(rows, key=lambda r: r["id"]):
+        b, i = r["fit3"], r["id"]
+        c = b["requirements"]["coreCounts"]
+        out.append({"id": i, "company": ads[i]["posting"]["company"], "label": "APPLY" if i in applies else "SKIP" if i in skip_ids else "",
+                    "role": b["role"].get("class") or NOT_AVAILABLE, "domain": b["domain"], "insufficient": b["insufficientReasons"],
+                    "rankV0": ranks["v0"].get(i), "rankV1": ranks["v1"].get(i),
+                    "core": c["core"], "resolvedCore": c["resolvedCore"], "unknownCore": c["UNKNOWN"], "notEvidencedCore": c[fit3.NOT_EVIDENCED]})
     return out
 
 

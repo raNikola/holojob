@@ -489,6 +489,28 @@ def test_b5_a2_apply_in_the_insufficient_group_is_a_miss_and_leaves_the_pairs_an
     assert got["verdict"] == "NOT EVALUABLE" and "v0" not in got
 
 
+def test_a3_split_groups_by_ad_id_not_by_company():
+    import check_fit3_bars as bars
+    from match_engine.fit3_industry import Industries
+    role_skip, other_same_company = bars.A3_ROLE_SKIPS[0], "zz-unlabelled"
+
+    def ad(i, company):
+        return {"posting": {"id": i, "title": "Product Manager", "company": company, "description": AD}, "facts": {}}
+
+    ads = {"a1": ad("a1", "Alpha"), role_skip: ad(role_skip, "Nebius"), other_same_company: ad(other_same_company, "Nebius")}
+    met = [answer("stakeholder-management", "MET", 4)]
+
+    def entry(role):
+        return {"anchored": fit3.anchor(reply(function={"role": role, "quote": "own the product roadmap"},
+                                              competencies=[{"id": "stakeholder-management", "mark": "core", "quote": "Strong stakeholder management"}]), AD, ROLES, COMPS, "PM"),
+                "answers": met}
+
+    # the labelled skip and the unlabelled same-company ad both rank above the APPLY ad; only the labelled one is in the A3 pairs
+    p = {"a1": entry("Other"), role_skip: entry("Product Manager"), other_same_company: entry("Product Manager")}
+    out = bars.b5(p, ads, {"apply": ["a1"], "fitSkip": [role_skip]}, Industries(), None)["v0"]["a3Split"]["roleOrRequirementSkips"]
+    assert out["pairs"] == 1 and out["inverted"] == 1 and out["skipsAboveApply"] == [role_skip]
+
+
 def test_the_schema_is_named_for_the_provider():
     # OpenAI answered 400 "Missing required parameter: response_format.json_schema.name" (plan Amendment A4): the wrapper needs a name and the schema.
     assert fit3.SCHEMA["name"] and fit3.SCHEMA["schema"]["type"] == "object"

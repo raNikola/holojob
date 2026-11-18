@@ -99,10 +99,10 @@ def facts_from_extract7(scratch: Path, items: list[dict], facts: dict) -> tuple[
     return out_items, out_facts, {"noResponsibilities": none, "responsibilityRows": sum(len(f["requirements"]) for f in out_facts.values())}
 
 
-def facts_from_fit3(scratch: Path, items: list[dict], facts: dict) -> tuple[list[dict], dict, dict]:
-    """The scratch ads with `requirements` replaced by the anchored Fit 3 competency rows (fit3.matcher_requirements)."""
+def facts_from_fit3(scratch: Path, items: list[dict], facts: dict, classification: str = "classification.json") -> tuple[list[dict], dict, dict]:
+    """The scratch ads with `requirements` replaced by the anchored Fit 3 competency rows (fit3.matcher_requirements) of the named pass."""
     from match_engine import fit3
-    path = scratch / "fit3" / "classification.json"
+    path = scratch / "fit3" / classification
     if not path.exists():
         raise SystemExit(f"no {path}: run scripts/measure_fit3.py --confirm first (the owner's paid read)")
     entries = json.loads(path.read_text(encoding="utf-8"))["entries"]
@@ -120,7 +120,8 @@ def facts_from_fit3(scratch: Path, items: list[dict], facts: dict) -> tuple[list
     return out_items, out_facts, {"noFit3Rows": none, "fit3Rows": sum(len(f["requirements"]) for f in out_facts.values())}
 
 
-def prepare(scratch: Path, out: Path, ids: list[str], real_data: Path, responsibilities: bool = False, fit3_rows: bool = False) -> dict:
+def prepare(scratch: Path, out: Path, ids: list[str], real_data: Path, responsibilities: bool = False, fit3_rows: bool = False,
+            classification: str = "classification.json") -> dict:
     from calibration.enrich_sample import FACTS_NAME
     from competency_mapping import load_remap
     items, facts, counts = facts_from_scratch(scratch, ids)
@@ -128,7 +129,7 @@ def prepare(scratch: Path, out: Path, ids: list[str], real_data: Path, responsib
         items, facts, extra = facts_from_extract7(scratch, items, facts)
         counts = {**counts, **extra, "prepared": len(items)}
     if fit3_rows:
-        items, facts, extra = facts_from_fit3(scratch, items, facts)
+        items, facts, extra = facts_from_fit3(scratch, items, facts, classification)
         counts = {**counts, **extra, "prepared": len(items)}
     mc.write_private(out / "review-items.json", json.dumps({"version": 1, "items": items}, ensure_ascii=False))
     mc.write_private(out / FACTS_NAME, json.dumps({"version": 1, "facts": facts}, ensure_ascii=False))
@@ -145,6 +146,8 @@ def main(argv=None) -> int:
     p.add_argument("--max-usd", type=float, required=True)
     p.add_argument("--responsibilities", action="store_true", help="ask the matcher about the extract-7 responsibilities (default --out <scratch>/matcher-resp)")
     p.add_argument("--fit3", action="store_true", help="ask the matcher about the anchored Fit 3 competency rows (default --out <scratch>/matcher-fit3)")
+    p.add_argument("--classification", default="classification.json", help="with --fit3: the pass under <scratch>/fit3/ whose own core / secondary marks are asked "
+                   "(a second pass needs its own --out, e.g. <scratch>/matcher-fit3-pass2)")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--data-dir", type=Path, default=None, help="the real data dir (only the remap and, for a run, the key store)")
     p.add_argument("--confirm", action="store_true", help="REQUIRED to call the provider")
@@ -184,7 +187,7 @@ def main(argv=None) -> int:
 
     ids = json.loads(args.ids.read_text(encoding="utf-8"))
     ids = ids.get("ids") if isinstance(ids, dict) else ids
-    counts = prepare(scratch, out, list(dict.fromkeys(i for i in ids or [] if isinstance(i, str))), real, args.responsibilities, args.fit3)
+    counts = prepare(scratch, out, list(dict.fromkeys(i for i in ids or [] if isinstance(i, str))), real, args.responsibilities, args.fit3, args.classification)
     print(json.dumps({"prepared": counts, "out": str(out)}))
     profile = json.loads(es.PROFILE_PATH.read_text(encoding="utf-8"))
     intelligence = json.loads(es.INTELLIGENCE_PATH.read_text(encoding="utf-8"))
