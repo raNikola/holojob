@@ -47,6 +47,26 @@ function workModeOf(job) {
   return extracted === 'unclear' || extracted === 'unknown' ? '' : extracted
 }
 
+// Clear remote wording in the ad's own text (fix 4 of scoring 1.6; python/job_scoring/remote_text.py holds the same list): it wins over a structured field
+// that says onsite or hybrid, because the structured field is a board default or a guess and the sentence is the ad. A negation just before it cancels it.
+const CLEAR_REMOTE = [
+  /\b(?:fully|100%|entirely|completely)[ -]remote\b/,
+  /\bwork(?:ing)?\s+(?:remotely\s+)?from\s+anywhere\b/,
+  /\bremote\s+from\s+anywhere\b/,
+]
+const REMOTE_NEGATION = /\b(?:not|no|never|isn't|aren't|non|without)\b[^.;\n]{0,25}$/
+
+/** The phrase of the ad text that says the job is fully remote, or null. Tags and case are ignored. */
+export function clearRemoteText(description) {
+  const text = String(description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/\u2019/g, "'").toLowerCase()
+  for (const pattern of CLEAR_REMOTE) {
+    for (const m of text.matchAll(new RegExp(pattern.source, 'g'))) {
+      if (!REMOTE_NEGATION.test(text.slice(Math.max(0, m.index - 30), m.index))) return m[0]
+    }
+  }
+  return null
+}
+
 // A remote ad that names no country, or names the world, Europe or Serbia, can be done from Serbia. "EU" does not: Serbia is not in it.
 const REMOTE_OPEN = new Set(['WORLDWIDE', 'EUROPE', 'RS'])
 const SERBIA = 'RS'
@@ -63,7 +83,7 @@ function feasibilityOf(job) {
   if (eligibility.b2b === true) return { code: 'remote_feasible', why: 'The ad also accepts B2B or contractor work.' }
   const facts = job?.llmFacts || {}
   if (String(facts.jobCountry || '').toUpperCase() === SERBIA) return { code: 'remote_feasible', why: 'The job is in Serbia.' }
-  if (job?.isRemote === true || workModeOf(job) === 'remote') {
+  if (job?.isRemote === true || workModeOf(job) === 'remote' || clearRemoteText(job?.description)) {
     const allowed = (Array.isArray(facts.remoteEligibility) ? facts.remoteEligibility : []).map((c) => String(c).trim().toUpperCase()).filter(Boolean)
     if (!allowed.length) return { code: 'remote_feasible', why: 'Remote, and the ad names no country restriction.' }
     if (allowed.some((c) => REMOTE_OPEN.has(c))) return { code: 'remote_feasible', why: `Remote, open to ${allowed.join(', ')}.` }

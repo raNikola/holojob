@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { eligibilityBadges, eligibilityFeasibility, isRemoteFeasible } from '../../src/modules/jobs/workAuthorization.js'
+import { clearRemoteText, eligibilityBadges, eligibilityFeasibility, isRemoteFeasible } from '../../src/modules/jobs/workAuthorization.js'
 import { defaultOrder, postedTimeOf } from '../../src/modules/jobs/jobTableModel.js'
 import { CLEAR_ALL_FILTERS, MORE_FILTER_KEYS, activeFilterChips, filterJobs, hiddenAsNotOnBoard } from '../../src/modules/jobs/jobFilters.js'
 import { getDefaultJobsState } from '../../src/modules/jobs/jobStorage.js'
@@ -37,6 +37,20 @@ describe('eligibility sub-state inside Unconfirmed (owner decision 2026-11-18, d
 
   it('the board work mode wins over the extracted one, as in the Location dimension', () => {
     expect(eligibilityFeasibility(unknown({ workMode: 'onsite' }, { workMode: 'remote' }))).toBe('onsite_needs_authorization')
+  })
+
+  it('clear remote wording in the ad text wins over a structured field that says onsite or hybrid', () => {
+    const text = (description, extra = {}, facts = {}) => unknown({ description, ...extra }, facts)
+    expect(eligibilityFeasibility(text('This role is fully remote.', { workMode: 'onsite' }))).toBe('remote_feasible')
+    expect(eligibilityFeasibility(text('You can work from anywhere in Europe', {}, { workMode: 'hybrid' }))).toBe('remote_feasible')
+    expect(eligibilityFeasibility(text('<p>100% remote</p>', { isRemote: false }))).toBe('remote_feasible')
+    // the country restriction still applies to a remote ad
+    expect(eligibilityFeasibility(text('We are fully remote', {}, { remoteEligibility: ['US'] }))).toBe('onsite_needs_authorization')
+    // a negation cancels it; plain "remote" is not clear text
+    expect(eligibilityFeasibility(text('This is not a fully remote position', { workMode: 'onsite' }))).toBe('onsite_needs_authorization')
+    expect(eligibilityFeasibility(text('Remote work is possible two days a week'))).toBe('onsite_needs_authorization')
+    expect(clearRemoteText('We offer work from anywhere')).toBe('work from anywhere')
+    expect(clearRemoteText('')).toBeNull()
   })
 
   it('only an Unconfirmed ad has a sub-state; the other states and a dormant check have none', () => {
