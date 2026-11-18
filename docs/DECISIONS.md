@@ -2252,3 +2252,14 @@ Owner decision: make scoring 1.5 and the Fit 3 role class live on DS9. Built as 
 - **Decision: the 1.50 cap.** The estimate's worst case (8000 output tokens per call, USD 2.80) was above the cap, so the run went in three batches of 193-194 ads, each with `--max-usd` equal to the budget still unspent (1.50, 1.33, 1.16); each batch's own worst case was below its cap. Actual spend USD 0.4946 (0.1649 + 0.1676 + 0.1621). Provider gpt-6-luna through the scratch gate and ledger (the scratch AI settings, daily call cap 2000, as in W5).
 - **Result.** 581 of 581 classified, no failures. Role class on the 582 scored rows: target 507, adjacent 34, other 27, not available 14 (1 manual job, 13 whose role did not anchor).
 - **Not changed:** scoring, settings, prompts of the pipeline, vocabulary, `automation.enabled` (false), ordering.
+
+## Fix live bands: read the unread ads, re-measure, calibration trigger (2026-11-18)
+
+Owner brief; plan `~/holojob-eval/w5-calibration-plan.md` (sha256 `bd7097c553ed609e5885fee01a87c5686fcebaa989a12e80041328211d9140cf`), written before the read and before any post-read number.
+
+- **Read.** `enrich_jobs.py --manual --max-usd 1.50`, default prompt, no change: 500 of 517 unread ads extracted, USD 0.8286 (ledger), 0 failed. 17 were refused by the AI gate's daily paid call limit (500, the owner's setting); not raised, not worked around, so 17 ads stay unread. Re-score under 1.5 (no model call). Backups: `data/jobs/*.bak-pre-w5read-20261118`.
+- **Before / after (open, non-blocked rows).** Insufficient evidence 512 of 567 -> 12 of 502 rows. Bands before: Strong 249, Good 220, Weak 96, Reject 2 (567). After: Excellent 3, Strong 228, Good 178, Weak 91, Reject 2 (502). Blocked rows 7 -> 72 (the read facts exposed visa / language / location blocks). Strong + Good with insufficient evidence 95.1% -> 2.2%.
+- **Trigger.** (a) Strong 45.4% of non-blocked > 15%: fired. (b) 2.2% <= 10%: not fired.
+- **Calibration.** Labels in the population: 25 of 64 (dev 44 + holdout-v1; the rest are closed, blocked or no longer listed). No Strong cutoff reaches 70% Apply / top precision with at least 8 labelled ads (precision at >= 61: 13 labelled, 23%; at >= 76: 5, 40%). Good: 58% at the floor 40, 86% at 57 (14 labelled). Rule: both cutoffs valid or 1.5 stays live. **Not valid, so no 1.6, no evidence cap, no deploy; scoring 1.5 stays live.** Finding: on this sample the score does not separate Apply from the rest inside the Strong band; the cutoff cannot fix the 45% Strong share without a better signal. Labelled sample is small (25) and chosen on the labels it is measured on.
+- **Open decisions.** Apply / P1 thresholds (70 / 76) unchanged; the 17 unread ads need the daily call limit raised or another day.
+- Top 30 (live) vs baseline top 30 (target, newest first): overlap 0 of 30; lists in `~/holojob-eval/w5-top30.md` (ids + public titles).
