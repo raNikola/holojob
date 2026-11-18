@@ -603,7 +603,7 @@ EMBEDDING_FEATURE = "embedding-experiment"
 # No tokenizer in the venv: a conservative character cap stands in for the model's 8191-token input limit. An input above it is truncated
 # and reported by embed(), never silently.
 EMBED_MAX_CHARS = 16000
-EMBED_BATCH = 64
+EMBED_BATCH = 128  # one request for the whole experiment (OpenAI allows 2048 inputs and 300k tokens per request)
 
 
 class EmbedInputRefused(ValueError):

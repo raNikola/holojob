@@ -175,3 +175,31 @@ def test_evaluate_runs_end_to_end_on_toy_data():
     out = mes.evaluate(ads, classes, vectors)
     assert out["verdict"] in ("WIN", "INCONCLUSIVE", "NO HELP") and out["point"]["aucTieBreak"] == 1.0 and out["point"]["aucBaseline"] == 0.5
     assert out["applied"]["embeddingOnlyAucVsFitSkip"] == 1.0
+
+
+def test_seventy_texts_go_in_one_request(api):
+    result = llm_client.embed([f"ad number {n}" for n in range(70)], confirm=True, max_usd=0.2)
+    assert len(api) == 1 and len(api[0]["body"]["input"]) == 70 and len(result["vectors"]) == 70
+
+
+def test_level_gain_is_the_tie_break_effect_inside_role_classes():
+    classes = {"a": "target", "b": "target", "c": "target", "d": "other", "e": "other"}
+    levels = {"a": 3, "b": 2, "c": 1, "d": 1, "e": 0}
+    good = {"a": 0.9, "b": 0.5, "c": 0.1, "d": 0.6, "e": 0.2}
+    bad = {"a": 0.1, "b": 0.5, "c": 0.9, "d": 0.2, "e": 0.6}
+    up = mes.level_metrics(list(levels), levels, classes, good)
+    down = mes.level_metrics(list(levels), levels, classes, bad)
+    assert up["rhoTieBreak"] > up["rhoRoleOnly"] and up["gain"] > 0 > down["gain"]
+    assert up["rhoRoleOnly"] == down["rhoRoleOnly"]
+    assert mes.level_metrics(["a", "b"], levels, classes, good) is None  # fewer than three ads
+    assert mes.level_metrics(list(levels), {i: 1 for i in levels}, classes, good) is None  # a constant level
+
+
+def test_level_task_reports_aggregates_only():
+    ads = {i: {"company": c, "set": "dev"} for i, c in zip("abcdef", "ABCDEF")}
+    classes = dict(zip("abcdef", ["other", "other", "adjacent", "target", "adjacent", "target"]))
+    levels = dict(zip("abcdef", [0, 1, 2, 3, 1, 2]))
+    scores = dict(zip("abcdef", [0.1, 0.2, 0.3, 0.4, 0.15, 0.35]))
+    out = mes.level_task(ads, classes, scores, {i: a["company"] for i, a in ads.items()}, levels)
+    assert out["verdict"] in ("WIN", "INCONCLUSIVE", "NO HELP") and out["ads"] == 6 and out["companyGroups"] == 6
+    assert not any(i in out for i in "abcdef") and not {"a", "b", "c", "d", "e", "f"} & set(json.dumps(out).replace('"', " ").replace(":", " ").replace(",", " ").split())

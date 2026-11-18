@@ -131,13 +131,52 @@ def company_groups(ads: dict[str, dict]) -> dict[str, list[str]]:
     return out
 
 
+DEV_IDS = EVAL / "dev44-ids.json"
+DEV_STORE = "dev-store-i1.json"  # the stored i1 pass over the 44 dev ads
+EVAL_SET = mc.default_data_dir() / "calibration" / "stage-a" / "eval-set.json"  # read only
+
+
+def dev_ads(scratch: Path = m3.DEFAULT_SCRATCH) -> dict[str, dict]:
+    """{id: ad} for the dev ads that have text (set "dev", label "dev", level = the owner's `overall` 0-3 from the eval set). Dev ads are never trained on."""
+    ids = list(dict.fromkeys(json.loads(DEV_IDS.read_text(encoding="utf-8"))))
+    levels = {i: a["overall"] for i, a in json.loads(EVAL_SET.read_text(encoding="utf-8"))["ads"].items()}
+    out = {}
+    for i, ad in bars.load_ads(scratch, ids).items():
+        p = ad["posting"]
+        if i in levels and (p["description"] or "").strip():
+            out[i] = {**p, "rawDescription": p["description"], "description": clean_text(p["description"]), "label": "dev", "set": "dev", "level": int(levels[i])}
+    return out
+
+
+def all_ads(scratch: Path = m3.DEFAULT_SCRATCH) -> dict[str, dict]:
+    """The labelled ads, the applied ones and the dev ads. A dev ad that is also an application stays an Applied ad (one text, one embedding, the application
+    snapshot) and gains the dev `level`; its dev text is kept as `devRaw` for the stored i1 key. A dev ad that is a rated holdout ad is refused (none is)."""
+    labelled, dev = labelled_ads(scratch), dev_ads(scratch)
+    out = dict(labelled)
+    for i, d in dev.items():
+        if i not in out:
+            out[i] = {**d, "devRaw": d["rawDescription"]}
+        elif out[i]["set"] == "applied":
+            out[i] = {**out[i], "level": d["level"], "devRaw": d["rawDescription"], "alsoDev": True}
+        else:
+            raise SystemExit("refused: a dev ad is also a rated holdout ad")
+    return out
+
+
 def role_classes(scratch: Path, ads: dict[str, dict]) -> dict[str, str]:
-    """{id: target|adjacent|other} from the stored i1 pass 1 for the holdout ads that have an answer. The classification key hashes the raw text."""
+    """{id: target|adjacent|other} from the stored i1 pass 1 (rated holdout ads: i1-store-p1, dev ads: dev-store-i1) for the ads that have an answer.
+    The classification key hashes the raw text."""
     from match_engine import fit3
     fit3.use_candidate(CANDIDATE)
-    holdout = {i: {"posting": {**m3.posting_of(a), "description": a["rawDescription"]}} for i, a in ads.items() if a["set"] == "holdout"}
-    doc = json.loads((scratch / m3.OUT_DIR / STORE_PASS).read_text(encoding="utf-8"))
-    return {i: bars.role_class(a) for i, a in bars.anchored_pass(doc, holdout).items()}
+    out = {}
+    parts = (("holdout", STORE_PASS, {i: a["rawDescription"] for i, a in ads.items() if a["set"] == "holdout"}),
+             ("dev", DEV_STORE, {i: a["devRaw"] for i, a in ads.items() if "devRaw" in a}))
+    for _, store, raw in parts:
+        part = {i: {"posting": {**m3.posting_of(ads[i]), "description": text}} for i, text in raw.items()}
+        if part:
+            doc = json.loads((scratch / m3.OUT_DIR / store).read_text(encoding="utf-8"))
+            out.update({i: bars.role_class(a) for i, a in bars.anchored_pass(doc, part).items()})
+    return out
 
 
 # --- evaluation (pure functions, numpy only) ---------------------------------------------------------------------------------------------------
@@ -242,6 +281,53 @@ def verdict_of(ci: list[float]) -> str:
     return "INCONCLUSIVE"
 
 
+HOLDOUT_LEVEL = {"apply": 2, "maybe": 1, "fit_skip": 0, "elig_skip": 0}  # task 2b: the owner's verdict as an ordinal level (every skip is 0)
+
+
+def _spearman(x: list, y: list) -> float | None:
+    """Spearman with tied values sharing their average rank; None below 3 items or when either side is constant. x may hold tuples (a combined key)."""
+    import numpy as np
+    from check_fit3_dev import _avg_ranks
+    if len(x) < 3:
+        return None
+    rx, ry = np.asarray(_avg_ranks(x)), np.asarray(_avg_ranks(y))
+    if rx.std() == 0 or ry.std() == 0:
+        return None
+    return float(np.corrcoef(rx, ry)[0, 1])
+
+
+def level_metrics(ids: list[str], levels: dict[str, int], classes, scores) -> dict | None:
+    """Task 2: Spearman between the owner's level and (a) the role class alone, (b) role class then the signal; gain = (b) - (a). `ids` may repeat (resample).
+    Ads without a stored role class are left out. A missing score counts 0.0 (it does not occur on the dev ads: the training set is the holdout Apply/FIT-skip ads)."""
+    use = [i for i in ids if classes.get(i) in CLASS_RANK]
+    y = [levels[i] for i in use]
+    base = _spearman([CLASS_RANK[classes[i]] for i in use], y)
+    tie = _spearman([(CLASS_RANK[classes[i]], scores[i] if scores.get(i) is not None else 0.0) for i in use], y)
+    if base is None or tie is None:
+        return None
+    return {"rhoRoleOnly": base, "rhoTieBreak": tie, "gain": tie - base}
+
+
+def level_task(ads: dict[str, dict], classes, scores, companies, levels: dict[str, int]) -> dict:
+    ids = sorted(i for i in levels if i in ads)
+    groups: dict[str, list[str]] = {}
+    for i in ids:
+        if classes.get(i) in CLASS_RANK:
+            groups.setdefault(companies[i], []).append(i)
+    stat = lambda sample: level_metrics(sample, levels, classes, scores)  # noqa: E731
+    point = stat([i for g in groups.values() for i in g])
+    out = {"ads": len(ids), "withStoredRoleClass": sum(len(g) for g in groups.values()), "companyGroups": len(groups),
+           "roleClassCounts": {c: sum(1 for g in groups.values() for i in g if classes[i] == c) for c in CLASS_RANK}, "point": point}
+    if point is None:
+        return {**out, "verdict": "NOT EVALUABLE"}
+    boot = bootstrap(groups, set(), stat)
+    within = {}  # descriptive: the signal against the level inside each role class (no gain, no CI)
+    for c in CLASS_RANK:
+        members = [i for g in groups.values() for i in g if classes[i] == c]
+        within[c] = {"n": len(members), "spearman": _spearman([scores[i] if scores.get(i) is not None else 0.0 for i in members], [levels[i] for i in members])}
+    return {**out, "withinClassSpearmanOfSignal": within, "bootstrap": boot, "verdict": verdict_of(boot["ci95"]["gain"])}
+
+
 def evaluate(ads: dict[str, dict], classes: dict[str, str], vectors: dict[str, list]) -> dict:
     labels = {i: a["label"] for i, a in ads.items()}
     companies = {i: normal_company(a["company"]) for i, a in ads.items()}
@@ -268,7 +354,10 @@ def evaluate(ads: dict[str, dict], classes: dict[str, str], vectors: dict[str, l
     return {"counts": {k: sum(1 for i in rated if labels[i] == k) for k in ("apply", "maybe", "fit_skip", "elig_skip")} | {"applied": sum(1 for i in ads if labels[i] == "applied")},
             "unscoredAds": sum(1 for v in scores.values() if v is None), "point": point, "bootstrap": boot,
             "verdict": verdict_of(boot["ci95"]["gain"]),
-            "applied": {"embeddingOnlyAucVsFitSkip": applied_auc(sorted(sub))["auc"], "bootstrap": bootstrap(a_groups, a_marked, applied_auc)}}
+            "applied": {"embeddingOnlyAucVsFitSkip": applied_auc(sorted(sub))["auc"], "bootstrap": bootstrap(a_groups, a_marked, applied_auc)},
+            # task 2 (amendment 1): graded owner levels. 2a = the dev ads' `overall` (the verdict of task 2); 2b = the holdout-v1 verdicts as an ordinal level (reported under the same rule, not the verdict).
+            "task2a_devOverall": level_task(ads, classes, scores, companies, {i: a["level"] for i, a in ads.items() if "level" in a}),
+            "task2b_holdoutVerdictLevel": level_task(ads, classes, scores, companies, {i: HOLDOUT_LEVEL[a["label"]] for i, a in rated.items()})}
 
 
 # --- embed -------------------------------------------------------------------------------------------------------------------------------------
@@ -287,7 +376,7 @@ def run_embed(args) -> int:
     if out_path.exists():
         print(f"{out_path} exists: refusing to overwrite stored vectors", file=sys.stderr)
         return 2
-    ads = labelled_ads(args.scratch)
+    ads = all_ads(args.scratch)
     ids = sorted(ads)
     texts = [embed_text(ads[i]) for i in ids]
     # The estimate and the call both use the scratch copies of the AI settings and ledger; only the key store is the real one (read only).
@@ -321,7 +410,7 @@ def run_embed(args) -> int:
 
 
 def run_evaluate(args) -> int:
-    ads = labelled_ads(args.scratch)
+    ads = all_ads(args.scratch)
     classes = role_classes(args.scratch, ads)
     doc = json.loads((args.scratch / OUT_NAME / "vectors.json").read_text(encoding="utf-8"))
     vectors = doc["vectors"]
