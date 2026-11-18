@@ -594,3 +594,124 @@ def _tier_usage(usage: dict) -> dict:
             "service_tier_actual": usage.get("service_tier_actual"),
             "flex_unavailable": bool(usage.get("flex_unavailable")),
             "http_statuses": usage.get("http_statuses"), "http_errors": usage.get("http_errors")}
+
+
+# --- embeddings (W5 step 4, an experiment: no pipeline step calls this) -------------------------------------------------------------------------
+
+EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_FEATURE = "embedding-experiment"
+# No tokenizer in the venv: a conservative character cap stands in for the model's 8191-token input limit. An input above it is truncated
+# and reported by embed(), never silently.
+EMBED_MAX_CHARS = 16000
+EMBED_BATCH = 64
+
+
+class EmbedInputRefused(ValueError):
+    """embed() takes a list of cleaned public ad texts and nothing else; anything shaped otherwise is refused before the gate."""
+
+
+def _check_embed_texts(texts) -> list[str]:
+    if not isinstance(texts, list) or not texts:
+        raise EmbedInputRefused("embed() takes a non-empty list of ad texts (strings)")
+    for item in texts:
+        if type(item) is not str or not item.strip():  # a dict or object (a profile, a label, an application) is never a text
+            raise EmbedInputRefused("embed() takes only non-empty strings: cleaned public ad text")
+    return texts
+
+
+def embed_prepare(texts, max_chars: int = EMBED_MAX_CHARS) -> tuple[list[str], list[int]]:
+    """(texts cut to max_chars, indexes of the texts that were cut). The caller reports the cut ones."""
+    _check_embed_texts(texts)
+    cut = [i for i, t in enumerate(texts) if len(t) > max_chars]
+    return [t[:max_chars] for t in texts], cut
+
+
+def embed_preflight(texts, model: str = EMBEDDING_MODEL, max_chars: int = EMBED_MAX_CHARS):
+    """ai_gate.check() for embed() with these texts (no service tier: embeddings have none); records nothing, calls nothing."""
+    cleaned, _ = embed_prepare(texts, max_chars)
+    name, model, base_url = call_target("openai", model)
+    return ai_gate.check(name, model, sum(len(t) for t in cleaned), base_url=base_url, feature=EMBEDDING_FEATURE, output_tokens=0)
+
+
+def _embed_http(provider: Provider, batch: list[str], model: str, usage: dict, credential: Credential | None) -> list[list[float]]:
+    import requests
+
+    headers = {"Content-Type": "application/json"}
+    if credential and credential.api_key:
+        headers["Authorization"] = f"Bearer {credential.api_key}"
+    body = {"model": model, "input": batch, "encoding_format": "float"}
+    last_error = ""
+    for attempt in range(1, HTTP_RETRIES + 1):
+        usage["attempts"] = usage.get("attempts", 0) + 1
+        try:
+            response = requests.post(f"{provider.base_url}/embeddings", headers=headers, json=body, timeout=HTTP_TIMEOUT)
+        except requests.RequestException as exc:
+            last_error = secret_store.mask(str(exc))[:200]
+            usage.setdefault("http_statuses", []).append("connection error")
+            time.sleep(2.0 * attempt)
+            continue
+        usage.setdefault("http_statuses", []).append(response.status_code)
+        detail = "" if response.ok else _error_detail(response)
+        if not response.ok:
+            usage.setdefault("http_errors", []).append({"status": response.status_code, "message": detail})
+        if response.status_code in (401, 403):
+            raise LlmUnavailable(f"{provider.name} rejected the key ({response.status_code})" + (f": {detail}" if detail else ""))
+        if response.status_code == 400:
+            raise LlmRefused(f"{provider.name} rejected the embedding request (400)" + (f": {detail}" if detail else ""))
+        if response.status_code in (408, 429, 500, 502, 503, 529):
+            last_error = f"HTTP {response.status_code}" + (f": {detail}" if detail else "")
+            time.sleep(2.0 * attempt)
+            continue
+        if not response.ok:
+            raise LlmUnavailable(f"{provider.name} HTTP {response.status_code}: {detail}")
+        data = response.json()
+        rows = sorted(data.get("data") or [], key=lambda r: r.get("index", 0))
+        vectors = [r.get("embedding") for r in rows]
+        if len(vectors) != len(batch) or not all(isinstance(v, list) and v for v in vectors):
+            raise LlmRefused(f"{provider.name} returned {len(vectors)} vectors for {len(batch)} inputs")
+        counted = data.get("usage") or {}
+        tokens = counted.get("prompt_tokens", counted.get("total_tokens"))
+        if isinstance(tokens, int):
+            usage.update(input_tokens=tokens, output_tokens=0)
+        return vectors
+    raise LlmUnavailable(f"{provider.name} unreachable after {HTTP_RETRIES} tries: {last_error}")
+
+
+def embed(texts, *, confirm: bool, max_usd: float, model: str = EMBEDDING_MODEL, max_chars: int = EMBED_MAX_CHARS) -> dict:
+    """Embed cleaned public ad texts. {"vectors": [[float]], "truncated": [indexes cut to max_chars], "inputTokens": int, "costUsd": float}.
+
+    Only a list of strings is accepted (no profile, label or application field can be passed). Sends nothing without confirm=True and a positive
+    max_usd; refuses when the gate's estimate for ALL texts is above max_usd; every request is reserved through ai_gate (feature
+    `embedding-experiment`, provider openai, no service tier, zero output tokens) and recorded with the tokens the provider reports."""
+    if confirm is not True:
+        raise LlmRefused("embed() sends ad text to the provider only with confirm=True")
+    if not isinstance(max_usd, (int, float)) or isinstance(max_usd, bool) or max_usd <= 0:
+        raise LlmRefused("embed() needs a positive max_usd")
+    cleaned, cut = embed_prepare(texts, max_chars)
+    name, model, resolved, credential = _target("openai", model)
+    decision = ai_gate.check(name, model, sum(len(t) for t in cleaned), base_url=resolved.base_url, feature=EMBEDDING_FEATURE, output_tokens=0)
+    if not decision.allowed:
+        ai_gate.record_refused(decision)
+        raise GuardrailRefused(decision.reason)
+    if (decision.row.get("cost") or 0) > max_usd:
+        raise LlmRefused(f"estimated cost {decision.row.get('cost'):.6f} USD is above max_usd {max_usd}")
+    vectors: list[list[float]] = []
+    tokens, cost = 0, 0.0
+    for start in range(0, len(cleaned), EMBED_BATCH):
+        batch = cleaned[start:start + EMBED_BATCH]
+        try:
+            ticket = ai_gate.reserve(name, model, sum(len(t) for t in batch), base_url=resolved.base_url, feature=EMBEDDING_FEATURE, output_tokens=0)
+        except ai_gate.AiRefused as exc:
+            raise GuardrailRefused(exc.reason) from exc
+        usage: dict = {}
+        try:
+            vectors.extend(_embed_http(resolved, batch, model, usage, credential))
+        except Exception as exc:
+            ticket.finish(False, input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"), error=secret_store.mask(str(exc)),
+                          attempts=usage.get("attempts"), http_statuses=usage.get("http_statuses"), http_errors=usage.get("http_errors"))
+            raise
+        ticket.finish(True, input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"), attempts=usage.get("attempts"),
+                      http_statuses=usage.get("http_statuses"), http_errors=usage.get("http_errors"))
+        tokens += int(usage.get("input_tokens") or 0)
+        cost += float(ticket.price.get("inputPerMTok") or 0) * int(usage.get("input_tokens") or 0) / 1e6
+    return {"vectors": vectors, "truncated": cut, "inputTokens": tokens, "costUsd": round(cost, 8)}

@@ -55,6 +55,15 @@
       "source": "https://developers.openai.com/api/docs/pricing (short context, up to 272K input tokens)",
       "checkedAt": "2026-11-09"
     },
+    {
+      "provider": "openai",
+      "model": "text-embedding-3-small",
+      "class": "paid",
+      "inputPerMTok": 0.02,
+      "outputPerMTok": 0,
+      "source": "https://developers.openai.com/api/docs/models/text-embedding-3-small (USD 0.02 per 1M input tokens; embeddings have no output tokens; price given and verified on that page by the owner brief of W5 step 4)",
+      "checkedAt": "2026-11-18"
+    },
     { "provider": "openai", "model": "*", "class": "paid", "inputPerMTok": null, "outputPerMTok": null, "source": null, "checkedAt": null },
     { "provider": "deepseek", "model": "*", "class": "paid", "inputPerMTok": null, "outputPerMTok": null, "source": null, "checkedAt": null },
     { "provider": "openrouter", "model": "*", "class": "paid", "inputPerMTok": null, "outputPerMTok": null, "source": null, "checkedAt": null },
