@@ -5,7 +5,7 @@ src/data/competencies/<family>.json) and quotes the ad; code anchors every answe
 keyword or alias. The classification call sends the ad and the two lists only: no candidate data.
 
 Anchoring (fail closed, each drop counted; amendment A1.1): a role or competency name outside its list and a mark other than core / secondary are
-dropped; an item in the wrong list is moved; a secondary mark without a verbatim ad quote is dropped, a core mark without one falls to secondary
+dropped; an item in the wrong list is dropped and counted `misplaced` (A2.5); a secondary mark without a verbatim ad quote is dropped, a core mark without one falls to secondary
 with status UNKNOWN (never dropped, never sent to the matcher). Role class comes from the config, never from the model's label; the title can only
 demote, and only when it names a SPECIFIC role of the Other list with a quote found in the ad title (A1.5), never promote.
 
@@ -28,7 +28,7 @@ from job_fingerprint import job_fingerprint
 from . import competencies as comp_lists
 from .constants import ENGINE_VERSION, MAX_UNKNOWN_MUST_RATIO, MIN_CONFIDENCE, PARTIAL_FACTOR
 from .fit import credit
-from .fit3_industry import compare as compare_industries
+from .fit3_industry import Industries, compare as compare_industries
 from .fit2 import _normal_status
 from .normalize import normalize, quote_in
 from .verify import NOT_EVIDENCED
@@ -142,7 +142,7 @@ def classify(posting: dict, *, confirmed: bool, provider: str | None, model: str
 
 def anchor(raw: dict, description: str, roles: dict[str, str], comps: list[dict], title: str = "") -> dict:
     """The model's reply made safe by code: {role, competencies, dropped, modelMarks}. See the module docstring for what is dropped, moved, demoted."""
-    dropped = {"role": 0, "title": 0, "unknownId": 0, "badMark": 0, "unquoted": 0, "duplicate": 0, "moved": 0, "coreDemoted": 0}
+    dropped = {"role": 0, "title": 0, "unknownId": 0, "badMark": 0, "unquoted": 0, "duplicate": 0, "misplaced": 0, "coreDemoted": 0}
     by_name = {normalize(n): n for n in roles}
     ids = {c["id"] for c in comps}
     fn = raw.get("function") if isinstance(raw.get("function"), dict) else {}
@@ -164,11 +164,10 @@ def anchor(raw: dict, description: str, roles: dict[str, str], comps: list[dict]
                 return
         marks[cid] = {"id": cid, "mark": mark, "quote": quote, **({"demotedFromCore": True} if quote is None else {})}
 
-    # A competency id in a role slot is moved to the competencies as a secondary mark (A1.1 a); it needs a verbatim ad quote.
-    for name, quote in ((fn.get("role"), fn_quote), (ttl.get("role"), str(ttl.get("quote") or "").strip())):
-        if isinstance(name, str) and name in ids and normalize(name) not in by_name and quote_in(quote, description):
-            put(name, "secondary", quote)
-            dropped["moved"] += 1
+    # A2.5: an item in the wrong list (a competency id in a role slot) is dropped and counted, never moved.
+    for name in (fn.get("role"), ttl.get("role")):
+        if isinstance(name, str) and name in ids and normalize(name) not in by_name:
+            dropped["misplaced"] += 1
 
     entries = raw.get("competencies") or []
     for entry in entries:
@@ -178,10 +177,8 @@ def anchor(raw: dict, description: str, roles: dict[str, str], comps: list[dict]
         cid, mark = entry.get("id"), entry.get("mark")
         quote = str(entry.get("quote") or "").strip()
         if cid not in ids:
-            role_name = by_name.get(normalize(cid)) if isinstance(cid, str) else None
-            if role_name and fn_name is None and quote_in(quote, description):  # A1.1 b: a role in the competency list fills an empty function slot
-                fn_name, fn_quote = role_name, quote
-                dropped["moved"] += 1
+            if isinstance(cid, str) and normalize(cid) in by_name:  # A2.5: a role name in the competency list is dropped, not moved
+                dropped["misplaced"] += 1
             else:
                 dropped["unknownId"] += 1
             continue
@@ -266,7 +263,7 @@ def seniority(ad_level: str | None, candidate_level: str | None) -> dict:
 def fit3(anchored: dict | None, answers: list[dict] | None = None, ad_industries=None, candidate_industries=None, *,
          ad_level: str | None = None, candidate_level: str | None = None) -> dict:
     """The Fit 3 block of one posting. `anchored` = anchor() of the stored reply; `answers` = matcher rows over matcher_requirements();
-    `ad_industries` / `candidate_industries` = sets of table domain ids (fit3_industry), for the domain only."""
+    `ad_industries` = a set of table domain ids, `candidate_industries` = fit3_industry.Industries (A2.4), for the domain only."""
     anchored = anchored or {"role": {"class": None}, "competencies": [], "dropped": {}}
     units = _units(anchored, answers)
     core, secondary = ([u for u in units if u["ask"] == m] for m in MARKS)
@@ -291,14 +288,16 @@ def fit3(anchored: dict | None, answers: list[dict] | None = None, ad_industries
               "resolvedSecondary": sum(1 for u in secondary if resolved(u))}
     for status in ("MET", "PARTIAL", "CONTRADICTED", NOT_EVIDENCED, "UNKNOWN"):
         counts[status] = sum(u["status"] == status for u in core)
-    domain, shared = compare_industries(ad_industries, candidate_industries)
+    cand = candidate_industries or Industries()
+    domain, shared = compare_industries(ad_industries, cand)
     return {
         "scoringVersion": SCORING_VERSION,
         "engineVersion": ENGINE_VERSION,
         "promptVersion": PROMPT_VERSION,
         "role": anchored["role"],
         "domain": domain,
-        "domainDetail": {"adIndustries": sorted(ad_industries or ()), "sharedIndustries": shared, "candidateIndustryCount": len(candidate_industries or ())},
+        "domainDetail": {"adIndustries": sorted(ad_industries or ()), "sharedIndustries": shared, "candidateIndustryCount": len(cand.confirmed),
+                         "candidateComplete": cand.complete, "preferredIndustries": sorted(cand.preferred)},
         "requirements": {"units": units, "coreCounts": counts, "coreCoverage": _text(core_cov), "secondaryCoverage": _text(sec_cov),
                          "coreCoverageV1": _text(_coverage(core, True)), "secondaryCoverageV1": _text(_coverage(secondary, True)),
                          "coverage": None if core_cov is None else float(round(core_cov, 4))},
@@ -338,7 +337,7 @@ def rank(rows: list[dict], variant: str = "v0") -> dict:
 
 
 def stored_fit3(job: dict, posting: dict, store: dict | None, roles: dict[str, str], comps: list[dict],
-                candidate_industries: set[str] | None = None, candidate_level: str | None = None) -> dict | None:
+                candidate_industries: Industries | None = None, candidate_level: str | None = None) -> dict | None:
     """The block for a job from the stored entry {"reply": raw, "answers": [rows] | None}, or None when the ad has no stored classification."""
     from .fit3_industry import ad_industries
     entry = (store or {}).get(classification_key(posting, roles, comps))

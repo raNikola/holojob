@@ -7,8 +7,8 @@
 --ids FILE      the ads read for holdout v1 (default holdout-ids-18.json); --denominator N (default 20) is the holdout size, an ad that has no text counts as not evaluable.
 --pass1 / --pass2  files under <scratch>/fit3/ (a classification, or a store merged with the matcher answers by merge_fit3_answers.py). B1-B4 need only the
                 replies; B5 needs `answers` (UNKNOWN units put an ad into the Insufficient group, so B5 is then "not evaluable" or fails honestly).
---labels FILE   the owner's labels, kept OUTSIDE the repo: {"apply": [company substrings], "fitSkip": [...], "expectTarget": [...], "expectOther": [...]}.
-                Matched case-insensitively against the ad's company. An APPLY ad with no text (Monzo) is simply not in the top 6.
+--labels FILE   the owner's labels, kept OUTSIDE the repo: {"apply": [ad ids or company substrings], "fitSkip": [...], "expectTarget": [...], "expectOther": [...]}.
+                An id is matched exactly, a substring case-insensitively against the company. An APPLY ad with no text (Monzo) is a miss (A2.1).
 
 A failed bar is reported as failed. A bar that cannot be computed is "not evaluable", never a pass. Console: counts, ad ids and public company names.
 """
@@ -30,15 +30,10 @@ NOT_AVAILABLE = "not available"
 
 
 def load_ads(scratch: Path, ids: list[str]) -> dict[str, dict]:
-    """{id: {"posting", "facts"}} for the ads that have text in the scratch view."""
-    view = json.loads((scratch / "jobs" / "discovered_jobs.json").read_text(encoding="utf-8"))
-    rows = {j.get("jobId"): j for j in (view.get("jobs") if isinstance(view, dict) else view) or []}
-    out = {}
-    for i in ids:
-        row = rows.get(i)
-        if isinstance(row, dict) and (row.get("description") or "").strip():
-            out[i] = {"posting": m3.posting_of({**row, "jobId": i}), "facts": row.get("llmFacts") or {}}
-    return out
+    """{id: {"posting", "facts"}} for the ads that have text, read as measure_fit3 reads them (the list, then the history ledger)."""
+    import measure_extraction_variance as mv
+    rows, _missing = mv.load_jobs(scratch, ids)
+    return {r["jobId"]: {"posting": m3.posting_of(r), "facts": r.get("llmFacts") or {}} for r in rows if (r.get("description") or "").strip()}
 
 
 def anchored_pass(doc: dict, ads: dict[str, dict]) -> dict[str, dict]:
@@ -64,7 +59,8 @@ def core_ids(a: dict) -> set[str]:
 
 
 def match_company(ads: dict[str, dict], needle: str) -> list[str]:
-    return [i for i, ad in ads.items() if needle.lower() in (ad["posting"]["company"] or "").lower()]
+    """A label is an ad id (exact) or a company substring, case-insensitive. An id that has no text in the scratch view matches nothing."""
+    return [i for i, ad in ads.items() if needle == i or (needle not in ads and needle.lower() in (ad["posting"]["company"] or "").lower())]
 
 
 def b1(p1, p2, denominator):
@@ -121,7 +117,8 @@ def b4(passes):
 
 
 def b5(p, ads, labels, candidate_industries, candidate_level):
-    """PRELIMINARY. V0 and V1 side by side; neither is selected."""
+    """PRELIMINARY. V0 and V1 side by side; neither is selected. A2.1: an APPLY ad in the insufficient group is a miss for criterion 1 and is left out of
+    the criterion-2 pairs. A2.2: a pass with no matcher answers is NOT EVALUABLE."""
     from match_engine import fit3
     from match_engine.fit3_industry import ad_industries
     apply_ids = {n: match_company(ads, n) for n in labels.get("apply") or []}
@@ -129,18 +126,22 @@ def b5(p, ads, labels, candidate_industries, candidate_level):
     rows = [{"id": i, "fit3": fit3.fit3(a["anchored"], a["answers"], ad_industries(ads[i]["posting"], ads[i]["facts"]), candidate_industries,
                                        ad_level=ads[i]["facts"].get("seniority"), candidate_level=candidate_level)} for i, a in p.items()]
     out = {"applyLabels": len(apply_ids), "applyWithText": sum(1 for v in apply_ids.values() if v), "adsRanked": len(rows)}
+    if not any(r["fit3"]["requirements"]["coreCounts"]["answered"] for r in rows):
+        return {**out, "verdict": "NOT EVALUABLE", "why": "this pass carries no matcher answers"}
     for variant in fit3.VARIANTS:
         ranked = fit3.rank(rows, variant)
         order = [r["id"] for r in ranked["ranked"]]
         keys = {r["id"]: fit3.order_key(r["fit3"], variant) for r in ranked["ranked"]}
         applies = [i for ids in apply_ids.values() for i in ids]
+        pairable = [a for a in applies if a in keys]  # an APPLY ad in the insufficient group (or without text) is out of the pairs
         top = sum(1 for i in applies if i in order[:TOP])
-        above = [s for s in skip_ids if s in keys and any(a not in keys or keys[s] <= keys[a] for a in applies if a != s)]
+        above = [s for s in skip_ids if s in keys and any(keys[s] <= keys[a] for a in pairable if a != s)]
         crit1 = top >= 3
-        out[variant] = {"applyInTop6": top, "of": len(apply_ids), "fitSkipAboveApply": above, "rankedGroup": len(order),
-                        "insufficientGroup": len(ranked["insufficient"]), "criterion1": crit1, "criterion2": not above,
+        out[variant] = {"applyInTop6": top, "of": len(apply_ids), "applyInsufficientOrNoText": len(apply_ids) - len(pairable),
+                        "fitSkipAboveApply": above, "rankedGroup": len(order), "insufficientGroup": len(ranked["insufficient"]),
+                        "criterion1": crit1, "criterion2": not above,
                         "verdict": "PASS (PRELIMINARY)" if crit1 and not above else "FAIL (PRELIMINARY)"}
-    out["verdict"] = "NOT EVALUABLE" if not any(r["fit3"]["requirements"]["coreCounts"]["answered"] for r in rows) else "see v0 / v1, none selected"
+    out["verdict"] = "see v0 / v1, none selected"
     return out
 
 

@@ -45,6 +45,9 @@ def test_role_config_is_the_declared_lists():
         "Technical Project Manager", "IT Project Manager", "Software Delivery Manager"]
     assert {n for n, c in ROLES.items() if c == "adjacent"} == {"Project Manager", "Program Manager", "Engineering Manager"}
     assert ROLES["Other"] == "other"
+    assert {n for n, c in ROLES.items() if c == "other"} == {  # A2.3: exact names only, no generic "Engineer" or "Manager"
+        "Other", "Backend Engineer", "Frontend Engineer", "Full-Stack Engineer", "Software Engineer", "QA Engineer", "Data Engineer", "DevOps Engineer",
+        "Account Executive"}
 
 
 def test_the_shipped_competency_list_is_the_closed_list():
@@ -71,7 +74,7 @@ def test_class_comes_from_the_config_not_from_the_model_label():
     assert anchored(r)["role"]["class"] == "adjacent"
 
 
-SPECIFIC = {**ROLES, "Software Engineer": "other"}
+SPECIFIC = ROLES
 
 
 def test_title_demotes_only_with_a_specific_other_role_and_a_title_quote():
@@ -84,6 +87,19 @@ def test_title_demotes_only_with_a_specific_other_role_and_a_title_quote():
         got = anchored(reply(title=t), roles=SPECIFIC, title=title)
         assert got["role"]["class"] == "target" and got["role"]["demotedByTitle"] is False, t
     assert anchored(reply(title={"role": "nonsense"}))["dropped"]["title"] == 1
+
+
+def test_titles_that_only_contain_an_other_name_are_not_demoted():
+    # A2.3: the model can only name a listed role; none of these titles is one, so none demotes, whatever the quote
+    for title, named in (("Software Engineering Manager", "Software Engineering Manager"), ("Data Product Manager", "Data Product Manager"),
+                         ("Technical Program Manager, Data Platform", "Technical Program Manager, Data Platform")):
+        got = anchored(reply(title={"role": named, "quote": title}), title=title)
+        assert got["role"]["class"] == "target" and got["role"]["demotedByTitle"] is False, title
+    # and every listed Other name does demote when quoted from the title
+    for name in ("Backend Engineer", "Frontend Engineer", "Full-Stack Engineer", "Software Engineer", "QA Engineer", "Data Engineer", "DevOps Engineer",
+                 "Account Executive"):
+        assert anchored(reply(title={"role": name, "quote": name}), title=f"{name} II")["role"]["demotedByTitle"] is True, name
+    assert "Engineer" not in ROLES and "Manager" not in ROLES
 
 
 def test_title_never_promotes():
@@ -101,7 +117,7 @@ def test_competency_marks_are_dropped_unless_listed_and_marked_a_core_without_qu
         "junk"])
     a = anchored(r)
     assert [(m["id"], m["mark"], m["quote"] is None) for m in a["competencies"]] == [("fintech", "secondary", True), ("stakeholder-management", "core", False)]
-    assert a["dropped"] == {"role": 0, "title": 0, "unknownId": 1, "badMark": 2, "unquoted": 0, "duplicate": 1, "moved": 0, "coreDemoted": 1}
+    assert a["dropped"] == {"role": 0, "title": 0, "unknownId": 1, "badMark": 2, "unquoted": 0, "duplicate": 1, "misplaced": 0, "coreDemoted": 1}
 
 
 def test_a_secondary_without_a_quote_is_dropped():
@@ -118,17 +134,16 @@ def test_a_quoteless_core_gets_no_matcher_row_and_stays_unknown():
     assert unit["status"] == "UNKNOWN" and unit["ask"] == "secondary" and unit["demotedFromCore"] is True
 
 
-def test_misplaced_items_are_moved_to_the_right_list():
-    # a competency id in the function slot becomes a secondary mark; the role is then not available
+def test_misplaced_items_are_dropped_and_counted_not_moved():
+    # a competency id in the function slot: the role is not available, nothing is added to the competencies
     a = anchored(reply(function={"role": "roadmapping", "quote": "own the product roadmap"}, competencies=[]))
-    assert a["role"]["class"] is None and a["dropped"]["moved"] == 1
-    assert [(m["id"], m["mark"]) for m in a["competencies"]] == [("roadmapping", "secondary")]
-    # a role name in the competency list fills an empty function slot, with its verified quote
+    assert a["role"]["class"] is None and a["dropped"]["misplaced"] == 1 and a["competencies"] == []
+    # a role name in the competency list is dropped, even when the function slot is empty
     b = anchored(reply(function={"role": "", "quote": ""}, competencies=[{"id": "Product Manager", "mark": "core", "quote": "own the product roadmap"}]))
-    assert b["role"]["class"] == "target" and b["role"]["quote"] == "own the product roadmap" and b["dropped"]["moved"] == 1 and b["competencies"] == []
-    # ... but never over a function the model already gave
-    c = anchored(reply(competencies=[{"id": "Project Manager", "mark": "core", "quote": "own the product roadmap"}]))
-    assert c["role"]["class"] == "target" and c["dropped"]["moved"] == 0 and c["dropped"]["unknownId"] == 1
+    assert b["role"]["class"] is None and b["dropped"]["misplaced"] == 1 and b["competencies"] == [] and b["dropped"]["unknownId"] == 0
+    c = anchored(reply(competencies=[{"id": "Project Manager", "mark": "core", "quote": "own the product roadmap"}, {"id": "made-up", "mark": "core"}]))
+    assert c["role"]["class"] == "target" and c["dropped"]["misplaced"] == 1 and c["dropped"]["unknownId"] == 1
+    assert "moved" not in c["dropped"]
 
 
 def test_a_bad_frame_is_an_error():
@@ -217,21 +232,39 @@ def test_domain_by_synonym_from_the_stored_industry_fields():
     assert ind.ad_industries({**posting, "description": "x"}, {"domain": "Insurance"}) == {"insurance"}
     intel = {"historyEntries": [{"role": "r", "domains": ["telecom", "nonsense"]}, {"role": "s"}],
              "jobFitPreferences": {"preferredIndustries": ["SaaS", "gardening"]}, "experienceMap": {"domainsWorkedIn": ["Banking"]}}
-    assert ind.candidate_industries(intel) == {"telecom", "saas", "banking"} and ind.candidate_industries(None) == set()
-    assert ind.compare({"banking"}, {"banking", "saas"}) == ("match", ["banking"])
-    assert ind.compare({"healthcare"}, {"saas"}) == ("different", [])
-    assert ind.compare(set(), {"saas"})[0] == "unknown" and ind.compare({"saas"}, set())[0] == "unknown"
+    got = ind.candidate_industries(intel)  # A2.4: preferences are display only; one history entry has no domains, so the set is incomplete
+    assert got.confirmed == {"telecom", "banking"} and got.preferred == {"saas"} and got.complete is False
+    assert ind.candidate_industries(None) == ind.Industries()
+    full = ind.candidate_industries({"historyEntries": [{"domains": ["telecom"]}, {"domains": ["saas", "x"]}]})
+    assert full.confirmed == {"telecom", "saas"} and full.complete is True
+    assert ind.candidate_industries({"historyEntries": [{"domains": ["nonsense"]}]}).complete is False  # no table domain: not complete
+    assert ind.candidate_industries({"experienceMap": {"domainsWorkedIn": ["Banking"]}}).complete is False  # no history at all
+    complete, partial = ind.Industries(frozenset({"saas"}), True), ind.Industries(frozenset({"saas"}), False)
+    assert ind.compare({"banking"}, ind.Industries(frozenset({"banking", "saas"}), False)) == ("match", ["banking"])  # match is valid when incomplete
+    assert ind.compare({"healthcare"}, complete) == ("different", [])
+    assert ind.compare({"healthcare"}, partial)[0] == "unknown"  # different needs a complete candidate set
+    assert ind.compare({"healthcare"}, ind.Industries(frozenset({"saas"}), False, frozenset({"healthcare"})))[0] == "unknown"  # preferences never count
+    assert ind.compare(set(), complete)[0] == "unknown" and ind.compare({"saas"}, ind.Industries())[0] == "unknown"
 
 
 def test_domain_does_not_read_the_matcher_statuses():
     dom = {"id": "x", "provisional": True, "text": "Fintech", "kind": "domain", "importance": "must", "status": "CONTRADICTED", "strength": 0,
            "quoteVerified": True, "postingQuote": "Fintech"}
     assert fit3.fit3(anchored(), [dom])["domain"] == "unknown"
-    b = fit3.fit3(anchored(), None, {"banking"}, {"banking"})
-    assert b["domain"] == "match" and b["domainDetail"] == {"adIndustries": ["banking"], "sharedIndustries": ["banking"], "candidateIndustryCount": 1}
+    from match_engine.fit3_industry import Industries
+    b = fit3.fit3(anchored(), None, {"banking"}, Industries(frozenset({"banking"}), False, frozenset({"saas"})))
+    assert b["domain"] == "match" and b["domainDetail"] == {"adIndustries": ["banking"], "sharedIndustries": ["banking"], "candidateIndustryCount": 1,
+                                                            "candidateComplete": False, "preferredIndustries": ["saas"]}
+    assert fit3.fit3(anchored(), None, {"banking"}, Industries(frozenset({"saas"}), True))["domain"] == "different"
+    assert fit3.fit3(anchored(), None, {"banking"}, Industries(frozenset({"saas"}), False))["domain"] == "unknown"
 
 
 # ---- ordering ----
+
+def I(domains, complete=False):
+    from match_engine.fit3_industry import Industries
+    return Industries(frozenset(domains), complete)
+
 
 def row(rid, role_cls, domain, core_status, *, secondary=None):
     marks = [{"id": "stakeholder-management", "mark": "core", "quote": "q"}]
@@ -239,7 +272,7 @@ def row(rid, role_cls, domain, core_status, *, secondary=None):
         marks.append({"id": "roadmapping", "mark": "secondary", "quote": "q"})
     a = {"role": {"class": role_cls}, "competencies": marks, "dropped": {}}
     answers = [answer("stakeholder-management", core_status, 4)] + ([answer("roadmapping", secondary, 4)] if secondary else [])
-    ad, cand = ({"healthcare"}, {"saas"}) if domain == "different" else ({"saas"}, {"saas"}) if domain == "match" else (None, {"saas"})
+    ad, cand = ({"healthcare"}, I({"saas"}, True)) if domain == "different" else ({"saas"}, I({"saas"}, True)) if domain == "match" else (None, I({"saas"}, True))
     return {"id": rid, "fit3": fit3.fit3(a, answers, ad, cand)}
 
 
@@ -320,8 +353,9 @@ def test_shadow_adds_fit3_from_a_stored_entry_and_changes_nothing_else(tmp_path)
     entry = {"reply": reply(), "answers": [answer("stakeholder-management", "MET", 4)]}
     (tmp_path / "fit3.json").write_text(json.dumps({"version": 1, "entries": {fit3.classification_key(posting, roles, comps): entry}}))
 
+    from match_engine.fit3_industry import Industries
     again = ShadowEngine(CANDIDATE, judge=False, provider="t", model="m", cache_path=cache, complete=Fake(), workers=1, candidate_level="lead",
-                         candidate_industries={"saas"})
+                         candidate_industries=Industries(frozenset({"saas"}), True))
     [with3] = again.apply([a_job()])
     block = with3["engineShadow"].pop("fit3")
     assert block["scoringVersion"] == "3.0" and block["role"]["class"] == "target"
@@ -340,7 +374,7 @@ def test_stored_fit3_reads_the_industry_from_the_ad_facts_and_the_title_from_the
     job = {**a_job(), "llmFacts": {"domain": "Insurance", "seniority": "mid"}}
     posting = {"id": "a", "title": "Software Engineer", "company": "Acme", "description": AD}
     store = {fit3.classification_key(posting, roles, comps): {"reply": reply(title={"role": "Software Engineer", "quote": "Software Engineer"}), "answers": None}}
-    block = fit3.stored_fit3(job, posting, store, roles, comps, {"banking"}, "senior")
+    block = fit3.stored_fit3(job, posting, store, roles, comps, I({"banking"}, True), "senior")
     assert block["domain"] == "different" and block["role"]["demotedByTitle"] is True and block["seniority"]["distance"] == 1
 
 
@@ -399,6 +433,7 @@ def test_merge_puts_the_matcher_rows_into_the_classification_entry():
 
 def test_bars_checker_computes_b1_to_b5_on_synthetic_passes():
     import check_fit3_bars as bars
+    from match_engine.fit3_industry import Industries
 
     def ad(i, company):
         return {"posting": {"id": i, "title": "Product Manager", "company": company, "description": AD}, "facts": {}}
@@ -413,12 +448,42 @@ def test_bars_checker_computes_b1_to_b5_on_synthetic_passes():
     p1 = {"a1": entry("Product Manager"), "a2": entry("Other"), "a3": entry("Product Manager")}
     p2 = {"a1": entry("Product Manager"), "a2": entry("Other"), "a3": entry("Product Manager", "never said")}
     labels = {"apply": ["alpha", "monzo"], "fitSkip": ["beta"], "expectTarget": ["alpha"], "expectOther": ["beta"]}
-    out = bars.evaluate(ads, [p1, p2], labels, {"saas"}, "senior", 20)
+    out = bars.evaluate(ads, [p1, p2], labels, Industries(frozenset({"saas"}), True), "senior", 20)
     assert out["B1"]["flips"] == 0 and out["B1"]["verdict"] == "PASS" and out["B2"]["verdict"] == "PASS"
     assert out["B3"]["medianOverlap"] == 1.0 and out["B3"]["shareWithCore"] == [1.0, 0.6667] and out["B3"]["verdict"] == "FAIL"  # a3's core fell in pass 2
     assert out["B4"]["passes"][1] == {"modelMarks": 3, "secondaryDropped": 0, "coreDemoted": 1, "share": 0.3333} and out["B4"]["verdict"] == "FAIL"
     first = out["B5"][0]["v0"]
     assert first["applyInTop6"] == 1 and first["of"] == 2 and first["fitSkipAboveApply"] == [] and first["verdict"] == "FAIL (PRELIMINARY)"  # 1 of 2 in the top 6
-    swapped = bars.evaluate(ads, [{**p1, "a1": entry("Other"), "a2": entry("Product Manager")}], {**labels, "expectTarget": [], "expectOther": []}, set(), None, 20)
+    swapped = bars.evaluate(ads, [{**p1, "a1": entry("Other"), "a2": entry("Product Manager")}], {**labels, "expectTarget": [], "expectOther": []}, Industries(), None, 20)
     assert swapped["B5"][0]["v0"]["fitSkipAboveApply"] == ["a2"]
-    assert bars.evaluate(ads, [p1], labels, set(), None, 20)["B1"]["verdict"] == "NOT EVALUABLE"
+    assert bars.evaluate(ads, [p1], labels, Industries(), None, 20)["B1"]["verdict"] == "NOT EVALUABLE"
+
+
+def test_b5_a2_apply_in_the_insufficient_group_is_a_miss_and_leaves_the_pairs_and_no_answers_is_not_evaluable():
+    import check_fit3_bars as bars
+    from match_engine.fit3_industry import Industries
+
+    def ad(i, company):
+        return {"posting": {"id": i, "title": "Product Manager", "company": company, "description": AD}, "facts": {}}
+
+    ads = {"a1": ad("a1", "Alpha Corp"), "a2": ad("a2", "Beta Ltd"), "a3": ad("a3", "Gamma Inc")}
+
+    def entry(answers, role="Product Manager"):
+        return {"anchored": fit3.anchor(reply(function={"role": role, "quote": "own the product roadmap"},
+                                              competencies=[{"id": "stakeholder-management", "mark": "core", "quote": "Strong stakeholder management"}]),
+                                        AD, ROLES, COMPS, "PM"), "answers": answers}
+
+    met = [answer("stakeholder-management", "MET", 4)]
+    # Alpha (APPLY) has no resolved core unit: insufficient. Beta (FIT-skip) and Gamma (APPLY) are ranked.
+    p = {"a1": entry([answer("stakeholder-management", "UNKNOWN", 0)]), "a2": entry(met, "Other"), "a3": entry(met)}
+    labels = {"apply": ["alpha", "gamma"], "fitSkip": ["beta"]}
+    out = bars.b5(p, ads, labels, Industries(), None)["v0"]
+    assert out["applyInTop6"] == 1 and out["applyInsufficientOrNoText"] == 1 and out["criterion1"] is False
+    assert out["fitSkipAboveApply"] == [] and out["criterion2"] is True  # Alpha is out of the pairs; Beta (Other tier) is below Gamma
+    # an APPLY that is insufficient must not make criterion 2 fail: with only that APPLY and a ranked skip, there is no pair
+    only = bars.b5({"a1": p["a1"], "a2": p["a2"]}, ads, {"apply": ["alpha"], "fitSkip": ["beta"]}, Industries(), None)["v0"]
+    assert only["fitSkipAboveApply"] == [] and only["criterion2"] is True and only["criterion1"] is False
+    # a pass with no matcher answers is NOT EVALUABLE, not FAIL
+    bare = {i: entry(None) for i in ads}
+    got = bars.b5(bare, ads, labels, Industries(), None)
+    assert got["verdict"] == "NOT EVALUABLE" and "v0" not in got
