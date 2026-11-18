@@ -2223,3 +2223,15 @@ Owner brief, size L, no provider call, no re-read of ads. Role caps (unrelated t
 - **Tools (owner-run, nothing was called).** `scripts/measure_fit3.py` (the classification read: estimate first, `--max-usd`, `--confirm`, scratch dir, ad + closed lists only), then `measure_holdout_matcher.py --fit3` (layer b, own output folder `matcher-fit3`). Privacy inventory updated.
 - **Not done / open.** No paid run yet, so Fit 3 coverage and stability are unmeasured; the bars for a stability pass and a holdout check must be written before they run. The `answers` of a `fit3.json` entry are not yet merged from the matcher output by a tool (until then layer (b) reads UNKNOWN in shadow). The candidate's seniority is not in the candidate dict: `ShadowEngine(candidate_level=...)` is empty in production until it is wired.
 - **1.x unchanged** (the stop rule): see the report; with no `fit3.json` no row carries `fit3`, so the 598-ad re-run cannot show the wiring. That is covered by `tests/python/test_fit3.py` (a temp-dir store: `fit3` appears, every other field is byte-identical).
+
+## Fit design: agreed decisions (2026-11-18, owner-confirmed)
+
+The standing design of Professional Fit, recorded once so later briefs can stay short. Implementation status is in the W3, W4 and W5 entries above.
+
+- **Role Fit judges the function from the responsibilities, not the title.** Domain Fit is a separate signal. Eligibility is a separate gate.
+- **Role classes.** Target: Product Manager, Technical Product Manager, Product Owner, Technical Program Manager, Technical Project Manager, IT Project Manager, Software Delivery Manager. Adjacent: generic Project / Program Manager, Engineering Manager. Other: hands-on engineering and unrelated functions.
+- **Title.** A title may only demote an obviously unrelated role, never promote.
+- **Unknown never lowers Fit.** Unknown or unconfirmed moves nothing; only confirmed cases Block.
+- **Closed lists.** Fit is built on closed lists the model classifies into, anchored in code (listed ids, verbatim ad quotes). It is not built on keyword or alias mapping of ad sentences.
+- **Two requirement layers.** What the ad asks (weight only) and what the CV proves (matcher statuses with verified quotes) stay apart; a mark is never proof.
+- **Holdout v2 stays blind** until the final validation.
