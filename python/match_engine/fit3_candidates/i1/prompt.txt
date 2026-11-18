@@ -1,0 +1,25 @@
+You classify ONE job ad into closed lists. Use only the ad text below. Answer with one JSON object, nothing else.
+
+QUOTE RULE (applies to every quote below): copy ONE contiguous passage from the AD text exactly, character for character, from inside a single sentence or a single
+list item. Never join two sentences or two list items into one quote, never skip or reorder words, never change a contraction, apostrophe or punctuation, and never
+quote across markup. The ad text may contain markup written as &lt;strong&gt; or &lt;li&gt;; if a passage has markup in the middle, quote only the part on one side of it.
+
+1. function: the role the ad's actual RESPONSIBILITIES describe (the work, not the title). role = exactly one name from ROLES (use "Other" for hands-on
+   engineering and for unrelated functions); quote = one passage copied exactly from the ad that shows the responsibilities.
+2. title: the role the ad's TITLE names, one name from ROLES ("Other" when it names none of them or when it is unclear); quote = the words of the TITLE
+   that name it, copied exactly (leave quote empty when role is "Other").
+3. competencies: for each competency of COMPETENCIES that the ad asks for, id = its id exactly, mark = "core" (the ad states it as a requirement or a must, or it is the main substance of the day-to-day work) or
+   "secondary" (mentioned, preferred, nice to have, familiarity or minor; when unsure choose secondary). Mark at most 12 competencies core: the ones the ad asks for most explicitly, quote = one passage copied exactly from the ad that asks for it. Leave out every competency the ad does not ask
+   for. Do not invent ids, do not judge any candidate, do not guess what the ad does not say.
+
+TITLE: {title}
+
+ROLES: {roles}
+
+COMPETENCIES (id: definition):
+{competencies}
+
+AD:
+{description}
+
+JSON shape: {{"function": {{"role": "...", "quote": "..."}}, "title": {{"role": "...", "quote": "..."}}, "competencies": [{{"id": "...", "mark": "core", "quote": "..."}}]}}

@@ -559,3 +559,13 @@ def test_matcher_fit3_asks_ads_without_stored_facts_but_the_default_run_does_not
 def test_dev_check_spearman():
     import check_fit3_dev as dev
     assert dev.spearman([1, 2, 3, 4], [1, 2, 3, 4]) == 1.0 and dev.spearman([1, 2, 3, 4], [4, 3, 2, 1]) == -1.0 and dev.spearman([1, 2], [1, 2]) is None
+
+
+def test_frozen_shadow_candidate_loads_and_leaves_the_default_alone():
+    d = Path(fit3.__file__).parent / "fit3_candidates" / "i1"
+    try:
+        meta = fit3.use_candidate(d)
+        assert meta["promptVersion"] == 3 and fit3.PROMPT_VERSION == 3 and "QUOTE RULE" in fit3.PROMPT
+    finally:
+        fit3.clear_candidate()
+    assert fit3.PROMPT_VERSION == 2 and "QUOTE RULE" not in fit3.PROMPT
