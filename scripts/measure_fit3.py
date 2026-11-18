@@ -80,6 +80,7 @@ def run(jobs: list[dict], provider, model, guard, workers: int) -> tuple[dict, d
 
     roles, comps = fit3.load_roles(), fit3.closed_competencies()
     failures: Counter = Counter()
+    seen: set = set()
 
     def gated(prompt, schema=None, model=None, provider=None):
         worst = guard.reserve(prompt)
@@ -92,10 +93,16 @@ def run(jobs: list[dict], provider, model, guard, workers: int) -> tuple[dict, d
         posting = posting_of(job)
         try:
             reply = fit3.classify(posting, confirmed=True, provider=provider, model=model, complete=gated, roles=roles, comps=comps)
-        except GuardrailRefused:
-            return None, "refused"
-        except (LlmUnavailable, LlmRefused, fit3.Fit3Error):
-            return None, "failed"
+        except GuardrailRefused as exc:
+            return None, f"refused:{type(exc).__name__}"
+        except (LlmUnavailable, LlmRefused, fit3.Fit3Error) as exc:
+            # Class name for the counter; the first 160 characters of the message go to stderr once per distinct text (the payload is a public ad
+            # and the closed lists, no candidate data), so config, schema, privacy and provider failures can be told apart.
+            note = f"{type(exc).__name__}: {str(exc)[:160]}"
+            if note not in seen:
+                seen.add(note)
+                print(f"  first failure of this kind, ad {posting['id']}: {note}", file=sys.stderr)
+            return None, f"failed:{type(exc).__name__}"
         return (fit3.classification_key(posting, roles, comps), {"reply": reply, "answers": None}), None
 
     entries = {}

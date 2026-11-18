@@ -27,6 +27,8 @@ import measure_fit3 as m3  # noqa: E402
 TOP = 6
 MAX_FLIPS, MIN_MEDIAN_OVERLAP, MIN_CORE_SHARE, MAX_MISSING_QUOTES = 2, 0.80, 0.90, 0.25
 NOT_AVAILABLE = "not available"
+A3_ROLE_SKIPS = ("Nebius", "VinDynamics")  # plan Addendum A3 (the owner's grouping of the seven FIT-skips)
+A3_INDUSTRIAL_SKIPS = ("Form Energy", "HII", "Severn Trent", "Oracle", "Parker")
 
 
 def load_ads(scratch: Path, ids: list[str]) -> dict[str, dict]:
@@ -137,9 +139,15 @@ def b5(p, ads, labels, candidate_industries, candidate_level):
         top = sum(1 for i in applies if i in order[:TOP])
         above = [s for s in skip_ids if s in keys and any(keys[s] <= keys[a] for a in pairable if a != s)]
         crit1 = top >= 3
+
+        def inverted(group):  # A3, reporting only: APPLY/SKIP pairs inverted (a tie counts as above) out of the pairs of this group
+            skips = [i for n in group for i in match_company(ads, n) if i in keys]
+            return {"inverted": sum(1 for s in skips for a in pairable if a != s and keys[s] <= keys[a]), "pairs": len(skips) * len(pairable),
+                    "skipsAboveApply": sorted(s for s in skips if any(keys[s] <= keys[a] for a in pairable if a != s))}
         out[variant] = {"applyInTop6": top, "of": len(apply_ids), "applyInsufficientOrNoText": len(apply_ids) - len(pairable),
                         "fitSkipAboveApply": above, "rankedGroup": len(order), "insufficientGroup": len(ranked["insufficient"]),
                         "criterion1": crit1, "criterion2": not above,
+                        "a3Split": {"roleOrRequirementSkips": inverted(A3_ROLE_SKIPS), "industrialSkips": inverted(A3_INDUSTRIAL_SKIPS)},
                         "verdict": "PASS (PRELIMINARY)" if crit1 and not above else "FAIL (PRELIMINARY)"}
     out["verdict"] = "see v0 / v1, none selected"
     return out

@@ -44,7 +44,8 @@ MARKS = ("core", "secondary")
 MARK_IMPORTANCE = {"core": "must", "secondary": "preferred"}
 LEVELS = {"junior": 1, "mid": 2, "senior": 3, "lead": 4, "head": 5}
 KINDS = ("skill", "domain", "experience", "education", "certification", "other")
-SCHEMA = {
+# The provider path sends this as response_format.json_schema, which needs a name (plan Amendment A4); not strict: the reply shape is unchanged.
+SCHEMA = {"name": "fit3_classification", "schema": {
     "type": "object",
     "properties": {
         "function": {"type": "object", "properties": {"role": {"type": "string"}, "quote": {"type": "string"}}},
@@ -53,7 +54,7 @@ SCHEMA = {
             "id": {"type": "string"}, "mark": {"type": "string"}, "quote": {"type": "string"}}}},
     },
     "required": ["function", "title", "competencies"],
-}
+}}
 
 PROMPT = """You classify ONE job ad into closed lists. Use only the ad text below. Answer with one JSON object, nothing else.
 

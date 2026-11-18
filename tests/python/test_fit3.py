@@ -487,3 +487,9 @@ def test_b5_a2_apply_in_the_insufficient_group_is_a_miss_and_leaves_the_pairs_an
     bare = {i: entry(None) for i in ads}
     got = bars.b5(bare, ads, labels, Industries(), None)
     assert got["verdict"] == "NOT EVALUABLE" and "v0" not in got
+
+
+def test_the_schema_is_named_for_the_provider():
+    # OpenAI answered 400 "Missing required parameter: response_format.json_schema.name" (plan Amendment A4): the wrapper needs a name and the schema.
+    assert fit3.SCHEMA["name"] and fit3.SCHEMA["schema"]["type"] == "object"
+    assert fit3.SCHEMA["schema"]["required"] == ["function", "title", "competencies"]
