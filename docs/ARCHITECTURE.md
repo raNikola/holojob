@@ -346,25 +346,26 @@ Carried over from the former "Next, in order" list (nothing else from it is stil
   (`data/*` except `data/examples`) and also drops `.env*`, `.claude`, `claude-config`, `docs`, `tests`, `fixtures`,
   so no private path enters any layer. Old intermediate frontend layers from earlier builds still hold
   `data/applications`, `data/ai` and so on; `podman image prune` removes them.
-- **Fast deploy without a rebuild (fish).** For quick iteration, copy into the running container. It is lost on
-  `podman-compose up -d --force-recreate`, on an `up` after a rebuild and on `podman rm`, so run
-  `podman-compose build` before any recreate; `cp` also never deletes a file removed from the repo
-  (`podman exec holojob rm <path>`). Changes to `.env`, dependencies, the Dockerfile or `requirements.txt` always
-  need the full build.
+- **Deploy = image rebuild from a tagged, pushed commit. No hot patches** (owner decision 2026-11-18). Never `podman cp` / `tar | podman cp`
+  into the running container, never edit files inside it: such a change is not in any image, is lost on the next recreate and leaves the running code
+  different from the commit the source link points at. Every deploy is:
 
-      # frontend only (no restart: dist is streamed per request); Node 20 as in the Dockerfile
-      cd /srv/holojob
-      podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run build
-      podman exec holojob rm -rf /app/dist
-      podman cp dist holojob:/app/dist
+      # 1. the commit is pushed to origin and the tree it is built from is clean (a `git archive <commit>` export is the safest context:
+      #    the build context otherwise includes untracked files)
+      # 2. keep the running image as rollback
+      podman tag localhost/holojob:latest localhost/holojob:rollback-<date>
+      # 3. normal compose build, commit baked in (never an exported or copied filesystem)
+      env HOLOJOB_COMMIT=<full commit sha> podman-compose build
+      # 4. tag the new image like the git tag, back up the data file the release rewrites, recreate from /srv/holojob
+      podman tag localhost/holojob:latest localhost/holojob:<release-tag>
+      podman-compose -f /srv/holojob/docker-compose.yml up -d --force-recreate --no-build
+      # 5. checks: health 200 (use an allowed Host header: -H "Host: localhost:3073" http://127.0.0.1:3073/api/pipeline/health),
+      #    row and Blocked counts, band counts equal to the release report, no new line in data/ai/usage-ledger.jsonl.
+      #    Roll back on any failure: podman tag localhost/holojob:rollback-<date> localhost/holojob:latest, then the same recreate.
 
-      # python only (spawned per call, no restart)
-      tar --exclude=__pycache__ -C python -cf - . | podman cp - holojob:/app/python
-
-      # Node scripts/ or src/ (server code): restart keeps the container filesystem
-      tar -C scripts -cf - . | podman cp - holojob:/app/scripts
-      tar -C src -cf - . | podman cp - holojob:/app/src
-      podman restart holojob
+  A re-score after a deploy runs inside the container (`podman exec holojob ...`) or through the app's own route, never by copying code in.
+  The image holds no tests and no private data (`.dockerignore`); the data stays in the `./data` bind mount, so a rebuild changes no data.
+  A frontend or Python change is a rebuild too (about 10 s with a warm layer cache, see above), so there is no reason to skip it.
 
 ### Tests (full text)
 
