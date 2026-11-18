@@ -16,6 +16,9 @@ estimate and the hard cap, and stops.
                 is sent as one requirement row (kind experience, importance nice, its own quote), no prompt change. The default --out is then
                 <scratch>/matcher-resp, never <scratch>/matcher: that folder is the step-2 input and is not overwritten. Rows map back to
                 their r:<hash> unit key through postingQuote (match_engine.fit21.quote_key).
+--fit3          the matcher over the Fit 3 competency rows (W5): each core / secondary competency anchored from <scratch>/fit3/classification.json
+                (measure_fit3.py) is one requirement row (id = the competency id, text = its definition, its ad quote). Default --out <scratch>/matcher-fit3,
+                never <scratch>/matcher. Layer (b) of Fit 3: a competency with no answer stays UNKNOWN.
 --max-usd X     required; the runner's hard stop (engine_sample counts every call at its worst case).
 
 It runs python/calibration/engine_sample.py (match_posting only: not the fit judge, no score, no label, no production cache) with
@@ -96,12 +99,36 @@ def facts_from_extract7(scratch: Path, items: list[dict], facts: dict) -> tuple[
     return out_items, out_facts, {"noResponsibilities": none, "responsibilityRows": sum(len(f["requirements"]) for f in out_facts.values())}
 
 
-def prepare(scratch: Path, out: Path, ids: list[str], real_data: Path, responsibilities: bool = False) -> dict:
+def facts_from_fit3(scratch: Path, items: list[dict], facts: dict) -> tuple[list[dict], dict, dict]:
+    """The scratch ads with `requirements` replaced by the anchored Fit 3 competency rows (fit3.matcher_requirements)."""
+    from match_engine import fit3
+    path = scratch / "fit3" / "classification.json"
+    if not path.exists():
+        raise SystemExit(f"no {path}: run scripts/measure_fit3.py --confirm first (the owner's paid read)")
+    entries = json.loads(path.read_text(encoding="utf-8"))["entries"]
+    roles, comps = fit3.load_roles(), fit3.closed_competencies()
+    out_items, out_facts, none = [], {}, 0
+    for item in items:
+        posting = {"id": item["jobId"], "title": item.get("title") or "", "company": item.get("company") or "", "description": item.get("description") or ""}
+        entry = entries.get(fit3.classification_key(posting, roles, comps))
+        rows = fit3.matcher_requirements(fit3.anchor(entry["reply"], posting["description"], roles, comps), comps) if entry else []
+        if not rows:
+            none += 1
+            continue
+        out_items.append(item)
+        out_facts[item["jobId"]] = {**facts[item["jobId"]], "requirements": rows}
+    return out_items, out_facts, {"noFit3Rows": none, "fit3Rows": sum(len(f["requirements"]) for f in out_facts.values())}
+
+
+def prepare(scratch: Path, out: Path, ids: list[str], real_data: Path, responsibilities: bool = False, fit3_rows: bool = False) -> dict:
     from calibration.enrich_sample import FACTS_NAME
     from competency_mapping import load_remap
     items, facts, counts = facts_from_scratch(scratch, ids)
     if responsibilities:
         items, facts, extra = facts_from_extract7(scratch, items, facts)
+        counts = {**counts, **extra, "prepared": len(items)}
+    if fit3_rows:
+        items, facts, extra = facts_from_fit3(scratch, items, facts)
         counts = {**counts, **extra, "prepared": len(items)}
     mc.write_private(out / "review-items.json", json.dumps({"version": 1, "items": items}, ensure_ascii=False))
     mc.write_private(out / FACTS_NAME, json.dumps({"version": 1, "facts": facts}, ensure_ascii=False))
@@ -117,6 +144,7 @@ def main(argv=None) -> int:
     p.add_argument("--out", type=Path, default=None)
     p.add_argument("--max-usd", type=float, required=True)
     p.add_argument("--responsibilities", action="store_true", help="ask the matcher about the extract-7 responsibilities (default --out <scratch>/matcher-resp)")
+    p.add_argument("--fit3", action="store_true", help="ask the matcher about the anchored Fit 3 competency rows (default --out <scratch>/matcher-fit3)")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--data-dir", type=Path, default=None, help="the real data dir (only the remap and, for a run, the key store)")
     p.add_argument("--confirm", action="store_true", help="REQUIRED to call the provider")
@@ -129,9 +157,12 @@ def main(argv=None) -> int:
     if scratch == real or real in scratch.parents:
         print("the scratch dir is, or sits inside, the real data dir: refused", file=sys.stderr)
         return 2
-    out = (args.out or scratch / ("matcher-resp" if args.responsibilities else "matcher")).resolve()
-    if args.responsibilities and out == (scratch / "matcher").resolve():
-        print("--responsibilities must not write to <scratch>/matcher (the step-2 input): refused", file=sys.stderr)
+    if args.fit3 and args.responsibilities:
+        print("--fit3 and --responsibilities are separate runs", file=sys.stderr)
+        return 2
+    out = (args.out or scratch / ("matcher-fit3" if args.fit3 else "matcher-resp" if args.responsibilities else "matcher")).resolve()
+    if (args.responsibilities or args.fit3) and out == (scratch / "matcher").resolve():
+        print("--responsibilities / --fit3 must not write to <scratch>/matcher (the step-2 input): refused", file=sys.stderr)
         return 2
     if real in out.parents or out == real:
         print("--out is inside the real data dir: refused", file=sys.stderr)
@@ -153,7 +184,7 @@ def main(argv=None) -> int:
 
     ids = json.loads(args.ids.read_text(encoding="utf-8"))
     ids = ids.get("ids") if isinstance(ids, dict) else ids
-    counts = prepare(scratch, out, list(dict.fromkeys(i for i in ids or [] if isinstance(i, str))), real, args.responsibilities)
+    counts = prepare(scratch, out, list(dict.fromkeys(i for i in ids or [] if isinstance(i, str))), real, args.responsibilities, args.fit3)
     print(json.dumps({"prepared": counts, "out": str(out)}))
     profile = json.loads(es.PROFILE_PATH.read_text(encoding="utf-8"))
     intelligence = json.loads(es.INTELLIGENCE_PATH.read_text(encoding="utf-8"))

@@ -41,6 +41,7 @@ from .evidence_select import mode_of
 from .fit import score
 from .fit2 import UnitResolver, fit2
 from .fit21 import fit21
+from . import fit3 as fit3_mod
 from .gates import CHEAP_GATES, PASS, cheap_gate_report, gate_results
 from .matcher import EVIDENCE_FIELDS, cache_key, match_posting, overlay_answers, posting_from_job
 
@@ -100,7 +101,8 @@ class ShadowEngine:
     def __init__(self, candidate: dict, *, judge: bool, provider: str, model: str | None,
                  cache_path: Path | None = None, limit: int | None = DEFAULT_LIMIT,
                  complete=complete_json, workers: int = 4, identity: tuple[str, list[str]] | None = None,
-                 select=None, compact=None, remap: dict[str, str] | None = None, memory=None, unit_resolver=None, role_family: str | None = None):
+                 select=None, compact=None, remap: dict[str, str] | None = None, memory=None, unit_resolver=None, role_family: str | None = None,
+                 fit3_path: Path | None = None, candidate_level: str | None = None):
         self.candidate = candidate
         self.memory = memory
         # redact.identity_of(profile), for the matcher's redaction; never sent.
@@ -117,6 +119,14 @@ class ShadowEngine:
         self.provider = provider
         self.model = model
         self.cache_path = cache_path or CACHE_PATH
+        # Fit 3 (shadow): stored classifications read from fit3.json next to the engine cache; nothing here calls a model for it.
+        self.fit3_path = fit3_path or self.cache_path.with_name("fit3.json")
+        self.candidate_level = candidate_level
+        self._fit3_store: dict = {}
+        if self.fit3_path.exists():
+            self._fit3_store = (json.loads(self.fit3_path.read_text(encoding="utf-8")) or {}).get("entries") or {}
+        self._fit3_roles = fit3_mod.load_roles() if self._fit3_store else {}
+        self._fit3_comps = fit3_mod.closed_competencies("product") if self._fit3_store else []
         self.limit = limit
         self.workers = workers
         self._complete = complete
@@ -241,6 +251,8 @@ class ShadowEngine:
         if from_cache and self.judge:
             ai_gate.record_cache_hit(self.provider, self.model, feature="evidence-matcher", job_id=_key(job))
         gates = gate_results(job, self.candidate, output["gates"], output["requirements"])
+        block3 = (fit3_mod.stored_fit3(job, posting, self._fit3_store, self._fit3_roles, self._fit3_comps,
+                                       output["requirements"], self.candidate_level) if self._fit3_store else None)
         return {
             "engineVersion": ENGINE_VERSION,
             **{k: output[k] for k in ("promptVersion", "profileVersion", "evidenceVersion", "answersVersion",
@@ -251,6 +263,7 @@ class ShadowEngine:
             "fit2": fit2(output["requirements"], self.units, (job.get("llmFacts") or {}).get("responsibilities")),
             "fit21": fit21(output["requirements"], self.units, (job.get("llmFacts") or {}).get("responsibilities"),
                            auxiliary=self._auxiliary(job)),
+            **({"fit3": block3} if block3 else {}),
             "warnings": output.get("warnings") or [],
             "provider": output.get("provider"),
             "model": output.get("model"),

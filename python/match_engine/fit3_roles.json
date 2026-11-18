@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "_note": "Fit 3 role list (shadow only). Role names only: nothing about the candidate. The model names a role from this list; code derives the class from it.",
+  "target": [
+    "Product Manager",
+    "Technical Product Manager",
+    "Product Owner",
+    "Technical Program Manager",
+    "Technical Project Manager",
+    "IT Project Manager",
+    "Software Delivery Manager"
+  ],
+  "adjacent": [
+    "Project Manager",
+    "Program Manager",
+    "Engineering Manager"
+  ],
+  "other": [
+    "Other"
+  ]
+}
