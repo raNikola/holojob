@@ -80,13 +80,14 @@ export function viewport(wide = true) {
 export const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)) })
 
 /** A fresh mount of `file`'s default export under the profile provider, with `stored` in the browser. Modules are new each time, as after a page load. */
+// showNotOnBoard is on by default here: these tests use absent and closed rows as ordinary rows; the default-off behaviour has its own tests.
 export async function mountScreen({ stored = [], file = '../../../src/components/jobs/JobDiscoveryScreen.jsx', props = {}, keepStorage = false, filters = {} } = {}) {
   vi.resetModules()
   const storage = await import('../../../src/modules/jobs/jobStorage.js')
   if (!keepStorage) {
     localStorage.clear()
     sessionStorage.clear() // the screen's open tab
-    storage.saveJobs({ meta: {}, jobs: stored, filters: { ...storage.getDefaultJobsState().filters, ...filters }, importedAt: 'first' }, localStorage)
+    storage.saveJobs({ meta: {}, jobs: stored, filters: { ...storage.getDefaultJobsState().filters, showNotOnBoard: true, ...filters }, importedAt: 'first' }, localStorage)
   }
   const { default: Screen } = await import(/* @vite-ignore */ file)
   const { ProfileProvider } = await import('../../../src/context/ProfileContext.jsx')

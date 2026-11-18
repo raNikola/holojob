@@ -64,7 +64,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
   const chips = activeFilterChips(filters)
   const salary = salaryRangeOf(filters)
   // Chips of filters that are not rendered (score filters without scores) are not counted in the toggle.
-  const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider', 'company', 'hideNoLongerListed', 'showOffList'].includes(c.key)))
+  const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider', 'company', 'hideNoLongerListed', 'showNotOnBoard', 'showOffList'].includes(c.key)))
   const priorityOptions = useMemo(
     () => countByValue(jobs, 'priority', SHOWN_PRIORITIES).map(({ value, count }) => ({ value, label: `${value} (${count})` })),
     [jobs],
@@ -236,6 +236,13 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                   checked={Boolean(filters.showOffList)}
                   onChange={(v) => onChange({ showOffList: v })}
                   disabledNote={offListDisabledNote}
+                />
+                <Checkbox
+                  className=""
+                  label="Show ads not on the company's board"
+                  help={tip('showNotOnBoard', "Show ads not on the company's board")}
+                  checked={Boolean(filters.showNotOnBoard)}
+                  onChange={(v) => onChange({ showNotOnBoard: v })}
                 />
                 <Checkbox
                   className=""

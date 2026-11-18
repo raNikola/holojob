@@ -66,7 +66,7 @@ export function classBadges(row) {
 }
 
 /** The notices above the list, each `{ kind, text, retry? }`. A list that is not whole never goes without saying so. */
-export function listNotices({ mode, status, error, meta, rows, copies, hasServerOnly }) {
+export function listNotices({ mode, status, error, meta, rows, copies, hasServerOnly, unlisted = 0 }) {
   const notices = []
   if (status === 'error') {
     const shown = rows ? 'Showing the last list loaded and what is saved in this browser' : 'Showing what is saved in this browser'
@@ -76,6 +76,9 @@ export function listNotices({ mode, status, error, meta, rows, copies, hasServer
     if (!rows && status === 'error') notices.push({ kind: 'error', text: INCOMPLETE_ROUTE })
     else if (!rows) notices.push({ kind: 'info', text: `Loading the full list. ${INCOMPLETE_ROUTE.split(':')[0]} until it arrives.` })
     else if (meta?.filteredFile !== 'ok') notices.push({ kind: 'error', text: INCOMPLETE_FILTERED })
+  }
+  if (mode === 'active' && rows && unlisted > 0) {
+    notices.push({ kind: 'info', text: `${unlisted} ${unlisted === 1 ? 'ad is' : 'ads are'} not on the company's board in the latest complete check and left out of this list. They are in All (filter Not in latest search or Closed).` })
   }
   if (rows && copies?.state === 'waiting') notices.push({ kind: 'info', text: 'Copies of the same ad are shown separately until your applications have loaded.' })
   if (rows && copies?.state === 'failed') notices.push({ kind: 'error', text: 'Your applications could not be loaded: copies of the same ad are shown separately, and a row with an application may be missing from Active.' })

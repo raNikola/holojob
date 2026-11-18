@@ -25,7 +25,7 @@ import { ALL_SEARCH_NOTE, EXPORT_NOTE, OFF_LIST_NOTE, applyAllControls, classOpt
 import JobDetailDrawer from './JobDetailDrawer'
 import JobEmptyState from './JobEmptyState'
 import { appliedJobIds } from '../../modules/applications/appliedFilter'
-import { filterJobs, getUniqueProviders, getUniqueSites, listedJobs, onListJobs } from '../../modules/jobs/jobFilters'
+import { filterJobs, getUniqueProviders, getUniqueSites, hiddenAsNotOnBoard, listedJobs, onListJobs } from '../../modules/jobs/jobFilters'
 import { computeJobStats } from '../../modules/jobs/jobStats'
 import { selectionFor, toggleAllSelected, toggleSelected } from '../../modules/jobs/jobTableModel'
 import { probePipelineApi, runTailor } from '../../modules/jobs/pipelineRunner'
@@ -189,10 +189,13 @@ export default function JobDiscoveryScreen() {
   const providers = useMemo(() => getUniqueProviders(baseRows), [baseRows])
   const effectiveFilters = useMemo(() => withProfileSalaryDefaults(state.filters, profile?.basicProfile), [state.filters, profile?.basicProfile])
   const filteredJobs = useMemo(() => {
-    if (useComposed) return filterComposed(shownRows, effectiveFilters, { appliedJobIds: appliedIds })
+    // All is the full list (its class filters find the ads the board no longer lists); only Active leaves them out by default.
+    if (useComposed) return filterComposed(shownRows, listMode === 'all' ? { ...effectiveFilters, showNotOnBoard: true } : effectiveFilters, { appliedJobIds: appliedIds })
     // Until the route answers, Active still leaves closed ads out. Demo mode and no API have no All list to find them in.
     return filterJobs(routeEnabled ? viewJobs.filter((job) => !isClosedAd(job)) : viewJobs, effectiveFilters, { appliedJobIds: appliedIds })
-  }, [useComposed, shownRows, viewJobs, effectiveFilters, appliedIds, routeEnabled])
+  }, [useComposed, listMode, shownRows, viewJobs, effectiveFilters, appliedIds, routeEnabled])
+  // Ads the default list leaves out because the board no longer lists them (the notice says how many, and where to find them).
+  const notOnBoardHidden = useMemo(() => (useComposed && listMode === 'active' ? shownRows.filter((job) => hiddenAsNotOnBoard(job, effectiveFilters)).length : 0), [useComposed, listMode, shownRows, effectiveFilters])
   // Changing a filter starts the selection and the paging again; a sort, Show more or a row's new status do not.
   const filterKey = useMemo(
     () => JSON.stringify([effectiveFilters, listMode, [...listClasses].sort(), seenRecentlyOnly]),
@@ -200,7 +203,7 @@ export default function JobDiscoveryScreen() {
   )
   const notices = routeEnabled ? listNotices({
     mode: listMode, status: allAds.status, error: allAds.error, meta: allAds.meta, rows: allAds.rows, copies: composed?.copies,
-    hasServerOnly: Boolean(composedRows?.some((row) => row.serverOnly)),
+    hasServerOnly: Boolean(composedRows?.some((row) => row.serverOnly)), unlisted: notOnBoardHidden,
   }) : []
   const filtersShown = useComposed ? { ...effectiveFilters, showOffList: false } : effectiveFilters
   const selectedJobIds = selectionFor(selection, filterKey)

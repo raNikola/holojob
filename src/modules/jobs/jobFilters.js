@@ -66,6 +66,21 @@ export function isNoLongerListed(job) {
 }
 
 /**
+ * An ad the company's board does not list in the latest complete check: the route's class `absent` or `closed`, or on a stored row `isAbsent` / `isClosed`
+ * (python/job_scoring/job_history.py). Owner decision 2026-11-18: the default list and its order leave these out; the filter `showNotOnBoard` brings them back
+ * (All holds them either way). An ad the owner has worked on (saved, applied, or with an application) stays.
+ */
+export function isNotOnBoard(job) {
+  const gone = job?.class ? job.class === 'absent' || job.class === 'closed' : job?.isClosed === true || job?.isAbsent === true
+  if (!gone) return false
+  const worked = job?.status === 'saved' || job?.status === 'applied_manually' || Boolean(job?.applicationTracking)
+  return !worked
+}
+
+/** Whether the filters hide this ad as not on the board. */
+export const hiddenAsNotOnBoard = (job, filters = {}) => !filters?.showNotOnBoard && isNotOnBoard(job)
+
+/**
  * A stored row absent from current results: the last imported file lacks it, and it was kept only because it holds the
  * owner's data (`importJobsFromFile`). Temporary protection until the Step 5 job-state overlay (docs/DECISIONS.md). Not an
  * orphan, which is Step 5's record with no matching active discovery record, and says nothing about the ad being closed.
@@ -96,6 +111,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     remoteOnly = false,
     hideNeedsVisa = false,
     hideNoLongerListed = false,
+    showNotOnBoard = false,
     showOffList = false,
     status = '',
     matchLabel = '',
@@ -127,6 +143,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     if (!matchesSalary(job.salaryMonthlyEur, salaryRange, salaryIncludeUnknown !== false)) return false
     if (remoteOnly && !job.isRemote) return false
     if (hideNoLongerListed && isNoLongerListed(job)) return false
+    if (!showNotOnBoard && isNotOnBoard(job)) return false
     if (hideNeedsVisa && isBlockedByVisa(job)) return false
     if (sites.size && !sites.has((job.site || '').toLowerCase())) return false
     if (providers.size && !providers.has(providerOf(job).toLowerCase())) return false
@@ -205,6 +222,7 @@ export function activeFilterChips(filters = {}) {
     add('salary', `Salary: ${describeRange(from, to)}${hidesUnknown}`, SALARY_CLEARED)
   }
   if (filters.hideNoLongerListed) add('hideNoLongerListed', 'Hiding jobs no longer listed', { hideNoLongerListed: false })
+  if (filters.showNotOnBoard) add('showNotOnBoard', "Showing ads not on the company's board", { showNotOnBoard: false })
   if (filters.showOffList) add('showOffList', 'Showing jobs absent from current results', { showOffList: false })
   if (filters.hideNeedsVisa) add('hideNeedsVisa', 'Hiding jobs that need a visa', { hideNeedsVisa: false })
   return chips
@@ -235,6 +253,7 @@ export const CLEAR_ALL_FILTERS = {
   remoteOnly: false,
   hideNeedsVisa: false,
   hideNoLongerListed: false,
+  showNotOnBoard: false,
   showOffList: false,
   status: '',
   matchLabel: '',
@@ -246,7 +265,7 @@ export const CLEAR_ALL_FILTERS = {
 }
 
 /** Filters inside "More filters" that are active, so the toggle can show a count. */
-export const MORE_FILTER_KEYS = ['provider', 'company', 'matchLabel', 'roleClass', 'salary', 'hideNeedsVisa', 'hideNoLongerListed', 'showOffList']
+export const MORE_FILTER_KEYS = ['provider', 'company', 'matchLabel', 'roleClass', 'salary', 'hideNeedsVisa', 'hideNoLongerListed', 'showNotOnBoard', 'showOffList']
 export function moreFiltersCount(chips) {
   return chips.filter((c) => MORE_FILTER_KEYS.includes(c.key)).length
 }

@@ -101,8 +101,9 @@ describe('Hide jobs no longer listed', () => {
   const list = [{ jobId: 'a' }, { jobId: 'b', isClosed: true }, { jobId: 'c', isClosed: false }]
 
   it('is off by default and when unset', () => {
-    expect(filterJobs(list, {})).toHaveLength(3)
-    expect(filterJobs(list, { hideNoLongerListed: false })).toHaveLength(3)
+    // showNotOnBoard is the newer default-off filter (eligibilityFeasibility.test.js); it is turned on here so this one is read alone.
+    expect(filterJobs(list, { showNotOnBoard: true })).toHaveLength(3)
+    expect(filterJobs(list, { showNotOnBoard: true, hideNoLongerListed: false })).toHaveLength(3)
   })
 
   it('drops jobs that disappeared from the source when on', () => {
@@ -137,6 +138,6 @@ describe('Hide jobs no longer listed is independent of eligibility gates', () =>
 
   it('leaves jobs outside your places or needing a visa to their own filter', () => {
     expect(ids(filterJobs(list, { hideNoLongerListed: true, hideNeedsVisa: true }))).toEqual(['open', 'unknown', 'null', 'outside', 'visa'])
-    expect(ids(filterJobs(list, { hideNeedsVisa: true }))).toEqual(['open', 'unknown', 'null', 'closed', 'outside', 'visa'])
+    expect(ids(filterJobs(list, { hideNeedsVisa: true, showNotOnBoard: true }))).toEqual(['open', 'unknown', 'null', 'closed', 'outside', 'visa'])
   })
 })

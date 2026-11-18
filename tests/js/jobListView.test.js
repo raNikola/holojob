@@ -74,8 +74,10 @@ describe('Seen in the last 14 days', () => {
 describe('the existing filters over a composed list', () => {
   it('Hide no longer listed reads the class, and the stored flag only with no class', () => {
     const rows = [route('c', 'closed'), route('old', 'found', { isClosed: true }), stored('s', { isClosed: true }), route('a', 'absent')]
-    expect(ids(filterComposed(rows, { hideNoLongerListed: true }))).toEqual(['old', 'a'])
-    expect(ids(filterComposed(rows, {}))).toEqual(['c', 'old', 's', 'a'])
+    expect(ids(filterComposed(rows, { hideNoLongerListed: true, showNotOnBoard: true }))).toEqual(['old', 'a'])
+    expect(ids(filterComposed(rows, { showNotOnBoard: true }))).toEqual(['c', 'old', 's', 'a'])
+    // by default the board-based filter leaves out the closed and absent ones, and the route class wins over the stored flag
+    expect(ids(filterComposed(rows, {}))).toEqual(['old'])
   })
 
   it('Show off-list has no job here: an off-list row the two lists let in is not hidden', () => {
@@ -84,8 +86,8 @@ describe('the existing filters over a composed list', () => {
 
   it('other filters still apply: search reads what a server-only row has, and never finds its ad text', () => {
     const rows = [serverOnly('a', 'absent', { title: 'Chef' }), stored('s', { description: 'chef wanted' })]
-    expect(ids(filterComposed(rows, { searchText: 'chef' }))).toEqual(['a', 's'])
-    expect(ids(filterComposed([serverOnly('a', 'absent')], { searchText: 'roadmap' }))).toEqual([])
+    expect(ids(filterComposed(rows, { searchText: 'chef', showNotOnBoard: true }))).toEqual(['a', 's'])
+    expect(ids(filterComposed([serverOnly('a', 'absent')], { searchText: 'roadmap', showNotOnBoard: true }))).toEqual([])
   })
 })
 

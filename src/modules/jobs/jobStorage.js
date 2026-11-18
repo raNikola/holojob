@@ -18,6 +18,7 @@ const DEFAULT_FILTERS = {
   remoteOnly: false,
   hideNeedsVisa: false,
   hideNoLongerListed: false,
+  showNotOnBoard: false,
   showOffList: false,
   status: '',
   matchLabel: '',

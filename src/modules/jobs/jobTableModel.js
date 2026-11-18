@@ -5,19 +5,39 @@
 
 import { isClosedAd } from './jobHistory.js'
 import { fitScoreOf, isNotRead, preCapScoreOf } from './matchScore.js'
+import { isRemoteFeasible } from './workAuthorization.js'
 
 export const JOB_PAGE_SIZE = 100
 const NOTHING = new Set()
 
 const byId = (a, b) => (a.jobId === b.jobId ? 0 : String(a.jobId) < String(b.jobId) ? -1 : 1)
 
+/** The band of a Fit Score, as labels.py `match_label`: 0 Excellent (85+), 1 Strong (70+), 2 Good (55+), 3 Weak (40+), 4 Reject. Rows with no score are not ranked here. */
+const bandOf = (score) => (score >= 85 ? 0 : score >= 70 ? 1 : score >= 55 ? 2 : score >= 40 ? 3 : 4)
+
+/** When the ad was posted (`datePosted`, else `firstSeen`) as a time, or null when neither is a readable date. */
+export function postedTimeOf(row) {
+  for (const value of [row?.datePosted, row?.firstSeen]) {
+    const time = typeof value === 'string' && value ? Date.parse(value) : NaN
+    if (Number.isFinite(time)) return time
+  }
+  return null
+}
+
 /**
- * The default order: Fit Score descending, rows with no score last; equal scores by the score before caps (descending), then by jobId.
- * Rows without scoreBeforeCaps use their Fit Score. Only the default sort uses this: a sort the owner picked is left as it is.
+ * The default order (owner decision 2026-11-18): by band; inside a band the ads that can be taken from Serbia as they stand first
+ * (`isRemoteFeasible`), then newest first; then the Fit Score, the score before caps (descending) and jobId as tie-breaks. Rows with no Fit Score last.
+ * It only orders: no score, band or verdict changes. Only the default sort uses this: a sort the owner picked is left as it is.
  */
 export function defaultOrder(rows) {
   const desc = (x, y) => (x === y ? 0 : x === null ? 1 : y === null ? -1 : y - x)
-  return [...rows].sort((a, b) => desc(fitScoreOf(a), fitScoreOf(b)) || desc(preCapScoreOf(a), preCapScoreOf(b)) || byId(a, b))
+  const band = (row) => { const score = fitScoreOf(row); return score === null ? null : -bandOf(score) }
+  return [...rows].sort((a, b) => desc(band(a), band(b))
+    || Number(isRemoteFeasible(b)) - Number(isRemoteFeasible(a))
+    || desc(postedTimeOf(a), postedTimeOf(b))
+    || desc(fitScoreOf(a), fitScoreOf(b))
+    || desc(preCapScoreOf(a), preCapScoreOf(b))
+    || byId(a, b))
 }
 
 /** Open ads before closed ones, each group in the order given. Only for the default sort: a sort the owner picked is left as it is. */

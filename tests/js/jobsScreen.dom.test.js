@@ -162,6 +162,17 @@ describe('Active and All', () => {
     expect(screen.text()).toContain('Not scored')
   })
 
+  it('by default Active leaves out the ad the board no longer lists, says how many, and the filter brings it back', async () => {
+    stubServer({ route: good })
+    screen = await mountScreen({ stored: STORED, filters: { showNotOnBoard: false } })
+    expect(screen.rows()).toHaveLength(2)
+    expect(screen.text()).not.toContain('why absent')
+    expect(screen.text()).toContain("1 ad is not on the company's board")
+    await screen.click(screen.box(/Show ads not on the company's board/))
+    expect(screen.rows()).toHaveLength(3)
+    expect(screen.text()).toContain('why absent')
+  })
+
   it('the toggle, the class filter and the 14-day filter change the list and write nothing', async () => {
     stubServer({ route: good })
     screen = await mountScreen({ stored: STORED })
