@@ -111,7 +111,7 @@ def facts_from_fit3(scratch: Path, items: list[dict], facts: dict) -> tuple[list
     for item in items:
         posting = {"id": item["jobId"], "title": item.get("title") or "", "company": item.get("company") or "", "description": item.get("description") or ""}
         entry = entries.get(fit3.classification_key(posting, roles, comps))
-        rows = fit3.matcher_requirements(fit3.anchor(entry["reply"], posting["description"], roles, comps), comps) if entry else []
+        rows = fit3.matcher_requirements(fit3.anchor(entry["reply"], posting["description"], roles, comps, posting["title"]), comps) if entry else []
         if not rows:
             none += 1
             continue

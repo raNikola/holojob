@@ -9,9 +9,11 @@ THIS SCRIPT CALLS A MODEL PROVIDER (and bills it) ONLY WITH --confirm. Without i
 Sends the ad (title, description) and the two closed lists (match_engine/fit3_roles.json, src/data/competencies/product.json). NO candidate data.
 --ids FILE      the ads to classify (default the holdout-v1 id file). Their text is read from the real data dir, read only.
 --scratch DIR   default /home/ranikola/holojob-eval/holdout-scratch-data. Refused if it is, or sits inside, the real data dir. The AI ledger and settings are its copies.
+--out-name NAME the file name under <scratch>/fit3/ (default classification.json). A second pass for the stability bars is a run with another name,
+                e.g. --out-name classification-pass2.json; an existing file is never overwritten.
 --max-usd X     required; the run is refused when the worst case is above X, and a spend guard enforces X per call.
 
-Writes only <scratch>/fit3/classification.json (directory 700, file 600): {"version": 1, "entries": {<classification key>: {"reply": <raw model reply>, "answers": null}}}.
+Writes only <scratch>/fit3/<out-name> (directory 700, file 600): {"version": 1, "entries": {<classification key>: {"reply": <raw model reply>, "answers": null}}}.
 The reply holds ad quotes only; the console gets counts and cost. Code anchors the reply on every read (match_engine/fit3.anchor).
 Next: scripts/measure_holdout_matcher.py --fit3 (the matcher over the marked competencies, layer b), then the stored file can be copied to data/cache/fit3.json by the owner.
 """
@@ -32,9 +34,15 @@ from measure_holdout_extract7 import check_scratch  # noqa: E402
 
 DEFAULT_IDS = mc.EVAL_DIR / "holdout-ids-18.json"
 DEFAULT_SCRATCH = mc.EVAL_DIR / "holdout-scratch-data"
-OUT_NAME = "fit3/classification.json"
+OUT_DIR = "fit3"
+OUT_NAME = "classification.json"
 FEATURE = "fit3-classify"
 UPPER_CHARS_PER_TOKEN = 3.0
+
+
+def fit3_prompt_version() -> int:
+    from match_engine import fit3
+    return fit3.PROMPT_VERSION
 
 
 def posting_of(job: dict) -> dict:
@@ -104,6 +112,7 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--ids", type=Path, default=DEFAULT_IDS)
     p.add_argument("--scratch", type=Path, default=DEFAULT_SCRATCH)
+    p.add_argument("--out-name", default=OUT_NAME)
     p.add_argument("--max-usd", type=float, required=True)
     p.add_argument("--provider", default=None)
     p.add_argument("--model", default=None)
@@ -113,6 +122,13 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
     if args.max_usd <= 0:
         print("--max-usd must be positive", file=sys.stderr)
+        return 2
+    if Path(args.out_name).name != args.out_name or not args.out_name.endswith(".json"):
+        print("--out-name must be a plain *.json file name", file=sys.stderr)
+        return 2
+    out_path = args.scratch / OUT_DIR / args.out_name
+    if out_path.exists():
+        print(f"{out_path} exists: refusing to overwrite a stored pass", file=sys.stderr)
         return 2
     data_dir = Path(args.data_dir or mc.default_data_dir())
     check_scratch(args.scratch, data_dir)
@@ -130,7 +146,7 @@ def main(argv=None) -> int:
     except LlmUnavailable as exc:
         print(f"cannot price the run, so nothing is called: {exc}", file=sys.stderr)
         return 1
-    print(json.dumps({"estimate": est, "hardCapUsd": args.max_usd, "writes": str(args.scratch / OUT_NAME)}, indent=1))
+    print(json.dumps({"estimate": est, "hardCapUsd": args.max_usd, "writes": str(out_path)}, indent=1))
     if not est.get("priceKnown"):
         print("the price of this provider/model is unknown to the budget gate: refusing.", file=sys.stderr)
         return 1
@@ -165,7 +181,7 @@ def main(argv=None) -> int:
         return 1
     guard = Guard(base.cap, base.price, base.max_output)
     entries, failures = run(jobs, args.provider, args.model, guard, args.workers)
-    mc.write_private(args.scratch / OUT_NAME, json.dumps({"version": 1, "promptVersion": 1, "entries": entries}, ensure_ascii=False))
+    mc.write_private(out_path, json.dumps({"version": 1, "promptVersion": fit3_prompt_version(), "entries": entries}, ensure_ascii=False))
     changed = mc.fingerprint_changes(before, mc.data_fingerprint(data_dir))
     print(f"classified {len(entries)} of {len(jobs)} ads; failures: {failures or 'none'}; spent ${guard.spent():.4f} of the ${args.max_usd:.2f} cap")
     print(f"real data dir changed by this run: {'NO' if not changed else changed}")

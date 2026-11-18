@@ -34,7 +34,7 @@ import pipeline_lock  # noqa: E402
 import view_guard  # noqa: E402
 import job_history  # noqa: E402
 from scorer import SCORING_VERSION, resolve_weights, score_jobs  # noqa: E402
-from match_engine import shadow  # noqa: E402
+from match_engine import fit3 as fit3_levels, fit3_industry, shadow  # noqa: E402
 from redact import identity_of  # noqa: E402 (on the path through llm_enhancer)
 
 INTELLIGENCE_PATH = ROOT / "data" / "intelligence" / "candidate-intelligence.json"
@@ -67,6 +67,12 @@ def _load_profile() -> dict | None:
     return json.loads(PROFILE_PATH.read_text(encoding="utf-8")) if PROFILE_PATH.exists() else None
 
 
+def _candidate_level(intelligence: dict) -> str | None:
+    """The candidate's seniority on the Fit 3 scale (junior..head), else None. Shown as a distance in engineShadow.fit3, never a cap."""
+    level = str((intelligence.get("candidateSummary") or {}).get("seniorityLevel") or "").strip().lower()
+    return level if level in fit3_levels.LEVELS else None
+
+
 def _shadow_engine(profile: dict | None, intelligence: dict, judge: bool, provider: str, model: str | None):
     """The shadow engine when HOLOJOB_ENGINE_SHADOW is on and a profile is on disk, else None."""
     if not shadow.enabled():
@@ -83,7 +89,9 @@ def _shadow_engine(profile: dict | None, intelligence: dict, judge: bool, provid
     memory = EvidenceMap(candidate, load_mapper(candidate["roleFamily"]))
     engine = shadow.ShadowEngine(candidate, judge=judge, provider=provider, model=model,
                                  identity=identity_of(profile), memory=memory,
-                                 role_family=intelligence.get("roleFamily"))
+                                 role_family=intelligence.get("roleFamily"),
+                                 candidate_level=_candidate_level(intelligence),
+                                 candidate_industries=fit3_industry.candidate_industries(intelligence))
     memory.already_matched = set(engine._cache)
     return engine
 

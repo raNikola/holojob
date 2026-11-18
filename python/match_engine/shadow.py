@@ -102,7 +102,8 @@ class ShadowEngine:
                  cache_path: Path | None = None, limit: int | None = DEFAULT_LIMIT,
                  complete=complete_json, workers: int = 4, identity: tuple[str, list[str]] | None = None,
                  select=None, compact=None, remap: dict[str, str] | None = None, memory=None, unit_resolver=None, role_family: str | None = None,
-                 fit3_path: Path | None = None, candidate_level: str | None = None):
+                 fit3_path: Path | None = None, candidate_level: str | None = None,
+                 candidate_industries: set[str] | None = None):
         self.candidate = candidate
         self.memory = memory
         # redact.identity_of(profile), for the matcher's redaction; never sent.
@@ -122,6 +123,7 @@ class ShadowEngine:
         # Fit 3 (shadow): stored classifications read from fit3.json next to the engine cache; nothing here calls a model for it.
         self.fit3_path = fit3_path or self.cache_path.with_name("fit3.json")
         self.candidate_level = candidate_level
+        self.candidate_industries = set(candidate_industries or ())  # table domain ids, read locally from the intelligence (fit3_industry); never sent
         self._fit3_store: dict = {}
         if self.fit3_path.exists():
             self._fit3_store = (json.loads(self.fit3_path.read_text(encoding="utf-8")) or {}).get("entries") or {}
@@ -252,7 +254,7 @@ class ShadowEngine:
             ai_gate.record_cache_hit(self.provider, self.model, feature="evidence-matcher", job_id=_key(job))
         gates = gate_results(job, self.candidate, output["gates"], output["requirements"])
         block3 = (fit3_mod.stored_fit3(job, posting, self._fit3_store, self._fit3_roles, self._fit3_comps,
-                                       output["requirements"], self.candidate_level) if self._fit3_store else None)
+                                       self.candidate_industries, self.candidate_level) if self._fit3_store else None)
         return {
             "engineVersion": ENGINE_VERSION,
             **{k: output[k] for k in ("promptVersion", "profileVersion", "evidenceVersion", "answersVersion",
