@@ -14,7 +14,8 @@ whether they can get to the work, from where they live or by relocating.
 
 from __future__ import annotations
 
-from geography import country_of_name, resolve_country
+from geography import REMOTE as REMOTE_PLACE, country_of_name, covers, resolve_country
+from remote_text import clear_remote_text
 from text_utils import normalize_text
 
 REMOTE_PREFERRED = 95
@@ -53,8 +54,10 @@ def job_work_mode(job: dict) -> str:
     return _MODE_SPELLINGS.get(work_mode, work_mode)
 
 
-def is_remote_job(job: dict) -> bool:
-    return bool(job.get("isRemote")) or job_work_mode(job) == "remote"
+def is_remote_job(job: dict, clear_text: bool = True) -> bool:
+    """Remote by the board's flag, the work mode, or clear wording in the ad ("fully remote", "work from anywhere"; scoringVersion 1.6:
+    the sentence wins over a structured field that says onsite or hybrid)."""
+    return bool(job.get("isRemote")) or job_work_mode(job) == "remote" or (clear_text and clear_remote_text(job.get("description")) is not None)
 
 
 def _country_only(location: str) -> bool:
@@ -77,7 +80,30 @@ def _relocation_allows(job: dict, prefs: dict) -> bool:
     return bool(home and there and there != home)
 
 
-def score_location_match(job: dict, intelligence: dict) -> tuple[int, list[str]]:
+def outside_relocation_scope(job: dict, prefs: dict) -> str | None:
+    """Why an onsite or hybrid job lies outside what the profile accepts, or None (scoringVersion 1.6, fix 4).
+
+    Only a job that is not remote (structured field and ad text) AND whose work mode is stated onsite / hybrid / fieldwork counts: an
+    unclear mode, an unknown country or an unknown home country never caps. Scope = the relocation policy (none: the home country only;
+    abroad or anywhere: other countries too) and, when the profile lists places, those places. The profile's own settings decide.
+    """
+    if is_remote_job(job) or job_work_mode(job) not in ("onsite", "hybrid", "fieldwork"):
+        return None
+    there = resolve_country(job.get("location") or "") or (job.get("llmFacts") or {}).get("jobCountry")
+    home = resolve_country(prefs.get("country") or "")
+    if not there or (home and there == home):
+        return None
+    allowed = [a for a in (prefs.get("allowedLocations") or []) if a and a != REMOTE_PLACE]
+    if allowed and not any(covers(a, there) for a in allowed):
+        return f"{there} is outside the places you will take a job in"
+    policy = prefs.get("relocation") or "none"
+    if policy in ("abroad", "anywhere") or not home:
+        return None
+    return f"your profile says no relocation, and the job is in {there}"
+
+
+def score_location_match(job: dict, intelligence: dict, fixed: bool = True) -> tuple[int, list[str]]:
+    """`fixed` False is the 1.5 behaviour (no ad-text remote wording, no relocation-scope rule); the leave-one-out measurement uses it."""
     prefs = intelligence.get("jobFitPreferences") or {}
     preferred = [normalize_text(p) for p in prefs.get("preferredLocations") or []]
     # A commute place is a city. A country there ("Serbia") would match every
@@ -88,7 +114,7 @@ def score_location_match(job: dict, intelligence: dict) -> tuple[int, list[str]]
     job_loc = normalize_text(job.get("location") or "")
     work_mode = job_work_mode(job)
 
-    if is_remote_job(job):
+    if is_remote_job(job, fixed):
         if "remote" in remote_pref or "flexible" in remote_pref:
             return REMOTE_PREFERRED, ["Remote, matches stated preference"]
         return REMOTE, ["Remote"]
@@ -96,6 +122,10 @@ def score_location_match(job: dict, intelligence: dict) -> tuple[int, list[str]]
     for place in places:
         if place in job_loc:
             return PREFERRED_PLACE, [f"Located in {place}"]
+
+    out_of_scope = outside_relocation_scope(job, prefs) if fixed else None
+    if out_of_scope:
+        return ONSITE_ELSEWHERE, [f"Onsite or hybrid, outside your relocation scope: {out_of_scope}"]
 
     if job_loc and _relocation_allows(job, prefs):
         return RELOCATION_ACCEPTABLE, [f"In {job_loc}; you are open to relocating there"]

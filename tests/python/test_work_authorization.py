@@ -222,12 +222,14 @@ def test_visa_statuses_no_longer_cap_the_score(intelligence, facts, status_):
     assert not any(r.startswith("Capped: needs a work permit") for r in result["reasons"])
 
 
-def test_an_excluded_location_is_a_state_not_a_cap(intelligence):
+def test_an_excluded_location_is_a_state_and_an_onsite_job_there_is_capped_at_weak_by_the_1_6_location_rule(intelligence):
+    # 1.5: the place outside allowedLocations was only a state. 1.6 (fix 4): an onsite or hybrid job outside what the profile accepts is capped at Weak.
     intel = copy.deepcopy(intelligence)
     intel["jobFitPreferences"]["allowedLocations"] = ["EUROPE"]
     result = score_job(full_job("Austin, United States", visaSponsorship="offered"), intel)
-    assert result["workAuthorization"]["status"] == wa.OUTSIDE_ALLOWED and result["matchScore"] == result["scoreBeforeCaps"]
-    assert any(r.startswith("Location:") for r in result["reasons"])
+    assert result["workAuthorization"]["status"] == wa.OUTSIDE_ALLOWED
+    assert result["matchScore"] <= 54 < result["scoreBeforeCaps"]
+    assert any(r.startswith("Location:") for r in result["reasons"]) and any(r.startswith("Capped: onsite or hybrid") for r in result["reasons"])
 
 
 def test_sponsored_and_authorized_jobs_are_not_capped(intelligence):

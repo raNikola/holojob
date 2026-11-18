@@ -21,6 +21,10 @@ from facts_guard import guard_job, read_freshness
 from llm_enhancer import NoOpEnhancer
 from red_flags import detect_red_flags
 from corpus import build_idf
+import ceilings
+from ceilings import ALL_FIXES, active_fixes  # noqa: F401  (re-exported: the measurement scripts switch fixes off through ceilings.DISABLED_FIXES)
+from dimensions.location_match import outside_relocation_scope
+from dimensions.skill_match import requirement_share
 import row_state
 import work_authorization as wa
 from salary import salary_metadata
@@ -32,12 +36,18 @@ from role_tier import ROLE_FAMILIES, UNRELATED, title_tier
 WEIGHTS_FILE = Path(__file__).resolve().parents[2] / "src" / "data" / "scoringWeights.json"
 DEFAULT_WEIGHTS = json.loads(WEIGHTS_FILE.read_text(encoding="utf-8"))
 
-# Stamped on every scored row. 1.5: the visa caps (25 / 40 / 45) and the language cap are gone from matchScore and
+# Stamped on every scored row. 1.6 (owner brief 2026-11-18): the skill dimension no longer counts role-title tokens and carries the ad's own
+# requirements; role class other / not available caps at Weak (ceilings.py, applied by role_class.stamp); a security clearance or US-status
+# requirement is a blocker; an onsite or hybrid job outside the relocation scope is capped at Weak; with a theta set, an unmet-requirement share
+# at or over it caps at Good. 1.5: the visa caps (25 / 40 / 45) and the language cap are gone from matchScore and
 # shown as eligibility states beside it; "Not read" ads get no Fit Score and the cap-5 insufficient rule is replaced by
 # read status; a profile with no skills gets no score above 50; extraction facts of an unknown shape count as no facts.
-SCORING_VERSION = "1.5"
+SCORING_VERSION = "1.6"
 # A profile with no skill stack scores every ad on neutral baselines: capped, with a marker (never a confident score).
 NO_PROFILE_STACK_CAP = 50
+# Fix 5: the share of an ad's usable must requirements the profile leaves uncovered at which the score is capped at Good (ceilings.UNMET_CAP).
+# None = no ceiling. Chosen by the pre-registered rule in ~/holojob-eval/w5-top-fixes-plan.md; set only if the rule yields a value.
+UNMET_MUST_THETA = None
 
 
 def resolve_weights(saved: dict | None) -> dict:
@@ -118,8 +128,10 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     weights = resolve_weights(intelligence.get("scoringWeights"))
     enhancer = enhancer or NoOpEnhancer()
 
+    fixes = active_fixes()
+    prefs = intelligence.get("jobFitPreferences") or {}
     role_score, role_reasons = score_role_match(job, intelligence)
-    skill_score, skill_reasons, matched, missing = score_skill_match(job, intelligence, idf)
+    skill_score, skill_reasons, matched, missing = score_skill_match(job, intelligence, idf, fixed="skill" in fixes)
     # The title tier is read first: an ad whose title is outside the target roles gets no industry transfer (and is capped below).
     facts = job.get("llmFacts") or {}
     family, family_tracks = accepted_tracks(intelligence)
@@ -127,7 +139,7 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     industry_score, industry_reasons, transferability = score_industry_match_detail(
         job, intelligence, transfer_allowed=not title_capped)
     exp_score, exp_reasons = score_experience_match(job, intelligence)
-    loc_score, loc_reasons = score_location_match(job, intelligence)
+    loc_score, loc_reasons = score_location_match(job, intelligence, fixed="location" in fixes)
     cult_score, cult_reasons = score_culture_match(job, intelligence)
 
     dimensions = {
@@ -155,15 +167,26 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         match_score = min(match_score, OFF_TRACK_CAP)
     if title_capped:
         match_score = min(match_score, UNRELATED_TITLE_CAP)
+    # 1.6 fix 4: an onsite or hybrid job outside what the profile accepts is Weak at best (not Blocked: the owner may still want to look).
+    scope_reason = outside_relocation_scope(job, prefs) if "location" in fixes else None
+    location_capped = bool(scope_reason)
+    if location_capped:
+        match_score = min(match_score, ceilings.LOCATION_CAP)
+    # 1.6 fix 5: too many of the ad's own must requirements are not covered. Off while UNMET_MUST_THETA is None.
+    unmet = requirement_share(job, intelligence, idf)
+    unmet_share = unmet["share"] if unmet else None
+    unmet_capped = ("unmet" in fixes and UNMET_MUST_THETA is not None and unmet is not None and unmet_share >= UNMET_MUST_THETA)
+    if unmet_capped:
+        match_score = min(match_score, ceilings.UNMET_CAP)
 
     # Eligibility and the language gap are facts shown beside the score; neither lowers it (scoringVersion 1.5).
-    prefs = intelligence.get("jobFitPreferences") or {}
     authorization = wa.authorization_status(job, prefs)  # location state and the shadow engine's gates; no cap reads it
     eligible = eligibility.assess(job, prefs)
     language_names = language_gap_names(job, intelligence)
     location_state = blocking.location_state(job, prefs)
     language_state = blocking.language_state(job, intelligence)
-    blocked_by = blocking.blockers(eligible, language_state["blocking"], location_state)
+    clearance = blocking.clearance_state(job) if "clearance" in fixes else None
+    blocked_by = blocking.blockers(eligible, language_state["blocking"], location_state, clearance)
 
     no_stack = not any(_skill_bank(intelligence))
     if no_stack:
@@ -192,6 +215,10 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         reasons.append("No role family set in the profile: the role is not checked against one")
     if title_capped:
         reasons.append(f"Capped: the title matches no {family} target role")
+    if location_capped:
+        reasons.append(f"Capped: onsite or hybrid job outside your relocation scope ({scope_reason}), so no score above {ceilings.LOCATION_CAP}")
+    if unmet_capped:
+        reasons.append(f"Capped: {unmet['uncovered']} of {unmet['usable']} requirements the ad lists are not covered by your profile, so no score above {ceilings.UNMET_CAP}")
     if red_flags:
         reasons.extend([f"Red flag: {f}" for f in red_flags])
     if no_stack:
@@ -246,6 +273,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         "blockedBy": blocked_by,
         "blockedFrom": None if not_read else blocked_from(match_score, red_flags, blocked_by),
         "profileGuard": "no_profile_stack" if no_stack else None,
+        # Display and measurement: the share of the ad's usable must requirements the profile leaves uncovered (fix 5 reads it), null = none usable.
+        "unmetMustShare": None if unmet_share is None else round(unmet_share, 3),
         "confidence": confidence,
         "roleMatch": role_score,
         "skillMatch": skill_score,
@@ -269,7 +298,7 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         # True when a hard rule applies to the job, whether or not it lowered
         # this particular score. The enhancer never lifts such a job, so caps
         # stay decided here.
-        "hardCapped": not_read or bool(red_flags) or off_track or title_capped or no_stack,
+        "hardCapped": not_read or bool(red_flags) or off_track or title_capped or no_stack or location_capped or unmet_capped,
     }
     return enhancer.enhance(job, result, intelligence)
 

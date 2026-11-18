@@ -120,7 +120,7 @@ def test_the_scorer_stores_no_state_when_dormant_and_never_changes_the_score_eit
     active = score_job(job, {**intel, "jobFitPreferences": prefs()})
     assert dormant["eligibility"] is None and active["eligibility"]["state"] == el.REFUSED
     assert dormant["matchScore"] == active["matchScore"] == active["scoreBeforeCaps"]
-    assert active["scoringVersion"] == "1.5" and active["hardCapped"] is False
+    assert active["scoringVersion"] == "1.6" and active["hardCapped"] is False
 
 
 # --- B2B / employer of record / contractor ------------------------------------------------------------------------
@@ -193,7 +193,7 @@ def test_rescore_makes_no_model_call_and_stamps_each_row(tmp_path, monkeypatch):
                                       "--manual", str(tmp_path / "manual_jobs.json"), "--output", str(output)])
     assert run_scoring.main() == 0 and seen
     doc = json.loads(output.read_text())
-    assert doc["meta"]["scoringVersion"] == "1.5" and all(r["scoringVersion"] == "1.5" for r in doc["jobs"])
+    assert doc["meta"]["scoringVersion"] == "1.6" and all(r["scoringVersion"] == "1.6" for r in doc["jobs"])
     with pytest.raises(RuntimeError):
         real()._complete("prompt", schema=None, model=None, provider=None)
 
@@ -217,7 +217,7 @@ def test_the_kept_ad_rescore_goes_through_the_same_local_path(tmp_path, monkeypa
                                   scored=tmp_path / "scored_jobs.json", kept=tmp_path / "kept.json")
     assert code == 0 and seen
     # the ledger fix: the kept ad is scored from its stored facts, so it is read and its refusal is found
-    assert body["job"]["eligibility"]["state"] == el.REFUSED and body["job"]["scoringVersion"] == "1.5"
+    assert body["job"]["eligibility"]["state"] == el.REFUSED and body["job"]["scoringVersion"] == "1.6"
 
 
 # --- a Not read row has matchScore None: no reader may fail on it ---------------------------------------------------

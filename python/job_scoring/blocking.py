@@ -10,6 +10,10 @@ the profile already expresses:
                        (Step 2c). With no declared language list the check is dormant: every required language shows as unconfirmed.
                        The extraction carries no required proficiency level, so only presence on the list is compared.
   location             the ad names a place outside the profile's allowedLocations, or states a geography outside them
+  security_clearance   the ad REQUIRES a security clearance (security / TS-SCI / top secret / secret / public trust / NATO secret clearance)
+                       or a US citizenship / "U.S. person" status (scoringVersion 1.6, owner brief 2026-11-18). Evidence is verbatim: a must-have
+                       requirement whose postingQuote is found in the ad, or a sentence of the ad text; in both the sentence must not be softened
+                       (`softened`, Step 2d) and not negated ("no clearance required"). The profile holds no clearance field, so no one is exempt.
 
 Location is a state: "in" / "outside" / "unknown" (None when the profile sets no allowedLocations: dormant). A bare "Remote" with no
 country is not country evidence: unknown, never "in", never "outside". The profile has no on-site exclusion field of its own;
@@ -129,7 +133,48 @@ def language_state(job: dict, intelligence: dict) -> dict:
     return out
 
 
-def blockers(eligible: dict | None, language_names: list[str], location: dict | None) -> list[dict]:
+# What counts as a clearance or a US-status demand. A bare "clearance" or "citizenship" is not enough: "clearance sale", "EU citizenship".
+CLEARANCE = re.compile(
+    r"\b(?:(?:top[- ]secret|secret|public[- ]trust|nato[- ]secret|ts/sci)(?:\s+security)?\s+clearance|security\s+clearance|ts/sci|top[- ]secret|"
+    r"(?:u\.?s\.?|united\s+states)\s+(?:citizen(?:ship)?|national|person)s?|citizen(?:ship)?\s+of\s+the\s+(?:u\.?s\.?|united\s+states)|"
+    r"(?:citizen|national)s?\s+of\s+the\s+(?:u\.?s\.?|united\s+states))\b",
+    re.I,
+)
+_CLEARANCE_NEGATION = re.compile(r"\b(?:no|not|without|never|neither|nor)\b[^.;\n]{0,25}$", re.I)
+_CLEARANCE_NEGATION_AFTER = re.compile(r"^[^.;\n]{0,25}\b(?:not\s+(?:required|needed|necessary)|isn't\s+required|is\s+not\s+a\s+requirement)\b", re.I)
+_SENTENCES = re.compile(r"\n\s*\n|(?<=[.!?])\s+|\s*\*\s+|\n")
+
+
+def _demanded(sentence: str, description) -> bool:
+    """True when the sentence asks for a clearance / US status: it matches, nothing negates it, and the ad does not soften it."""
+    plain = _plain(sentence)
+    for hit in CLEARANCE.finditer(plain):
+        if _CLEARANCE_NEGATION.search(plain[:hit.start()]) or _CLEARANCE_NEGATION_AFTER.search(plain[hit.end():]):
+            continue
+        return not softened(plain, description)
+    return False
+
+
+def clearance_state(job: dict) -> dict | None:
+    """{"kind": "security_clearance", "quote", "basis"} when the ad requires a clearance or US status, else None.
+
+    Reads (1) the extraction's must-have requirements: the postingQuote must be found in the ad (eligibility.quote_in_text), (2) the ad's own
+    sentences, for an extraction that marked nothing. The quote is always text of the ad, so it is verbatim by construction.
+    """
+    description = job.get("description") or ""
+    for req in (job.get("llmFacts") or {}).get("requirements") or []:
+        quote = str((req or {}).get("postingQuote") or "") if isinstance(req, dict) else ""
+        if (req or {}).get("importance") == "must" and quote and CLEARANCE.search(_plain(quote)) \
+                and eligibility.quote_in_text(quote, description) and _demanded(quote, description):
+            return {"kind": "security_clearance", "quote": quote[:300], "basis": "requirement"}
+    for part in _SENTENCES.split(re.sub(r"\*+|_{2,}", " ", _plain(description))):
+        sentence = " ".join(part.split())
+        if 8 <= len(sentence) <= 600 and CLEARANCE.search(sentence) and _demanded(sentence, description):
+            return {"kind": "security_clearance", "quote": sentence[:300], "basis": "ad_text"}
+    return None
+
+
+def blockers(eligible: dict | None, language_names: list[str], location: dict | None, clearance: dict | None = None) -> list[dict]:
     """The blocking facts of one ad as [{"kind", "text"}]; [] when none."""
     out = []
     if eligible and eligible["state"] == eligibility.REFUSED:
@@ -138,4 +183,6 @@ def blockers(eligible: dict | None, language_names: list[str], location: dict | 
         out.append({"kind": "language", "text": f"the ad requires {' and '.join(language_names)}, which your profile does not list"})
     if location and location["state"] == OUTSIDE:
         out.append({"kind": "location", "text": location["reason"]})
+    if clearance:
+        out.append({"kind": "security_clearance", "text": f"the ad requires a security clearance or US status: \"{clearance['quote']}\""})
     return out
