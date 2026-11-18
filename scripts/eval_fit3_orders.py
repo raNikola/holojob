@@ -48,7 +48,23 @@ def stability(rows1: list[dict], rows2: list[dict], name: str) -> dict:
     both = [i for i in o1 if i in set(o2)]
     p1, p2 = ({i: n for n, i in enumerate(o)} for o in (o1, o2))
     rho = dev.spearman([p1[i] for i in both], [p2[i] for i in both])
-    return {"top6Overlap": round(overlap, 4), "spearman": rho, "adsInBoth": len(both), "ranked": [len(o1), len(o2)]}
+    return {"top6Overlap": round(overlap, 4), "spearman": rho, "adsInBoth": len(both), "ranked": [len(o1), len(o2)],
+            "postHocTieAware": tie_aware(rows1, rows2, name)}
+
+
+def tie_aware(rows1: list[dict], rows2: list[dict], name: str) -> dict:
+    """POST-HOC diagnostic, outside the pre-registered rule (an id tie-break is identical in both passes, so ads tied on the key look perfectly stable in `spearman`).
+    Spearman between the passes on the key WITHOUT the id (tied ads share their average rank), plus how many ranked ads share a key with another ad."""
+    rank, key = ranker(name)
+    keys = []
+    for rows in (rows1, rows2):
+        ranked = rank(rows)["ranked"]
+        keys.append({r["id"]: key(r["fit3"]) for r in ranked})
+    both = sorted(set(keys[0]) & set(keys[1]))
+    avg = [dict(zip(sorted(k), dev._avg_ranks([k[i] for i in sorted(k)]))) for k in keys]
+    rho = dev.spearman([avg[0][i] for i in both], [avg[1][i] for i in both])
+    tied = [sum(1 for i in k if sum(1 for j in k if k[j] == k[i]) > 1) for k in keys]
+    return {"spearmanTiesShared": rho, "adsInATie": tied, "distinctKeys": [len(set(k.values())) for k in keys]}
 
 
 def b5(rows: list[dict], ads, labels, name: str) -> dict:
@@ -84,8 +100,11 @@ def dev_concordance(rows: list[dict], levels: dict[str, int], name: str) -> dict
             hi, lo = (i, j) if levels[i] > levels[j] else (j, i)
             pairs += 1
             agree += 1.0 if keys[hi] < keys[lo] else 0.5 if keys[hi] == keys[lo] else 0.0
+    avg = dict(zip(ids, dev._avg_ranks([keys[i] for i in ids])))  # POST-HOC: tied ads share their average rank (the id is random wrt the owner level, so its luck is not stability)
     return {"ranked": len(ranked["ranked"]), "insufficient": len(ranked["insufficient"]), "compared": len(ids), "spearman": rho,
-            "pairConcordance": None if not pairs else round(agree / pairs, 4), "pairs": int(pairs)}
+            "pairConcordance": None if not pairs else round(agree / pairs, 4), "pairs": int(pairs),
+            "postHocSpearmanTiesShared": dev.spearman([-avg[i] for i in ids], [levels[i] for i in ids]),
+            "postHocAdsInATie": sum(1 for i in ids if sum(1 for j in ids if keys[j] == keys[i]) > 1), "postHocDistinctKeys": len({keys[i] for i in ids})}
 
 
 def verdict(base: dict, cand: dict) -> dict:
