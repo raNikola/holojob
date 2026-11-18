@@ -30,11 +30,13 @@ from bs4 import BeautifulSoup
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python" / "llm"))
 sys.path.insert(0, str(ROOT / "python" / "job_scoring"))
+sys.path.insert(0, str(ROOT / "python"))  # match_engine (role class stamp)
 
 from atomic_write import write_text_atomic  # noqa: E402
 import claude_code  # noqa: E402
 import manual_jobs  # noqa: E402
 import pipeline_lock  # noqa: E402
+import role_class  # noqa: E402
 import view_guard  # noqa: E402
 import safe_fetch  # noqa: E402
 from scorer import score_jobs  # noqa: E402
@@ -351,6 +353,7 @@ def run_job_json(args) -> int:
         scored = [j for j in score_jobs([dict(j) for j in corpus], intelligence) if j.get("jobId") in ids]
         for job in scored:
             manual_jobs.mark_missing_facts(job)
+        role_class.stamp(scored)
         merge_into_scored(scored, args.scored, keep=("tailoredAssets", "status"), meta_key="lastManualJobAt")
     except Exception as exc:  # the message may quote job text; only the class is reported
         return _fail(5, error="scoring_failed", detail=type(exc).__name__, saved=sorted(ids))
@@ -435,7 +438,9 @@ def import_locked(args) -> int:
         # Score only the new jobs and merge into scored_jobs.json (preserves tailoredAssets)
         if args.intelligence.exists():
             intelligence = json.loads(args.intelligence.read_text(encoding="utf-8"))
-            merge_into_scored(score_jobs([dict(j) for j in imported], intelligence), args.scored)
+            imported_rows = score_jobs([dict(j) for j in imported], intelligence)
+            role_class.stamp(imported_rows)
+            merge_into_scored(imported_rows, args.scored)
         else:
             print("No candidate intelligence; imported without scoring", file=sys.stderr)
 

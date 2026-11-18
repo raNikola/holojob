@@ -21,6 +21,7 @@ const DEFAULT_FILTERS = {
   showOffList: false,
   status: '',
   matchLabel: '',
+  roleClass: '',
   priority: [],
   minScore: '',
   // salaryMode: untouched | set | cleared (salaryFilter.js). salaryFrom / salaryTo (EUR per month) exist

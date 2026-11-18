@@ -24,6 +24,7 @@ import job_history  # noqa: E402
 import kept_ads  # noqa: E402
 import manual_jobs  # noqa: E402
 import pipeline_lock  # noqa: E402
+import role_class  # noqa: E402
 from scorer import score_jobs  # noqa: E402
 
 
@@ -53,6 +54,7 @@ def run(job_id: str, *, intelligence: Path, jobs: Path, manual: Path, scored: Pa
         row = next((r for r in scored_rows if r.get("jobId") == job_id), None)
         if row is None:
             return 4, {"ok": False, "error": "not_in_history"}
+        role_class.stamp([row])
         import_job_url.merge_into_scored([row], scored, meta_key="lastKeptRescoreAt")
         return 0, {"ok": True, "job": row}
     finally:

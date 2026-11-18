@@ -2240,3 +2240,15 @@ The standing design of Professional Fit, recorded once so later briefs can stay 
 - **Closed lists.** Fit is built on closed lists the model classifies into, anchored in code (listed ids, verbatim ad quotes). It is not built on keyword or alias mapping of ad sentences.
 - **Two requirement layers.** What the ad asks (weight only) and what the CV proves (matcher statuses with verified quotes) stay apart; a mark is never proof.
 - **Holdout v2 stays blind** until the final validation.
+
+
+## Production release: scoring 1.5 and the Fit 3 role class (2026-11-18)
+
+Owner decision: make scoring 1.5 and the Fit 3 role class live on DS9. Built as the smallest change that shows the role class; Fit 3 does not rank, `order_key` / `rank()` / `matchScore` are untouched.
+
+- **What.** `fit3.role_labels(jobs, store, roles, comps)` stamps `roleClass` (`target` / `adjacent` / `other` / `not available`) and `roleName` on every scored row, from the stored classification of the ad (`data/cache/fit3.json`), anchored in code as everywhere. No text, no stored entry or an unanchored role reads `not available`. It reads the store only: no model call. `run_scoring.score` runs it after `score_jobs` and before the engine shadow. UI: `RoleClassBadge` in the list (card and table) and the detail, a "Role class" select in More filters with a chip (`modules/jobs/roleClass.js`, `jobFilters.js`); a row without the field reads `not available`.
+- **Decision: the production prompt is candidate i1.** The stored classification key includes the prompt version (repo default 2, i1 is 3). `run_scoring.score` activates `fit3_candidates/i1` for the run and clears it after (`PRODUCTION_CANDIDATE`), so the repo default prompt and its tests stay as they were, and the shadow's `engineShadow.fit3` block reads the same entries. A change of prompt needs a new classification run.
+- **Decision: ads in scope.** Every scored row with a stored text whose text is also in `discovered_jobs.json` (581 of 582; the one hand-entered job is not in that file, `measure_fit3.py` reads from it, so it reads `not available`). Role class is stamped on each full run / Re-score; a job scored alone by the manual path has none until the next Re-score.
+- **Decision: the 1.50 cap.** The estimate's worst case (8000 output tokens per call, USD 2.80) was above the cap, so the run went in three batches of 193-194 ads, each with `--max-usd` equal to the budget still unspent (1.50, 1.33, 1.16); each batch's own worst case was below its cap. Actual spend USD 0.4946 (0.1649 + 0.1676 + 0.1621). Provider gpt-6-luna through the scratch gate and ledger (the scratch AI settings, daily call cap 2000, as in W5).
+- **Result.** 581 of 581 classified, no failures. Role class on the 582 scored rows: target 507, adjacent 34, other 27, not available 14 (1 manual job, 13 whose role did not anchor).
+- **Not changed:** scoring, settings, prompts of the pipeline, vocabulary, `automation.enabled` (false), ordering.

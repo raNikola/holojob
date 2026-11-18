@@ -10,6 +10,7 @@ export const FILTER_HELP = {
   provider: 'The connector that fetched the ad: jobspy (LinkedIn), greenhouse, ashby, workable or infostud; “Manual” lists the jobs you added by hand. Tick several to see them together; none ticked shows all.',
   company: 'The hiring company, searchable, with the number of jobs each has in your list. A trailing country is ignored (“Fivetran Serbia” and “Fivetran” are one company) and case does not matter. Tick several to see them together; none ticked shows all.',
   matchLabel: 'Shows only jobs with this label (Excellent, Strong, Good, Weak, Reject), which comes from the match score.',
+  roleClass: 'The role class of the ad, read from its responsibilities: Target role, Adjacent role, Other role, or Role not available (no ad text, or not classified). It is a filter and a badge only; it does not change the score or the order.',
   salary: 'The pay the scorer read from the ad, in EUR per month. A job matches when its pay range overlaps yours; a single figure must lie inside it. Jobs with no readable pay follow “Include jobs without salary”.',
   hideNoLongerListed: 'Hides jobs that have disappeared from the source since they were last seen. Jobs whose status is unknown stay, and so do jobs outside your places or needing a visa.',
   showOffList: 'Also lists jobs absent from current results that you worked on: a status, AI insights, generated documents, outreach or tracking keep them in this browser. It does not mean the ad closed. They are never scored and return to the list if a later run finds them.',

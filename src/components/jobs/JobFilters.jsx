@@ -18,6 +18,7 @@ import {
 import { salaryRangeOf } from '../../modules/jobs/salaryFilter'
 import { FILTER_HELP } from '../../modules/jobs/filterHelp'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
+import { ROLE_CLASS_SELECT } from '../../modules/jobs/roleClass'
 import { MATCH_LABELS, PRIORITIES, hasMatchScores } from '../../modules/jobs/matchScore'
 
 const SHOWN_PRIORITIES = PRIORITIES.filter((p) => p !== 'Reject')
@@ -189,6 +190,17 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
                     onChange={(v) => onChange({ matchLabel: v })}
                     options={MATCH_LABELS}
                     placeholder="All labels"
+                  />
+                </div>
+                <div className="min-w-[9rem] flex-[1_1_9rem]">
+                  <SelectField
+                    id="filter-role-class"
+                    label="Role class"
+                    labelExtra={tip('roleClass', 'Role class')}
+                    value={filters.roleClass || ''}
+                    onChange={(v) => onChange({ roleClass: v })}
+                    options={ROLE_CLASS_SELECT}
+                    placeholder="All roles"
                   />
                 </div>
                 <SalaryFilter

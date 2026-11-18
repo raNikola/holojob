@@ -11,6 +11,7 @@ import { hasMatchScores, isInsufficientData, isNotRead } from '../../modules/job
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { isCapReason } from '../../modules/jobs/workAuthorization'
 import AuthorizationBadge from './AuthorizationBadge'
+import RoleClassBadge from './RoleClassBadge'
 import JobDescription from './JobDescription'
 import { formatSeen, historyBadges } from '../../modules/jobs/jobHistory'
 import { formatMonthlyEur, salaryBadges } from '../../modules/jobs/jobSalary'
@@ -132,6 +133,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
         <>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} size="lg" />
+            <RoleClassBadge job={job} />
             {scoreRowChips(job).map((c) => <Badge key={c.kind} variant={c.variant}>{c.text}</Badge>)}
             <EngineShadowBadge shadow={job.engineShadow} />
           </div>

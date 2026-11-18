@@ -18,6 +18,7 @@ Seniority is a signed distance, shown, never a cap. Eligibility stays the unchan
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 from fractions import Fraction
@@ -386,3 +387,41 @@ def stored_fit3(job: dict, posting: dict, store: dict | None, roles: dict[str, s
     facts = job.get("llmFacts") or {}
     return fit3(anchored, entry.get("answers"), ad_industries(posting, facts), candidate_industries, ad_level=facts.get("seniority"),
                 candidate_level=candidate_level)
+
+
+# --- Production role class (badge and filter only; no ordering, no score) -------------------------------------------------------------------------
+PRODUCTION_CANDIDATE = Path(__file__).with_name("fit3_candidates") / "i1"
+
+
+@contextlib.contextmanager
+def production_candidate():
+    """The frozen candidate i1 for the block, then the previous prompt state back (safe to nest)."""
+    global PROMPT, PROMPT_VERSION
+    saved = (PROMPT, PROMPT_VERSION, dict(_WORDING))
+    use_candidate(PRODUCTION_CANDIDATE)
+    try:
+        yield
+    finally:
+        PROMPT, PROMPT_VERSION = saved[0], saved[1]
+        _WORDING.clear()
+        _WORDING.update(saved[2])
+
+ROLE_NOT_AVAILABLE = "not available"
+
+
+def role_labels(jobs: list[dict], store: dict | None, roles: dict[str, str], comps: list[dict]) -> dict[str, int]:
+    """Stamp every job with `roleClass` (target / adjacent / other / "not available") and `roleName` (the role the ad's responsibilities describe, or None)
+    from the stored classification of the ad (code anchors it, as everywhere). An ad with no text, no stored entry or an unanchored role is "not available".
+    Reads only the store: no model call, no score, no ordering. Returns the counts per class."""
+    counts = {c: 0 for c in (*ROLE_CLASSES, ROLE_NOT_AVAILABLE)}
+    for job in jobs:
+        description = job.get("description") or ""
+        cls, name = None, None
+        entry = (store or {}).get(classification_key(job, roles, comps)) if description.strip() else None
+        if isinstance(entry, dict) and isinstance(entry.get("reply"), dict):
+            role = anchor(entry["reply"], description, roles, comps, job.get("title") or "")["role"]
+            cls, name = role.get("class"), role.get("function")
+        job["roleClass"] = cls or ROLE_NOT_AVAILABLE
+        job["roleName"] = name if cls else None
+        counts[job["roleClass"]] += 1
+    return counts

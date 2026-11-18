@@ -16,6 +16,7 @@ import { isFollowUpDue } from '../../modules/jobs/followUps'
 import { ApplyBadge, PriorityBadge } from './JobScoreBadge'
 import FitScore from './FitScore'
 import AuthorizationBadge from './AuthorizationBadge'
+import RoleClassBadge from './RoleClassBadge'
 import JobTailorActions from './JobTailorActions'
 import SortableTh, { useTableSort } from '../ui/SortableTh'
 import { sortRows } from '../../modules/tableSort'
@@ -210,6 +211,7 @@ function JobCard({
           </div>
           <div className="flex flex-col items-end gap-1">
             {showScores && <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} emptyLabel="Not scored" />}
+            {showScores && <RoleClassBadge job={job} />}
             <StatusBadge status={job.status} historyOnly={rowKind(job) === 'server'} />
             <HistoryBadges job={job} classView={classView} />
             <FollowUpBadge job={job} />
@@ -364,7 +366,7 @@ export default function JobTable({
                 )}
                 <td className="w-full px-3 py-2 align-top font-medium text-stone-900 dark:text-stone-100">
                   <div>{job.title}</div>
-                  <div className="mt-1 flex flex-wrap gap-1"><HistoryBadges job={job} classView={classView} /><FollowUpBadge job={job} /></div>
+                  <div className="mt-1 flex flex-wrap gap-1">{showScores && <RoleClassBadge job={job} />}<HistoryBadges job={job} classView={classView} /><FollowUpBadge job={job} /></div>
                   <ReasonLine job={job} classView={classView} />
                 </td>
                 <td className="max-w-[12rem] px-3 py-2 align-top text-stone-600 dark:text-stone-400">{job.company}</td>

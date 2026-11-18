@@ -31,6 +31,7 @@ from llm_enhancer import (  # noqa: E402
 import kept_ads  # noqa: E402
 import manual_jobs  # noqa: E402
 import pipeline_lock  # noqa: E402
+import role_class  # noqa: E402
 import view_guard  # noqa: E402
 import job_history  # noqa: E402
 from scorer import SCORING_VERSION, resolve_weights, score_jobs  # noqa: E402
@@ -153,6 +154,12 @@ def main() -> int:
 
 
 def score(args: argparse.Namespace) -> int:
+    """Production Fit 3 runs the frozen candidate i1 (its prompt version is part of the stored classification key); nothing here calls a model for it."""
+    with fit3_levels.production_candidate():
+        return _score(args)
+
+
+def _score(args: argparse.Namespace) -> int:
     if not args.intelligence.exists():
         print(f"Missing intelligence: {args.intelligence}", file=sys.stderr)
         return 1
@@ -216,6 +223,7 @@ def score(args: argparse.Namespace) -> int:
         enhancer = local_enhancer(identity, provider, model, args.judge_threshold)
 
     scored = score_jobs(jobs, intelligence, enhancer, workers=args.workers)
+    print(f"role class: {role_class.stamp(scored)}", file=sys.stderr)
     c = enhancer.counts
 
     # Shadow mode (ENGINE_CONTRACT.md section 7): adds engineShadow to each job

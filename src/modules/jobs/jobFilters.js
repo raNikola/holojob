@@ -1,6 +1,7 @@
 import { fitScoreOf } from './matchScore.js'
 import { isBlockedByVisa } from './workAuthorization.js'
 import { describeRange, matchesSalary, salaryRangeOf } from './salaryFilter.js'
+import { roleClassOf, roleClassLabel } from './roleClass.js'
 import geography from '../../data/geography.json'
 
 export function getJobProvider(job) {
@@ -98,6 +99,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
     showOffList = false,
     status = '',
     matchLabel = '',
+    roleClass = '',
     priority = [],
     minScore = '',
     salaryIncludeUnknown = true,
@@ -116,6 +118,7 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
       if (!appliedJobIds?.has(job.jobId)) return false
     } else if (status && job.status !== status) return false
     if (matchLabel && job.matchLabel !== matchLabel) return false
+    if (roleClass && roleClassOf(job) !== roleClass) return false
     if (priorities.length && !priorities.includes(job.priority)) return false
     if (minScore !== '' && minScore != null) {
       const floor = Number(minScore)
@@ -195,6 +198,7 @@ export function activeFilterChips(filters = {}) {
   const companies = normalizeMultiFilter(filters.company)
   if (companies.length) add('company', `Company: ${companies.join(', ')}`, { company: [] })
   if (filters.matchLabel) add('matchLabel', `Match label: ${filters.matchLabel}`, { matchLabel: '' })
+  if (filters.roleClass) add('roleClass', `Role class: ${roleClassLabel(filters.roleClass)}`, { roleClass: '' })
   const { from, to } = salaryRangeOf(filters)
   if (from != null || to != null) {
     const hidesUnknown = filters.salaryIncludeUnknown === false ? ', jobs without salary hidden' : ''
@@ -234,6 +238,7 @@ export const CLEAR_ALL_FILTERS = {
   showOffList: false,
   status: '',
   matchLabel: '',
+  roleClass: '',
   priority: [],
   minScore: '',
   ...SALARY_CLEARED,
@@ -241,7 +246,7 @@ export const CLEAR_ALL_FILTERS = {
 }
 
 /** Filters inside "More filters" that are active, so the toggle can show a count. */
-export const MORE_FILTER_KEYS = ['provider', 'company', 'matchLabel', 'salary', 'hideNeedsVisa', 'hideNoLongerListed', 'showOffList']
+export const MORE_FILTER_KEYS = ['provider', 'company', 'matchLabel', 'roleClass', 'salary', 'hideNeedsVisa', 'hideNoLongerListed', 'showOffList']
 export function moreFiltersCount(chips) {
   return chips.filter((c) => MORE_FILTER_KEYS.includes(c.key)).length
 }

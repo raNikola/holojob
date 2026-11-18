@@ -569,3 +569,55 @@ def test_frozen_shadow_candidate_loads_and_leaves_the_default_alone():
     finally:
         fit3.clear_candidate()
     assert fit3.PROMPT_VERSION == 2 and "QUOTE RULE" not in fit3.PROMPT
+
+
+# ---- production role class (badge and filter only) ----
+def _store_for(job, rep):
+    return {fit3.classification_key(job, ROLES, COMPS): {"reply": rep, "answers": None}}
+
+
+def test_role_labels_stamp_each_class_and_not_available():
+    job = {"jobId": "a", "title": "Product Manager", "company": "Acme", "description": AD}
+    adjacent = {"jobId": "b", "title": "Project Manager", "company": "Acme", "description": AD + " (project)"}
+    no_text = {"jobId": "c", "title": "Product Manager", "company": "Acme", "description": "  "}
+    no_entry = {"jobId": "d", "title": "Product Manager", "company": "Acme", "description": AD + " (other)"}
+    other = {"jobId": "e", "title": "Engineer", "company": "Acme", "description": AD + " (eng)"}
+    store = {**_store_for(job, reply()),
+             **_store_for(adjacent, reply(function={"role": "Project Manager", "quote": "own the product roadmap"})),
+             **_store_for(other, reply(function={"role": "Other", "quote": "own the product roadmap"}))}
+    jobs = [job, adjacent, no_text, no_entry, other]
+    counts = fit3.role_labels(jobs, store, ROLES, COMPS)
+    assert [j["roleClass"] for j in jobs] == ["target", "adjacent", "not available", "not available", "other"]
+    assert jobs[0]["roleName"] == "Product Manager" and jobs[2]["roleName"] is None
+    assert counts == {"target": 1, "adjacent": 1, "other": 1, "not available": 2}
+
+
+def test_role_labels_unquoted_role_is_not_available_and_no_store_is_all_not_available():
+    job = {"jobId": "a", "title": "Product Manager", "company": "Acme", "description": AD}
+    bad = _store_for(job, reply(function={"role": "Product Manager", "quote": "invented sentence"}))
+    assert fit3.role_labels([dict(job)], bad, ROLES, COMPS)["not available"] == 1
+    assert fit3.role_labels([dict(job)], None, ROLES, COMPS)["not available"] == 1
+
+
+def test_production_candidate_is_i1():
+    meta = fit3.use_candidate(fit3.PRODUCTION_CANDIDATE)
+    try:
+        assert meta["name"] == "i1" and fit3.PROMPT_VERSION == 3
+    finally:
+        fit3.clear_candidate()
+
+
+def test_stamp_reads_a_temp_store_under_i1_and_restores_the_prompt(tmp_path):
+    import role_class
+    job = {"jobId": "a", "title": "Product Manager", "company": "Acme", "description": AD}
+    roles, comps = fit3.load_roles(), fit3.closed_competencies("product")
+    with fit3.production_candidate():
+        key = fit3.classification_key(job, roles, comps)
+    assert ":f3p3:" in key and fit3.PROMPT_VERSION == 2  # the repo default is back after the block
+    store = tmp_path / "fit3.json"
+    store.write_text(json.dumps({"version": 1, "entries": {key: {"reply": reply(), "answers": None}}}))
+    rows = [dict(job), {**job, "jobId": "b", "description": AD + " other"}]
+    counts = role_class.stamp(rows, store)
+    assert [r["roleClass"] for r in rows] == ["target", "not available"] and counts["target"] == 1
+    assert fit3.PROMPT_VERSION == 2
+    assert role_class.stamp([dict(job)], tmp_path / "missing.json")["not available"] == 1
