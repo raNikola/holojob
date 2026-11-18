@@ -515,3 +515,47 @@ def test_the_schema_is_named_for_the_provider():
     # OpenAI answered 400 "Missing required parameter: response_format.json_schema.name" (plan Amendment A4): the wrapper needs a name and the schema.
     assert fit3.SCHEMA["name"] and fit3.SCHEMA["schema"]["type"] == "object"
     assert fit3.SCHEMA["schema"]["required"] == ["function", "title", "competencies"]
+
+
+def test_candidate_overlay_changes_prompt_version_and_wording_only(tmp_path):
+    import json as _json
+    real = fit3.closed_competencies()
+    base_hash = fit3.lists_hash(ROLES, real)
+    cid = real[0]["id"]
+    (tmp_path / "candidate.json").write_text(_json.dumps({"name": "t", "promptVersion": 7}))
+    (tmp_path / "prompt.txt").write_text(fit3.PROMPT.replace("exactly", "character for character"))
+    (tmp_path / "competency-wording.json").write_text(_json.dumps({"definitions": {cid: "reworded"}}))
+    try:
+        fit3.use_candidate(tmp_path)
+        comps = fit3.closed_competencies()
+        assert fit3.PROMPT_VERSION == 7 and "character for character" in fit3.PROMPT
+        assert [c["id"] for c in comps] == [c["id"] for c in real] and comps[0]["definition"] == "reworded"  # whole list, same ids
+        assert fit3.lists_hash(ROLES, comps) != base_hash
+        assert ":f3p7:" in fit3.classification_key({"id": "x", "title": "t", "company": "c", "description": "d"}, ROLES, comps)
+        (tmp_path / "competency-wording.json").write_text(_json.dumps({"definitions": {"no-such-id": "x"}}))
+        with pytest.raises(ValueError):
+            fit3.use_candidate(tmp_path)
+        (tmp_path / "competency-wording.json").write_text("{}")
+        (tmp_path / "candidate.json").write_text(_json.dumps({"name": "t", "promptVersion": 2}))
+        with pytest.raises(ValueError):  # a changed prompt on the old version would collide with stored keys
+            fit3.use_candidate(tmp_path)
+    finally:
+        fit3.clear_candidate()
+    assert fit3.PROMPT_VERSION == 2 and fit3.lists_hash(ROLES, fit3.closed_competencies()) == base_hash
+
+
+def test_matcher_fit3_asks_ads_without_stored_facts_but_the_default_run_does_not(tmp_path):
+    import measure_holdout_matcher as mm
+    jobs = tmp_path / "jobs"
+    jobs.mkdir()
+    rows = [{"jobId": "a", "title": "t", "description": "d"}, {"jobId": "b", "title": "t", "description": "d", "llmFacts": {"requirements": [{"id": "r"}]}}]
+    (jobs / "discovered_jobs.json").write_text(json.dumps({"jobs": rows}))
+    items, facts, counts = mm.facts_from_scratch(tmp_path, ["a", "b"])
+    assert [i["jobId"] for i in items] == ["b"] and counts["noFacts"] == 1
+    items, facts, counts = mm.facts_from_scratch(tmp_path, ["a", "b"], fit3_rows=True)
+    assert [i["jobId"] for i in items] == ["a", "b"] and facts["a"] == {}
+
+
+def test_dev_check_spearman():
+    import check_fit3_dev as dev
+    assert dev.spearman([1, 2, 3, 4], [1, 2, 3, 4]) == 1.0 and dev.spearman([1, 2, 3, 4], [4, 3, 2, 1]) == -1.0 and dev.spearman([1, 2], [1, 2]) is None

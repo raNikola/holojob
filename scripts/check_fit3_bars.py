@@ -192,7 +192,11 @@ def main(argv=None) -> int:
     p.add_argument("--pass1", required=True)
     p.add_argument("--pass2", default=None)
     p.add_argument("--labels", type=Path, required=True)
+    p.add_argument("--candidate", type=Path, default=None, help="a Fit 3 candidate directory (prompt, prompt version, competency wording); default the repo prompt")
     args = p.parse_args(argv)
+    if args.candidate:
+        from match_engine import fit3 as _fit3
+        _fit3.use_candidate(args.candidate)
     from match_engine.fit3_industry import candidate_industries
     ids = json.loads(args.ids.read_text(encoding="utf-8"))
     ids = list(dict.fromkeys(i for i in (ids.get("ids") if isinstance(ids, dict) else ids) or [] if isinstance(i, str)))

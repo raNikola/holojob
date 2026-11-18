@@ -126,7 +126,11 @@ def main(argv=None) -> int:
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--data-dir", type=Path, default=None, help="the real data dir (read only); default as the other measure scripts")
     p.add_argument("--confirm", action="store_true", help="REQUIRED to call the provider")
+    p.add_argument("--candidate", type=Path, default=None, help="a Fit 3 candidate directory (prompt, prompt version, competency wording); default the repo prompt")
     args = p.parse_args(argv)
+    if args.candidate:
+        from match_engine import fit3 as _fit3
+        _fit3.use_candidate(args.candidate)
     if args.max_usd <= 0:
         print("--max-usd must be positive", file=sys.stderr)
         return 2

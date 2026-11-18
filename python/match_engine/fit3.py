@@ -96,8 +96,46 @@ def load_roles(path: Path | None = None) -> dict[str, str]:
 
 
 def closed_competencies(family: str = "product") -> list[dict]:
-    """[{id, definition, kind}] of the family's curated list: the closed list the model picks from."""
-    return [{"id": c["id"], "definition": c.get("definition") or "", "kind": c.get("kind")} for c in comp_lists.load(family)]
+    """[{id, definition, kind}] of the family's curated list: the closed list the model picks from. A Fit 3 candidate may reword definitions (use_candidate);
+    the id set is always the whole curated list."""
+    return [{"id": c["id"], "definition": _WORDING.get(c["id"]) or c.get("definition") or "", "kind": c.get("kind")} for c in comp_lists.load(family)]
+
+
+# --- Candidate overlay (optimization loop, plan w5-optimization-plan.md): Fit 3 only, never touches src/data/competencies/*.json -----------------------
+_BASE_PROMPT, _BASE_VERSION = PROMPT, PROMPT_VERSION
+_WORDING: dict[str, str] = {}
+_PLACEHOLDERS = ("{title}", "{roles}", "{competencies}", "{description}")
+
+
+def clear_candidate() -> None:
+    global PROMPT, PROMPT_VERSION
+    PROMPT, PROMPT_VERSION = _BASE_PROMPT, _BASE_VERSION
+    _WORDING.clear()
+
+
+def use_candidate(directory: Path | str) -> dict:
+    """Load a candidate directory: candidate.json {"name", "promptVersion", "variant"}, optional prompt.txt (the classification prompt, same placeholders and
+    brace escaping as PROMPT) and optional competency-wording.json {"definitions": {id: text}}. The role list is not overridable (target roles are fixed).
+    A prompt that differs from the base must carry a new promptVersion (it is part of the classification key). Returns candidate.json."""
+    global PROMPT, PROMPT_VERSION
+    d = Path(directory)
+    meta = json.loads((d / "candidate.json").read_text(encoding="utf-8"))
+    clear_candidate()
+    prompt_file = d / "prompt.txt"
+    prompt = prompt_file.read_text(encoding="utf-8").rstrip("\n") if prompt_file.exists() else _BASE_PROMPT
+    version = int(meta.get("promptVersion", _BASE_VERSION))
+    if prompt != _BASE_PROMPT and version == _BASE_VERSION:
+        raise ValueError("a changed prompt needs a new promptVersion")
+    if any(token not in prompt for token in _PLACEHOLDERS):
+        raise ValueError("the candidate prompt lacks a placeholder")
+    ids = {c["id"] for c in comp_lists.load("product")}
+    wording_file = d / "competency-wording.json"
+    wording = json.loads(wording_file.read_text(encoding="utf-8")).get("definitions") or {} if wording_file.exists() else {}
+    if set(wording) - ids or any(not isinstance(v, str) or not v.strip() for v in wording.values()):
+        raise ValueError("competency wording: unknown id or empty definition (the id set is the whole curated list)")
+    PROMPT, PROMPT_VERSION = prompt, version
+    _WORDING.update(wording)
+    return meta
 
 
 def lists_hash(roles: dict[str, str], comps: list[dict]) -> str:

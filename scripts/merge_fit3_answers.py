@@ -54,7 +54,11 @@ def main(argv=None) -> int:
     p.add_argument("--matcher", type=Path, default=None)
     p.add_argument("--out", default="store.json")
     p.add_argument("--data-dir", type=Path, default=None)
+    p.add_argument("--candidate", type=Path, default=None, help="a Fit 3 candidate directory (prompt, prompt version, competency wording); default the repo prompt")
     args = p.parse_args(argv)
+    if args.candidate:
+        from match_engine import fit3 as _fit3
+        _fit3.use_candidate(args.candidate)
     real = Path(args.data_dir or mc.default_data_dir()).resolve()
     scratch = args.scratch.resolve()
     if scratch == real or real in scratch.parents:

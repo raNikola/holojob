@@ -42,7 +42,7 @@ DEFAULT_IDS = mc.EVAL_DIR / "holdout-ids-18.json"
 DEFAULT_SCRATCH = mc.EVAL_DIR / "holdout-scratch-data"
 
 
-def facts_from_scratch(scratch: Path, ids: list[str]) -> tuple[list[dict], dict, dict]:
+def facts_from_scratch(scratch: Path, ids: list[str], fit3_rows: bool = False) -> tuple[list[dict], dict, dict]:
     """(ad rows without facts, {jobId: facts}, counts). The view wins over the ledger; no text is printed."""
     view = json.loads((scratch / "jobs" / "discovered_jobs.json").read_text(encoding="utf-8"))
     rows = {j.get("jobId"): j for j in (view.get("jobs") if isinstance(view, dict) else view) or []}
@@ -57,7 +57,10 @@ def facts_from_scratch(scratch: Path, ids: list[str]) -> tuple[list[dict], dict,
             continue
         counts["found"] += 1
         llm = (rows.get(i) or {}).get("llmFacts") or (entries.get(i) or {}).get("llmFacts")
-        if not llm:
+        if fit3_rows:  # Fit 3 replaces the requirement rows, so an ad without stored facts (the 45 labelled ads, 20 of them) is asked with empty facts
+            items.append({k: v for k, v in {**row, "jobId": i}.items() if k != "llmFacts"})
+            facts[i] = llm or {}
+        elif not llm:
             counts["noFacts"] += 1
         elif not llm.get("requirements"):
             counts["noRequirements"] += 1
@@ -124,7 +127,7 @@ def prepare(scratch: Path, out: Path, ids: list[str], real_data: Path, responsib
             classification: str = "classification.json") -> dict:
     from calibration.enrich_sample import FACTS_NAME
     from competency_mapping import load_remap
-    items, facts, counts = facts_from_scratch(scratch, ids)
+    items, facts, counts = facts_from_scratch(scratch, ids, fit3_rows)
     if responsibilities:
         items, facts, extra = facts_from_extract7(scratch, items, facts)
         counts = {**counts, **extra, "prepared": len(items)}
@@ -151,7 +154,11 @@ def main(argv=None) -> int:
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--data-dir", type=Path, default=None, help="the real data dir (only the remap and, for a run, the key store)")
     p.add_argument("--confirm", action="store_true", help="REQUIRED to call the provider")
+    p.add_argument("--candidate", type=Path, default=None, help="a Fit 3 candidate directory (prompt, prompt version, competency wording); default the repo prompt")
     args = p.parse_args(argv)
+    if args.candidate:
+        from match_engine import fit3 as _fit3
+        _fit3.use_candidate(args.candidate)
     if args.max_usd <= 0:
         print("--max-usd must be positive", file=sys.stderr)
         return 2
