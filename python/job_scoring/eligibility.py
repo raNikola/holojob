@@ -22,6 +22,7 @@ Rules:
 
 from __future__ import annotations
 
+import html
 import re
 
 import work_authorization as wa
@@ -49,7 +50,23 @@ _B2B_PATTERNS = [re.compile(p) for p in (
 
 
 def _quote_text(text) -> str:
-    return normalize_text(str(text or "").replace("’", "'").replace("‘", "'"))
+    # Markdown emphasis ("***does not offer sponsorship***", "**not**" on its own line) is formatting, not words.
+    plain = re.sub(r"\*+|_{2,}", " ", str(text or "")).replace("’", "'").replace("‘", "'")
+    return normalize_text(plain)
+
+
+def refusal_in_text(description) -> str | None:
+    """The ad's own sentence that refuses sponsorship, a visa or a permit, or None.
+
+    For an ad whose extraction did not mark the refusal. The sentence comes from the stored text, so it is verbatim by
+    construction; the pattern is the one every other refusal uses (work_authorization.refuses_sponsorship).
+    """
+    plain = re.sub(r"\*+|_{2,}", " ", re.sub(r"<[^>]+>", " ", html.unescape(str(description or ""))))
+    for part in re.split(r"\n\s*\n|(?<=[.!?])\s+", plain):
+        sentence = " ".join(part.split())
+        if 8 <= len(sentence) <= 400 and wa.refuses_sponsorship(sentence):
+            return sentence
+    return None
 
 
 def quote_in_text(quote, description) -> bool:
@@ -105,12 +122,12 @@ def assess(job: dict, prefs: dict) -> dict | None:
     open_to_sponsorship = bool((prefs.get("workAuthorization") or {}).get("openToSponsorship"))
     b2b_ok = bool((prefs.get("workAuthorization") or {}).get("b2bAvailable"))
 
-    def blocked(reason: str, kind: str) -> dict:
+    def blocked(reason: str, kind: str, quote: str = evidence) -> dict:
         wording = b2b_wording(description) if b2b_ok else None
         if wording:
             return _result(UNKNOWN, place, f"{reason}; the ad also accepts B2B or contractor work", quote=wording, kind="b2b_exception",
                            basis=basis, b2b=True)
-        return _result(REFUSED, place, reason, quote=evidence, kind=kind, basis=basis)
+        return _result(REFUSED, place, reason, quote=quote, kind=kind, basis=basis)
 
     if sponsorship == "offered" and quoted:
         if open_to_sponsorship:
@@ -122,6 +139,11 @@ def assess(job: dict, prefs: dict) -> dict | None:
         if wa.refuses_sponsorship(evidence):
             return blocked(f"needs a work permit for {place} and the ad does not sponsor one", "refused")
         return blocked(f"requires an existing right to work, and {place} is outside your authorized countries", "right_to_work_required")
+    if sponsorship != "offered" and not (quoted and wa.refuses_sponsorship(evidence)):
+        # The extraction marked no refusal (silent, or a quote that is no refusal): the ad's own words may still hold one.
+        sentence = refusal_in_text(description)
+        if sentence:
+            return blocked(f"needs a work permit for {place} and the ad does not sponsor one", "refused_in_text", sentence)
     if evidence and not quoted:
         return _result(UNKNOWN, place, "the ad's visa quote is not found in its text, so it was not used", kind="quote_not_in_ad", basis=basis)
     return _result(UNKNOWN, place, f"needs a work permit for {place}; the ad does not mention sponsorship", kind="silent", basis=basis)
