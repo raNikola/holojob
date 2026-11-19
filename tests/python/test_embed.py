@@ -195,6 +195,7 @@ def test_level_gain_is_the_tie_break_effect_inside_role_classes():
     assert mes.level_metrics(list(levels), {i: 1 for i in levels}, classes, good) is None  # a constant level
 
 
+@pytest.mark.slow
 def test_level_task_reports_aggregates_only():
     ads = {i: {"company": c, "set": "dev"} for i, c in zip("abcdef", "ABCDEF")}
     classes = dict(zip("abcdef", ["other", "other", "adjacent", "target", "adjacent", "target"]))

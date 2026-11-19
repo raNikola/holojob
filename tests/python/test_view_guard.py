@@ -217,6 +217,7 @@ def test_a_view_lock_held_too_long_is_an_explicit_error_not_a_hang(tmp_path, mon
 # --- (b) parallel readers ----------------------------------------------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_parallel_processes_hitting_a_mismatch_at_once_one_rebuilds_the_others_wait_and_nobody_reads_half_a_file(tmp_path, monkeypatch):
     root, old_view = world(tmp_path, monkeypatch, runs=2, ads=60)
     jobs, ledger = paths(root)

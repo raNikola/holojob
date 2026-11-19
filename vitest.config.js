@@ -8,6 +8,8 @@ export default defineConfig({
   test: {
     include: ['tests/js/**/*.test.js'],
     environment: 'node',
+    // Four workers at most, so a run does not starve the home server.
+    maxWorkers: 4,
     setupFiles: ['tests/js/setup/findingsRoot.js', 'tests/js/setup/realDataGuard.js'],
     // The second guard: owner-private files are fingerprinted before and after the run (catches what a spawned process writes).
     globalSetup: ['tests/js/setup/realDataFingerprint.js'],

@@ -31,6 +31,8 @@ tzdata==2026.5
 
 # Testing (dev)
 pytest==8.4.1
+pytest-xdist==3.8.0
+execnet==2.1.2
 
 # TODO: major upgrades for later
 # pandas==3.0.6 (breaking changes — testirati pre upgrade-a)

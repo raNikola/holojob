@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import subprocess
 import sys
 import zipfile
@@ -108,7 +109,7 @@ def _zip(members: dict[str, bytes]) -> bytes:
     return out.getvalue()
 
 
-@pytest.mark.parametrize("name,data,code", [
+_REFUSALS = [
     ("empty", b"", "empty"),
     ("not a zip", b"MZ" + b"x" * 300, "corrupt_file"),
     ("old .doc or password protected", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 100, "encrypted"),
@@ -118,7 +119,11 @@ def _zip(members: dict[str, bytes]) -> bytes:
     ("many members under their own limit that add up past the total", _zip({"word/document.xml": b"<x/>", **{f"m{i}.bin": b"\0" * (20 * 1024 * 1024) for i in range(3)}}), "corrupt_file"),
     ("too many members", _zip({"word/document.xml": b"<x/>", **{f"m{i}.txt": b"a" for i in range(2100)}}), "corrupt_file"),
     ("over the size limit", b"PK" + b"x" * (MAX_DOCX_BYTES + 1), "too_large"),
-])
+]
+
+
+# Ids from the case names: the generated zips carry the current time, so byte-derived ids differ between pytest-xdist workers.
+@pytest.mark.parametrize("name,data,code", _REFUSALS, ids=[case[0] for case in _REFUSALS])
 def test_refusals_use_fixed_codes(name, data, code):
     with pytest.raises(TextImportError) as err:
         docx_to_text(data)
@@ -129,7 +134,7 @@ def test_refusals_use_fixed_codes(name, data, code):
     ("one member over its own limit", _zip({"word/document.xml": b"\0" * (30 * 1024 * 1024)})),
     ("members under their own limit that add up past the total", _zip({"word/document.xml": b"<x/>", **{f"m{i}.bin": b"\0" * (20 * 1024 * 1024) for i in range(3)}})),
     ("too many members", _zip({"word/document.xml": b"<x/>", **{f"m{i}.txt": b"a" for i in range(2100)}})),
-])
+], ids=lambda value: value if isinstance(value, str) else "zip")  # the zips carry the current time: byte-derived ids differ between xdist workers
 def test_the_package_limits_refuse_before_python_docx_ever_opens_the_file(name, data):
     """Each limit is tested on its own at check_package: python-docx would reject these fake packages anyway, and that must not hide a missing limit."""
     with pytest.raises(TextImportError) as err:
@@ -168,8 +173,8 @@ def test_external_entities_are_not_resolved():
     assert Path("/etc/hostname").read_text().strip() not in text
 
 
-def _run(data: bytes, source="resume_docx"):
-    return subprocess.run([sys.executable, "-I", RUNNER, source], input=data, capture_output=True)
+def _run(data: bytes, source="resume_docx", env=None):
+    return subprocess.run([sys.executable, "-I", RUNNER, source], input=data, capture_output=True, env=env)
 
 
 def test_the_runner_answers_a_draft_or_a_fixed_code_and_prints_nothing_to_stderr():
@@ -184,9 +189,12 @@ def test_the_runner_answers_a_draft_or_a_fixed_code_and_prints_nothing_to_stderr
 
 
 def test_the_file_is_not_written_anywhere(tmp_path):
-    before = sorted(p.name for p in Path("/tmp").glob("*docx*"))
-    _run(_bytes(_resume()))
-    assert sorted(p.name for p in Path("/tmp").glob("*docx*")) == before
+    # The runner gets its own empty temp dir, so another test (or xdist worker) writing to /tmp cannot disturb the check.
+    tmp = tmp_path / "tmp"
+    tmp.mkdir()
+    ran = _run(_bytes(_resume()), env={**os.environ, "TMPDIR": str(tmp), "TEMP": str(tmp), "TMP": str(tmp)})
+    assert json.loads(ran.stdout)["ok"] is True
+    assert list(tmp.iterdir()) == []
 
 
 def test_check_package_accepts_a_real_document():

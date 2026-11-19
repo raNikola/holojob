@@ -178,6 +178,7 @@ def test_a_child_that_ignores_sigterm_is_killed_when_the_step_is_gone(fake):
     assert lock_is_free() and on_disk(RUN_ID)["status"] == "cancelled"
 
 
+@pytest.mark.slow
 def test_a_step_that_ignores_sigterm_is_killed_after_the_grace_and_nothing_survives(fake):
     proc = fake.start(FAKE_MODE="ignore", FAKE_DISCOVERY_SECONDS="60")
     started(fake)
@@ -193,6 +194,7 @@ def test_a_step_that_ignores_sigterm_is_killed_after_the_grace_and_nothing_survi
     assert lock_is_free()
 
 
+@pytest.mark.slow
 def test_a_step_that_has_claimed_its_commit_is_never_killed(fake):
     """The commit point: SIGTERM is ignored (deferred), the grace passes, and the orchestrator still does not kill, because it cannot win the claim."""
     proc = fake.start(FAKE_MODE="commit", FAKE_DISCOVERY_SECONDS="3")
@@ -649,6 +651,7 @@ def leftover(repo):
     return [line for line in listing if str(repo) in line and "pytest" not in line]
 
 
+@pytest.mark.slow
 def test_the_real_run_cancelled_mid_scrape_commit_point_and_hard_kill(scratch):
     repo = scratch.repo
     jobs = repo / "data/jobs"

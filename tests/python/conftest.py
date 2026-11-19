@@ -208,3 +208,6 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "network: hits a live third-party site; skipped when unreachable"
     )
+    config.addinivalue_line(
+        "markers", "slow: takes about a second or more (real subprocess kills, parallel processes); the fast pre-push tier skips it, the full tier runs it"
+    )

@@ -20,10 +20,11 @@ esac
 # The commits that would land on a branch. Deleted branches (an all-zero local sha)
 # and tags are not checked.
 shas=
-while read -r _local_ref local_sha remote_ref _remote_sha; do
+remote_shas=
+while read -r _local_ref local_sha remote_ref remote_sha; do
   case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
   case "$local_sha" in *[!0]*) ;; *) continue ;; esac
-  case " $shas " in *" $local_sha "*) ;; *) shas="$shas $local_sha" ;; esac
+  case " $shas " in *" $local_sha "*) ;; *) shas="$shas $local_sha"; remote_shas="$remote_shas $local_sha:$remote_sha" ;; esac
 done
 [ -n "$shas" ] || exit 0
 
@@ -52,50 +53,19 @@ command -v podman >/dev/null 2>&1 || die "podman not found"
 [ -d "$top/node_modules" ] || die "node_modules missing (see Tests in CLAUDE.md)"
 [ -x "$top/.venv/bin/python" ] || die ".venv/bin/python missing (see Tests in CLAUDE.md)"
 
-work=$(mktemp -d) || die "cannot create a temp directory"
-trap 'rm -rf "$work"' EXIT
-trap 'exit 130' HUP INT TERM
-
-in_node() {
-  podman run --rm --security-opt label=disable -e NPM_CONFIG_UPDATE_NOTIFIER=false \
-    -v "$tree:/work" -v "$top/node_modules:/work/node_modules" -w /work \
-    docker.io/library/node:20-bookworm "$@"
-}
-
-run_pytest() {
-  (cd "$tree" && "$top/.venv/bin/python" -m pytest -m "not network" -q)
-}
-
-step() {
-  name=$1
-  shift
-  started=$(date +%s)
-  if "$@" >"$work/log" 2>&1 </dev/null; then
-    printf 'pre-push: PASS %-8s %ss\n' "$name" "$(($(date +%s) - started))"
-  else
-    printf 'pre-push: FAIL %-8s %ss\n' "$name" "$(($(date +%s) - started))"
-    tail -n 60 "$work/log"
-    die "$name failed for ${sha%"${sha#???????}"}"
-  fi
-}
+# Two tiers (scripts/test-tier.sh). Fast, the default: lint, the tests related to what the push changes, the meta tests.
+# Full, on demand: HOLOJOB_PUSH_TIER=full git push ..., or run it first: sh scripts/test-tier.sh full
+tier=${HOLOJOB_PUSH_TIER:-fast}
+case "$tier" in fast | full) ;; *) die "HOLOJOB_PUSH_TIER must be fast or full, not $tier" ;; esac
 
 total_started=$(date +%s)
 for sha in $shas; do
-  # Check the commit being pushed, not the working tree: a file left out of the
-  # commit passes in the working tree and still breaks what gets pushed.
-  tree="$work/tree"
-  mkdir "$tree"
-  git -C "$top" archive -o "$work/tree.tar" "$sha" && tar -xf "$work/tree.tar" -C "$tree" || die "cannot export $sha"
-  # Git-ignored and generated from the profile; without it the scoring snapshot tests skip.
-  if [ -f "$top/data/engine-snapshot.json" ]; then
-    mkdir -p "$tree/data"
-    cp "$top/data/engine-snapshot.json" "$tree/data/"
-  fi
-
-  step lint in_node npm run lint
-  step js-tests in_node npm run test:js
-  step pytest run_pytest
-  step build in_node npm run build
-  rm -rf "$tree"
+  # What the remote already has: the sha it reports for this branch if we know it, else where the commit left origin/main.
+  base=
+  for r in $remote_shas; do
+    case "$r" in "$sha":*) base=${r#*:}; break ;; esac
+  done
+  case "$base" in *[!0]*) git -C "$top" cat-file -e "$base^{commit}" 2>/dev/null || base= ;; *) base= ;; esac
+  sh "$top/scripts/test-tier.sh" "$tier" "$sha" "$base" || die "$tier tier failed for ${sha%"${sha#???????}"}"
 done
-echo "pre-push: all checks passed in $(($(date +%s) - total_started))s"
+echo "pre-push: $tier tier passed in $(($(date +%s) - total_started))s"
