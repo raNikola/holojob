@@ -108,6 +108,8 @@ def run(engine, jobs, est: dict, max_usd: float, profile: dict) -> dict:
     """The paid run. Worst-case accounting per call, stop at the cap; the AI gate still enforces the owner's daily and monthly limits."""
     price = est["price"]
     spent = {"usd": 0.0, "calls": 0, "reason": None}
+    for key in matcher.MASKED_CONTACTS:
+        matcher.MASKED_CONTACTS[key] = 0  # the estimate built the same prompts; count the run's own
     lock = threading.Lock()
 
     def guarded(prompt, schema=None, model=None, provider=None):
@@ -133,7 +135,7 @@ def run(engine, jobs, est: dict, max_usd: float, profile: dict) -> dict:
     engine.save()  # whatever was paid for is kept, also after a stop
     stop = spent["reason"] or engine.refusal
     return {"stopped": stop, "newCalls": engine.counts["matched"], "failed": engine.counts["failed"], "refused": engine.counts["refused"],
-            "modelCalls": spent["calls"], "worstCaseUsd": round(spent["usd"], 4)}
+            "modelCalls": spent["calls"], "worstCaseUsd": round(spent["usd"], 4), "contactsMasked": dict(matcher.MASKED_CONTACTS)}
 
 
 def describe(est: dict, selection: dict, max_usd: float | None) -> list[str]:
@@ -147,6 +149,8 @@ def describe(est: dict, selection: dict, max_usd: float | None) -> list[str]:
         lines.append(f"estimated cost (upper bound, no cache discount): ${est['costUsd']:.4f} at ${price['inputPerMTok']}/{price['outputPerMTok']} per 1M tokens")
     lines.append(f"budget: today {b['dailySpent']:.4f} of {b['dailyLimit']}; this month {b['monthlySpent']:.4f} of {b['monthlyLimit']}")
     lines.append("privacy scan: " + (f"{len(est['leaks'])} ads hit it and are NOT sent (ids: {', '.join(map(str, est['leaks']))}); the rest pass" if est["leaks"] else "all requests pass"))
+    m = matcher.MASKED_CONTACTS
+    lines.append(f"contact data masked in ad text before sending: {m['ads']} ads ({m['emails']} e-mail addresses, {m['phones']} phone numbers); the owner-identifier scan is unchanged")
     if max_usd is not None:
         lines.append(f"cap: ${max_usd:.2f}" + (" (the estimate is OVER it: the run would stop part-way)" if est["costUsd"] and est["costUsd"] > max_usd else ""))
     return lines

@@ -30,7 +30,8 @@ from job_fingerprint import PROMPT_VERSION as EXTRACTION_PROMPT_VERSION
 from job_fingerprint import job_fingerprint
 from llm_client import GuardrailRefused, LlmRefused, LlmUnavailable, active_provider, complete_json
 import ai_gate  # noqa: E402 (on the path through llm_client)
-from redact import redact_cv_text
+import threading
+from redact import mask_ad_contacts, redact_cv_text
 from requirement_frames import remap_facts
 
 from .evidence_select import mode_of, select_evidence, version_of
@@ -40,6 +41,10 @@ from .verify import STATUSES, apply_proposal, drop_unquoted, output_status, reso
 MATCH_PROMPT_VERSION = 2
 # One string for both prompts, as the contract's `promptVersion` asks.
 PROMPT_VERSION = f"extract-{EXTRACTION_PROMPT_VERSION}.match-{MATCH_PROMPT_VERSION}"
+
+# Counts of the e-mail addresses and phone numbers masked in ad text before sending (a recruiter's contact line); read by owner-run scripts.
+MASKED_CONTACTS = {"ads": 0, "emails": 0, "phones": 0}
+_MASKED_LOCK = threading.Lock()
 
 EVIDENCE_FIELDS = ("id", "source", "role", "start", "end", "text")
 
@@ -243,6 +248,12 @@ def build_prompt(description: str, asked: list[tuple[str, dict]], evidence: list
     requirements = [
         {"ref": ref, "text": r["text"], "kind": r["kind"], "importance": r["importance"]} for ref, r in asked
     ]
+    description, masked = mask_ad_contacts(description)
+    if masked["emails"] or masked["phones"]:
+        with _MASKED_LOCK:
+            MASKED_CONTACTS["ads"] += 1
+            MASKED_CONTACTS["emails"] += masked["emails"]
+            MASKED_CONTACTS["phones"] += masked["phones"]
     return PROMPT.format(
         description=description,
         requirements=json.dumps(requirements, ensure_ascii=False, indent=1),

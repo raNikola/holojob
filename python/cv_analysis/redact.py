@@ -72,6 +72,24 @@ def identity_of(profile: dict | None) -> tuple[str, list[str]]:
     return name, [str(l).strip() for l in links if str(l or "").strip()] if isinstance(links, list) else []
 
 
+def mask_ad_contacts(text: str) -> tuple[str, dict]:
+    """(text, {"emails": n, "phones": n}): the e-mail addresses and phone numbers an AD carries, replaced by [EMAIL] / [PHONE].
+
+    For public ad text only (a recruiter's contact line); the owner-identifier scan is not loosened and still runs on the result."""
+    emails = len(EMAIL_RE.findall(text))
+    text = EMAIL_RE.sub("[EMAIL]", text)
+    phones = 0
+
+    def phone(m):
+        nonlocal phones
+        if not _is_phone(m.group(0)):
+            return m.group(0)
+        phones += 1
+        return "[PHONE]"
+
+    return PHONE_RE.sub(phone, text), {"emails": emails, "phones": phones}
+
+
 def find_leaks(text: str, name: str = "", links: list[str] | None = None) -> list[str]:
     """What of the owner's is still in `text` after redaction; empty when it is clean.
 

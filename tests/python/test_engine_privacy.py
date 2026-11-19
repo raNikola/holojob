@@ -293,8 +293,8 @@ def test_it_catches_a_careless_shadow_wiring(pipeline, monkeypatch):
     # The second pass strips the name and e-mail; nothing can strip the languages.
     build = evidence_index.build_candidate
 
-    def careless(profile, intelligence, facts):
-        candidate = build(profile, intelligence, facts)
+    def careless(profile, intelligence, facts, enrichment=None):
+        candidate = build(profile, intelligence, facts, enrichment)
         basic = profile["basicProfile"]
         extra = [basic["fullName"], basic["email"], *intelligence["languages"]]
         candidate["evidence"] += [{"id": f"ev-x{i}", "source": "fact", "role": None, "start": None, "end": None,
