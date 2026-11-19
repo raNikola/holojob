@@ -47,7 +47,7 @@ The owner decides product behavior; Code decides the technical approach.
 
 - **While developing:** only targeted tests for the changed code, plus the relevant lint. Mutation tests only for changed logic, when needed.
 - **Before each commit:** those targeted tests and relevant lint pass. Do not run the full suite just to commit.
-- **Before a push or merge, once, when the feature is complete:** full pytest, full Vitest, JS lint, production build, mutation checks, required integration tests, `data/` fingerprint check. The pre-push hook runs lint, JS tests, pytest and build; the rest by hand. If the gate fails: fix, rerun the failed checks; rerun everything only if later changes could affect verified areas.
+- **Before a push or merge, once, when the feature is complete:** full pytest, full Vitest, JS lint, production build, mutation checks, required integration tests, `data/` fingerprint check. The pre-push hook runs the **fast tier** by default (lint of the changed files, the tests related to what the push changes, the meta tests; no build, no `slow` tests, falls back to the meta tests and says so when it cannot map a change). The **full tier** (all lint, Vitest, pytest incl. `slow`, build) runs only on demand: `sh scripts/test-tier.sh full`, or `HOLOJOB_PUSH_TIER=full git push ...`; the rest by hand. If the gate fails: fix, rerun the failed checks; rerun everything only if later changes could affect verified areas.
 
 ## Test commands
 
@@ -56,7 +56,8 @@ The owner decides product behavior; Code decides the technical approach.
     podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run lint
     podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run test:js
     podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run build
-    .venv/bin/python -m pytest tests/python -q            # add -m "not network" to run offline
+    .venv/bin/python -m pytest tests/python -q            # 4 xdist workers (pytest.ini); add -m "not network" to run offline, -m "not slow" to skip the ~1 s+ kill/cancel tests, -n 0 for one process
+    sh scripts/test-tier.sh fast|full                      # the two pre-push tiers by hand (HOLOJOB_NODE_MODULES / HOLOJOB_PYTHON point it at node_modules and the venv when they are not in the repo root)
 
 `npm test` / `npm run test:python` work on neither side. Details (venv setup, pre-push hook, network tests): `docs/ARCHITECTURE.md` "Tests and pre-push hook".
 
