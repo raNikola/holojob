@@ -252,11 +252,16 @@ def cmd_evaluate(args) -> int:
     from calibration import fit_b_metrics as m
     gains = {i: g for i, g in json.loads(Path(args.labels).read_text(encoding="utf-8"))["gains"].items() if g is not None}
     scores_b = {i: r["output"]["score"] for i, r in json.loads(Path(args.ratings).read_text(encoding="utf-8"))["ratings"].items()}
-    scores_base = {i: float(s) for i, s in json.loads(Path(args.baseline).read_text(encoding="utf-8")).items()}
+    base = json.loads(Path(args.baseline).read_text(encoding="utf-8"))
+    scores_base = {i: float(s) for i, s in (base.get("matchScore") if isinstance(base.get("matchScore"), dict) else base).items()}
     ids = [i for i in gains if i in scores_b and i in scores_base]
+    if args.population:  # the frozen population (Amendment 3): labelled ads that pass the code gates, fixed at the baseline freeze
+        allowed = set(json.loads(Path(args.population).read_text(encoding="utf-8"))["gatePassingScoredIds"])
+        ids = [i for i in ids if i in allowed]
     gains = {i: gains[i] for i in ids}
     result = m.verdict(scores_b, scores_base, gains, args.delta)
-    secondary = {"ndcg20_B": m.ndcg_of(scores_b, gains, 20), "ndcg20_base": m.ndcg_of(scores_base, gains, 20),
+    secondary = {"ndcg20_B": m.ndcg_tie_aware(scores_b, gains, 20), "ndcg20_base": m.ndcg_tie_aware(scores_base, gains, 20),
+                 "ndcg20_B_idTieBreak": m.ndcg_of(scores_b, gains, 20), "ndcg20_base_idTieBreak": m.ndcg_of(scores_base, gains, 20),
                  "precision10_B": m.precision_at(scores_b, gains, 10), "precision10_base": m.precision_at(scores_base, gains, 10),
                  "tieShare_B": m.tie_share({i: scores_b[i] for i in ids}), "tieShare_base": m.tie_share({i: scores_base[i] for i in ids})}
     if args.gpt_csv and Path(args.gpt_csv).exists():
@@ -295,6 +300,7 @@ def main(argv=None) -> int:
     p.add_argument("--baseline", required=True)
     p.add_argument("--labels", required=True)
     p.add_argument("--delta", type=float, required=True)
+    p.add_argument("--population", default=None, help="the frozen population file (Amendment 3); only its gate-passing ads are evaluated")
     p.add_argument("--gpt-csv", default=None)
     args = ap.parse_args(argv)
     return {"summary": cmd_summary, "estimate": cmd_estimate, "run": cmd_run, "labels": cmd_labels, "evaluate": cmd_evaluate}[args.cmd](args)

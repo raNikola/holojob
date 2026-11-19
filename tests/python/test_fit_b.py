@@ -104,3 +104,34 @@ def test_a_paid_run_needs_confirm_and_a_cap_and_never_writes_under_the_real_data
     assert measure_fit_b.main(base + ["--confirm"]) == 2
     with pytest.raises(SystemExit):
         measure_fit_b.refuse_real(Path("/srv/holojob/data/anything"))
+
+
+def test_tie_aware_ndcg_is_the_exact_expectation_over_orderings_inside_tied_groups():
+    import itertools
+    scores = {"a": 90, "b": 70, "c": 70, "d": 70, "e": 40, "f": 40, "g": 10}
+    gains = {"a": 1.0, "b": 3.0, "c": 0.0, "d": 1.5, "e": 3.0, "f": 0.0, "g": 2.0}
+    groups = {}
+    for i, s in scores.items():
+        groups.setdefault(s, []).append(i)
+    orderings = []
+    for combo in itertools.product(*(itertools.permutations(groups[s]) for s in sorted(groups, reverse=True))):
+        orderings.append([i for part in combo for i in part])
+    for k in (3, 4, 10):
+        brute = sum(m.ndcg_at([gains[i] for i in o], k) for o in orderings) / len(orderings)
+        assert m.ndcg_tie_aware(scores, gains, k) == pytest.approx(brute)
+
+
+def test_tie_aware_equals_the_id_order_when_nothing_ties_and_ignores_ad_ids_when_all_tie():
+    scores, gains = {"a": 3, "b": 2, "c": 1}, {"a": 0.0, "b": 3.0, "c": 1.0}
+    assert m.ndcg_tie_aware(scores, gains, 10) == pytest.approx(m.ndcg_of(scores, gains, 10))
+    renamed = {"z1": 0.0, "z2": 3.0, "z3": 1.0}
+    assert m.ndcg_tie_aware({"a": 5, "b": 5, "c": 5}, gains, 10) == pytest.approx(m.ndcg_tie_aware({"z1": 5, "z2": 5, "z3": 5}, renamed, 10))
+
+
+def test_verdict_uses_the_tie_aware_primary_and_reports_the_id_tie_break_beside_it():
+    base = {f"ad{i}": 50 for i in range(12)}
+    b = {f"ad{i}": 90 - i for i in range(12)}
+    gains = {f"ad{i}": 3.0 if i < 3 else 0.0 for i in range(12)}
+    out = m.verdict(b, base, gains, 0.05)
+    assert out["ndcg10_B"] == pytest.approx(1.0) and out["ndcg10_base"] == pytest.approx(m.ndcg_tie_aware(base, gains, 10))
+    assert out["ndcg10_base_idTieBreak"] == pytest.approx(m.ndcg_of(base, gains, 10)) and "win" in out

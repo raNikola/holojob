@@ -48,6 +48,32 @@ def ndcg_of(scores: dict[str, float], gains: dict[str, float], k: int) -> float 
     return ndcg_at([gains[i] for i in order(scores, labelled)], k)
 
 
+def expected_dcg(pairs: list[tuple], k: int) -> float:
+    """Exact expected DCG@k over all orderings within groups of equal scores. `pairs` = [(score or None, gain)]. DCG is linear in the gain at each
+    position, and every member of a tied group is equally likely at each of the group's positions, so a group that occupies positions s..s+g-1
+    contributes (mean gain of the group) x (sum of the position discounts inside the top k). No sampling. An unscored ad (None) is the last group."""
+    groups: dict = {}
+    for score, gain in pairs:
+        groups.setdefault(None if score is None else float(score), []).append(gain)
+    total, start = 0.0, 0
+    for score in sorted(groups, key=lambda v: (v is None, -(v or 0.0))):
+        members = groups[score]
+        discount = sum(1 / math.log2(pos + 2) for pos in range(start, min(start + len(members), k)))
+        total += (sum(members) / len(members)) * discount
+        start += len(members)
+    return total
+
+
+def ndcg_tie_aware_pairs(pairs: list[tuple], k: int) -> float | None:
+    ideal = dcg(sorted((g for _, g in pairs), reverse=True), k)
+    return None if ideal == 0 else expected_dcg(pairs, k) / ideal
+
+
+def ndcg_tie_aware(scores: dict[str, float], gains: dict[str, float], k: int) -> float | None:
+    """PRIMARY metric (Amendment 5): nDCG@k, labelled ads only, expected over all orderings inside tied score groups. `ndcg_of` (ad id order) is the secondary."""
+    return ndcg_tie_aware_pairs([(scores.get(i), gains[i]) for i in gains if gains[i] is not None], k)
+
+
 def precision_at(scores: dict[str, float], gains: dict[str, float], k: int, threshold: float = 3.0) -> float | None:
     """Share of the top k labelled ads whose gain reaches `threshold` (the Apply level)."""
     labelled = [i for i in gains if gains[i] is not None]
@@ -100,7 +126,8 @@ def paired_bootstrap(scores_b: dict[str, float], scores_base: dict[str, float], 
                      resamples: int = BOOTSTRAP_RESAMPLES, seed: int = BOOTSTRAP_SEED, level: float = CI_LEVEL) -> dict:
     """Paired bootstrap of nDCG@k(B) - nDCG@k(baseline), resampling ads with replacement.
 
-    Each draw is its own item; inside a resample the order is score descending, then ad id, then draw index, for both methods. A resample whose
+    Each draw is its own item; both methods are scored with the tie-aware nDCG (Amendment 5: expected value over the orderings inside tied scores, so
+    no ad id or draw index order is used). A resample whose
     ideal DCG is 0 is discarded and redrawn (counted in `redrawn`). The interval is the percentile interval with `level` mass in the middle.
     """
     ids = sorted(i for i in gains if gains[i] is not None and i in scores_b and i in scores_base)
@@ -116,11 +143,8 @@ def paired_bootstrap(scores_b: dict[str, float], scores_base: dict[str, float], 
             redrawn += 1
             continue
 
-        def gains_in_order(scores):
-            ranked = sorted(items, key=lambda t: (-(scores[t[1]]), t[1], t[0]))
-            return [gains[i] for _, i in ranked]
-
-        diffs.append(ndcg_at(gains_in_order(scores_b), k) - ndcg_at(gains_in_order(scores_base), k))
+        diffs.append(ndcg_tie_aware_pairs([(scores_b[i], gains[i]) for _, i in items], k)
+                     - ndcg_tie_aware_pairs([(scores_base[i], gains[i]) for _, i in items], k))
     diffs.sort()
     tail = (1 - level) / 2
     return {"n": len(ids), "diffs": diffs, "low": diffs[int(tail * len(diffs))], "high": diffs[min(len(diffs) - 1, int((1 - tail) * len(diffs)))], "redrawn": redrawn}
@@ -137,10 +161,11 @@ def apply_guard(scores_b: dict[str, float], scores_base: dict[str, float], gains
 
 def verdict(scores_b: dict[str, float], scores_base: dict[str, float], gains: dict[str, float], delta: float, k: int = 10) -> dict:
     """The pre-registered win rule: diff >= delta, AND the bootstrap CI lower bound > 0, AND the apply guard holds."""
-    nb, n0 = ndcg_of(scores_b, gains, k), ndcg_of(scores_base, gains, k)
+    nb, n0 = ndcg_tie_aware(scores_b, gains, k), ndcg_tie_aware(scores_base, gains, k)
+    nb_id, n0_id = ndcg_of(scores_b, gains, k), ndcg_of(scores_base, gains, k)
     boot = paired_bootstrap(scores_b, scores_base, gains, k)
     guard = apply_guard(scores_b, scores_base, gains)
     diff = None if nb is None or n0 is None else nb - n0
     win = bool(diff is not None and diff >= delta and boot["low"] is not None and boot["low"] > 0 and guard["pass"])
-    return {"ndcg10_B": nb, "ndcg10_base": n0, "diff": diff, "delta": delta, "ciLow": boot["low"], "ciHigh": boot["high"], "n": boot["n"],
+    return {"ndcg10_B": nb, "ndcg10_base": n0, "diff": diff, "delta": delta, "ndcg10_B_idTieBreak": nb_id, "ndcg10_base_idTieBreak": n0_id, "ciLow": boot["low"], "ciHigh": boot["high"], "n": boot["n"],
             "redrawn": boot["redrawn"], "guard": guard, "win": win}
