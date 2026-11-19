@@ -145,8 +145,7 @@ _CLEARANCE_NEGATION = re.compile(r"\b(?:no|not|without|never|neither|nor)\b[^.;\
 _CLEARANCE_NEGATION_AFTER = re.compile(r"^[^.;\n]{0,25}\b(?:not\s+(?:required|needed|necessary)|isn't\s+required|is\s+not\s+a\s+requirement)\b", re.I)
 # The sentence must SAY the ad requires it. A bare "Security clearance." or a benefits-list line is a mention, not a demand (owner rule 2026-11-19).
 DEMAND = re.compile(
-    r"\b(?:requires?|required|requiring|requirements?|must|mandatory|need(?:s|ed)?|essential|prerequisite|obtain|hold(?:ing)?|possess(?:ion)?|"
-    r"eligib(?:le|ility)|ability\s+to|able\s+to|strictly|necessary)\b",
+    r"\b(?:requires?|required|requiring|must|mandatory|need(?:s|ed)?\s+to|essential|prerequisite|ability\s+to|able\s+to|strictly|necessary)\b",
     re.I,
 )
 _SENTENCES = re.compile(r"\n\s*\n|(?<=[.!?])\s+|\s*\*\s+|\n")

@@ -181,6 +181,9 @@ def test_the_ad_text_alone_is_enough_when_the_extraction_marked_nothing():
     "Security clearance",
     "Our client specifies nationality criteria for individuals seeking security clearance.",
     "Security clearance sponsorship is part of our benefits.",
+    "We help eligible staff obtain a security clearance.",
+    "If needed, we sponsor a security clearance.",
+    "Client security clearance requirements vary by project.",
 ])
 def test_a_bare_mention_is_unconfirmed_never_blocked(quote):
     """Owner rule 2026-11-19: Blocked only when the sentence says the ad REQUIRES it; a mention is a flag beside the score."""
