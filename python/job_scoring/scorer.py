@@ -178,6 +178,7 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     language_state = blocking.language_state(job, intelligence)
     clearance = blocking.clearance_state(job) if "clearance" in fixes else None
     blocked_by = blocking.blockers(eligible, language_state["blocking"], location_state, clearance)
+    clearance_flag = blocking.clearance_unconfirmed(job) if "clearance" in fixes and not clearance else None
 
     no_stack = not any(_skill_bank(intelligence))
     if no_stack:
@@ -221,6 +222,8 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         reasons.append(f"{authorization['location']['flag']}: {authorization['location']['reason']}")
     if blocked_by:
         reasons.append("Blocked: " + "; ".join(b["text"] for b in blocked_by))
+    if clearance_flag:
+        reasons.append(f"Clearance unconfirmed: the ad mentions a clearance or US status but does not say it is required: \"{clearance_flag['quote']}\"")
     if language_names:
         reasons.append(f"Language: the ad requires {' and '.join(language_names)}, which your profile does not list")
     if language_state["unconfirmed"]:
@@ -258,6 +261,7 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         "eligibility": eligible,
         "languageGap": language_names,
         "languageState": language_state,
+        "clearanceUnconfirmed": clearance_flag,
         "locationState": location_state,
         "blockedBy": blocked_by,
         "blockedFrom": None if not_read else blocked_from(match_score, red_flags, blocked_by),

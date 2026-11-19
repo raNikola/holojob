@@ -175,6 +175,38 @@ def test_the_ad_text_alone_is_enough_when_the_extraction_marked_nothing():
     assert blocking.clearance_state(job(description=f"{BODY} Security clearance is a plus. {PAD}")) is None
 
 
+@pytest.mark.parametrize("quote", [
+    "Government security clearance.",
+    "TS/SCI Clearance.",
+    "Security clearance",
+    "Our client specifies nationality criteria for individuals seeking security clearance.",
+    "Security clearance sponsorship is part of our benefits.",
+])
+def test_a_bare_mention_is_unconfirmed_never_blocked(quote):
+    """Owner rule 2026-11-19: Blocked only when the sentence says the ad REQUIRES it; a mention is a flag beside the score."""
+    for j in (with_quote(quote), job(description=f"{BODY} {quote} {PAD}")):
+        assert blocking.clearance_state(j) is None
+        assert blocking.clearance_unconfirmed(j)["quote"]
+    row = score_job(with_quote(quote), intel(**BANK))
+    assert row["blockedBy"] == [] and row["clearanceUnconfirmed"]
+    assert any(r.startswith("Clearance unconfirmed") for r in row["reasons"])
+
+
+@pytest.mark.parametrize("quote", [
+    "Ability to obtain NPPV3 security clearance requiring UK residency",
+    "Ability to obtain a Secret clearance",
+    "An active Secret clearance is required",
+    "Must be able to obtain and maintain a US DOW Security Clearance",
+])
+def test_demand_wording_in_the_sentence_blocks(quote):
+    assert blocking.clearance_state(with_quote(quote)) and blocking.clearance_unconfirmed(with_quote(quote)) is None
+
+
+def test_a_negated_or_softened_mention_is_neither_blocked_nor_flagged():
+    for q in ("No security clearance required.", "Security clearance is a plus."):
+        assert blocking.clearance_state(with_quote(q)) is None and blocking.clearance_unconfirmed(with_quote(q)) is None
+
+
 def test_an_optional_extraction_mark_does_not_block():
     assert blocking.clearance_state(with_quote("Top secret clearance required.", importance="nice")) is not None  # the sentence itself still says required
     j = with_quote("Clearance is welcome.", importance="nice")
