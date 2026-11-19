@@ -251,6 +251,10 @@ def _score(args: argparse.Namespace) -> int:
         print(f"engine (shadow): skipped after an error: {exc}", file=sys.stderr)
         engine_summary = {"enabled": True, "error": str(exc)[:300]}
 
+    if not args.judge_preview:
+        # Visible state: an ad without a current engine answer says "ceiling not evaluated" instead of silently passing the ceiling.
+        print(f"engine coverage: {ceilings.stamp_engine_coverage(scored, engine is not None)}", file=sys.stderr)
+
     if args.judge_preview:
         eligible = c["cached"] + c["uncached"] + c["beyond_limit"]
         print(json.dumps({

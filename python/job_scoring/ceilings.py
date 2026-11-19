@@ -83,6 +83,36 @@ def apply_unmet_ceiling(rows: list[dict], theta: float | None = None, variant: s
     return lowered
 
 
+NOT_EVALUATED_NOTE = "Ceiling not evaluated: no current evidence-engine answer for this ad, so the unmet-requirements ceiling did not run"
+NOT_EVALUATED_OFF = "Ceiling not evaluated: the evidence engine did not run for this scoring, so the unmet-requirements ceiling did not run"
+
+
+def stamp_engine_coverage(rows: list[dict], engine_on: bool) -> dict:
+    """Say, per row, whether the engine ceiling could run: engineCoverage {"status", "reason"}. Returns the counts.
+
+    answered        the row has engine answers for the current profile, prompt and requirement set: the ceiling ran (and may not have lowered it)
+    not_evaluated   an open, scored ad with requirements and no current answer (a new or changed ad, a changed profile or prompt, the engine off,
+                    a failed call): it passes the ceiling only because nothing was evaluated, and the row says so
+    not_applicable  closed, not read, or no requirements extracted: there is nothing for the ceiling to read
+    """
+    counts = {"answered": 0, "not_evaluated": 0, "not_applicable": 0}
+    for row in rows:
+        shadow = row.get("engineShadow")
+        if isinstance(shadow, dict) and shadow.get("requirements") is not None and not shadow.get("error"):
+            status, reason = "answered", None
+        elif row.get("isClosed") or row.get("matchScore") is None or not ((row.get("llmFacts") or {}).get("requirements")):
+            status, reason = "not_applicable", None
+        elif not engine_on:
+            status, reason = "not_evaluated", "engine_off"
+        else:
+            status, reason = "not_evaluated", "failed" if isinstance(shadow, dict) and shadow.get("error") else "no_answer"
+        row["engineCoverage"] = {"status": status, "reason": reason}
+        counts[status] += 1
+        if status == "not_evaluated":
+            row["reasons"] = [*(row.get("reasons") or []), NOT_EVALUATED_OFF if reason == "engine_off" else NOT_EVALUATED_NOTE]
+    return counts
+
+
 def apply_role_ceiling(rows: list[dict]) -> int:
     """Cap every row whose role class is other / not available at ROLE_CEILING. Returns how many rows were lowered."""
     lowered = 0

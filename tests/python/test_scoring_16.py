@@ -343,3 +343,31 @@ def test_the_failed_skill_change_changes_nothing_unless_a_measurement_switches_i
 
 def test_the_engine_ceiling_is_variant_b_at_theta_0_3():
     assert (ceilings.UNMET_VARIANT, ceilings.UNMET_THETA) == ("B", 0.3)
+
+
+# --- engine coverage: an ad with no current engine answer says so instead of silently passing the ceiling -----------------------------
+
+def _row(**kw):
+    return {"jobId": "x", "matchScore": 80, "reasons": [], "llmFacts": {"requirements": [{"id": "r"}]}, **kw}
+
+
+def test_an_ad_without_a_current_engine_answer_is_marked_not_evaluated():
+    answered = _row(engineShadow={"requirements": []})
+    missing, closed, unread, no_reqs, failed = _row(), _row(isClosed=True), _row(matchScore=None), _row(llmFacts={}), _row(engineShadow={"error": "x"})
+    counts = ceilings.stamp_engine_coverage([answered, missing, closed, unread, no_reqs, failed], engine_on=True)
+    assert counts == {"answered": 1, "not_evaluated": 2, "not_applicable": 3}
+    assert missing["engineCoverage"] == {"status": "not_evaluated", "reason": "no_answer"}
+    assert failed["engineCoverage"]["reason"] == "failed"
+    assert any(r.startswith("Ceiling not evaluated") for r in missing["reasons"])
+    assert answered["reasons"] == closed["reasons"] == []
+
+
+def test_with_the_engine_off_every_applicable_ad_says_so():
+    row = _row()
+    ceilings.stamp_engine_coverage([row], engine_on=False)
+    assert row["engineCoverage"]["reason"] == "engine_off" and "did not run" in row["reasons"][-1]
+
+
+def test_the_paid_fill_command_refuses_a_confirm_without_a_cap():
+    import engine_missing
+    assert engine_missing.main(["--confirm"]) == 2
