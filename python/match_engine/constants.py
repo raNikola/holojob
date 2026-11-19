@@ -4,7 +4,7 @@ Set in step 7 against tests/fixtures/postings/ (ENGINE_CONTRACT.md, Open
 points 1): one matcher run on the owner's evidence index, re-scored offline
 with python/match_engine/calibrate.py. Still a proposal until the owner has
 reviewed the fixture results; the engine stays in shadow mode meanwhile.
-tests/python/test_engine_snapshot.py shows what any change here moves.
+test_fit.py checks the invariants any change here must keep (ranges, determinism, blocked, MET never lowers fit).
 Any change here changes results, so it bumps ENGINE_VERSION (section 6).
 
 Values are Fractions, not floats, so Fit is computed in exact rational

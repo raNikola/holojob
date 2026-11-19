@@ -454,7 +454,7 @@ a calibration run on `tests/fixtures/postings/` before Phase 1 code depends on i
 1. Values of `STRENGTH_CREDIT`, `IMPORTANCE_WEIGHT`, `PARTIAL_FACTOR`, `MIN_CONFIDENCE`, `MAX_UNKNOWN_MUST_RATIO`,
    `ROLE_MISMATCH_FIT_CAP`, `UNVERIFIED_FIT_CAP` and the three label thresholds.
    Proposed in engine 0.2.0 from one matcher run on the fixtures (`match_engine/calibrate.py`, reasoning in
-   `match_engine/constants.py`); pinned by `tests/python/test_engine_snapshot.py`. Awaiting the owner's review.
+   `match_engine/constants.py`); invariants in `tests/python/test_fit.py` (the pinned snapshot test was removed 2026-11-19). Awaiting the owner's review.
 2. The exact downgrade rule on an unverified quote (section 5.2) and what makes a MISSING legitimate rather than
    UNKNOWN (section 4.1).
 3. The bucket rule (section 5.4) and the `gate_blocked` label limit.
