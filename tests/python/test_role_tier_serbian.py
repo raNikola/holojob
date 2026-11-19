@@ -77,33 +77,33 @@ SERBIAN_NEITHER = [
 ]
 
 
-@pytest.mark.parametrize("title", SERBIAN_PRODUCT)
-def test_a_serbian_product_title_is_near(title):
-    assert title_tier(title, 45, "product") == NEAR
-    assert title_tier(title, 45, "product", {}) == NEAR
+def test_a_serbian_product_title_is_near():
+    for title in SERBIAN_PRODUCT:
+        assert title_tier(title, 45, "product") == NEAR, title
+        assert title_tier(title, 45, "product", {}) == NEAR, title
 
 
-@pytest.mark.parametrize("title", SERBIAN_PROJECT)
-def test_a_serbian_project_title_without_facts_stays_unrelated(title):
-    assert title_tier(title, 45, "product") == UNRELATED
-    assert title_tier(title, 45, "product", {}) == UNRELATED
-    assert title_tier(title, 45, "product", {"roleTrack": "product_management", "roleTrackEvidence": " "}) == UNRELATED
+def test_a_serbian_project_title_without_facts_stays_unrelated():
+    for title in SERBIAN_PROJECT:
+        assert title_tier(title, 45, "product") == UNRELATED, title
+        assert title_tier(title, 45, "product", {}) == UNRELATED, title
+        assert title_tier(title, 45, "product", {"roleTrack": "product_management", "roleTrackEvidence": " "}) == UNRELATED, title
 
 
-@pytest.mark.parametrize("title", SERBIAN_PROJECT)
-def test_a_serbian_project_title_with_product_evidence_is_near(title):
-    assert title_tier(title, 45, "product", PRODUCT_FACTS) == NEAR
-    assert title_tier(title, 45, "product", {"roleTrack": "product_ownership", "roleTrackEvidence": EVIDENCE}) == NEAR
+def test_a_serbian_project_title_with_product_evidence_is_near():
+    for title in SERBIAN_PROJECT:
+        assert title_tier(title, 45, "product", PRODUCT_FACTS) == NEAR, title
+        assert title_tier(title, 45, "product", {"roleTrack": "product_ownership", "roleTrackEvidence": EVIDENCE}) == NEAR, title
 
 
-@pytest.mark.parametrize("title", SERBIAN_PROJECT)
-def test_a_serbian_project_title_with_a_delivery_track_stays_unrelated(title):
-    assert title_tier(title, 45, "product", DELIVERY_FACTS) == UNRELATED
+def test_a_serbian_project_title_with_a_delivery_track_stays_unrelated():
+    for title in SERBIAN_PROJECT:
+        assert title_tier(title, 45, "product", DELIVERY_FACTS) == UNRELATED, title
 
 
-@pytest.mark.parametrize("title", SERBIAN_NEITHER)
-def test_other_serbian_wording_is_unrelated(title):
-    assert title_tier(title, 45, "product", PRODUCT_FACTS) == UNRELATED
+def test_other_serbian_wording_is_unrelated():
+    for title in SERBIAN_NEITHER:
+        assert title_tier(title, 45, "product", PRODUCT_FACTS) == UNRELATED, title
 
 
 def test_a_serbian_project_equivalent_treats_the_facts_like_its_english_twin():
