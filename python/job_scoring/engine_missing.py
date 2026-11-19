@@ -117,7 +117,7 @@ def estimate(engine, jobs, send, profile, selection) -> dict:
                          for p in prompts.values()), 4)
     settings = ai_gate.load_settings()
     totals = ai_gate.totals(None, settings)
-    return {"toAsk": len(prompts) - len(leaks), "maxChars": max((len(p) for p in prompts.values()), default=0), "planned": len(send), "leaks": leaks, "price": price, "costUsd": cost,
+    return {"toAsk": len(prompts) - len(leaks), "maxChars": max((len(p) for p in prompts.values()), default=0), "planned": len(send), "send": set(send), "leaks": leaks, "price": price, "costUsd": cost,
             "excluded": dict(engine.excluded),
             "budget": {"dailyLimit": settings.get("dailyLimit"), "monthlyLimit": settings.get("monthlyLimit"),
                        "dailySpent": totals["today"]["cost"], "monthlySpent": totals["thisMonth"]["cost"]}}
@@ -150,7 +150,9 @@ def run(engine, jobs, est: dict, max_usd: float, profile: dict) -> dict:
     if not decision.allowed:
         ai_gate.record_refused(decision, skipped=est["toAsk"])
         return {"stopped": f"AI gate refused: {decision.reason}", "asked": 0}
-    engine.apply([j for j in jobs if (j.get("jobId") or id(j)) not in set(est["leaks"])])  # an ad that hits the scan is never sent
+    # Only the ads the estimate scanned: with a limit, apply() would plan again over the list minus the refused ads and reach ads nobody scanned.
+    engine.limit = None
+    engine.apply([j for j in jobs if (j.get("jobId") or id(j)) in est["send"] and (j.get("jobId") or id(j)) not in set(est["leaks"])])
     engine.save()  # whatever was paid for is kept, also after a stop
     stop = spent["reason"] or engine.refusal
     return {"stopped": stop, "newCalls": engine.counts["matched"], "failed": engine.counts["failed"], "refused": engine.counts["refused"],
