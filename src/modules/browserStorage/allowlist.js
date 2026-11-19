@@ -16,6 +16,7 @@ export const BROWSER_STORAGE_ALLOWLIST = [
   { key: 'job-dashboard-theme', store: 'local', maxBytes: 16, reason: 'Light or dark choice (not persisted yet).' },
   { key: 'job-dashboard-profile-sync-pending', store: 'local', maxBytes: 8, reason: 'True while the server copy of the profile is behind after an import ("not synced yet"); a flag, no content.' },
   { key: 'job-dashboard-intelligence-stale', store: 'local', maxBytes: 8, reason: 'True after an import until the owner regenerates the intelligence ("profile changed"); a flag, no content.' },
+  { key: 'holojob.storageNotice.dismissed', store: 'local', maxBytes: 256, reason: 'Which notices the owner closed: a short JSON list of notice ids; UI-only flag, no user data.' },
   { key: 'holojob-demo-bootstrap-done', store: 'session', maxBytes: 8, reason: 'Demo-mode flag; exists only in demo mode.' },
 ]
 
@@ -38,6 +39,7 @@ export const TOLERATED_UNTIL_MIGRATED = [
 export const STORAGE_API_USERS = [
   'src/components/ai/AICommandCenter.jsx',
   'src/components/dashboard/DashboardHome.jsx',
+  'src/components/layout/StorageNotice.jsx',
   'src/components/resumes/ResumeLibrary.jsx',
   'src/components/settings/SettingsHome.jsx',
   'src/context/ProfileContext.jsx',
