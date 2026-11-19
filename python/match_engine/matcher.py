@@ -262,6 +262,11 @@ def build_prompt(description: str, asked: list[tuple[str, dict]], evidence: list
     )
 
 
+def _unmasked_quote(quote):
+    """A gate quote copied from masked ad text holds a placeholder and cannot match the stored ad word for word: it is dropped (null)."""
+    return None if isinstance(quote, str) and ("[EMAIL]" in quote or "[PHONE]" in quote) else quote
+
+
 def _check_reply(raw) -> tuple[dict, dict]:
     """(proposals by ref, gate quotes) from a reply; SchemaViolation if its frame is wrong.
 
@@ -478,7 +483,7 @@ def match_posting(
         "model": model,
         "requirements": verdicts,
         # Passed through as the model gave them; checked and rolled up in step 6.
-        "gates": [{"gate": gate, "quote": gate_quotes[gate]} for gate in GATES],
+        "gates": [{"gate": gate, "quote": _unmasked_quote(gate_quotes[gate])} for gate in GATES],
         "warnings": warnings,
     }
     if cache is not None:

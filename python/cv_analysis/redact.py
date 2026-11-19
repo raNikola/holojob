@@ -72,22 +72,44 @@ def identity_of(profile: dict | None) -> tuple[str, list[str]]:
     return name, [str(l).strip() for l in links if str(l or "").strip()] if isinstance(links, list) else []
 
 
+# Phone shapes an ad's contact line really has. Deliberately narrower than PHONE_RE (the owner-data scan, which stays broad and fail-closed):
+# a salary range ("120 000 - 150 000"), years, experience counts, ids and dates are never masked.
+_SEP = r"[\s().\-/]"
+AD_PHONE_RES = (
+    re.compile(r"(?<![\w+])\+\s?\d{1,3}" + _SEP + r"{0,3}\d(?:" + _SEP + r"{0,2}\d){6,13}"),  # +381 11 234 5678, +1 (555) 123-4567
+    re.compile(r"(?<![\w+])(?<!\d[\s.\-/])00[1-9]\d{0,2}" + _SEP + r"{0,3}\d(?:" + _SEP + r"{0,2}\d){6,12}"),  # 00381 11 234 5678
+    re.compile(r"(?<![\w+])\(\d{2,5}\)[\s.\-]?\d{3,4}(?:[\s.\-]?\d{2,4}){1,2}(?!\d)"),  # (011) 234-5678
+    re.compile(r"(?<![\w+])(?<!\d[\s.\-/])0[1-9]\d{0,2}[\s./\-]\d{3}(?:[\s.\-]?\d{2,4}){1,2}(?!\d)"),  # national: 011 234 5678, 064/123-4567 (a trunk 0 first)
+    re.compile(r"(?i)\b(?:tel|phone|mobile|mob|call|whatsapp|fax)\b\.?:?\s*(\+?\d[\d\s().\-/]{6,}\d)"),  # a labelled number
+)
+_DATE_LIKE = re.compile(r"\d{1,2}[./\-]\d{1,2}[./\-](?:19|20)\d{2}|(?:19|20)\d{2}[./\-]\d{1,2}[./\-]\d{1,2}")
+
+
+def _ad_phone(text: str) -> bool:
+    digits = re.sub(r"\D", "", text)
+    return 8 <= len(digits) <= 15 and not _DATE_LIKE.fullmatch(text.strip())
+
+
 def mask_ad_contacts(text: str) -> tuple[str, dict]:
     """(text, {"emails": n, "phones": n}): the e-mail addresses and phone numbers an AD carries, replaced by [EMAIL] / [PHONE].
 
-    For public ad text only (a recruiter's contact line); the owner-identifier scan is not loosened and still runs on the result."""
+    For public ad text only (a recruiter's contact line); the owner-identifier scan is not loosened and still runs on the result.
+    Only real phone shapes are masked (AD_PHONE_RES); numbers in requirements, pay and dates stay as they are."""
     emails = len(EMAIL_RE.findall(text))
     text = EMAIL_RE.sub("[EMAIL]", text)
     phones = 0
 
     def phone(m):
         nonlocal phones
-        if not _is_phone(m.group(0)):
+        number = m.group(1) if m.re.groups else m.group(0)
+        if not _ad_phone(number):
             return m.group(0)
         phones += 1
-        return "[PHONE]"
+        return m.group(0).replace(number, "[PHONE]") if m.re.groups else "[PHONE]"
 
-    return PHONE_RE.sub(phone, text), {"emails": emails, "phones": phones}
+    for pattern in AD_PHONE_RES:
+        text = pattern.sub(phone, text)
+    return text, {"emails": emails, "phones": phones}
 
 
 def find_leaks(text: str, name: str = "", links: list[str] | None = None) -> list[str]:

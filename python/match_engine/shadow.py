@@ -130,6 +130,7 @@ class ShadowEngine:
         self._fit3_roles = fit3_mod.load_roles() if self._fit3_store else {}
         self._fit3_comps = fit3_mod.closed_competencies("product") if self._fit3_store else []
         self.limit = limit
+        self.first: set = set()  # job ids planned before all others (an owner-run fill that must answer a given set first); empty in a pipeline run
         self.workers = workers
         self._complete = complete
         self._lock = threading.Lock()
@@ -181,7 +182,7 @@ class ShadowEngine:
             # Only an order among equal scores: nothing here changes a score or costs an ad anything.
             requirements = posting["facts"]["requirements"]
             ratio = Fraction(sum(1 for r in requirements if r.get("provisional")), len(requirements))
-            eligible.append((-local_score(job), location != PASS, ratio, -_posted(job),
+            eligible.append((_key(job) not in self.first, -local_score(job), location != PASS, ratio, -_posted(job),
                              job_fingerprint(posting), str(_key(job)), _key(job)))
         eligible.sort()
         chosen = eligible if self.limit is None else eligible[: max(0, self.limit)]

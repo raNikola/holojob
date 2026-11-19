@@ -46,7 +46,7 @@ class Captured(LlmUnavailable):
     """Raised by the dry-run `complete` after it has kept the prompt: nothing is sent."""
 
 
-def build(jobs_path: Path, max_ads: int | None):
+def build(jobs_path: Path, max_ads: int | None, first_ids: set | None = None):
     """(engine, jobs, send ids): the production shadow engine in judge mode, over the scored rows, with the plan of what it would send."""
     os.environ[shadow.SHADOW_ENV] = "1"
     intelligence = json.loads(run_scoring.INTELLIGENCE_PATH.read_text(encoding="utf-8"))
@@ -56,8 +56,27 @@ def build(jobs_path: Path, max_ads: int | None):
     if engine is None:
         raise SystemExit("no profile on disk: nothing to match against")
     engine.limit = max_ads
+    engine.first = set(first_ids or ())
     jobs = json.loads(jobs_path.read_text(encoding="utf-8"))["jobs"]
+    jobs = jobs + ledger_rows(jobs_path, {str(j.get("jobId")) for j in jobs}, first_ids)
     return engine, jobs, engine.plan(jobs), profile, selection
+
+
+def ledger_rows(jobs_path: Path, present: set, wanted: set | None) -> list[dict]:
+    """The stored ad rows of `wanted` ids that the job list does not hold, read from the job ledger (read only), as measure_fit_b does.
+    Their answers go to the engine cache under the ad fingerprint like any other; nothing is written to the job list."""
+    missing = {str(i) for i in wanted or ()} - present
+    if not missing:
+        return []
+    import job_history
+    ledger = job_history.load(job_history.ledger_path(jobs_path.parent / "discovered_jobs.json"), read_only=True).get("jobs") or {}
+    return [{**entry["job"], "jobId": i} for i in sorted(missing)
+            for entry in [ledger.get(i)] if isinstance(entry, dict) and isinstance(entry.get("job"), dict)]
+
+
+def read_ids(path: Path) -> set:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {str(i) for i in (data.get("ids") if isinstance(data, dict) else data)}
 
 
 def leaks_of(prompt: str, profile: dict, candidate: dict) -> list[str]:
@@ -160,6 +179,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--jobs", type=Path, default=JOBS_PATH)
     ap.add_argument("--max-ads", type=int, default=None, help="ask about at most this many ads, highest score first (default: all)")
+    ap.add_argument("--first-ids", type=Path, default=None, help="a JSON file of ad ids (a list, or {\"ids\": [...]}) planned before all other ads, then the rest by score; an id the job list does not hold is read from the job ledger")
     ap.add_argument("--max-usd", type=float, default=None, help="the run's hard stop in US dollars; required with --confirm")
     ap.add_argument("--confirm", action="store_true", help="make the paid calls")
     args = ap.parse_args(argv)
@@ -171,7 +191,7 @@ def main(argv=None) -> int:
         print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
         return pipeline_lock.EXIT_LOCKED
     try:
-        engine, jobs, send, profile, selection = build(args.jobs, args.max_ads)
+        engine, jobs, send, profile, selection = build(args.jobs, args.max_ads, read_ids(args.first_ids) if args.first_ids else None)
         profile = profile
         est = estimate(engine, jobs, send, profile, selection)
         print("\n".join(describe(est, selection, args.max_usd)))
