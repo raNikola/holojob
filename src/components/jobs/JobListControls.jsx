@@ -1,10 +1,8 @@
-import Alert from '../ui/Alert'
-import Button from '../ui/Button'
 
 const MODES = [{ id: 'active', label: 'Active' }, { id: 'all', label: 'All' }]
 
-/** The Active/All toggle, All's own filters and the notices. All of it is held by the screen in memory: nothing here is saved. */
-export default function JobListControls({ mode, onMode, options = [], classes, onClasses, recent, onRecent, notices = [], onRetry, retrying = false }) {
+/** The Active/All toggle, All's own filters. All of it is held by the screen in memory: nothing here is saved. */
+export default function JobListControls({ mode, onMode, options = [], classes, onClasses, recent, onRecent }) {
   const toggleClass = (value) => {
     const next = new Set(classes)
     if (!next.delete(value)) next.add(value)
@@ -44,12 +42,6 @@ export default function JobListControls({ mode, onMode, options = [], classes, o
           ))}
         </fieldset>
       )}
-      {notices.map((notice) => (
-        <Alert key={notice.text} variant={notice.kind === 'error' ? 'error' : 'info'}>
-          <span role={notice.kind === 'error' ? 'alert' : 'status'}>{notice.text}</span>
-          {notice.retry && <Button variant="secondary" className="ml-3 !min-h-0 !py-1 !text-xs" disabled={retrying} onClick={onRetry}>Try again</Button>}
-        </Alert>
-      ))}
     </div>
   )
 }

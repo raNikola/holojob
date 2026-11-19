@@ -332,13 +332,8 @@ describe('the controls', () => {
     expect(html).toContain('Saved in this browser (0)')
     expect(html).toContain('checked=""')
   })
-
-  it('notices show, an error with its try-again', () => {
-    const html = controls({ notices: [{ kind: 'error', text: 'Broke', retry: true }, { kind: 'info', text: 'Note' }] })
-    expect(html).toContain('Broke')
-    expect(html).toContain('role="alert"')
-    expect(html).toContain('Try again')
-    expect(html).toContain('Note')
+  it('no longer renders the notices itself: they are toasts in the screen (tests/js/toast.dom.test.js)', () => {
+    expect(controls({ notices: [{ kind: 'info', text: 'Note' }] })).not.toContain('Note')
   })
 })
 

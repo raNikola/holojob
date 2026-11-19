@@ -57,6 +57,8 @@ import { cancelledText } from '../../modules/jobs/rescrapeRun'
 import { withProfileSalaryDefaults } from '../../modules/jobs/jobSalary'
 import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { useProfile } from '../../context/ProfileContext'
+import { HeaderPortal } from '../layout/HeaderSlot'
+import { TOAST_AUTO_HIDE_MS, Toast, ToastStack } from '../ui/Toast'
 
 const JOB_TABS = [
   { id: 'jobs', label: 'Jobs' },
@@ -87,6 +89,9 @@ export default function JobDiscoveryScreen() {
   const [rerunMsg, setRerunMsg] = useState('')
   const [addJobOpen, setAddJobOpen] = useState(false)
   const [addNote, setAddNote] = useState(null)
+  // List notices closed (or timed out) in this visit, by text; a notice whose text changes shows again.
+  const [closedNotices, setClosedNotices] = useState(() => new Set())
+  const closeNotice = useCallback((text) => setClosedNotices((prev) => new Set(prev).add(text)), [])
 
   // The old opt-in source checkbox lived here; its value moves to Settings > Sources on the server once.
   useEffect(() => { migrateLegacyDiscoveryOptions() }, [])
@@ -410,7 +415,35 @@ export default function JobDiscoveryScreen() {
           onRuleBased={() => runBulkTailor(tailorAsk, { noLlm: true })}
         />
       )}
-      <Tabs tabs={JOB_TABS} active={activeTab} onChange={handleTabChange} />
+      <HeaderPortal>
+        <Tabs tabs={JOB_TABS} active={activeTab} onChange={handleTabChange} compact />
+        {activeTab === 'jobs' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" className="!min-h-0 !py-1.5" onClick={() => { setAddInitial(null); setAddJobOpen(true) }}>
+              <Plus className="h-4 w-4" />
+              Add job
+            </Button>
+            {hasJobs && (
+              <div className="relative">
+                <Button variant="secondary" className="!min-h-0 !py-1.5" title={EXPORT_NOTE} onClick={() => setExportOpen(!exportOpen)}>
+                  <MoreHorizontal className="h-4 w-4" />
+                  Export
+                </Button>
+                {exportOpen && (
+                  <div className="absolute right-0 z-30 mt-1 w-40 rounded-lg border border-stone-200 bg-white py-1 shadow-lg dark:border-stone-700 dark:bg-stone-900">
+                    <button type="button" onClick={handleExportJson} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-stone-50 dark:hover:bg-stone-800">
+                      <Download className="h-4 w-4" /> JSON, saved rows
+                    </button>
+                    <button type="button" onClick={handleExportCsv} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-stone-50 dark:hover:bg-stone-800">
+                      <Download className="h-4 w-4" /> CSV, saved rows
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </HeaderPortal>
 
       {autoLoadNote && (
         <p className="text-xs text-teal-700 dark:text-teal-300">{autoLoadNote}</p>
@@ -418,24 +451,30 @@ export default function JobDiscoveryScreen() {
 
       {activeTab === 'jobs' && (
         <>
-          <div className="flex justify-end">
-            <Button variant="secondary" onClick={() => { setAddInitial(null); setAddJobOpen(true) }}>
-              <Plus className="h-4 w-4" />
-              Add job
-            </Button>
-          </div>
           {addJobOpen && <AddJobDialog initial={addInitial} onClose={() => setAddJobOpen(false)} onSaved={handleJobAdded} />}
-          {addNote && (
-            <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-teal-700 dark:text-teal-300">
-              <span>{addNote.text}</span>
-              {addNote.retry && (
-                <Button variant="secondary" disabled={addNote.busy} onClick={() => handleScoreNow(addNote.jobId, state.jobs.find((j) => j.jobId === addNote.jobId)?.title ?? 'the job')}>
-                  {addNote.busy ? 'Scoring…' : 'Score now'}
-                </Button>
-              )}
-              <button type="button" className="underline" onClick={() => setAddNote(null)}>Dismiss</button>
-            </div>
-          )}
+          <ToastStack>
+            {addNote && (
+              <Toast key="add-note" onDismiss={() => setAddNote(null)}>
+                <span>{addNote.text}</span>
+                {addNote.retry && (
+                  <Button variant="secondary" className="ml-2 !min-h-0 !py-1 !text-xs" disabled={addNote.busy} onClick={() => handleScoreNow(addNote.jobId, state.jobs.find((j) => j.jobId === addNote.jobId)?.title ?? 'the job')}>
+                    {addNote.busy ? 'Scoring…' : 'Score now'}
+                  </Button>
+                )}
+              </Toast>
+            )}
+            {notices.filter((notice) => !closedNotices.has(notice.text)).map((notice) => (
+              <Toast
+                key={notice.text}
+                kind={notice.kind === 'error' ? 'error' : 'info'}
+                autoHideMs={notice.kind === 'error' ? null : TOAST_AUTO_HIDE_MS}
+                onDismiss={() => closeNotice(notice.text)}
+              >
+                <span>{notice.text}</span>
+                {notice.retry && <Button variant="secondary" className="ml-2 !min-h-0 !py-1 !text-xs" disabled={allAds.status === 'loading'} onClick={refetchAllAds}>Try again</Button>}
+              </Toast>
+            ))}
+          </ToastStack>
 
           {pipelineApiAvailable && (
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 dark:border-stone-800 dark:bg-stone-900">
@@ -475,22 +514,6 @@ export default function JobDiscoveryScreen() {
                     {filteredJobs.length} of {baseRows.length} jobs shown
                   </p>
                 </div>
-                  <div className="relative">
-                  <Button variant="secondary" title={EXPORT_NOTE} onClick={() => setExportOpen(!exportOpen)}>
-                    <MoreHorizontal className="h-4 w-4" />
-                    Export
-                  </Button>
-                  {exportOpen && (
-                    <div className="absolute right-0 z-10 mt-1 w-40 rounded-lg border border-stone-200 bg-white py-1 shadow-lg dark:border-stone-700 dark:bg-stone-900">
-                      <button type="button" onClick={handleExportJson} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-stone-50 dark:hover:bg-stone-800">
-                        <Download className="h-4 w-4" /> JSON, saved rows
-                      </button>
-                      <button type="button" onClick={handleExportCsv} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-stone-50 dark:hover:bg-stone-800">
-                        <Download className="h-4 w-4" /> CSV, saved rows
-                      </button>
-                    </div>
-                  )}
-                  </div>
               </div>
 
               {routeEnabled && (
@@ -502,9 +525,6 @@ export default function JobDiscoveryScreen() {
                   onClasses={setListClasses}
                   recent={seenRecentlyOnly}
                   onRecent={setSeenRecentlyOnly}
-                  notices={notices}
-                  onRetry={refetchAllAds}
-                  retrying={allAds.status === 'loading'}
                 />
               )}
 

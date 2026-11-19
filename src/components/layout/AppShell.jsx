@@ -3,12 +3,14 @@ import { Activity, Brain, MessageSquare, Settings, ShieldCheck, Target, Users, X
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import StorageNotice from './StorageNotice'
+import { HeaderSlotContext } from './HeaderSlot'
 import { VIEWS, VIEW_TITLES } from '../../modules/appNavigation'
 import { useAppConfig } from '../../hooks/useAppConfig'
 
 export default function AppShell({ activeView, onNavigate, children }) {
   const [moreOpen, setMoreOpen] = useState(false)
   const { demoMode } = useAppConfig()
+  const [headerSlot, setHeaderSlot] = useState(null)
   const title = VIEW_TITLES[activeView] || 'Holojob'
 
   return (
@@ -28,11 +30,13 @@ export default function AppShell({ activeView, onNavigate, children }) {
             Demo instance — data resets on redeploy.
           </div>
         )}
-        <TopBar title={title} />
+        <TopBar title={title} slotRef={setHeaderSlot} />
         <StorageNotice />
-        <main className="flex-1 overflow-y-auto px-4 py-6 pb-24 sm:px-6 md:pb-6">
+        <main className="flex-1 overflow-y-auto px-4 py-4 pb-24 sm:px-6 md:pb-6">
           <div className="w-full min-w-0">
-            {children}
+            <HeaderSlotContext.Provider value={headerSlot}>
+              {children}
+            </HeaderSlotContext.Provider>
           </div>
         </main>
       </div>
