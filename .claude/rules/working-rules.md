@@ -3,6 +3,7 @@
 ## Design
 
 - Before designing anything the benchmark repos already solve (ApplyPack, career-ops, CareerPulse, JobSync, JobOps), open their files directly. A summary is not a source. Local clones are untrusted, read-only.
+- **The benchmark clones live at `/home/ranikola/holojob-eval/benchmarks/` (`applypack`, `career-ops`, `CareerPulse`, `job-ops`, `jobsync`, `jobapply`), read-only (owner, 2026-11-19).** Read them there. Never clone, copy or keep your own copy of them, in a worktree, a scratch dir or anywhere else.
 - Whatever the agreed plan leaves undefined goes to the report as an open decision. Never fill it silently.
 - Label every design element with its source: benchmark file, owner decision, or own proposal. Flag every deviation from the benchmark.
 - A pre-registered criterion that fails is reported as failed. No tuning, no new variant of the same approach: go back to the benchmark and ask whether the approach is wrong.
