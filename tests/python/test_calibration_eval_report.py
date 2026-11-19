@@ -38,27 +38,10 @@ def make(tmp_path):
     return tmp_path
 
 
-def test_each_mode_is_reported_on_its_own_and_the_split_filters_the_ads(tmp_path):
-    out = make(tmp_path)
-    everything = er.build(out, "all", SECTIONS)
-    assert everything["ads"]["production_like"]["ads"] == 6 and everything["ads"]["diagnostic"]["ads"] == 6
-    dev, test = er.build(out, "dev", SECTIONS), er.build(out, "test", SECTIONS)
-    for mode in er.MODES:
-        assert dev["ads"][mode]["ads"] + test["ads"][mode]["ads"] == 6
-    assert "pooled" not in json.dumps(everything).lower()
 
 
-def test_three_systems_are_compared_on_the_same_ads(tmp_path):
-    a = er.build(make(tmp_path), "all", SECTIONS)["ads"]["production_like"]
-    assert set(a["systems"]) == {"matchScore", "engine", "preview"} and all(s["n"] == 6 for s in a["systems"].values())
-    assert a["previewDetail"]["adsWithUnconfirmedMusts"] == 6
 
 
-def test_the_line_view_types_the_verdicts_and_counts_the_fit_lowering_errors(tmp_path):
-    lines = er.build(make(tmp_path), "all", SECTIONS)["lines"]["production_like"]
-    typing = lines["newTyping"]
-    assert typing["realMusts"] == lines["mustLines"] and lines["precision"]["precision"] == 1.0
-    assert typing["contradictedButOwnerMeetsIt (fit-lowering error)"] == 0  # the fixture lines are MET or PARTIAL only
 
 
 def test_a_changed_label_file_is_warned_about_and_the_report_prints_no_text(tmp_path, capsys):

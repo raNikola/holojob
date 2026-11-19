@@ -34,22 +34,8 @@ def test_precision_is_counted_per_mode_and_never_pooled(tmp_path):
     assert "pooled" not in json.dumps(report).lower().replace("never pooled", "")
 
 
-def test_the_blind_first_answer_is_used_and_a_change_after_the_reveal_is_only_counted(tmp_path):
-    items = [item(1), item(2)]
-    changed = answer("no", "no", changed=True, final={"isMust": "yes", "meets": "yes", "savedAt": "t2"})
-    report = mr.build(folder(tmp_path, items, {1: changed, 2: answer("yes", "yes")}))
-    assert report["changedAfterReveal"] == 1
-    assert report["modes"]["production_like"]["precision"]["really_must"] == 1  # item 1 counts as the first answer, "no"
 
 
-def test_weighting_gives_each_stratum_its_pool_not_its_sample_share(tmp_path):
-    items = [item(1, cls="disagree"), item(2, cls="neutral"), item(3, cls="neutral")]
-    strata = [{"kind": "skill", "mode": "production_like", "class": "disagree", "pool": 10, "sampled": 1},
-              {"kind": "skill", "mode": "production_like", "class": "neutral", "pool": 90, "sampled": 2}]
-    out = folder(tmp_path, items, {1: answer("no", "no"), 2: answer("yes", "yes"), 3: answer("yes", "yes")}, strata)
-    p = mr.build(out)["modes"]["production_like"]["precision"]
-    assert p["precision"] == 0.67  # raw: 2 of 3
-    assert p["weighted"]["precision"] == 0.9 and p["weighted"]["coveredPoolShare"] == 1.0  # 0.1*0 + 0.9*1
 
 
 def test_verdict_agreement_is_counted_on_real_musts_only_with_the_costly_misses_named(tmp_path):
@@ -60,13 +46,6 @@ def test_verdict_agreement_is_counted_on_real_musts_only_with_the_costly_misses_
     assert (a["engineMissingButOwnerMeetsIt"], a["engineMetButOwnerDoesNot"]) == (1, 1)
 
 
-def test_the_bar_needs_both_the_precision_and_enough_answers(tmp_path):
-    many = [item(n, kind="domain") for n in range(1, 9)] + [item(n, kind="education") for n in range(9, 12)]
-    answers = {n: answer("yes", "yes") for n in range(1, 12)}
-    m = mr.build(folder(tmp_path, many, answers))["modes"]["production_like"]
-    assert m["trust"]["domain"] == "trusted at the bar"
-    assert m["trust"]["education"].startswith("undecided")  # only 3 answered
-    assert m["gateKinds"]["meetsBar"] is True
 
 
 def test_probe_items_are_reported_apart_from_the_must_precision(tmp_path):

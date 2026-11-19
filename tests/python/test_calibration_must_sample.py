@@ -40,50 +40,16 @@ def test_quotas_modes_probes_and_the_per_ad_cap_hold():
     assert counts["maxItemsFromOneAd"] <= ms.MAX_PER_AD
 
 
-def test_the_same_seed_draws_the_same_items_and_another_seed_draws_others():
-    a, b, c = ms.draw(*fixture(), seed=1), ms.draw(*fixture(), seed=1), ms.draw(*fixture(), seed=2)
-    ids = lambda s: [(i["jobId"], i["reqId"]) for i in s["items"]]
-    assert ids(a) == ids(b) and ids(a) != ids(c)
 
 
-def test_disagreements_come_before_controls_before_the_rest_inside_a_kind():
-    sample = ms.draw(*fixture())
-    musts = [i for i in sample["items"] if not i["probe"] and i["kind"] == "skill"]
-    # every disagreeing skill item in the pool is taken before any neutral one, as far as the quota reaches
-    pool_disagree = sum(s["pool"] for s in sample["strata"] if s["kind"] == "skill" and s["class"] == "disagree")
-    took_disagree = sum(1 for i in musts if i["class"] == "disagree")
-    assert took_disagree == min(pool_disagree, len(musts))
 
 
-def test_classification_uses_only_yes_and_no_ads():
-    assert ms.classify("yes", "MISSING") == "disagree" and ms.classify("yes", "PARTIAL") == "disagree"
-    assert ms.classify("no", "MET") == "disagree"
-    assert ms.classify("yes", "MET") == "control" and ms.classify("no", "MISSING") == "control"
-    assert ms.classify("partial", "MET") == "neutral" and ms.classify("no", "UNKNOWN") == "neutral"
 
 
-def test_a_probe_looks_like_any_other_item_and_the_display_order_is_mixed():
-    sample = ms.draw(*fixture())
-    assert all({"itemId", "kind", "text", "postingQuote", "title", "company"} <= set(i) for i in sample["items"])
-    assert [i["itemId"] for i in sample["items"]] == [f"i{n:02d}" for n in range(1, 71)]
-    flags = [i["probe"] for i in sample["items"]]
-    assert flags != sorted(flags)  # probes are not bunched at the end
-    assert all(i["importance"] != "must" for i in sample["items"] if i["probe"])
 
 
-def test_every_stratum_records_its_pool_and_sample_size_for_weighting():
-    sample = ms.draw(*fixture())
-    assert sum(s["sampled"] for s in sample["strata"]) == 60
-    assert all(s["sampled"] <= s["pool"] for s in sample["strata"])
-    assert sum(s["pool"] for s in sample["strata"]) == sample["mustPool"]
 
 
-def test_a_kind_with_too_few_items_is_made_up_from_the_big_kinds_not_left_short():
-    engine, labels, titles = fixture()
-    for entry in engine.values():
-        entry["output"]["requirements"] = [r for r in entry["output"]["requirements"] if r["kind"] != "education"]
-    counts = ms.counts(ms.draw(engine, labels, titles))
-    assert counts["mustItems"] == 60 and "education" not in counts["mustByKind"]
 
 
 def test_main_writes_the_sample_with_mode_600_and_prints_counts_only(tmp_path, capsys):

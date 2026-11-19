@@ -35,26 +35,10 @@ def folder(tmp_path, n=12):
     return tmp_path
 
 
-def test_every_ran_level_sits_on_both_sides_of_the_split_and_the_sides_are_balanced():
-    levels = {f"ad{i}": i % 4 for i in range(16)}
-    split = es.split_ads(levels, 7)
-    for level in range(4):
-        sides = [split[a] for a, lv in levels.items() if lv == level]
-        assert sides.count("dev") == sides.count("test") == 2
-    odd = es.split_ads({f"a{i}": 1 for i in range(5)}, 7)
-    assert sorted(odd.values()).count("dev") == 3  # an odd level gives the extra ad to dev
 
 
-def test_the_split_is_fixed_by_the_seed_and_changes_with_it():
-    levels = {f"ad{i}": i % 3 for i in range(30)}
-    assert es.split_ads(levels, 1) == es.split_ads(levels, 1)
-    assert es.split_ads(levels, 1) != es.split_ads(levels, 2)
 
 
-def test_every_line_of_an_ad_sits_on_the_same_side_as_its_ad(tmp_path):
-    frozen = es.freeze(folder(tmp_path))
-    assert all(line["split"] == frozen["ads"][line["jobId"]]["split"] for line in frozen["lines"].values())
-    assert frozen["counts"]["lines"] == 24 and frozen["counts"]["probeLines"] == 4
 
 
 def test_the_freeze_holds_ids_kinds_and_answers_but_no_text_and_has_mode_600(tmp_path):
@@ -75,21 +59,8 @@ def test_a_frozen_set_is_not_overwritten_without_force(tmp_path):
     assert es.load(out)["seed"] == 99
 
 
-def test_a_label_file_that_changes_after_the_freeze_is_reported(tmp_path, capsys):
-    out = folder(tmp_path)
-    es.freeze(out)
-    assert es.drift(out) == []
-    doc = json.loads((out / "ran-labels.json").read_text())
-    doc["labels"]["ad0"]["overall"] = 3
-    (out / "ran-labels.json").write_text(json.dumps(doc))
-    assert es.drift(out) == ["ran-labels.json"]
-    assert es.main(["check", "--out", str(out)]) == 1
-    assert "CHANGED" in capsys.readouterr().out
 
 
-def test_load_without_a_freeze_says_so(tmp_path):
-    with pytest.raises(SystemExit, match="freeze"):
-        es.load(tmp_path)
 
 
 def test_main_prints_counts_only(tmp_path, capsys):

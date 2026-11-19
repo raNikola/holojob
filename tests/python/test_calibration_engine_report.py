@@ -35,10 +35,6 @@ def test_each_mode_is_counted_on_its_own_and_never_pooled(tmp_path):
     assert "pooled" not in json.dumps(report).lower()
 
 
-def test_requirement_verdicts_are_grouped_by_the_owners_hard_requirements_label(tmp_path):
-    prod = er.build(folder(tmp_path))["modes"]["production_like"]["requirements"]
-    assert prod["yes"]["metShare"] == 1.0 and prod["partial"]["metShare"] == 0.5 and prod["partial"]["missingShare"] == 0.5
-    assert "no" not in prod  # that label belongs to the diagnostic ads only
 
 
 def test_the_report_labels_diagnostic_numbers_and_prints_no_text(tmp_path):

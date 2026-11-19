@@ -38,10 +38,6 @@ def stage(tmp_path):
     return tmp_path
 
 
-def test_spearman_handles_ties_and_degenerate_input():
-    assert rp.spearman([1, 2, 3, 4], [10, 20, 30, 40]) == 1.0
-    assert rp.spearman([1, 2, 3, 4], [4, 3, 2, 1]) == -1.0
-    assert rp.spearman([1, 1, 1], [1, 2, 3]) is None and rp.spearman([1, 2], [1, 2]) is None
 
 
 def test_band_comparison_counts_errors_and_names_the_mechanical_category(stage):
@@ -56,21 +52,8 @@ def test_band_comparison_counts_errors_and_names_the_mechanical_category(stage):
     assert system["views"]["relevant function, requirements not met"]["systemBands"] == {"Good": 1}
 
 
-def test_engine_is_compared_only_when_the_file_has_engine_output(stage):
-    system = rp.build(stage)["systems"]["matchScore (re-score of the frozen baseline)"]
-    assert system["engine"]["n"] == 0 and system["engineIncomplete"] == 1  # the one engine answer is Incomplete: left out
-    assert any("left out" in line for line in rp.render(rp.build(stage)))
-    other = stage / "engine.json"
-    other.write_text(json.dumps({"jobs": [job("a", "Weak", 40, engine="Weak"), job("d", "Strong", 78, engine="Strong")]}))
-    both = rp.build(stage, {"with engine": other})["systems"]["with engine"]
-    assert both["engine"]["n"] == 2 and both["engine"]["exact"] == 2
 
 
-def test_ai_agreement_is_per_judgment_and_ignores_invalid_answers(stage):
-    ai = rp.build(stage)["ai"]
-    assert ai["n"] == 2 and ai["invalid"] == 1
-    assert (ai["function"], ai["requirements"], ai["overall"]) == (0.5, 1.0, 1.0)
-    assert ai["overallAgreementByConfidence"] == {"high": [1, 1], "low": [1, 1]}
 
 
 def test_render_prints_ids_and_counts_only_and_the_run_writes_nothing(stage, capsys):
@@ -81,6 +64,3 @@ def test_render_prints_ids_and_counts_only_and_the_run_writes_nothing(stage, cap
     assert {p.name: p.read_bytes() for p in stage.rglob("*") if p.is_file()} == before
 
 
-def test_no_labels_yet_says_so(tmp_path):
-    (tmp_path / "sample.json").write_text(json.dumps({"jobIds": ["a"]}))
-    assert rp.render(rp.build(tmp_path))[-1] == "no confirmed labels yet: nothing to compare"

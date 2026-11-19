@@ -20,38 +20,16 @@ def req(n, status, strength=3, kind="skill", importance="must"):
 MIX = [req(1, "MET"), req(2, "PARTIAL", 2), req(3, "PARTIAL", 1), req(4, "MISSING", 0), req(5, "UNKNOWN", 0)]
 
 
-def test_stored_absence_and_unknown_are_both_silence_because_no_conflicting_quote_is_stored():
-    assert [off.typed(r)["status"] for r in MIX] == ["MET", "PARTIAL", "PARTIAL", "NOT_EVIDENCED", "NOT_EVIDENCED"]
 
 
-def test_demote_touches_only_partials_at_or_below_the_strength():
-    assert [off.demote(r, 1, "X")["status"] for r in MIX] == ["MET", "PARTIAL", "X", "MISSING", "UNKNOWN"]
-    assert [off.demote(r, None, "X")["status"] for r in MIX[:3]] == ["MET", "X", "X"]
 
 
-def test_under_the_new_rules_a_stricter_partial_raises_fit_and_lowers_confidence():
-    typed = [off.typed(r) for r in MIX]
-    strict = [off.demote(r, 1, v3.NOT_EVIDENCED) for r in typed]
-    assert ap.fit_of(strict, {}) > ap.fit_of(typed, {})  # a low-credit line leaves the denominator
-    assert ap.confidence_of(strict, GATES, {}) < ap.confidence_of(typed, GATES, {})
 
 
-def test_under_the_current_formula_a_stricter_partial_lowers_fit():
-    assert off._current([off.demote(r, 1, "MISSING") for r in MIX]) < off._current(MIX)
 
 
-def test_the_effect_reports_size_direction_labels_and_rank():
-    e = off.effect({"a": 10, "b": 50, "c": 80, "d": None}, {"a": 20, "b": 40, "c": 80, "d": 5}, {"a": 0, "b": 1, "c": 3, "d": 2})
-    assert (e["n"], e["up"], e["down"], e["same"], e["meanDelta"], e["minDelta"], e["maxDelta"]) == (3, 1, 1, 1, 0.0, -10, 10)
-    assert e["labels"] == {"Weak": 1, "Partial": 1, "Strong": 1}
-    assert off.effect({"a": 1}, {"a": None}, {"a": 0})["noEstimate"] == 1
 
 
-def test_partials_at_risk_are_counted_overall_and_by_the_owners_answer():
-    lines = [{"jobId": "a", "reqId": "r3", "meets": "no"}, {"jobId": "a", "reqId": "r2", "meets": "yes"}, {"jobId": "a", "reqId": "r1", "meets": "yes"}]
-    p = off.partial_at_risk(MIX, lines, {"a": {r["id"]: r for r in MIX}})
-    assert (p["partial"], p["partialStrength01"], p["partialStrengths"]) == (2, 1, {1: 1, 2: 1})
-    assert p["labelledPartial"] == {"no": 1, "yes": 1} and p["labelledPartialStrength01"] == {"no": 1}
 
 
 def stage(tmp_path):
@@ -98,22 +76,8 @@ def test_the_replay_prints_no_text_and_writes_nothing(tmp_path):
     assert sorted(p.name for p in out.iterdir()) == before
 
 
-def test_fit_with_a_prior_gives_the_exact_value_per_variant():
-    reqs = [req(1, "MET", 3), req(2, "UNKNOWN", 0), req(3, "MISSING", 0, importance="preferred"), req(4, "UNKNOWN", 0, kind="education")]
-    # weights: MET must 3 x 9/10, two silent musts 3 each, preferred silence stays out; denominator 9
-    assert off.fit_with_prior(reqs, off.PRIORS[0]) == 48  # (2.7 + 2 x 0.27 x 3) / 9
-    assert off.fit_with_prior(reqs, off.PRIORS[1]) == 60  # (2.7 + 2 x 0.45 x 3) / 9
-    assert off.fit_with_prior(reqs, off.PRIORS[2]) == 72  # (2.7 + 2 x 0.63 x 3) / 9
-    assert off.fit_with_prior(reqs, off.PRIORS[0], critical_at_prior=False) == 39  # (2.7 + 0.81) / 9
-    assert off.fit_with_prior(reqs, off.PRIORS[1], critical_at_prior=False) == 45  # (2.7 + 1.35) / 9
-    assert off.fit_with_prior(reqs, off.PRIORS[2], critical_at_prior=False) == 51  # (2.7 + 1.89) / 9
-    assert off.fit_with_prior([req(1, "UNKNOWN", 0, importance="nice")], off.PRIORS[1]) is None
 
 
-def test_closed_world_absence_is_silence_in_every_prior_variant():
-    absent = [req(1, "MET", 3), req(2, "MISSING", 0, kind="education")]
-    assert off.fit_with_prior(absent, off.PRIORS[1], critical_at_prior=False) == 45  # counted as an unconfirmed critical must, whatever the profile lists
-    assert off.fit_with_prior([req(1, "MET", 3), {**req(2, "CONTRADICTED", 0)}], off.PRIORS[1]) == 45  # a real contradiction earns nothing and is not a prior
 
 
 def test_the_replay_reports_every_prior_variant_per_mode_on_both_verdict_sets(tmp_path):

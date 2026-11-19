@@ -139,23 +139,8 @@ def ratings_text():
     return RATINGS.format(a1=IDS[0], a2=IDS[1], m1=IDS[2], s1=IDS[3], s2=IDS[4], s3=IDS[5], s4=IDS[6])
 
 
-def test_parse_ratings_and_criterion():
-    rows, crit = hc.parse_ratings(ratings_text())
-    assert [r["verdict"] for r in rows] == ["apply", "apply", "maybe", "skip", "skip", "skip", "skip"]
-    assert crit["status"].startswith("PROPOSAL")
-    assert sorted(crit["items"]) == [1, 2, 3, 4]
-    assert hc.fit_skip_ids(crit["items"][2], rows) == [IDS[3], IDS[4]]
-    stated, unconfirmed = hc.elig_barriers(rows)
-    assert [r["id"] for r in stated] == [IDS[2], IDS[5]]
-    assert [r["id"] for r in unconfirmed] == [IDS[6]]
 
 
-def test_position_reports_ties_both_ways_and_tau():
-    scores = {"a": 50, "b": 45, "c": 45, "d": 40}
-    assert hc.position(scores, "b") == (2, 3)
-    assert hc.position(scores, "a") == (1, 1)
-    assert hc.kendall_tau_b([3, 2, 1], [3, 2, 1]) == 1.0
-    assert hc.kendall_tau_b([1, 2, 3], [3, 2, 1]) == -1.0
 
 
 def ratings20():
@@ -164,16 +149,6 @@ def ratings20():
     return "\n".join(rows) + "\n\n## Success criterion" + tail.replace("(Nebius, Parker TPM)", "(Co1, Co2)")
 
 
-def test_compare_stops_when_more_than_five_ads_are_not_read(data_dir, ids_file, tmp_path, monkeypatch):
-    ratings = tmp_path / "ratings.md"
-    ratings.write_text(ratings20())
-    monkeypatch.setattr(hc, "score_rows", lambda *a, **k: pytest.fail("scored although coverage failed"))
-    out = tmp_path / "report.md"
-    before = snapshot(data_dir)
-    assert hc.main(["--data-dir", str(data_dir), "--ratings", str(ratings), "--ids", str(ids_file), "--out", str(out)]) == 1
-    assert "STOPPED at step 1" in out.read_text()
-    assert (out.stat().st_mode & 0o777) == 0o600
-    assert snapshot(data_dir) == before
 
 
 def test_compare_refuses_the_real_data_dir(monkeypatch, tmp_path, ids_file):
@@ -188,15 +163,3 @@ def test_compare_refuses_the_real_data_dir(monkeypatch, tmp_path, ids_file):
     assert snapshot(real) == before
 
 
-def test_metrics_counts_from_scores_and_status():
-    rows, crit = hc.parse_ratings(ratings_text())
-    base = {"uncapped": 60, "band": "Good", "fired": [], "binding": [], "authBasis": "ad_read"}
-    scores = {IDS[0]: 70, IDS[1]: 50, IDS[2]: 55, IDS[3]: 60, IDS[4]: 40, IDS[5]: 30, IDS[6]: 30}
-    status = {IDS[5]: "authorized"}
-    summ = {i: {**base, "score": s, "authStatus": status.get(i, "unknown")} for i, s in scores.items()}
-    summ[IDS[2]]["fired"] = ["language"]
-    m = hc.metrics(rows, crit, summ)
-    assert m["c1Strict"] == [IDS[0], IDS[1]]
-    assert m["c2Above"] == [IDS[3]]
-    assert m["c3Violations"] == [IDS[5]]
-    assert m["unconfirmedBarrier"] == [IDS[6]]

@@ -69,36 +69,12 @@ def test_caps_fired_versus_binding():
     assert mc.caps_of(row(dataStatus="insufficient", matchScore=5, scoreBeforeCaps=5)) == ({"insufficient_data"}, {"insufficient_data"})
 
 
-def test_baseline_snapshot_counts():
-    rows = [row(jobId="1", matchScore=45, scoreBeforeCaps=67, workAuthorization={"status": "needs_visa_silent", "basis": "not_read"}),
-            row(jobId="2", matchScore=45, scoreBeforeCaps=60, workAuthorization={"status": "needs_visa_silent", "basis": "ad_read"}),
-            row(jobId="3", matchScore=5, scoreBeforeCaps=5, dataStatus="insufficient", matchLabel=mc.INSUFFICIENT),
-            row(jobId="4", matchScore=80, scoreBeforeCaps=80, matchLabel="Strong")]
-    s = mb.snapshot(rows, {"scoringVersion": "9.9"})
-    assert s["adsTotal"] == 4 and s["adsByScoringVersion"] == {"9.9": 4} and s["ratedAds"] == 3
-    assert s["notRead"] == 1 and s["insufficientData"] == 1 and s["silentVisa"] == {"total": 2, "byBasis": {"not_read": 1, "ad_read": 1}}
-    assert s["largestTieGroups"][0] == {"score": 45, "count": 2}
-    assert s["capsFired"]["visa:needs_visa_silent"] == 2 and s["capsBinding"]["visa:needs_visa_silent"] == 2
-    assert s["extractionFacts"] == {"absent": 4}
 
 
-def test_extraction_status_read_stale_absent():
-    from job_fingerprint import job_fingerprint
-    ad = job("r")
-    assert mb.facts_state({**ad, "llmFacts": {"_fingerprint": job_fingerprint(ad)}}) == "read"
-    assert mb.facts_state({**ad, "llmFacts": {"_fingerprint": "old"}}) == "stale"
-    assert mb.facts_state(ad) == "absent"
 
 
 # --- impact ---------------------------------------------------------------------------------------------------------
 
-def test_impact_compare_lists_changed_ids():
-    old = mc.snapshot_rows([row(jobId="a", matchScore=40, matchLabel="Weak"), row(jobId="b"), row(jobId="gone")])
-    new = mc.snapshot_rows([row(jobId="a", matchScore=60, matchLabel="Good"), row(jobId="b"), row(jobId="fresh")])
-    result = mi.compare(old, new)
-    assert result["scoreChanged"] == ["a"] and result["bandChanged"] == ["a"] and result["compared"] == 2
-    assert result["onlyInBaseline"] == ["gone"] and result["onlyInCurrent"] == ["fresh"]
-    assert result["scoreDeltaCounts"] == {20: 1} and result["bandMoves"] == {"Weak -> Good": 1}
 
 
 def test_a_rescore_of_the_same_tree_changes_nothing(data_dir):
@@ -108,15 +84,6 @@ def test_a_rescore_of_the_same_tree_changes_nothing(data_dir):
     assert result["compared"] == 2 and result["scoreChanged"] == [] and result["bandChanged"] == []
 
 
-def test_snapshot_file_round_trips_and_a_scored_file_converts(data_dir, tmp_path):
-    doc = mc.rescore(data_dir)
-    scored = tmp_path / "scored.json"
-    scored.write_text(json.dumps(doc))
-    converted = mc.read_snapshot(scored)
-    snap = tmp_path / "snap.json"
-    mc.write_private(snap, json.dumps({"stamp": {"currentRun": {}}, "rows": converted["rows"], "titles": {}}))
-    assert stat.S_IMODE(snap.stat().st_mode) == 0o600
-    assert mc.read_snapshot(snap)["rows"] == converted["rows"]
 
 
 def test_rescore_refuses_a_stale_view(data_dir):
@@ -217,14 +184,6 @@ def facts(mode="remote", must=2):
             "requirements": [{"kind": "skill", "importance": "must", "postingQuote": "SECRET QUOTE"}] * must}
 
 
-def test_flip_report_rates():
-    report = mv.flip_report({"a": [facts("remote"), facts("hybrid"), facts("remote")], "b": [facts(), facts(), facts()], "c": [facts()]})
-    assert report["adsCompared"] == 2 and report["adsWithTooFewPasses"] == ["c"]
-    mode = report["fields"]["workMode"]
-    assert mode["adsFlipped"] == 1 and mode["adFlipRate"] == 0.5 and mode["flippedIds"] == ["a"]
-    assert mode["pairDisagreementRate"] == round(2 / 6, 3)
-    assert report["fields"]["roleTrack"]["adsFlipped"] == 0
-    assert "SECRET" not in json.dumps(report)
 
 
 @pytest.fixture

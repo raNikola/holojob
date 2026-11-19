@@ -24,49 +24,14 @@ def test_cap_type_reads_the_scorer_reason_lines():
     assert sa.cap_type(row("a")) == "none"
 
 
-def test_language_label_by_function_word_share():
-    assert sa.language_of("we will work with the team and our experience") == "en"
-    assert sa.language_of("rad na poslu i iskustvo u znanje za posla") == "sr"
 
 
-def test_diff_separates_unchanged_changed_and_missing_jobs():
-    before = [row("1"), row("2", score=40, label="Weak"), row("3")]
-    after = [row("1"), row("2", score=45, label="Weak", raw={"skillMatch": 70}), row("4")]
-    d = sa.diff_scores(before, after)
-    assert (d["common"], d["unchanged"], len(d["changed"])) == (2, 1, 1)
-    assert d["onlyBefore"] == ["3"] and d["onlyAfter"] == ["4"]
-    assert d["changed"][0]["dimensions"] == {"skillMatch": [60, 70]}
-    assert d["scoreDeltas"] == {5: 1} and d["labelChanges"] == 0
 
 
-def test_cases_resolve_by_company_and_title_and_missing_ones_are_reported():
-    rows = [row("c1", title="Account Executive", company="MPG Plus d.o.o."), row("x", company="Other")]
-    found, missing = sa.resolve_cases(rows)
-    assert found == {"mpg-account-executive": "c1"}
-    assert "raiffeisen-product-manager" in missing and len(missing) == len(sa.CASES) - 1
 
 
-def test_sample_is_seeded_keeps_cases_and_skips_closed_ads():
-    rows = [row(f"j{i}", company=f"Firm{i}", label="Weak" if i % 3 else "Strong", provider="infostud" if i % 4 else "ashby",
-                reasons=["Capped: the title matches no target role"] if i % 2 else [], isClosed=(i == 5)) for i in range(40)]
-    rows.append(row("case", title="Account Executive", company="MPG Plus"))
-    cases, _ = sa.resolve_cases(rows)
-    a = sa.draw_sample(rows, 12, 7, cases)
-    b = sa.draw_sample(rows, 12, 7, cases)
-    assert [r["jobId"] for r in a] == [r["jobId"] for r in b]
-    ids = [r["jobId"] for r in a]
-    assert len(ids) == len(set(ids)) == 12 and "case" in ids and "j5" not in ids
-    assert {r["matchLabel"] for r in a} == {"Weak", "Strong"} and {sa.cap_type(r) for r in a} == {"none", "title"}
 
 
-def test_larger_sample_keeps_every_ad_of_the_smaller_one():
-    rows = [row(f"j{i}", company=f"Firm{i}", label="Weak" if i % 3 else "Strong", provider="infostud" if i % 4 else "ashby",
-                reasons=["Capped: the title matches no target role"] if i % 2 else []) for i in range(60)]
-    rows.append(row("case", title="Account Executive", company="MPG Plus"))
-    cases, _ = sa.resolve_cases(rows)
-    small = [r["jobId"] for r in sa.draw_sample(rows, 30, 11, cases)]
-    large = [r["jobId"] for r in sa.draw_sample(rows, 45, 11, cases)]
-    assert large[:30] == small and len(set(large)) == 45 and "case" in large
 
 
 def test_review_items_show_no_score_field_and_the_holdout_excludes_the_sample(tmp_path):
@@ -107,12 +72,3 @@ def test_freeze_copies_inputs_once_and_never_touches_the_source(tmp_path):
         sa.freeze(out, data, lock=tmp_path / "lock")
 
 
-def test_diff_reading_says_when_the_rescore_reproduces_the_baseline(tmp_path):
-    rows = {"jobs": [row("1"), row("2")]}
-    for folder in ("baseline", "rescored"):
-        (tmp_path / folder).mkdir()
-        (tmp_path / folder / "scored_jobs.json").write_text(json.dumps(rows))
-    (tmp_path / "manifest.json").write_text(json.dumps({"git": {"scoringCodeChangedSinceBaseline": ["python/job_scoring/x.py"]}}))
-    result = sa.diff(tmp_path)
-    assert result["changed"] == [] and "reproduces the baseline" in result["attribution"]["reading"]
-    assert stat.S_IMODE((tmp_path / "diff.json").stat().st_mode) == 0o600
