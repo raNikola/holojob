@@ -392,3 +392,23 @@ def test_unknown_gates_become_questions_after_the_requirements():
 def test_output_carries_all_five_gates():
     result = score(STRONG_REQS, PASS5)
     assert [g["gate"] for g in result["gates"]] == list(GATES)
+
+
+# --- invariants over a grid (replaces the pinned snapshot of the owner's calibration run) --------
+
+def test_score_invariants_hold_over_a_grid_of_requirement_sets():
+    """Whatever the constants: ranges hold, a MET never lowers fit, a failed gate never reads 'apply'."""
+    import itertools
+
+    statuses = ("MET", "PARTIAL", "UNKNOWN", "MISSING")
+    importances = ("must", "preferred", "nice")
+    for combo in itertools.product(statuses, importances, repeat=2):
+        reqs = [req(combo[0], combo[1]), req(combo[2], combo[3]), req("MET", "preferred")]
+        for g in (PASS5, UNKNOWN5, gates("fail", "pass", "pass", "pass", "pass")):
+            out = score(reqs, g)
+            assert 0 <= out["fit"] <= 100 and 0 <= out["confidence"] <= 1
+            assert out == score([dict(r) for r in reqs], [dict(x) for x in g])
+            if any(x["result"] == "fail" for x in g):
+                assert out["bucket"] == "blocked"
+            worse = [req("UNKNOWN", r["importance"]) if r["status"] == "MET" else r for r in reqs]
+            assert score(reqs, g)["fit"] >= score(worse, g)["fit"]
