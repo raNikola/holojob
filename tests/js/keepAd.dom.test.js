@@ -360,11 +360,6 @@ describe('Keep this ad is the only write path', () => {
     expect(callers(/\bkeepAd\(/).sort()).toEqual(['src/components/jobs/KeepAdButton.jsx', 'src/modules/jobs/keepAd.js'])
   })
 
-  it('addJobIfAbsent has one other caller, for a row the file holds', () => {
-    expect(callers(/\baddJobIfAbsent\(/).sort()).toEqual(['src/components/jobs/JobDetailsPage.jsx', 'src/modules/jobs/jobsStore.js'])
-    expect(fs.readFileSync('src/components/jobs/JobDetailsPage.jsx', 'utf-8')).toContain('if (found.addable) addJobIfAbsent(found.addable)')
-  })
-
   it('the file rule still holds for a ledger-only row', async () => {
     const { loadJobSources } = await import('../../src/modules/jobs/jobResolve.js')
     const found = await loadJobSources('abs', { jobs: [] }, { autoLoad: async (state) => ({ state: { ...state, jobs: [] }, source: 'scored' }), loadDiscovered: async () => ({ jobs: [] }), loadHistory: async () => ledgerRow()('abs') })

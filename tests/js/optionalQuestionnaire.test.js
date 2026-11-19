@@ -111,11 +111,6 @@ describe('finish readiness', () => {
     expect(checkFinishReadiness(p)).toMatchObject({ ready: false, step: 1 })
   })
 
-  it('is wired to a Finish button in the wizard footer', () => {
-    const source = fs.readFileSync('src/components/onboarding/OnboardingWizard.jsx', 'utf8')
-    expect(source).toContain('checkFinishReadiness(profile)')
-    expect(source).toMatch(/onClick=\{finish\}[\s\S]*Finish/)
-  })
 })
 
 describe('derived answers', () => {

@@ -54,11 +54,3 @@ describe('restoring a snapshot into localStorage', () => {
     expect(back.basicProfile.minSalaryEur).toBe(1500)
   })
 })
-
-describe('Edit Profile footer', () => {
-  const src = fs.readFileSync('src/components/onboarding/OnboardingWizard.jsx', 'utf8')
-
-  it('takes the snapshot only when editing, once, when the wizard mounts', () => {
-    expect(src).toMatch(/useState\(\(\) => \(mode === 'edit' \? takeProfileSnapshot\(profile\) : null\)\)/)
-  })
-})

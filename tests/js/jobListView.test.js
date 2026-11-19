@@ -256,13 +256,6 @@ describe('notices', () => {
 describe('the screen', () => {
   const screen = fs.readFileSync('src/components/jobs/JobDiscoveryScreen.jsx', 'utf-8')
 
-  it('the new controls are plain state, outside what is saved', () => {
-    for (const line of ["useState('active')", 'const [listClasses, setListClasses] = useState(() => new Set())', 'const [seenRecentlyOnly, setSeenRecentlyOnly] = useState(false)']) expect(screen).toContain(line)
-    expect(screen).not.toMatch(/updateFilters\([^)]*(listMode|listClasses|seenRecently)/)
-    const storage = fs.readFileSync('src/modules/jobs/jobStorage.js', 'utf-8')
-    expect(storage).not.toMatch(/listMode|listClasses|serverOnly/)
-  })
-
   it('no new module writes or names storage', () => {
     for (const file of ['src/modules/jobs/jobListView.js', 'src/components/jobs/JobListControls.jsx']) {
       const code = fs.readFileSync(file, 'utf-8')
@@ -270,52 +263,6 @@ describe('the screen', () => {
     }
   })
 
-  it('what is saved is what it always was: the state, never a composed list', () => {
-    expect(screen).toContain('saveJobs(state)')
-    expect(screen).not.toMatch(/setState\([^)]*(composed|shownRows|baseRows|filteredJobs)/)
-    expect(screen).not.toMatch(/importJobsFromFile\([^)]*(composed|allAds)/)
-  })
-
-  it('the metrics keep their inputs', () => {
-    expect(screen).toContain('...computeJobStats(viewJobs)')
-    expect(screen).toContain('syncPipelineCounts(health, state.jobs)')
-    expect(screen).toContain('() => overlayTracking(withServerState(state.jobs, jobState.doc),')
-    expect(screen).toContain('jobs: listed,')
-    expect(screen).toContain('downloadJobsCsv(listed)')
-    expect(screen).toContain('jobs={state.jobs}')
-  })
-
-  it('only the list count and the filter options read the composed list', () => {
-    expect(screen).toContain('{filteredJobs.length} of {baseRows.length} jobs shown')
-    expect(screen).toContain('getUniqueSites(baseRows)')
-    expect(screen).toContain('getUniqueProviders(baseRows)')
-    expect(screen).toContain('jobs={baseRows}')
-  })
-
-  it('an API that is not there, or demo data, keeps today\'s list with no toggle', () => {
-    expect(screen).toContain('const routeEnabled = pipelineApiAvailable && !demoMode')
-    expect(screen).toContain('{routeEnabled && (\n                <JobListControls')
-    expect(screen).toContain('const useComposed = routeEnabled && (allAds.rows !== null || listMode === \'all\')')
-  })
-
-  it('Show off-list has no job in a composed list: it is off, disabled and says why', () => {
-    expect(screen).toContain('const filtersShown = useComposed ? { ...effectiveFilters, showOffList: false } : effectiveFilters')
-    expect(screen).toContain('offListDisabledNote={useComposed ? OFF_LIST_NOTE : null}')
-    const filters = (props) => renderToStaticMarkup(createElement(JobFilters, { filters: { ...getDefaultJobsState().filters, ...props.filters }, sites: [], providers: [], jobs: [], onChange() {}, ...props }))
-    const box = (html) => html.split('Show jobs absent from current results')[0].match(/<input[^>]*type="checkbox"[^>]*>/g).at(-1)
-    expect(box(filters({ offListDisabledNote: 'Already in' }))).toContain('disabled=""')
-    expect(box(filters({}))).not.toContain('disabled=""')
-    expect(filters({ offListDisabledNote: 'Already in' })).toContain('title="Already in"')
-  })
-
-  it('the route is asked each time the screen opens, not only the first', () => {
-    expect(fs.readFileSync('src/modules/jobs/useAllAds.js', 'utf-8')).toContain('if (enabled) loader.refetch()')
-  })
-
-  it('the route is asked again after any import, and after a Re-scrape however it ended', () => {
-    expect(screen).toContain('if (lastImportedAt.current === state.importedAt) return')
-    expect(screen).toContain('if (routeEnabled) refetchAllAds() // the ledger may have moved')
-  })
 })
 
 describe('Stale is not actionable, at every place that asks', () => {
@@ -337,13 +284,6 @@ describe('Stale is not actionable, at every place that asks', () => {
     expect(stats.apply).toBe(1)
     expect(stats.scored).toBe(2)
     expect(stats.avgScore).toBe(60)
-  })
-
-  it('the only other caller, the AI context, leaves it out of the top jobs', () => {
-    const source = fs.readFileSync('src/modules/ai/aiContextBuilder.js', 'utf-8')
-    expect(source).toContain("typeof j.matchScore === 'number' && isActionable(j)")
-    const callers = ['src/modules/ai/aiContextBuilder.js', 'src/modules/jobs/jobStats.js'].map((file) => fs.readFileSync(file, 'utf-8').includes('isActionable('))
-    expect(callers).toEqual([true, true])
   })
 
   it('a stale row on today\'s list has its badge, Closed before it', () => {

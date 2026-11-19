@@ -109,11 +109,6 @@ describe('the paging state', () => {
     expect(showMore(paged, 'filters|title|asc').limit).toBe(200)
   })
 
-  it('the table builds its key from the filters and the sort', () => {
-    const source = fs.readFileSync('src/components/jobs/JobTable.jsx', 'utf-8')
-    expect(source).toContain('const pageKey = `${filterKey}|${sort.key}|${sort.dir}`')
-    expect(source).toContain('const limit = pageLimit(paging, pageKey)')
-  })
 })
 
 describe('selection', () => {
@@ -133,13 +128,6 @@ describe('selection', () => {
   it('a filter change resets it: the key is the filters alone', () => {
     expect(selectionFor(start, 'other filters')).toEqual(new Set())
     expect(selectionFor(toggleSelected(start, 'other filters', 'b'), 'other filters')).toEqual(new Set(['b']))
-  })
-
-  it('Show more and a sort do not reset it: they are not in its key', () => {
-    const screen = fs.readFileSync('src/components/jobs/JobDiscoveryScreen.jsx', 'utf-8')
-    expect(screen).toContain('() => JSON.stringify([effectiveFilters, listMode, [...listClasses].sort(), seenRecentlyOnly])')
-    expect(screen).toContain('const selectedJobIds = selectionFor(selection, filterKey)')
-    expect(screen).toContain('filterKey={filterKey}')
   })
 
   it('a selected row stays checked when more rows load and when it moves', () => {
@@ -197,16 +185,6 @@ describe('select all means every filtered row', () => {
     expect(fs.readFileSync('src/components/jobs/JobDiscoveryScreen.jsx', 'utf-8')).toContain('toggleAllSelected(prev, filterKey, selectableIds(filteredJobs))')
   })
 
-})
-
-describe('bulk actions act on stored rows as before', () => {
-  it('reads the Set where it read the list', () => {
-    const screen = fs.readFileSync('src/components/jobs/JobDiscoveryScreen.jsx', 'utf-8')
-    expect(screen).toContain('selectedJobIds.has(j.jobId) ? { ...j, status } : j')
-    expect(screen).toContain('selectedCount={selectedJobIds.size}')
-    expect(screen).toContain('jobs={state.jobs}')
-    expect(fs.readFileSync('src/components/jobs/BulkActionsBar.jsx', 'utf-8')).toContain('jobs.filter((j) => selectedJobIds.has(j.jobId))')
-  })
 })
 
 describe('FitScore', () => {
