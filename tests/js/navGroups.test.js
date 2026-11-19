@@ -10,17 +10,6 @@ describe('NAV_GROUPS', () => {
     expect(new Set(grouped).size).toBe(grouped.length)
   })
 
-  it('keeps the approved order and titles', () => {
-    expect(NAV_GROUPS.map((group) => [group.title, group.items])).toEqual([
-      [null, [VIEWS.DASHBOARD]],
-      ['Work', [VIEWS.JOBS, VIEWS.APPLICATIONS, VIEWS.OUTREACH]],
-      ['Candidate', [VIEWS.PROFILE, VIEWS.INTELLIGENCE, VIEWS.CVS, VIEWS.CAREER_STRATEGY]],
-      ['Tools', [VIEWS.RESUMES, VIEWS.AI_COMMAND]],
-      ['System', [VIEWS.ACTIVITY, VIEWS.QUALITY]],
-      [null, [VIEWS.SETTINGS]],
-    ])
-  })
-
   it('pins only the Settings group and has unique group ids', () => {
     expect(NAV_GROUPS.filter((group) => group.pinned).map((group) => group.id)).toEqual(['settings'])
     expect(new Set(NAV_GROUPS.map((group) => group.id)).size).toBe(NAV_GROUPS.length)

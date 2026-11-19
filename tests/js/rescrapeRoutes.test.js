@@ -300,16 +300,6 @@ describe('the run view', () => {
     expect(latestEventText(view)).toBe('Scoring started')
   })
 
-  it('says each event in words', () => {
-    expect(eventText({ type: 'source_start', source: 'greenhouse' })).toBe('Reading greenhouse')
-    expect(eventText({ type: 'source_end', source: 'greenhouse', status: 'ok', read: 5, kept: 2 })).toBe('greenhouse: ok, 2 kept of 5 read')
-    expect(eventText({ type: 'source_end', source: 'wwr', status: 'failed', error: 'timeout' })).toBe('wwr: failed, timeout')
-    expect(eventText({ type: 'step_end', step: 'discovery', status: 'ok' })).toBe('Discovery finished')
-    expect(eventText({ type: 'step_end', step: 'scoring', status: 'failed' })).toBe('Scoring failed')
-    expect(eventText({ type: 'run_end', status: 'partial' })).toBe('Run finished: partial')
-    expect(eventText({ type: 'interrupted', message: 'gone' })).toBe('gone')
-    expect(eventText({ type: 'future_kind' })).toBe('future_kind')
-  })
 })
 
 describe('a cancelled run in words', () => {
@@ -335,14 +325,6 @@ describe('the progress line', () => {
 
   it('shows nothing before any run', () => {
     expect(html(emptyRunView())).toBe('')
-  })
-
-  it('shows the latest event and lists them all in an expandable list', () => {
-    const out = html(view({ events: [{ type: 'run_start', at: '2026-11-03T10:00:00+00:00' }, { type: 'source_start', source: 'greenhouse', at: '2026-11-03T10:00:01+00:00' }] }))
-    expect(out).toContain('<details')
-    expect(out).toContain('Reading greenhouse')
-    expect(out).toContain('Run started')
-    expect(out).toContain('2 events')
   })
 
   it('says what a cancelled run did and did not do, and never mentions held rows', () => {

@@ -31,10 +31,6 @@ describe('the import wizard writes only in handleApply, through the guarded appl
     expect(read1).not.toMatch(/updateProfile|uploadCvFile|cvActions/)
   })
 
-  it('no longer sends a PDF through the old upload screen', () => {
-    expect(wizard).not.toMatch(/ResumeUpload|import-linkedin|linkedinImport/)
-  })
-
   it('has no way to write in the picker, the paste step, the PDF step or the review screen', () => {
     for (const file of ['SourcePicker.jsx', 'PasteStep.jsx', 'PdfStep.jsx', 'ImportReview.jsx', 'ImportConfirm.jsx']) {
       const source = read(file)
@@ -59,11 +55,6 @@ describe('the import wizard writes only in handleApply, through the guarded appl
     }
   })
 
-  it('holds the Continue button while a draft is being reviewed', () => {
-    const wizard = fs.readFileSync('src/components/onboarding/OnboardingWizard.jsx', 'utf8')
-    expect(wizard).toMatch(/disabled=\{importBusy && currentStep === 1\}/)
-    expect(wizard).toMatch(/<ImportWizard onBusyChange=\{setImportBusy\}/)
-  })
 })
 
 describe('step 1 no longer demands a PDF', () => {

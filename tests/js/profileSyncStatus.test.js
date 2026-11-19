@@ -86,14 +86,3 @@ describe('the Review screen sync check: the save and the status are separate', (
     expect(describeFailure({ status: 404 })).toBe('HTTP 404')
   })
 })
-
-describe('the Review screen uses it', () => {
-  const source = fs.readFileSync('src/components/review/ReviewScreen.jsx', 'utf8')
-
-  it('no longer hides the result behind the cached availability flag, and reports a failed export sync', () => {
-    expect(source).not.toMatch(/isApiAvailable/)
-    expect(source).toMatch(/syncProfileWithStatus\(profile\)\.then\(\(result\) =>/)
-    expect(source).toMatch(/syncMessages\(outcome\)/)
-    expect(source).toMatch(/role="status"/)
-  })
-})

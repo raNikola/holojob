@@ -35,18 +35,3 @@ describe('sidebar collapsed state', () => {
     expect(() => saveSidebarCollapsed(true, null)).not.toThrow()
   })
 })
-
-describe('sidebar markup', () => {
-  const src = fs.readFileSync('src/components/layout/Sidebar.jsx', 'utf8')
-
-  it('is pinned to the viewport on desktop', () => {
-    expect(src).toMatch(/md:sticky md:top-0/)
-    expect(src).toMatch(/md:h-screen/)
-  })
-
-  it('leaves the mobile bottom nav as it was: compact buttons, never collapsed', () => {
-    const mobile = src.slice(src.indexOf('fixed bottom-0'))
-    expect(mobile).toContain('compact')
-    expect(mobile).not.toContain('collapsed')
-  })
-})

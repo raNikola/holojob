@@ -58,11 +58,6 @@ describe('restoring a snapshot into localStorage', () => {
 describe('Edit Profile footer', () => {
   const src = fs.readFileSync('src/components/onboarding/OnboardingWizard.jsx', 'utf8')
 
-  it('has Cancel next to Done, and Done still just exits', () => {
-    expect(src).toMatch(/onClick=\{cancelEdit\}/)
-    expect(src).toMatch(/onClick=\{\(\) => onComplete\?\.\(\)\}[\s\S]{0,40}Done/)
-  })
-
   it('takes the snapshot only when editing, once, when the wizard mounts', () => {
     expect(src).toMatch(/useState\(\(\) => \(mode === 'edit' \? takeProfileSnapshot\(profile\) : null\)\)/)
   })

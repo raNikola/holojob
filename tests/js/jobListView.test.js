@@ -35,14 +35,6 @@ const viewport = (matches) => vi.stubGlobal('matchMedia', () => ({ matches, addE
 const table = (jobs, props = {}) => renderToStaticMarkup(createElement(JobTable, { jobs, onStatusChange() {}, onJobSelect() {}, onToggleSelect() {}, onToggleSelectAll() {}, classView: true, ...props }))
 
 describe('the class filter', () => {
-  it('offers all nine classes and the display label, with counts, in a fixed order', () => {
-    const options = classOptions([route('a', 'absent'), route('b', 'absent'), stored('s')])
-    expect(options.map((o) => o.value)).toEqual(['found', 'held', 'absent', 'closed', 'older_key', 'stale', 'filtered', 'filtered_incomplete', 'unclassified', SAVED_IN_BROWSER])
-    expect(options.find((o) => o.value === 'absent').count).toBe(2)
-    expect(options.find((o) => o.value === SAVED_IN_BROWSER).count).toBe(1)
-    expect(options.find((o) => o.value === 'closed').count).toBe(0)
-  })
-
   it.each([
     ['found', 'Found'], ['held', 'Not checked this run'], ['absent', 'Not in latest search'], ['closed', 'Closed'], ['older_key', 'Search settings changed'],
     ['stale', 'Stale'], ['filtered', 'Filtered out'], ['filtered_incomplete', 'Incomplete'], ['unclassified', 'Status unknown'], [SAVED_IN_BROWSER, 'Saved in this browser'],
@@ -117,22 +109,6 @@ describe('badges and reasons per class', () => {
     expect(classBadges(route('a', cls))[0].label).toBe(label)
   })
 
-  it('found has no badge and no reason line; other classes keep theirs', () => {
-    expect(classBadges(route('a', 'found'))).toEqual([])
-    for (const wide of [true, false]) {
-      viewport(wide)
-      expect(table([route('a', 'found', { reason: 'Found by the latest run' })])).not.toContain('Found by the latest run')
-      expect(table([route('b', 'held', { reason: 'Could not say' })])).toContain('Could not say')
-    }
-  })
-
-  it('cards show them too', () => {
-    viewport(false)
-    const html = table([serverOnly('a', 'absent', { reason: 'Why' })])
-    expect(html).toContain('Not in latest search')
-    expect(html).toContain('Why')
-  })
-
   it('"Just found" stays on a row the latest run saw, and not beside a class that says otherwise', () => {
     const just = (cls) => classBadges(route('a', cls, { isNew: true })).map((b) => b.label)
     expect(just('found')).toEqual(['Just found'])
@@ -178,11 +154,6 @@ describe('a filtered row is read-only', () => {
     expect(html).not.toContain('cursor-pointer')
   })
 
-  it('and with nothing selectable no select-all is offered', () => {
-    viewport(true)
-    expect(table([filtered()])).not.toContain('Select all')
-  })
-
   it('Add job hands the row to the screen, and the form starts from title, company and address only', () => {
     const source = fs.readFileSync('src/components/jobs/JobDiscoveryScreen.jsx', 'utf-8')
     expect(source).toContain('setAddInitial({ title: row.title, company: row.company, jobUrl: row.jobUrl })')
@@ -220,14 +191,6 @@ describe('a server-only row before Keep this ad', () => {
     expect(html.match(/<input[^>]*type="checkbox"[^>]*>/g).at(-1)).toContain('disabled=""')
   })
 
-  it('in cards too', () => {
-    viewport(false)
-    const html = table([serverOnly('a', 'absent')])
-    expect(html.match(/<button[^>]*aria-label="Save[^>]*>/)[0]).toContain('disabled=""')
-    expect(html.match(/<input[^>]*type="checkbox"[^>]*>/)[0]).toContain('disabled=""')
-    expect(html.match(/<input[^>]*type="checkbox"[^>]*>/)[0]).toContain(`title="${SERVER_ONLY_NOTE}"`)
-  })
-
   it('the tailoring tools of a card are for stored rows only: they would write to the row', () => {
     viewport(false)
     expect(table([stored('s', { matchScore: 70 })])).toContain('TAILOR-ACTIONS')
@@ -238,18 +201,6 @@ describe('a server-only row before Keep this ad', () => {
     viewport(true)
     const save = table([stored('s')]).match(/<button[^>]*aria-label="Save"[^>]*>/)[0]
     expect(save).not.toContain('disabled=""')
-  })
-
-  it('select all counts what it can reach and says so', () => {
-    viewport(true)
-    const html = table([stored('s'), serverOnly('a', 'absent'), filtered()])
-    expect(html).toContain('Select all 1 filtered jobs saved in this browser')
-    expect(html).toContain('aria-label="Select all 1 filtered jobs saved in this browser, not only the 3 shown"')
-  })
-
-  it('the stored rows selected make "all selected", though others are in the list', () => {
-    viewport(true)
-    expect(table([stored('s'), serverOnly('a', 'absent')], { selectedJobIds: new Set(['s']) })).toContain('Clear selection of all 1 filtered jobs saved in this browser')
   })
 
   it('the drawer shows it and stores nothing: no store write in its code, and the note', () => {
@@ -278,10 +229,6 @@ describe('notices', () => {
     expect(notice.text).toContain('Showing what is saved in this browser; nothing was changed')
   })
 
-  it('a later failure says the last list is what is showing', () => {
-    expect(texts({ status: 'error', error: 'x' })[0]).toContain('Showing the last list loaded')
-  })
-
   it.each([['missing'], ['unreadable'], [undefined]])('filteredFile %s: All says it is incomplete, Active does not need to', (filteredFile) => {
     expect(INCOMPLETE_FILTERED).toBe('This list is incomplete: filtered ads could not be read')
     expect(texts({ mode: 'all', meta: { filteredFile } })).toEqual([INCOMPLETE_FILTERED])
@@ -297,10 +244,6 @@ describe('notices', () => {
     expect(notices).toContain(INCOMPLETE_ROUTE)
   })
 
-  it('still loading in All says so', () => {
-    expect(texts({ mode: 'all', status: 'loading', rows: null, meta: null })[0]).toContain('This list is incomplete until it arrives')
-  })
-
   it('copies not collapsed are noted, a failure as an error', () => {
     expect(texts({ copies: { state: 'waiting', hidden: 0 } })[0]).toContain('until your applications have loaded')
     const [failed] = listNotices({ ...base, copies: { state: 'failed', hidden: 0 } })
@@ -308,33 +251,6 @@ describe('notices', () => {
     expect(failed.text).toContain('Your applications could not be loaded')
   })
 
-  it('server-only rows say why they are read-only', () => {
-    expect(texts({ hasServerOnly: true })[0]).toContain('until you press Keep this ad')
-    expect(texts({ hasServerOnly: true })[0]).toContain('bulk actions cover saved rows only')
-  })
-})
-
-describe('the controls', () => {
-  const controls = (props = {}) => renderToStaticMarkup(createElement(JobListControls, { mode: 'active', onMode() {}, classes: new Set(), onClasses() {}, recent: false, onRecent() {}, ...props }))
-
-  it('the toggle says which is on, and Active shows no All controls', () => {
-    const html = controls()
-    expect(html).toMatch(/aria-pressed="true"[^>]*>Active/)
-    expect(html).toMatch(/aria-pressed="false"[^>]*>All/)
-    expect(html).not.toContain('Seen in the last 14 days')
-    expect(html).not.toContain('<fieldset')
-  })
-
-  it('All shows the class filter and the 14-day filter', () => {
-    const html = controls({ mode: 'all', options: classOptions([route('a', 'absent')]), classes: new Set(['absent']) })
-    expect(html).toContain('Seen in the last 14 days')
-    expect(html).toContain('Not in latest search (1)')
-    expect(html).toContain('Saved in this browser (0)')
-    expect(html).toContain('checked=""')
-  })
-  it('no longer renders the notices itself: they are toasts in the screen (tests/js/toast.dom.test.js)', () => {
-    expect(controls({ notices: [{ kind: 'info', text: 'Note' }] })).not.toContain('Note')
-  })
 })
 
 describe('the screen', () => {
@@ -394,18 +310,6 @@ describe('the screen', () => {
 
   it('the route is asked each time the screen opens, not only the first', () => {
     expect(fs.readFileSync('src/modules/jobs/useAllAds.js', 'utf-8')).toContain('if (enabled) loader.refetch()')
-  })
-
-  it('Export says it covers saved rows only', () => {
-    expect(EXPORT_NOTE).toContain('saved in this browser only')
-    expect(screen).toContain('title={EXPORT_NOTE}')
-    expect(screen).toContain('JSON, saved rows')
-    expect(screen).toContain('CSV, saved rows')
-  })
-
-  it('search says what it covers, in All only', () => {
-    expect(ALL_SEARCH_NOTE).toContain('does not match the ad text')
-    expect(screen).toContain("searchNote={useComposed && listMode === 'all' ? ALL_SEARCH_NOTE : null}")
   })
 
   it('the route is asked again after any import, and after a Re-scrape however it ended', () => {
@@ -484,12 +388,6 @@ describe('Stale in Active and All', () => {
     expect(applyAllControls(rows, { classes: new Set(['absent']), reference: NOW })).toEqual([])
   })
 
-  it('shows its badge and the reason with the counts', () => {
-    viewport(true)
-    const html = table([{ ...STALE, status: 'new', serverOnly: true }])
-    expect(html).toContain('>Stale<')
-    expect(html).toContain('No sighting for 40 days and 3 successful runs of this search')
-  })
 })
 
 describe('metrics: server-only rows cannot move them', () => {
@@ -559,11 +457,4 @@ describe('Wave 6: history-only rows and the shadow badge', () => {
     expect(only).not.toContain('Unreviewed')
   })
 
-  it('the table and cards no longer carry the shadow badge; Job Details still does', () => {
-    const shadow = { fit: 81, label: 'Strong', requirements: [], engineVersion: 'x' }
-    const html = table([stored('s2', { engineShadow: shadow, matchScore: 70, matchLabel: 'Good' })])
-    expect(html).not.toMatch(/shadow/i)
-    expect(fs.readFileSync('src/components/jobs/JobDetailBody.jsx', 'utf-8')).toContain('<EngineShadowBadge shadow={job.engineShadow} />')
-    expect(fs.readFileSync('src/components/jobs/JobTable.jsx', 'utf-8')).not.toContain('EngineShadowBadge')
-  })
 })

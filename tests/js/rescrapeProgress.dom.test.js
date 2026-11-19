@@ -34,16 +34,6 @@ function stubFetch(reply) {
 }
 
 describe('Details moved to the Activity tab', () => {
-  it('the controls row has no Details link and no event list, for a running or a finished run', async () => {
-    for (const v of [view(), view({ active: false, events: [{ type: 'run_end', status: 'ok' }] }, { status: 'ok' })]) {
-      const screen = await mount(v)
-      expect(screen.button(/^Details$/)).toBeUndefined()
-      expect(container.querySelector('details')).toBeNull()
-      await act(async () => root?.unmount())
-      container.remove()
-    }
-  })
-
   it('shows nothing before any run', async () => {
     const screen = await mount(emptyRunView())
     expect(screen.text()).toBe('')

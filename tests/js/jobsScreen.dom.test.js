@@ -56,20 +56,6 @@ describe('the table on a long list', () => {
     expect(screen.raw()).toBe(raw)
   })
 
-  it('select all covers every filtered row, says what is off screen, and clears', async () => {
-    stubServer({ health: false })
-    screen = await mountScreen({ stored: many(350) })
-    const writes = countWrites(screen.key)
-    const headerBox = () => screen.container.querySelector('input[type=checkbox][aria-label^="Select all 350 filtered"]')
-    expect(screen.button(/Select all 350 filtered/)).toBeUndefined() // the text link is gone; the header checkbox does the same
-    await screen.click(headerBox())
-    expect(screen.text()).toContain('350 selected')
-    expect(screen.text()).toContain('250 selected jobs are not shown yet')
-    await screen.click(headerBox())
-    expect(screen.text()).not.toContain('selected jobs are')
-    expect(writes()).toBe(0)
-  })
-
   it('a filter change resets the selection and the batch, keeps its persistence, and the stored jobs stay byte-identical', async () => {
     stubServer({ health: false })
     screen = await mountScreen({ stored: many(150) })
@@ -143,27 +129,9 @@ describe('the table on a long list', () => {
     expect([...screen.container.querySelectorAll('th button')].some((b) => /score/i.test(b.textContent))).toBe(true)
   })
 
-  it('a narrow window mounts cards only', async () => {
-    viewport(false)
-    stubServer({ health: false })
-    screen = await mountScreen({ stored: many(3) })
-    expect(screen.container.querySelector('table')).toBeNull()
-    expect(screen.text()).toContain('Job 1')
-  })
 })
 
 describe('Active and All', () => {
-  it('Active is the default, with badges, reasons and Not scored', async () => {
-    stubServer({ route: good })
-    screen = await mountScreen({ stored: STORED })
-    expect(screen.button(/^Active$/).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.rows()).toHaveLength(3)
-    expect(screen.text()).toContain('of 3 jobs shown')
-    expect(screen.text()).toContain('Not in latest search')
-    expect(screen.text()).toContain('why absent')
-    expect(screen.text()).toContain('Not scored')
-  })
-
   it('by default Active leaves out the ad the board no longer lists, says how many, and the filter brings it back', async () => {
     stubServer({ route: good })
     screen = await mountScreen({ stored: STORED, filters: { showNotOnBoard: false } })

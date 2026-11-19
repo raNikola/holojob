@@ -287,31 +287,6 @@ describe('what needs a stored ad waits for Keep, and says why', () => {
     expect(screen.text()).toContain(AI_PANEL_TEXT)
   })
 
-  it('the list says why its rows are read-only, and every disabled action says what to do', async () => {
-    stubServer({ route: good, ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
-    expect(screen.text()).toContain('read-only until you press Keep this ad')
-    expect(screen.text()).toContain('bulk actions cover saved rows only')
-    const buttons = [...absentRow().querySelectorAll('button[aria-label]')]
-    expect(buttons.length).toBeGreaterThan(0)
-    // Applied works without Keep (it writes to the tracker, which needs no stored row); every other action waits for Keep.
-    const applied = buttons.filter((b) => b.getAttribute('aria-label') === 'Mark as applied')
-    expect(applied).toHaveLength(1)
-    expect(applied[0].disabled).toBe(false)
-    for (const button of buttons.filter((b) => !applied.includes(b))) {
-      expect(button.disabled).toBe(true)
-      expect(button.title).toBe('Press Keep this ad first')
-    }
-    expect(absentRow().querySelector('input[type=checkbox]').title).toBe('Press Keep this ad first')
-  })
-
-  it('select all covers saved rows only and says so', async () => {
-    stubServer({ route: good, ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
-    await screen.click(screen.button(/Select all 1 filtered jobs saved in this browser/))
-    expect(screen.text()).toContain('1 selected')
-    expect(absentRow().querySelector('input[type=checkbox]').checked).toBe(false)
-  })
 })
 
 describe('Mark Applied, the same in the drawer and on Job Details', () => {

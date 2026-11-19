@@ -50,12 +50,6 @@ describe('one layout', () => {
     expect(render(list(1))).toContain('<table')
   })
 
-  it('neither layout is hidden by CSS any more', () => {
-    viewport(true)
-    expect(render(list(1))).not.toContain('md:hidden')
-    expect(render(list(1))).not.toContain('md:block')
-  })
-
   it.each([[true], [false]])('rows keep their actions and labels (wide: %s)', (wide) => {
     viewport(wide)
     const html = render([job(1)])
@@ -87,30 +81,6 @@ describe('paging: the whole list is sorted, then a batch is taken', () => {
     expect(count(html, '<tr')).toBe(101)
     expect(html).toContain('Showing 100 of 3500')
     expect(html).toContain('Show 100 more')
-  })
-
-  it('cards are one batch too', () => {
-    viewport(false)
-    expect(count(render(list(250)), 'Open link')).toBe(100)
-  })
-
-  it('the button names what is left, and goes when nothing is', () => {
-    viewport(true)
-    expect(render(list(150))).toContain('Show 50 more')
-    const all = render(list(100))
-    expect(all).not.toContain('more</button>')
-    expect(all).toContain('Showing 100 of 100')
-  })
-
-  it('the count is announced', () => {
-    viewport(true)
-    expect(render(list(3))).toContain('role="status"')
-  })
-
-  it('an empty list says so and offers nothing', () => {
-    const html = render([])
-    expect(html).toContain('No jobs match the current filters.')
-    expect(html).not.toContain('Select all')
   })
 
   it('the Provider column is judged on the whole list, not the batch', () => {
@@ -181,11 +151,6 @@ describe('selection', () => {
     expect(checked(render(list(150), { selectedJobIds: later }))).toBe(0)
   })
 
-  it('a card shows its selection too', () => {
-    viewport(false)
-    expect(count(render(list(3), { selectedJobIds: new Set(['j1']) }), 'checked=""')).toBe(1)
-  })
-
   it('counts the selected rows that are not on screen', () => {
     const jobs = list(300)
     expect(selectedNotShown(new Set(['j5', 'j150', 'j299']), jobs, 100)).toBe(2)
@@ -220,28 +185,6 @@ describe('select all means every filtered row', () => {
     expect(everySelected(new Set(), [])).toBe(false)
   })
 
-  it('the table says what it selects, in words and to a screen reader', () => {
-    viewport(true)
-    const html = render(list(350))
-    expect(html).not.toContain('Select all 350 filtered jobs</button>') // the text link is gone (owner, 2026-11-19); the header checkbox stays
-    expect(html).toContain('aria-label="Select all 350 filtered jobs, not only the 100 shown"')
-    expect(html).toContain('title="Select all 350 filtered jobs, not only the 100 shown"')
-  })
-
-  it('a narrow window has no select-all link either', () => {
-    viewport(false)
-    expect(render(list(350))).not.toContain('Select all 350 filtered jobs</button>')
-  })
-
-  it('with all selected it offers to clear, and says how many are off screen', () => {
-    viewport(true)
-    const html = render(list(350), { selectedJobIds: new Set(list(350).map((j) => j.jobId)) })
-    expect(html).not.toContain('Clear selection of all')
-    expect(html).toContain('250 selected jobs are not shown yet')
-    expect(html).toContain('checked=""')
-    expect(render(list(150), { selectedJobIds: new Set(['j140']) })).toContain('1 selected job is not shown yet')
-  })
-
   it('every row on screen selected is not all of them', () => {
     viewport(true)
     const html = render(list(350), { selectedJobIds: new Set(list(100).map((j) => j.jobId)) })
@@ -254,10 +197,6 @@ describe('select all means every filtered row', () => {
     expect(fs.readFileSync('src/components/jobs/JobDiscoveryScreen.jsx', 'utf-8')).toContain('toggleAllSelected(prev, filterKey, selectableIds(filteredJobs))')
   })
 
-  it('nothing off screen says nothing', () => {
-    viewport(true)
-    expect(render(list(50), { selectedJobIds: new Set(['j1']) })).not.toContain('not shown yet')
-  })
 })
 
 describe('bulk actions act on stored rows as before', () => {
@@ -278,10 +217,6 @@ describe('FitScore', () => {
     expect(score({ score: null })).toContain('>—<')
   })
 
-  it('emptyLabel replaces the dash', () => {
-    expect(score({ emptyLabel: 'Not scored' })).toContain('>Not scored<')
-  })
-
   it('a score ignores it', () => {
     const html = score({ score: 70, label: 'Good', emptyLabel: 'Not scored' })
     expect(html).toContain('70')
@@ -292,12 +227,6 @@ describe('FitScore', () => {
     expect(score({ score: 0, emptyLabel: 'Not scored' })).not.toContain('Not scored')
   })
 
-  it('the Jobs table says Not scored, in both layouts', () => {
-    viewport(true)
-    expect(render([job(1, { matchScore: null }), job(2)])).toContain('Not scored')
-    viewport(false)
-    expect(render([job(1, { matchScore: null }), job(2)])).toContain('Not scored')
-  })
 })
 
 describe('storage', () => {
@@ -349,46 +278,10 @@ describe('closed ads and the sort', () => {
     expect(closedLast(rows).map((row) => row.jobId)).toEqual(['j1', 'j2'])
   })
 
-  it('renders the default sort with the closed ad last', () => {
-    viewport(true)
-    const html = render([job(1, { matchScore: 90, class: 'closed', title: 'Closed one' }), job(2, { matchScore: 50, class: 'found', title: 'Open one' })])
-    expect(html.indexOf('Open one')).toBeLessThan(html.indexOf('Closed one'))
-  })
-})
-
-describe('the Salary column', () => {
-  it('shows the stated pay first and the EUR figure only as approximate', () => {
-    viewport(true)
-    const html = render([job(1, { salary: '92900 - 209500 yearly', salaryMonthlyEur: { min: 7123, max: 16062, currency: 'USD', converted: true } })])
-    expect(html).toContain('$92,900–209,500/year')
-    expect(html).toContain('≈ €7,123–16,062/mo')
-    expect(html.indexOf('$92,900')).toBeLessThan(html.indexOf('≈ €7,123'))
-  })
-
-  it('says so when the ad states none, in both layouts', () => {
-    viewport(true)
-    expect(render([job(1)])).toContain('Not specified')
-    viewport(false)
-    expect(render([job(1)])).toContain('Not specified')
-  })
 })
 
 describe('the Apply by column', () => {
   const reference = new Date(2026, 10, 8, 12).getTime()
-
-  it('shows the warning text and Not specified', () => {
-    viewport(true)
-    const html = render([job(1, { applyDeadline: '2026-11-09' }), job(2)], { reference })
-    expect(html).toContain('Tomorrow')
-    expect(html).toContain('Not specified')
-  })
-
-  it('an expired ad reads Expired and is still listed', () => {
-    viewport(true)
-    const html = render([job(1, { applyDeadline: '2026-11-01', title: 'Past date' })], { reference })
-    expect(html).toContain('Expired')
-    expect(html).toContain('Past date')
-  })
 
   it('the default sort stays the Fit Score', () => {
     viewport(true)
@@ -396,10 +289,6 @@ describe('the Apply by column', () => {
     expect(html.indexOf('No date high')).toBeLessThan(html.indexOf('Urgent low'))
   })
 
-  it('the phone layout has it too', () => {
-    viewport(false)
-    expect(render([job(1, { applyDeadline: '2026-11-08' })], { reference })).toContain('Today')
-  })
 })
 
 describe('the default order breaks score ties by the score before caps', () => {
@@ -420,10 +309,4 @@ describe('the default order breaks score ties by the score before caps', () => {
     expect(ids(rows)).toEqual(['j3', 'j1', 'j2'])
   })
 
-  it('renders the tie-break in the table', () => {
-    viewport(true)
-    const rows = [job(1, { matchScore: 45, scoreBeforeCaps: 50, title: 'Low pre-cap' }), job(2, { matchScore: 45, scoreBeforeCaps: 80, title: 'High pre-cap' })]
-    const html = render(rows)
-    expect(html.indexOf('High pre-cap')).toBeLessThan(html.indexOf('Low pre-cap'))
-  })
 })

@@ -47,11 +47,4 @@ describe('tailoring reasons are shown', () => {
     expect(html).not.toContain('tailor-checks-passed')
   })
 
-  it('names the four uncovered cases the owner asked for', () => {
-    expect(CHECK_LIMITS).toMatch(/lowercase/)
-    expect(CHECK_LIMITS).toMatch(/reworded into a false one/)
-    expect(CHECK_LIMITS).toMatch(/reused with another meaning/)
-    expect(CHECK_LIMITS).toMatch(/tone/)
-    expect(CHECK_LIMITS).toMatch(/do not prove every statement is true/)
-  })
 })

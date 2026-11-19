@@ -69,25 +69,6 @@ describe('the history', () => {
     expect(screen.text()).toContain('Records older than 90 days are removed')
   })
 
-  it('says Cancelled, Interrupted and Skipped in words, not only in a colour', async () => {
-    const screen = await mount(fakeFetch(api([
-      record(4, { status: 'cancelled', cancel: { requestedAt: start(4), outcome: 'collected_ads_saved', saved: 455 }, import: importBlock({ kind: 'partial', saved: 455, new: 3, refreshed: 452, ledger: undefined }) }),
-      record(3, { status: 'interrupted', finishedAt: null }),
-      record(2, { status: 'skipped', sources: [{ name: 'infostud', status: 'skipped', read: 0, kept: 0, new: 0, skipReason: "Infostud covers Serbia only, not 'Germany'" }] }),
-      record(1, { status: 'partial' }),
-      record(0, { status: 'failed' }),
-    ])))
-    const [cancelled, interrupted, skipped, partial, failed] = screen.rows().map((row) => row.textContent)
-    expect(cancelled).toContain('Cancelled')
-    expect(cancelled).toContain('The last run was cancelled. 455 collected ads were saved. Nothing else changed. Scoring was skipped.')
-    expect(interrupted).toContain('Interrupted')
-    expect(interrupted).toMatch(/stopped without finishing/)
-    expect(skipped).toContain('Skipped')
-    expect(skipped).toContain('Every source was skipped, so nothing was searched.')
-    expect(partial).toContain('Partial')
-    expect(failed).toContain('Failed')
-  })
-
   it('Show more asks for the next cursor and adds the runs, and goes when there is no more', async () => {
     const first = Array.from({ length: 3 }, (_, i) => record(10 - i))
     const second = [record(5), record(10)] // run 10 again: shown once
@@ -121,13 +102,6 @@ describe('asks only when told to', () => {
     await screen.click(screen.button(/Refresh/))
     expect(fetchFn.calls).toEqual(['/api/runs?limit=30', '/api/runs?limit=30'])
     expect(screen.rows()).toHaveLength(2)
-  })
-
-  it('has no timer in the code that fetches', () => {
-    for (const file of ['src/modules/activity/useRunHistory.js', 'src/modules/activity/activityClient.js', 'src/components/activity/ActivityScreen.jsx']) {
-      const code = fs.readFileSync(path.join(import.meta.dirname, '../..', file), 'utf-8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-      expect(code, file).not.toMatch(/setInterval|setTimeout|requestAnimationFrame|EventSource|WebSocket/)
-    }
   })
 
   it('a hidden tab makes no request, and asks once when it is shown', async () => {

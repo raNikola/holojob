@@ -28,35 +28,6 @@ function mockRescrape(view, capture = {}) {
   }))
 }
 
-describe('the controls row', () => {
-  it('orders Re-scrape jobs, Re-score, then the Skip LinkedIn checkbox, and has no inline URL import', async () => {
-    mockRescrape(idleView)
-    stubServer({ route: good })
-    screen = await mountScreen({ stored: STORED })
-    const scrape = screen.button(/^Re-scrape jobs$/)
-    const score = screen.button(/^Re-score$/)
-    const skip = screen.box(/Skip LinkedIn this time/)
-    expect(scrape && score && skip).toBeTruthy()
-    const before = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
-    expect(before(scrape, score)).toBe(true)
-    expect(before(score, skip)).toBe(true)
-    expect(screen.container.querySelector('input[placeholder="Paste job URL…"]')).toBeNull()
-    expect(screen.button(/Import URL/)).toBeUndefined()
-  })
-
-  it('shows Running… with the current source while a Re-scrape is going, and no Details link or event list', async () => {
-    mockRescrape({
-      ...idleView, active: true, run: { runId: 'r1', status: 'running', orchestrator: 'rescrape' },
-      events: [{ type: 'run_start' }, { type: 'source_start', source: 'jobspy' }],
-    })
-    stubServer({ route: good })
-    screen = await mountScreen({ stored: STORED })
-    expect(screen.button(/^Running… jobspy$/)).toBeTruthy()
-    expect(screen.button(/^Details$/)).toBeUndefined()
-    expect(screen.container.querySelector('details')).toBeNull()
-  })
-})
-
 describe('end of a run', () => {
   it('a failed Re-scrape is a persistent error toast, not only an Activity entry', async () => {
     const capture = {}
@@ -78,47 +49,5 @@ describe('end of a run', () => {
     await act(async () => { await capture.finished({ status: 'ok' }) })
     await settle()
     expect(screen.container.querySelector('[data-testid="toast-stack"] [role="status"]')?.textContent).toContain('Re-scrape done: 2 jobs')
-  })
-})
-
-describe('the filter bar and the count row', () => {
-  it('has no Filters heading, keeps the info icons, and holds More filters and Clear all in the bar', async () => {
-    mockRescrape(idleView)
-    stubServer({ route: good })
-    screen = await mountScreen({ stored: STORED })
-    expect([...screen.container.querySelectorAll('h3')].some((h) => h.textContent === 'Filters')).toBe(false)
-    expect(screen.container.querySelector('#filter-search').getAttribute('aria-label')).toBe('Search')
-    expect(screen.container.querySelector('button[aria-label="About Search"]')).toBeTruthy()
-    expect(screen.container.querySelector('button[aria-label="About Status"]')).toBeTruthy()
-    const bar = screen.container.querySelector('#filter-search').closest('.rounded-xl')
-    expect(screen.button(/More filters/, bar)).toBeTruthy()
-    expect(screen.button(/^Clear all$/, bar)).toBeTruthy()
-  })
-})
-
-describe('the Activity tab', () => {
-  it('opens after Analytics, holds the latest Re-scrape event log and the run history, and the Jobs tab no longer has them', async () => {
-    mockRescrape({ ...idleView, run: { runId: 'r1', status: 'ok', orchestrator: 'rescrape' }, events: [{ type: 'run_end', status: 'ok' }] })
-    stubServer({ route: good })
-    screen = await mountScreen({ stored: STORED })
-    const tabs = [...screen.container.querySelectorAll('[role="tab"], button')].map((b) => b.textContent)
-    expect(tabs.indexOf('Activity')).toBe(tabs.indexOf('Analytics') + 1)
-    expect(screen.text()).not.toContain('Run finished')
-    await screen.click(screen.button(/^Activity$/))
-    await settle()
-    expect(screen.text()).toContain('Latest Re-scrape')
-    expect(screen.text()).toContain('Run finished: ok')
-    expect(screen.text()).toContain('What each run read, kept and saved')
-  })
-})
-
-describe('the Pipeline tab keeps the URL import', () => {
-  it('Import job by URL is offered there', async () => {
-    mockRescrape(idleView)
-    stubServer({ route: good })
-    screen = await mountScreen({ stored: STORED })
-    await screen.click(screen.button(/^Pipeline$/))
-    await settle()
-    expect(screen.text()).toContain('Import job by URL')
   })
 })

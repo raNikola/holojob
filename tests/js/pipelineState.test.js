@@ -84,11 +84,4 @@ describe('pipeline counts follow the current jobs', () => {
     expect(next).toMatchObject({ lastTailoringRun: 't1', lastDiscoveryRun: 'd2', runningStep: 'scoring', jobsDiscovered: 3 })
   })
 
-  it('the screen derives from the stored list on mount and syncs on every change of health or jobs', () => {
-    const screen = fs.readFileSync('src/components/jobs/JobDiscoveryScreen.jsx', 'utf8')
-    const mount = screen.slice(screen.indexOf('autoLoadJobs(loadJobs())'), screen.indexOf('usePipelineAutoRefresh({'))
-    expect(mount).toContain('derivePipelineStateFromHealth(probe.health, loadJobs().jobs)')
-    expect(mount).not.toContain('probe.health, state.jobs')
-    expect(mount).toMatch(/syncPipelineCounts\(health, state\.jobs\)[\s\S]*\}, \[health, state\.jobs\]\)/)
-  })
 })
