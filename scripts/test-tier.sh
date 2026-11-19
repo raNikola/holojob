@@ -60,9 +60,9 @@ step() {
 }
 
 total_started=$(date +%s)
-step lint in_node npm run lint
 
 if [ "$tier" = full ]; then
+  step lint in_node npm run lint
   step js-tests in_node npm run test:js
   # pytest.ini caps the workers at 4 (pytest-xdist); the slow tests run here.
   step pytest sh -c 'cd "$1" && "$2" -m pytest -m "not network" -q' sh "$tree" "$python"
@@ -82,6 +82,19 @@ if [ -n "$base" ] && git -C "$top" diff --name-only --no-renames "$base" "$sha" 
 else
   base=
   echo "test-tier: cannot tell what this push changes (no common commit with origin/main): only the meta tests run" >&2
+fi
+
+# Lint: every ESLint rule here works on one file at a time, so the changed files are enough; the whole tree when the lint setup changed or the base is unknown.
+if [ -z "$base" ] || grep -qE '^(eslint\.config\.js|package(-lock)?\.json)$' "$changed"; then
+  step lint in_node npm run lint
+else
+  lint_files=$(grep -E '^(src|scripts)/.*\.(js|jsx|mjs|cjs)$' "$changed" | while read -r f; do [ -f "$tree/$f" ] && echo "$f"; done | tr '\n' ' ')
+  if [ -n "$lint_files" ]; then
+    # shellcheck disable=SC2086
+    step lint-changed in_node npx eslint --no-warn-ignored $lint_files
+  else
+    echo "test-tier: SKIP lint         no linted file changed"
+  fi
 fi
 
 "$python" "$tree/scripts/select-tests.py" --root "$tree" --changed "$changed" >"$work/selection.json" || die "select-tests.py failed"
