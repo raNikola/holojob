@@ -18,7 +18,11 @@ import hashlib
 import html
 import json
 import re
+import sys
 from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1] / "job_scoring"))
+import profile_enrichment  # noqa: E402
 
 PROMPT_VERSION = 1
 SUMMARY_VERSION = 1
@@ -87,9 +91,10 @@ def _lines(items) -> list[str]:
     return [_plain(i) for i in items or [] if isinstance(i, str) and _plain(i)]
 
 
-def summary_sections(scope: str, profile: dict, intelligence: dict) -> dict:
+def summary_sections(scope: str, profile: dict, intelligence: dict, enrichment: dict | None = None) -> dict:
     """The candidate summary as ordered sections. P-pub: what the CV shows (role, level, years, summary, experience without employer names, skills,
-    certifications). P-full: P-pub plus the domains and capabilities of the owner's confirmed history entries. Field list = the plan's table."""
+    certifications). P-full: P-pub plus the domains and capabilities of the owner's confirmed history entries, and the profile enrichment
+    (domain and history entries and experience boundaries, owner decision 2026-11-19; employer names masked as "[employer]"). Field list = the plan's table."""
     if scope not in SCOPES:
         raise ValueError(f"scope must be one of {SCOPES}")
     basic = profile.get("basicProfile") or {}
@@ -116,6 +121,17 @@ def summary_sections(scope: str, profile: dict, intelligence: dict) -> dict:
                 confirmed.append(f"{_plain(entry.get('role'))}: domains {', '.join(_lines(entry.get('domains'))) or '-'}; "
                                  f"capabilities {', '.join(_lines(entry.get('capabilities'))) or '-'}")
         out["Confirmed domains and capabilities"] = confirmed
+        data = profile_enrichment.normalize(enrichment)
+        employers = sorted(data["employers"], key=len, reverse=True)
+
+        def masked(text: str) -> str:
+            for name in employers:
+                text = re.sub(re.escape(name), "[employer]", text, flags=re.IGNORECASE)
+            return _plain(text)
+
+        out["Domain experience"] = [f"{masked(d['title'])}: {masked(d['text'])}" for d in data["domains"]]
+        out["Work history detail"] = [f"{masked(h['role'])} ({masked(h['period'])}): {masked(h['text'])}" for h in data["history"]]
+        out["Experience boundaries"] = [masked(b["text"]) for b in data["boundaries"]]
     return {k: [x for x in v if x] for k, v in out.items() if any(v)}
 
 
@@ -123,10 +139,10 @@ def render_summary(sections: dict) -> str:
     return "\n".join(f"{name}:\n" + "\n".join(("  " + line) if "\n" not in line else line for line in lines) for name, lines in sections.items())
 
 
-def build_summary(scope: str, profile: dict, intelligence: dict, identity: tuple[str, list[str]]) -> dict:
+def build_summary(scope: str, profile: dict, intelligence: dict, identity: tuple[str, list[str]], enrichment: dict | None = None) -> dict:
     """{"scope","version","text","sha256","counts"}: redacted, leak-checked (raises on a leak: fail closed). Counts only, no values, in `counts`."""
     from redact import find_leaks, redact_cv_text
-    sections = summary_sections(scope, profile, intelligence)
+    sections = summary_sections(scope, profile, intelligence, enrichment)
     text, removed = redact_cv_text(render_summary(sections), identity[0], identity[1])
     leaks = find_leaks(text, identity[0], identity[1])
     if leaks:

@@ -76,7 +76,8 @@ def read_ids(path: Path) -> list[str]:
 def summary_for(scope: str):
     from calibration import fit_b
     profile, intelligence, identity = load_inputs()
-    return fit_b.build_summary(scope, profile, intelligence, identity), profile
+    import profile_enrichment
+    return fit_b.build_summary(scope, profile, intelligence, identity, profile_enrichment.load()), profile
 
 
 def cmd_summary(args) -> int:

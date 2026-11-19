@@ -111,6 +111,10 @@ def apply_proposal(req: dict, proposal: dict, evidence_by_id: dict[str, dict]) -
     quote = proposal.get("evidenceQuote")
     proposed = proposal["strength"]
 
+    if item and item.get("negative"):
+        # The item says the candidate has NO such experience (profile enrichment, stance "none"): it cannot show the opposite.
+        return _resolved(req, "MISSING", None, None, False, 0), f"requirement {req['id']!r}: {status} cited a statement of absence, set to MISSING"
+
     if item and quote_in(quote, item["text"]):
         return _resolved(req, status, item["id"], quote, True, min(proposed, item["strength"])), None
 

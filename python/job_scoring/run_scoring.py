@@ -86,8 +86,9 @@ def _shadow_engine(profile: dict | None, intelligence: dict, judge: bool, provid
     from confirmed_facts import load as load_confirmed_facts
     from evidence_index import build_candidate
     from match_engine.evidence_map import EvidenceMap
+    import profile_enrichment
 
-    candidate = build_candidate(profile, intelligence, load_confirmed_facts())
+    candidate = build_candidate(profile, intelligence, load_confirmed_facts(), profile_enrichment.load())
     memory = EvidenceMap(candidate, load_mapper(candidate["roleFamily"]))
     engine = shadow.ShadowEngine(candidate, judge=judge, provider=provider, model=model,
                                  identity=identity_of(profile), memory=memory,

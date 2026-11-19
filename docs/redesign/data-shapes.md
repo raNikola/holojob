@@ -1240,6 +1240,23 @@ Map keys are `requirement_frames.frame_key()`: the ad's title, company and descr
   Fit, gates and label are recomputed from them in code under the current constants.
 - **Written by:** `match_engine/shadow.py` (from `run_scoring.py --judge`).
 
+## Profile enrichment (`data/profile-enrichment.json`)
+
+- **Purpose:** the owner's domain entries, work-history entries and experience boundaries, with the source of each. Read by the evidence index and the Experiment B P-full summary.
+- **Path / mode:** `data/profile-enrichment.json`, 600, written by `profile_enrichment.save` (atomic). Git-ignored. Not synced from the browser. Never holds contact data.
+
+```json
+{
+  "version": 1,
+  "employers": ["<string, names the Experiment B summary masks>"],
+  "domains": [{ "id": "<string>", "source": "CV|owner-confirmed", "title": "<string>", "text": "<string>" }],
+  "history": [{ "id": "<string>", "source": "CV|owner-confirmed", "role": "<string>", "period": "<string, e.g. April 2024-present>", "text": "<string>" }],
+  "boundaries": [{ "id": "<string>", "source": "CV|owner-confirmed", "stance": "direct|none|limited", "text": "<string>" }]
+}
+```
+
+An entry with a missing or unknown field is dropped on read. `stance: none` marks the evidence item `negative`.
+
 ## Outreach contacts
 
 - **Path:** `data/outreach/<jobId>/contacts.json`

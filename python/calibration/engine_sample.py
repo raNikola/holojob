@@ -43,6 +43,7 @@ import ai_selection  # noqa: E402
 from competency_mapping import load_remap  # noqa: E402
 from confirmed_facts import load as load_confirmed_facts  # noqa: E402
 from evidence_index import build_candidate  # noqa: E402
+import profile_enrichment  # noqa: E402
 from job_fingerprint import job_fingerprint  # noqa: E402
 from llm_client import GuardrailRefused, LlmUnavailable, complete_json, preflight, service_tier_for  # noqa: E402
 from match_engine import matcher  # noqa: E402
@@ -129,7 +130,7 @@ MODE_DIAGNOSTIC = "diagnostic"  # production would skip it; asked anyway so gate
 def plan(out: Path, profile: dict, intelligence: dict, production_only: bool = False, cap: float | None = None) -> dict:
     items = json.loads((out / "review-items.json").read_text(encoding="utf-8"))["items"]
     facts = json.loads((out / FACTS_NAME).read_text(encoding="utf-8"))["facts"] if (out / FACTS_NAME).exists() else {}
-    candidate, id_aliases = alias_unsafe_ids(build_candidate(profile, intelligence, load_confirmed_facts()), profile)
+    candidate, id_aliases = alias_unsafe_ids(build_candidate(profile, intelligence, load_confirmed_facts(), profile_enrichment.load()), profile)
     identity = identity_of(profile)
     remap = load_remap(out / "requirement-remap.json")
     store = ResultStore(out / RESULTS_NAME)

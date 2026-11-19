@@ -36,6 +36,7 @@ _CV_ANALYSIS = Path(__file__).resolve().parents[1] / "cv_analysis"
 if str(_CV_ANALYSIS) not in sys.path:
     sys.path.append(str(_CV_ANALYSIS))
 
+import profile_enrichment  # noqa: E402
 from redact import identity_of, redact_cv_text  # noqa: E402
 
 SOURCES = ("role", "project", "example", "questionnaire", "fact")
@@ -205,11 +206,12 @@ def evidence_id(source: str, role: str | None, text: str) -> str:
     return "ev-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
 
 
-def build_evidence(profile: dict, intelligence: dict) -> list[dict]:
+def build_evidence(profile: dict, intelligence: dict, enrichment: dict | None = None) -> list[dict]:
     """The evidence index of section 1.1, in a deterministic order.
 
     An item already in the index (same source, role and text, for example a skill
-    that is both listed and in a tool group) is kept once.
+    that is both listed and in a tool group) is kept once. `enrichment` is the owner's profile enrichment
+    (profile_enrichment.load()): its entries follow the profile's own items; None adds nothing.
     """
     profile = profile or {}
     intelligence = intelligence or {}
@@ -217,7 +219,11 @@ def build_evidence(profile: dict, intelligence: dict) -> list[dict]:
 
     seen: dict[str, None] = {}
     index = []
-    for source, role, start, end, text in _raw_items(profile, intelligence):
+    raw = [(s, r, a, b, t, False) for s, r, a, b, t in _raw_items(profile, intelligence)]
+    for item in profile_enrichment.evidence_items(enrichment):
+        start, end = _split_period(item["period"]) if item["period"] else (None, None)
+        raw.append((item["source"], item["role"], start, end, item["text"], item["negative"]))
+    for source, role, start, end, text, negative in raw:
         text, _ = redact_cv_text(text, full_name, links)
         text = text.strip()
         if not text:
@@ -228,7 +234,7 @@ def build_evidence(profile: dict, intelligence: dict) -> list[dict]:
         if key in seen:
             continue
         seen[key] = None
-        index.append({
+        entry = {
             "id": evidence_id(source, role, text),
             "text": text,
             "source": source,
@@ -236,7 +242,10 @@ def build_evidence(profile: dict, intelligence: dict) -> list[dict]:
             "start": start,
             "end": end,
             "strength": grade(text, source),
-        })
+        }
+        if negative:
+            entry["negative"] = True  # a statement of absence; never sent as a field, read by verify.apply_proposal
+        index.append(entry)
     return index
 
 
@@ -299,9 +308,11 @@ def languages_version(gates: dict) -> str:
     return _hash({"languages": sorted({str(x).strip().lower() for x in gates.get("languages") or []})})
 
 
-def build_candidate(profile: dict, intelligence: dict, confirmed_facts: list[dict]) -> dict:
-    """The engine's `candidate` input, minus nothing; `roleFamily` is null when the profile sets none."""
-    evidence = build_evidence(profile, intelligence)
+def build_candidate(profile: dict, intelligence: dict, confirmed_facts: list[dict], enrichment: dict | None = None) -> dict:
+    """The engine's `candidate` input, minus nothing; `roleFamily` is null when the profile sets none.
+
+    `enrichment` is profile_enrichment.load(): the callers that run the engine pass it so every run reads the same file; None adds nothing."""
+    evidence = build_evidence(profile, intelligence, enrichment)
     gates = build_gates(intelligence)
     role_family = (intelligence or {}).get("roleFamily") or None
     return {
