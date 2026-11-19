@@ -70,7 +70,8 @@ def ledger_rows(jobs_path: Path, present: set, wanted: set | None) -> list[dict]
         return []
     import job_history
     ledger = job_history.load(job_history.ledger_path(jobs_path.parent / "discovered_jobs.json"), read_only=True).get("jobs") or {}
-    return [{**entry["job"], "jobId": i} for i in sorted(missing)
+    # The extraction facts sit on the entry, not on its job snapshot (kept_ads.ledger_row merges them the same way).
+    return [{**entry["job"], "jobId": i, **({"llmFacts": entry["llmFacts"]} if entry.get("llmFacts") else {})} for i in sorted(missing)
             for entry in [ledger.get(i)] if isinstance(entry, dict) and isinstance(entry.get("job"), dict)]
 
 
