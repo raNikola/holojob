@@ -79,8 +79,10 @@ export function ConfidenceNote({ job }) {
 
 export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatusChange, includeTracker = true, includeAiTools = true, includeContacts = true, includeTailor = true }) {
   const showScores = hasMatchScores([job])
-  const limits = (job.reasons || []).filter(isCapReason)
-  const positiveReasons = (job.reasons || []).filter((r) => !r.startsWith('Red flag:') && !isCapReason(r) && !isFitReason(r))
+  // A state the owner should see beside the score, not a reason it scored well: a cap, or a check that did not run / could not confirm.
+  const isLimit = (r) => isCapReason(r) || r.startsWith('Ceiling not evaluated:') || r.startsWith('Clearance unconfirmed:')
+  const limits = (job.reasons || []).filter(isLimit)
+  const positiveReasons = (job.reasons || []).filter((r) => !r.startsWith('Red flag:') && !isLimit(r) && !isFitReason(r))
   const provider = getJobProvider(job)
   const showAiTabs = (showScores || job.keptByUser === true) && includeAiTools
   const documents = showScores && includeTailor
