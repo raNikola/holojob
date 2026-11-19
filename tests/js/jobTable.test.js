@@ -223,20 +223,20 @@ describe('select all means every filtered row', () => {
   it('the table says what it selects, in words and to a screen reader', () => {
     viewport(true)
     const html = render(list(350))
-    expect(html).toContain('Select all 350 filtered jobs</button>')
+    expect(html).not.toContain('Select all 350 filtered jobs</button>') // the text link is gone (owner, 2026-11-19); the header checkbox stays
     expect(html).toContain('aria-label="Select all 350 filtered jobs, not only the 100 shown"')
     expect(html).toContain('title="Select all 350 filtered jobs, not only the 100 shown"')
   })
 
-  it('a narrow window can select all too', () => {
+  it('a narrow window has no select-all link either', () => {
     viewport(false)
-    expect(render(list(350))).toContain('Select all 350 filtered jobs</button>')
+    expect(render(list(350))).not.toContain('Select all 350 filtered jobs</button>')
   })
 
   it('with all selected it offers to clear, and says how many are off screen', () => {
     viewport(true)
     const html = render(list(350), { selectedJobIds: new Set(list(350).map((j) => j.jobId)) })
-    expect(html).toContain('Clear selection of all 350 filtered jobs')
+    expect(html).not.toContain('Clear selection of all')
     expect(html).toContain('250 selected jobs are not shown yet')
     expect(html).toContain('checked=""')
     expect(render(list(150), { selectedJobIds: new Set(['j140']) })).toContain('1 selected job is not shown yet')
@@ -245,7 +245,7 @@ describe('select all means every filtered row', () => {
   it('every row on screen selected is not all of them', () => {
     viewport(true)
     const html = render(list(350), { selectedJobIds: new Set(list(100).map((j) => j.jobId)) })
-    expect(html).toContain('Select all 350 filtered jobs</button>')
+    expect(html).not.toContain('Select all 350 filtered jobs</button>')
     expect(html).not.toContain('Clear selection')
     expect(count(html, 'checked=""')).toBe(100)
   })

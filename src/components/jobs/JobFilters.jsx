@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, X } from 'lucide-react'
-import Card from '../ui/Card'
 import Input from '../ui/Input'
 import SelectField from '../ui/SelectField'
 import MultiSelectDropdown from '../ui/MultiSelectDropdown'
@@ -23,6 +22,11 @@ import { MATCH_LABELS, PRIORITIES, hasMatchScores } from '../../modules/jobs/mat
 
 const SHOWN_PRIORITIES = PRIORITIES.filter((p) => p !== 'Reject')
 const tip = (key, label) => <InfoTip text={FILTER_HELP[key]} label={`About ${label}`} />
+
+/** A bar control without a visible label: the info icon sits right after it, so it stays reachable. */
+function Tipped({ children, help, className }) {
+  return <div className={`flex items-center gap-1 ${className}`}>{children}{help}</div>
+}
 
 function Checkbox({ label, help, checked, onChange, className = 'self-end pb-2.5', disabledNote = null }) {
   return (
@@ -73,80 +77,111 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
   const companyOptions = useMemo(() => getCompanyOptions(jobs), [jobs])
 
   return (
-    <Card title="Filters" className="!p-4">
+    <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm dark:border-stone-800 dark:bg-stone-900">
       {searchNote && <p className="mb-2 text-xs text-stone-500 dark:text-stone-400">{searchNote}</p>}
-      <div className="flex flex-wrap items-end gap-3">
-        <Input
-          className="min-w-[10rem] flex-[2_1_10rem]"
-          id="filter-search"
-          label="Search"
-          labelExtra={tip('searchText', 'Search')}
-          value={filters.searchText}
-          onChange={(e) => onChange({ searchText: e.target.value })}
-          placeholder="Title, company, description…"
-        />
-        <Input
-          className="min-w-[7rem] flex-[1.5_1_7rem]"
-          id="filter-location"
-          label="Location"
-          labelExtra={tip('location', 'Location')}
-          value={filters.location}
-          onChange={(e) => onChange({ location: e.target.value })}
-          placeholder="Filter by location"
-        />
-        <div className="w-32 flex-none">
-          <MultiSelectDropdown
-            label="Source"
-            labelExtra={tip('site', 'Source')}
-            selected={normalizeMultiFilter(filters.site)}
-            onChange={(v) => onChange({ site: v })}
-            options={sites}
-            placeholder="All sources"
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Tipped className="min-w-[10rem] flex-[2_1_10rem]" help={tip('searchText', 'Search')}>
+          <Input
+            className="min-w-0 flex-1"
+            id="filter-search"
+            aria-label="Search"
+            title="Search"
+            value={filters.searchText}
+            onChange={(e) => onChange({ searchText: e.target.value })}
+            placeholder="Search title, company, description…"
           />
-        </div>
-        <div className="w-32 flex-none">
-          <SelectField
-            id="filter-status"
-            label="Status"
-            labelExtra={tip('status', 'Status')}
-            value={filters.status}
-            onChange={(v) => onChange({ status: v })}
-            options={statusFilterOptions(JOB_STATUSES, jobs, applicationStore)}
-            placeholder="All statuses"
+        </Tipped>
+        <Tipped className="min-w-[8rem] flex-[1.5_1_8rem]" help={tip('location', 'Location')}>
+          <Input
+            className="min-w-0 flex-1"
+            id="filter-location"
+            aria-label="Location"
+            title="Location"
+            value={filters.location}
+            onChange={(e) => onChange({ location: e.target.value })}
+            placeholder="Location"
           />
-        </div>
+        </Tipped>
+        <Tipped className="w-40 flex-none" help={tip('site', 'Source')}>
+          <div className="min-w-0 flex-1">
+            <MultiSelectDropdown
+              ariaLabel="Source"
+              selected={normalizeMultiFilter(filters.site)}
+              onChange={(v) => onChange({ site: v })}
+              options={sites}
+              placeholder="All sources"
+            />
+          </div>
+        </Tipped>
+        <Tipped className="w-40 flex-none" help={tip('status', 'Status')}>
+          <div className="min-w-0 flex-1">
+            <SelectField
+              id="filter-status"
+              ariaLabel="Status"
+              title="Status"
+              value={filters.status}
+              onChange={(v) => onChange({ status: v })}
+              options={statusFilterOptions(JOB_STATUSES, jobs, applicationStore)}
+              placeholder="All statuses"
+            />
+          </div>
+        </Tipped>
         {showScoreFilters && (
           <>
-            <div className="w-32 flex-none">
-              <MultiSelectDropdown
-                label="Priority"
-                labelExtra={tip('priority', 'Priority')}
-                selected={normalizeMultiFilter(filters.priority)}
-                onChange={(v) => onChange({ priority: v })}
-                options={priorityOptions}
-                placeholder="All priorities"
+            <Tipped className="w-40 flex-none" help={tip('priority', 'Priority')}>
+              <div className="min-w-0 flex-1">
+                <MultiSelectDropdown
+                  ariaLabel="Priority"
+                  selected={normalizeMultiFilter(filters.priority)}
+                  onChange={(v) => onChange({ priority: v })}
+                  options={priorityOptions}
+                  placeholder="All priorities"
+                />
+              </div>
+            </Tipped>
+            <Tipped className="w-[7.5rem] flex-none" help={tip('minScore', 'Min score')}>
+              <Input
+                className="min-w-0 flex-1"
+                id="filter-min-score"
+                aria-label="Min score"
+                title="Min score"
+                type="number"
+                min={0}
+                max={100}
+                value={filters.minScore}
+                onChange={(e) => onChange({ minScore: e.target.value })}
+                placeholder="Min score"
               />
-            </div>
-            <Input
-              className="w-[5.5rem] flex-none"
-              id="filter-min-score"
-              label="Min score"
-              labelExtra={tip('minScore', 'Min score')}
-              type="number"
-              min={0}
-              max={100}
-              value={filters.minScore}
-              onChange={(e) => onChange({ minScore: e.target.value })}
-              placeholder="e.g. 55"
-            />
+            </Tipped>
           </>
         )}
         <Checkbox
+          className=""
           label="Remote only"
           help={tip('remoteOnly', 'Remote only')}
           checked={filters.remoteOnly}
           onChange={(v) => onChange({ remoteOnly: v })}
         />
+        <div className="ml-auto flex items-center gap-4 text-sm">
+          <button
+            type="button"
+            aria-expanded={moreOpen}
+            aria-controls="more-filters"
+            onClick={toggleMore}
+            className="inline-flex items-center gap-1 text-stone-700 hover:text-teal-700 hover:underline dark:text-stone-300 dark:hover:text-teal-300"
+          >
+            More filters{moreCount > 0 ? ` (${moreCount})` : ''}
+            <ChevronDown className={`h-4 w-4 transition-transform duration-200 motion-reduce:transition-none ${moreOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            disabled={chips.length === 0}
+            onClick={() => onChange(CLEAR_ALL_FILTERS)}
+            className="text-stone-600 hover:text-teal-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-stone-400"
+          >
+            Clear all
+          </button>
+        </div>
       </div>
       {filters.status === APPLIED_FILTER && !applicationStore && (
         <p className="mt-2 text-xs text-stone-500">The application tracker has not loaded, so no job can be shown as applied.</p>
@@ -274,28 +309,6 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
           ))}
         </div>
       )}
-
-      {/* Always the last row: the extras open above it and the chips sit directly above it. */}
-      <div className="mt-3 flex items-center justify-end gap-4 border-t border-stone-200 pt-2 text-sm dark:border-stone-800">
-        <button
-          type="button"
-          aria-expanded={moreOpen}
-          aria-controls="more-filters"
-          onClick={toggleMore}
-          className="inline-flex items-center gap-1 text-stone-700 hover:text-teal-700 hover:underline dark:text-stone-300 dark:hover:text-teal-300"
-        >
-          More filters{moreCount > 0 ? ` (${moreCount})` : ''}
-          <ChevronDown className={`h-4 w-4 transition-transform duration-200 motion-reduce:transition-none ${moreOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          disabled={chips.length === 0}
-          onClick={() => onChange(CLEAR_ALL_FILTERS)}
-          className="text-stone-600 hover:text-teal-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-stone-400"
-        >
-          Clear all
-        </button>
-      </div>
-    </Card>
+    </div>
   )
 }

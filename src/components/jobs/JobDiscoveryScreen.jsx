@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Loader2, MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
 import Alert from '../ui/Alert'
 import Button from '../ui/Button'
+import Card from '../ui/Card'
 import Tabs from '../ui/Tabs'
 import JobDiscoverySummary from './JobDiscoverySummary'
 import PipelineHealthPanel from './PipelineHealthPanel'
@@ -52,8 +53,9 @@ import {
 } from '../../modules/jobs/jobStorage'
 import { runScoring, loadLatestScoredJobs } from '../../modules/jobs/pipelineRunner'
 import { useRescrapeRun } from '../../modules/jobs/useRescrapeRun'
-import RescrapeProgress from './RescrapeProgress'
-import { cancelledText } from '../../modules/jobs/rescrapeRun'
+import RescrapeProgress, { RescrapeEventLog } from './RescrapeProgress'
+import ActivityScreen from '../activity/ActivityScreen'
+import { cancelledText, currentSource } from '../../modules/jobs/rescrapeRun'
 import { withProfileSalaryDefaults } from '../../modules/jobs/jobSalary'
 import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { useProfile } from '../../context/ProfileContext'
@@ -64,6 +66,7 @@ const JOB_TABS = [
   { id: 'jobs', label: 'Jobs' },
   { id: 'pipeline', label: 'Pipeline' },
   { id: 'analytics', label: 'Analytics' },
+  { id: 'activity', label: 'Activity' },
 ]
 
 export default function JobDiscoveryScreen() {
@@ -86,7 +89,9 @@ export default function JobDiscoveryScreen() {
   const [applyJob, setApplyJob] = useState(null) // the job whose Applied form is open; nothing is written until it is saved
   const [bulkRunning, setBulkRunning] = useState(false)
   const [rerunning, setRerunning] = useState(false)
-  const [rerunMsg, setRerunMsg] = useState('')
+  // Which button's work this page is waiting on ('scrape' | 'score'), and the end-of-run toast (errors stay until closed).
+  const [busyAction, setBusyAction] = useState(null)
+  const [runToast, setRunToast] = useState(null)
   const [addJobOpen, setAddJobOpen] = useState(false)
   const [addNote, setAddNote] = useState(null)
   // List notices closed (or timed out) in this visit, by text; a notice whose text changes shows again.
@@ -216,33 +221,34 @@ export default function JobDiscoveryScreen() {
   const handleRescrapeFinished = useCallback(async (run) => {
     if (routeEnabled) refetchAllAds() // the ledger may have moved even if the scored file below cannot be read
     if (run?.status === 'cancelled') {
-      setRerunMsg(cancelledText(run.cancel).replace('The last run was cancelled.', 'Re-scrape was cancelled.'))
+      setRunToast({ kind: 'warn', text: cancelledText(run.cancel).replace('The last run was cancelled.', 'Re-scrape was cancelled.') })
       return
     }
     if (run?.import?.nothingSaved === 'no_usable_source') {
-      setRerunMsg('Re-scrape found nothing usable: no source gave a usable result, so the list was not changed. Details in Activity.')
+      setRunToast({ kind: 'warn', text: 'Re-scrape found nothing usable: no source gave a usable result, so the list was not changed. The event log is in the Activity tab.' })
       return
     }
     if (!run || run.status === 'failed' || run.status === 'interrupted') {
-      setRerunMsg(run?.status === 'interrupted' ? 'Re-scrape was interrupted.' : 'Re-scrape failed. Details below.')
+      setRunToast({ kind: 'error', text: run?.status === 'interrupted' ? 'Re-scrape was interrupted. It is not resumed: start it again when you want fresh jobs.' : 'Re-scrape failed. The event log is in the Activity tab.' })
       return
     }
     try {
       const jobs = await loadLatestScoredJobs()
       setState((prev) => importJobsFromFile(jobs, prev))
       const p1 = (jobs.jobs || []).filter((j) => j.priority === 'P1').length
-      setRerunMsg(`Done — ${jobs.jobs?.length || 0} jobs, ${p1} P1`)
+      setRunToast({ kind: 'success', text: `Re-scrape done: ${jobs.jobs?.length || 0} jobs, ${p1} P1.` })
     } catch (e) {
-      setRerunMsg(`Error: ${e.message}`)
+      setRunToast({ kind: 'error', text: `Re-scrape finished, but the new jobs could not be loaded: ${e.message}` })
     }
   }, [routeEnabled, refetchAllAds])
 
   const [skipJobspyOnce, setSkipJobspyOnce] = useState(false)
   const rescrape = useRescrapeRun({ enabled: pipelineApiAvailable, onFinished: handleRescrapeFinished })
 
-  const handleRerunDiscovery = useCallback(async () => {
+  const handleRerunDiscovery = async () => {
     setRerunning(true)
-    setRerunMsg('')
+    setBusyAction('scrape')
+    setRunToast(null)
     try {
       const intelligence = loadIntelligence()
       if (!intelligence?.searchStrategy?.jobSpySearchTerms?.length) {
@@ -254,29 +260,36 @@ export default function JobDiscoveryScreen() {
       })
       setSkipJobspyOnce(false) // "this time" means one run
     } catch (e) {
-      setRerunMsg(`Error: ${e.message}`)
+      setRunToast({ kind: 'error', text: `Re-scrape did not start: ${e.message}` })
     } finally {
       setRerunning(false)
+      setBusyAction(null)
     }
-  }, [profile, rescrape, skipJobspyOnce])
+  }
 
   const handleRescore = useCallback(async () => {
     setRerunning(true)
-    setRerunMsg('Re-scoring existing jobs…')
+    setBusyAction('score')
+    setRunToast(null)
     try {
       await runScoring()
       const jobs = await loadLatestScoredJobs()
       setState((prev) => importJobsFromFile(jobs, prev))
       const p1 = (jobs.jobs || []).filter((j) => j.priority === 'P1').length
-      setRerunMsg(`Re-scored ${jobs.jobs?.length || 0} jobs — ${p1} P1`)
+      setRunToast({ kind: 'success', text: `Re-scored ${jobs.jobs?.length || 0} jobs, ${p1} P1.` })
     } catch (e) {
-      setRerunMsg(`Error: ${e.message}`)
+      setRunToast({ kind: 'error', text: `Re-score failed: ${e.message}` })
     } finally {
       setRerunning(false)
+      setBusyAction(null)
       // A finished scoring run settles "scoring behind"; without this the banner stays after a cancelled Re-scrape.
       rescrape.refresh()
     }
   }, [rescrape])
+
+  const scrapeRunning = rescrape.view.active || (rerunning && busyAction === 'scrape')
+  const scoreRunning = rerunning && busyAction === 'score'
+  const runningSource = rescrape.view.active ? currentSource(rescrape.view.events) : ''
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)
@@ -445,15 +458,18 @@ export default function JobDiscoveryScreen() {
         )}
       </HeaderPortal>
 
-      {autoLoadNote && (
-        <p className="text-xs text-teal-700 dark:text-teal-300">{autoLoadNote}</p>
-      )}
-
-      {activeTab === 'jobs' && (
-        <>
-          {addJobOpen && <AddJobDialog initial={addInitial} onClose={() => setAddJobOpen(false)} onSaved={handleJobAdded} />}
-          <ToastStack>
-            {addNote && (
+      <ToastStack>
+            {runToast && (
+              <Toast
+                key={`run-${runToast.kind}-${runToast.text}`}
+                kind={runToast.kind}
+                autoHideMs={runToast.kind === 'success' ? TOAST_AUTO_HIDE_MS : null}
+                onDismiss={() => setRunToast(null)}
+              >
+                <span>{runToast.text}</span>
+              </Toast>
+            )}
+            {activeTab === 'jobs' && addNote && (
               <Toast key="add-note" onDismiss={() => setAddNote(null)}>
                 <span>{addNote.text}</span>
                 {addNote.retry && (
@@ -463,7 +479,7 @@ export default function JobDiscoveryScreen() {
                 )}
               </Toast>
             )}
-            {notices.filter((notice) => !closedNotices.has(notice.text)).map((notice) => (
+            {activeTab === 'jobs' && notices.filter((notice) => !closedNotices.has(notice.text)).map((notice) => (
               <Toast
                 key={notice.text}
                 kind={notice.kind === 'error' ? 'error' : 'info'}
@@ -474,13 +490,21 @@ export default function JobDiscoveryScreen() {
                 {notice.retry && <Button variant="secondary" className="ml-2 !min-h-0 !py-1 !text-xs" disabled={allAds.status === 'loading'} onClick={refetchAllAds}>Try again</Button>}
               </Toast>
             ))}
-          </ToastStack>
+      </ToastStack>
+
+      {activeTab === 'jobs' && (
+        <>
+          {addJobOpen && <AddJobDialog initial={addInitial} onClose={() => setAddJobOpen(false)} onSaved={handleJobAdded} />}
 
           {pipelineApiAvailable && (
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 dark:border-stone-800 dark:bg-stone-900">
               <Button onClick={handleRerunDiscovery} disabled={rerunning || rescrape.view.active || !pipelineApiAvailable}>
-                {rerunning || rescrape.view.active ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Re-scrape jobs
+                {scrapeRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {scrapeRunning ? `Running…${runningSource ? ` ${runningSource}` : ''}` : 'Re-scrape jobs'}
+              </Button>
+              <Button variant="secondary" onClick={handleRescore} disabled={rerunning || rescrape.view.active}>
+                {scoreRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {scoreRunning ? 'Running… scoring' : 'Re-score'}
               </Button>
               <label className="flex items-center gap-1.5 text-xs text-stone-600 dark:text-stone-400" title="Skips LinkedIn (JobSpy) for this run only; the switch in Settings > Sources stays as it is.">
                 <input
@@ -492,14 +516,6 @@ export default function JobDiscoveryScreen() {
                 />
                 Skip LinkedIn this time
               </label>
-              <Button variant="secondary" onClick={handleRescore} disabled={rerunning || rescrape.view.active}>
-                <RefreshCw className="h-4 w-4" />
-                Re-score
-              </Button>
-              {pipelineApiAvailable && <JobUrlImport onImported={handleUrlImported} compact />}
-              {rerunMsg && (
-                <p className="ml-1 text-xs text-stone-500 dark:text-stone-400">{rerunMsg}</p>
-              )}
               <RescrapeProgress view={rescrape.view} />
             </div>
           )}
@@ -508,13 +524,10 @@ export default function JobDiscoveryScreen() {
             <JobEmptyState />
           ) : (
             <div className="space-y-6 animate-fade-in">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-sm text-stone-600 dark:text-stone-400">
-                    {filteredJobs.length} of {baseRows.length} jobs shown
-                  </p>
-                </div>
-              </div>
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-stone-600 dark:text-stone-400">
+                <span>{filteredJobs.length} of {baseRows.length} jobs shown</span>
+                {autoLoadNote && <span className="text-xs text-teal-700 dark:text-teal-300">{autoLoadNote}</span>}
+              </p>
 
               {routeEnabled && (
                 <JobListControls
@@ -566,6 +579,7 @@ export default function JobDiscoveryScreen() {
           <PipelineHealthPanel health={health} pipelineState={pipelineState} />
           <PipelineOrchestrator state={state} onImport={handleImport} onHealthChange={handleHealthChange} />
           <JobImportPanel state={state} onImport={handleImport} />
+          {pipelineApiAvailable && <JobUrlImport onImported={handleUrlImported} />}
         </div>
       )}
 
@@ -579,6 +593,15 @@ export default function JobDiscoveryScreen() {
           ) : (
             <p className="text-sm text-stone-600 dark:text-stone-400">No job data yet. Run the pipeline or import jobs.</p>
           )}
+        </div>
+      )}
+
+      {activeTab === 'activity' && (
+        <div className="space-y-6">
+          <Card title="Latest Re-scrape" description="Every event of the most recent Re-scrape. Older runs are in the history below.">
+            <RescrapeEventLog view={rescrape.view} />
+          </Card>
+          <ActivityScreen />
         </div>
       )}
 

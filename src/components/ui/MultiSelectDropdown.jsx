@@ -7,7 +7,7 @@ import { filterOptions, isSelected, nextIndex, normalizeOptions, summaryLabel, t
  * strings or `{ value, label }`. Keys: Arrow Up / Down, Home, End move between the search box and the
  * rows, Space ticks, Escape closes and returns to the button; a click or tap outside closes it.
  */
-export default function MultiSelectDropdown({ label, labelExtra, selected = [], onChange, options = [], placeholder = 'All' }) {
+export default function MultiSelectDropdown({ label, labelExtra, selected = [], onChange, options = [], placeholder = 'All', ariaLabel }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const root = useRef(null)
@@ -71,6 +71,8 @@ export default function MultiSelectDropdown({ label, labelExtra, selected = [], 
         ref={button}
         id={buttonId}
         type="button"
+        aria-label={ariaLabel ? `${ariaLabel}: ${summaryLabel(selected, placeholder)}` : undefined}
+        title={ariaLabel}
         aria-haspopup="true"
         aria-expanded={open}
         aria-controls={open ? popupId : undefined}
@@ -85,7 +87,7 @@ export default function MultiSelectDropdown({ label, labelExtra, selected = [], 
         <div
           id={popupId}
           role="group"
-          aria-label={label ? `${label} options` : 'Options'}
+          aria-label={label || ariaLabel ? `${label || ariaLabel} options` : 'Options'}
           onKeyDown={onKeyDown}
           className="absolute z-20 mt-1 w-full min-w-[12rem] rounded-lg border border-stone-300 bg-white p-1 shadow-lg dark:border-stone-700 dark:bg-stone-950"
         >
@@ -94,7 +96,7 @@ export default function MultiSelectDropdown({ label, labelExtra, selected = [], 
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label={label ? `Search ${label}` : 'Search options'}
+            aria-label={label || ariaLabel ? `Search ${label || ariaLabel}` : 'Search options'}
             placeholder="Search…"
             className="mb-1 w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-50"
           />

@@ -1,6 +1,6 @@
 import RequiredMark from './RequiredMark'
 
-export default function SelectField({ label, labelExtra, id, required, error, value, onChange, options = [], placeholder = 'Select...' }) {
+export default function SelectField({ label, labelExtra, id, required, error, value, onChange, options = [], placeholder = 'Select...', ariaLabel, title }) {
   return (
     <div>
       {label && (
@@ -11,6 +11,8 @@ export default function SelectField({ label, labelExtra, id, required, error, va
       )}
       <select
         id={id}
+        aria-label={ariaLabel}
+        title={title}
         aria-required={required || undefined}
         aria-invalid={error ? true : undefined}
         aria-describedby={error && id ? `${id}-error` : undefined}

@@ -73,3 +73,16 @@ export function cancelledText(cancel) {
   const what = saved > 0 ? `${saved} collected ${saved === 1 ? 'ad was' : 'ads were'} saved.` : 'No ads were saved.'
   return `The last run was cancelled. ${what} Nothing else changed. Scoring was skipped.`
 }
+
+/** The source a running Re-scrape is reading now: the last source_start with no source_end after it. Empty when none is open. */
+export function currentSource(events = []) {
+  const open = []
+  for (const event of events) {
+    if (event.type === 'source_start') open.push(event.source)
+    else if (event.type === 'source_end') {
+      const at = open.lastIndexOf(event.source)
+      if (at >= 0) open.splice(at, 1)
+    }
+  }
+  return open[open.length - 1] ?? ''
+}

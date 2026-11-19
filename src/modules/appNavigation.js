@@ -109,7 +109,7 @@ export function persistJobsTab(tab) {
 export function loadJobsTab() {
   try {
     const saved = sessionStorage.getItem(JOBS_TAB_STORAGE_KEY)
-    if (saved === 'jobs' || saved === 'pipeline' || saved === 'analytics') {
+    if (saved === 'jobs' || saved === 'pipeline' || saved === 'analytics' || saved === 'activity') {
       return saved
     }
   } catch {

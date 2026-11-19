@@ -5,7 +5,7 @@ import Alert from '../ui/Alert'
 import { importJobsByUrl } from '../../modules/jobs/pipelineRunner'
 import { useProfile } from '../../context/ProfileContext'
 
-export default function JobUrlImport({ onImported, compact = false }) {
+export default function JobUrlImport({ onImported }) {
   const { profile } = useProfile()
   const [input, setInput] = useState('')
   const [running, setRunning] = useState(false)
@@ -28,23 +28,6 @@ export default function JobUrlImport({ onImported, compact = false }) {
     } finally {
       setRunning(false)
     }
-  }
-
-  if (compact) {
-    return (
-      <div className="flex items-center gap-2">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Paste job URL…"
-          className="w-56 rounded-lg border border-stone-300 px-2 py-1.5 text-xs dark:border-stone-700 dark:bg-stone-950 dark:text-stone-200"
-        />
-        <Button variant="secondary" disabled={!urls.length || running} onClick={() => run(true)}>
-          {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
-          Import URL
-        </Button>
-      </div>
-    )
   }
 
   return (

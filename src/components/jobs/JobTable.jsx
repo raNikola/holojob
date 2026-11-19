@@ -310,11 +310,6 @@ export default function JobTable({
   return (
     <>
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
-        {selectable.length > 0 && (
-          <button type="button" className="underline hover:text-stone-800 dark:hover:text-stone-100" onClick={onToggleSelectAll}>
-            {allSelected ? `Clear selection of all ${selectable.length} filtered jobs` : `Select all ${selectable.length} filtered jobs`}{unsaved ? ' saved in this browser' : ''}
-          </button>
-        )}
         {notShown > 0 && <span>{notShown} selected {notShown === 1 ? 'job is' : 'jobs are'} not shown yet</span>}
       </div>
       {isDesktop ? (

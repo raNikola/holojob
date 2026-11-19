@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
-// The Jobs screen's progress line (S7c): a Details link to Activity, and the same Cancel as Activity's. The screen's own poll is not touched here.
+// The Jobs screen's progress line (S7c): the same Cancel as Activity's (the Details link and the event list moved to the Jobs Activity tab). The screen's own poll is not touched here.
 import { createElement, act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import RescrapeProgress from '../../src/components/jobs/RescrapeProgress.jsx'
-import { OPEN_ACTIVITY_EVENT } from '../../src/modules/appNavigation.js'
-import { emptyRunView } from '../../src/modules/jobs/rescrapeRun.js'
+import RescrapeProgress, { RescrapeEventLog } from '../../src/components/jobs/RescrapeProgress.jsx'
+import { currentSource, emptyRunView } from '../../src/modules/jobs/rescrapeRun.js'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -34,24 +33,37 @@ function stubFetch(reply) {
   return fetchFn
 }
 
-describe('Details', () => {
-  it('opens Activity', async () => {
-    const heard = vi.fn()
-    window.addEventListener(OPEN_ACTIVITY_EVENT, heard)
-    const screen = await mount(view())
-    await screen.click(screen.button(/^Details$/))
-    window.removeEventListener(OPEN_ACTIVITY_EVENT, heard)
-    expect(heard).toHaveBeenCalledTimes(1)
-  })
-
-  it('is there for a finished run too', async () => {
-    const screen = await mount(view({ active: false }, { status: 'ok' }))
-    expect(screen.button(/^Details$/)).toBeDefined()
+describe('Details moved to the Activity tab', () => {
+  it('the controls row has no Details link and no event list, for a running or a finished run', async () => {
+    for (const v of [view(), view({ active: false, events: [{ type: 'run_end', status: 'ok' }] }, { status: 'ok' })]) {
+      const screen = await mount(v)
+      expect(screen.button(/^Details$/)).toBeUndefined()
+      expect(container.querySelector('details')).toBeNull()
+      await act(async () => root?.unmount())
+      container.remove()
+    }
   })
 
   it('shows nothing before any run', async () => {
     const screen = await mount(emptyRunView())
     expect(screen.text()).toBe('')
+  })
+
+  it('the event log lists the latest run for the Activity tab', async () => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    const v = view({ active: false, events: [{ type: 'run_start' }, { type: 'source_start', source: 'jobspy' }, { type: 'run_end', status: 'ok' }] }, { status: 'ok' })
+    await act(async () => { root.render(createElement(RescrapeEventLog, { view: v })) })
+    expect(container.textContent).toContain('Run finished: ok')
+    expect(container.textContent).toContain('3 events')
+    expect(container.textContent).toContain('Reading jobspy')
+  })
+
+  it('currentSource names the source that has started and not ended', () => {
+    expect(currentSource([{ type: 'source_start', source: 'a' }, { type: 'source_end', source: 'a' }, { type: 'source_start', source: 'b' }])).toBe('b')
+    expect(currentSource([{ type: 'source_start', source: 'a' }, { type: 'source_end', source: 'a' }])).toBe('')
+    expect(currentSource([])).toBe('')
   })
 })
 
