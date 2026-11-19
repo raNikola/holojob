@@ -1,6 +1,6 @@
 """Role class stamp (Fit 3, production): `roleClass` / `roleName` on scored rows, from the stored classification in data/cache/fit3.json.
 
-Badge and filter only: nothing here scores, orders or calls a model. Every path that scores rows (a full run, a manual job, a kept ad's Re-score) calls
+Badge, filter and (1.6) the role ceiling of ceilings.py: nothing here orders or calls a model. Every path that scores rows (a full run, a manual job, a kept ad's Re-score) calls
 `stamp`, so a row is the same whichever path wrote it. The classification key carries the prompt version, so the lookup runs under the frozen candidate i1
 (`fit3.PRODUCTION_CANDIDATE`); a prompt change needs a new classification run.
 """
@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import sys
+
+import ceilings
 
 from match_engine import fit3, shadow
 
@@ -28,4 +30,8 @@ def stamp(scored: list[dict], path=None) -> dict[str, int]:
         except (OSError, ValueError) as exc:
             print(f"role class: fit3.json unreadable ({type(exc).__name__}), every ad is 'not available'", file=sys.stderr)
     with fit3.production_candidate():
-        return fit3.role_labels(scored, store, fit3.load_roles(), fit3.closed_competencies("product"))
+        counts = fit3.role_labels(scored, store, fit3.load_roles(), fit3.closed_competencies("product"))
+    # Scoring 1.6: a class of other / not available caps the Fit Score at Weak. The class is known only here, so the ceiling is applied here,
+    # on every path that stamps.
+    counts["ceilingLowered"] = ceilings.apply_role_ceiling(scored)
+    return counts

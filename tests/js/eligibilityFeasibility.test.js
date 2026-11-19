@@ -50,6 +50,9 @@ describe('eligibility sub-state inside Unconfirmed (owner decision 2026-11-18, d
     expect(eligibilityFeasibility(text('This is not a fully remote position', { workMode: 'onsite' }))).toBe('onsite_needs_authorization')
     expect(eligibilityFeasibility(text('Remote work is possible two days a week'))).toBe('onsite_needs_authorization')
     expect(clearRemoteText('We offer work from anywhere')).toBe('work from anywhere')
+    // a benefit line or an allowance is not the job
+    expect(clearRemoteText('For fully remote workers we provide extra support for their home office.')).toBeNull()
+    expect(clearRemoteText("Two weeks of 'Work from Anywhere' each year.")).toBeNull()
     expect(clearRemoteText('')).toBeNull()
   })
 

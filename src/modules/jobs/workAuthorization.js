@@ -55,13 +55,19 @@ const CLEAR_REMOTE = [
   /\bremote\s+from\s+anywhere\b/,
 ]
 const REMOTE_NEGATION = /\b(?:not|no|never|isn't|aren't|non|without)\b[^.;\n]{0,25}$/
+// A benefit or an allowance is not the job: "for fully remote workers we provide ...", "two weeks of 'Work from Anywhere' each year".
+const PEOPLE_AFTER = /^\W{0,2}\s*(?:workers|employees|colleagues|staff|teammates|team\s+members|candidates|people|contractors)\b/
+const ALLOWANCE_BEFORE = /\b(?:weeks?|days?|months?|benefits?|perks?|stipend|policy|programme?)\b[^.;\n]{0,25}$/
+const ALLOWANCE_AFTER = /^\W{0,2}\s*(?:each|per|a|every)\s+(?:year|month|quarter)\b|^\W{0,2}\s*annually\b/
 
 /** The phrase of the ad text that says the job is fully remote, or null. Tags and case are ignored. */
 export function clearRemoteText(description) {
   const text = String(description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/\u2019/g, "'").toLowerCase()
   for (const pattern of CLEAR_REMOTE) {
     for (const m of text.matchAll(new RegExp(pattern.source, 'g'))) {
-      if (!REMOTE_NEGATION.test(text.slice(Math.max(0, m.index - 30), m.index))) return m[0]
+      const before = text.slice(Math.max(0, m.index - 30), m.index)
+      const after = text.slice(m.index + m[0].length, m.index + m[0].length + 30)
+      if (!(REMOTE_NEGATION.test(before) || PEOPLE_AFTER.test(after) || ALLOWANCE_BEFORE.test(before) || ALLOWANCE_AFTER.test(after))) return m[0]
     }
   }
   return null

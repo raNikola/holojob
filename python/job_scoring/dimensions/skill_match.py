@@ -11,8 +11,12 @@ so "Product Management" -- in nearly every listing -- earns almost nothing.
 The must-haves say what this particular ad demands. They come from the
 extraction pass, so they exist only after enrich_jobs.py has run. They do not
 move the score -- counting shared tokens cannot tell whether a sentence-long
-requirement is met -- but what they leave uncovered is reported first in
+requirement is met (owner decision 2026-11-19: token overlap is not a valid test of a met requirement; a 1.6 attempt to
+score it lowered concordance with the owner levels and was dropped) -- but what they leave uncovered is reported first in
 missingSkills, because that is what a tailored resume has to answer.
+
+Role titles belong to the Role dimension only (1.6): the ad title is not matched against the bank, and a bank keyword
+made only of role-title words ("Product Manager", "Technical Product Lead") is no skill: no credit, not in matchedSkills.
 """
 
 from __future__ import annotations
@@ -48,6 +52,25 @@ MUST_HAVE_SHARE = 0.5
 
 FLOOR = 20
 CEILING = 100
+
+
+# Words that name a seniority or a role rather than a skill; with the words of the profile's own target roles they make the
+# role-title vocabulary. "leadership" is not here: it is a skill.
+ROLE_NOUNS = ("senior", "lead", "head", "director", "owner", "principal", "staff", "associate", "manager", "management")
+
+
+def role_title_vocabulary(intelligence: dict) -> set[str]:
+    """Tokens of the profile's target role names (primary, secondary, stretch, avoid, search variants) and the seniority nouns."""
+    strategy = intelligence.get("roleStrategy") or {}
+    names = [str(n) for key in ("primaryTargetRoles", "secondaryTargetRoles", "stretchRoles", "avoidRoles", "searchRoleVariants")
+             for n in strategy.get(key) or [] if n]
+    return term_tokens(" ".join([*names, *ROLE_NOUNS]))
+
+
+def is_role_title_keyword(keyword: str, vocabulary: set[str]) -> bool:
+    """True when every token of the keyword is role-title vocabulary: the keyword names a job, not a skill."""
+    tokens = term_tokens(keyword)
+    return bool(tokens) and tokens <= vocabulary
 
 
 def bank_prose_count(intelligence: dict) -> int:
@@ -123,6 +146,27 @@ def _credit(keywords, weight, jd_tokens, idf):
     return earned, hits, achievable
 
 
+def _must_have_detail(must_haves, candidate_tokens, idf):
+    """(earned, achievable, covered, uncovered) over the usable requirements; nothing usable gives achievable 0."""
+    earned = 0.0
+    achievable = 0.0
+    covered: list[str] = []
+    uncovered: list[str] = []
+    for requirement in must_haves:
+        tokens = {t for t in term_tokens(requirement) if idf(t) >= GENERIC_IDF_FLOOR}
+        if not tokens:
+            continue
+        weight = sum(idf(token) for token in tokens) / len(tokens)
+        achievable += weight
+        coverage = len(tokens & candidate_tokens) / len(tokens)
+        earned += weight * coverage
+        if coverage >= MIN_COVERAGE:
+            covered.append(requirement)
+        else:
+            uncovered.append(requirement)
+    return earned, achievable, covered, uncovered
+
+
 def _must_have_score(must_haves, candidate_tokens, idf):
     """Score the candidate against this ad's own stated requirements.
 
@@ -130,25 +174,7 @@ def _must_have_score(must_haves, candidate_tokens, idf):
     nothing usable -- a requirement made only of corpus-generic words says
     nothing either way.
     """
-    earned = 0.0
-    achievable = 0.0
-    covered: list[str] = []
-    uncovered: list[str] = []
-
-    for requirement in must_haves:
-        tokens = {t for t in term_tokens(requirement) if idf(t) >= GENERIC_IDF_FLOOR}
-        if not tokens:
-            continue
-        weight = sum(idf(token) for token in tokens) / len(tokens)
-        achievable += weight
-
-        coverage = len(tokens & candidate_tokens) / len(tokens)
-        earned += weight * coverage
-        if coverage >= MIN_COVERAGE:
-            covered.append(requirement)
-        else:
-            uncovered.append(requirement)
-
+    earned, achievable, covered, uncovered = _must_have_detail(must_haves, candidate_tokens, idf)
     if achievable <= 0:
         return None, [], []
 
@@ -157,14 +183,18 @@ def _must_have_score(must_haves, candidate_tokens, idf):
 
 
 def score_skill_match(
-    job: dict, intelligence: dict, idf=None
+    job: dict, intelligence: dict, idf=None, *, fixed: bool = True
 ) -> tuple[int, list[str], list[str], list[str]]:
+    """`fixed` False is the 1.5 behaviour (title matched, role keywords credited); the measurement scripts use it."""
     idf = idf or flat_idf
     high, medium, supporting = _bank(intelligence)
     if not (high or medium or supporting):
         return 50, ["No keyword bank in intelligence"], [], []
+    if fixed:
+        vocabulary = role_title_vocabulary(intelligence)
+        high, medium, supporting = ([k for k in group if not is_role_title_keyword(k, vocabulary)] for group in (high, medium, supporting))
 
-    jd_tokens = term_tokens(f"{job.get('title', '')} {job.get('description', '')}")
+    jd_tokens = term_tokens(job.get("description", "") if fixed else f"{job.get('title', '')} {job.get('description', '')}")
     if not jd_tokens:
         return FLOOR, ["Empty job description"], [], []
 

@@ -31,6 +31,7 @@ from llm_enhancer import (  # noqa: E402
 import kept_ads  # noqa: E402
 import manual_jobs  # noqa: E402
 import pipeline_lock  # noqa: E402
+import ceilings  # noqa: E402
 import role_class  # noqa: E402
 import view_guard  # noqa: E402
 import job_history  # noqa: E402
@@ -237,6 +238,8 @@ def _score(args: argparse.Namespace) -> int:
         elif engine:
             scored = engine.apply(scored)
             engine.save()
+            # 1.6 fix 5: with a theta set, rows whose engine answers mark too many must requirements unmet are capped at Good (off by default).
+            print(f"engine ceiling: {ceilings.apply_unmet_ceiling(scored)} rows lowered", file=sys.stderr)
             engine_summary = {"enabled": True, **engine.counts, "refusal": engine.refusal,
                               "limit": engine.limit if args.judge else None}
             n = engine.counts
