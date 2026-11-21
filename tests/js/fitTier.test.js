@@ -41,7 +41,7 @@ describe('groups and headings in the default order', () => {
   it('shows a heading only where a group starts, and says the group is not ranked', () => {
     const rows = [row('s1', 90), row('s2', 80), row('p', 60)]
     expect(groupHeading(rows, 0)).toContain('Strong fit')
-    expect(groupHeading(rows, 0)).toContain('not ranked')
+    expect(groupHeading(rows, 0)).toContain('Not ranked by fit')
     expect(groupHeading(rows, 1)).toBeNull()
     expect(groupHeading(rows, 2)).toContain('Possible fit')
   })

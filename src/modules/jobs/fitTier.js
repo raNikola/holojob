@@ -22,8 +22,8 @@ export const TIERS = [
   { id: TIER_WEAK, label: 'Weak fit' },
 ]
 
-/** Shown under a tier heading: the order inside a tier is not a ranking. */
-export const TIER_ORDER_NOTE = 'not ranked inside this group: remote-feasible from Serbia first, then newest'
+/** Shown in a tier heading: the order inside a tier is not a ranking by fit. */
+export const TIER_ORDER_NOTE = 'Not ranked by fit; remote-feasible from Serbia first, then newest'
 
 const INDEX = Object.fromEntries(TIERS.map((tier, i) => [tier.id, i]))
 
