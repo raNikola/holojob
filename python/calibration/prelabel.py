@@ -174,9 +174,10 @@ def owner_leaks(text: str, profile: dict) -> list[str]:
 
     The redaction's own final check (any e-mail or phone pattern, the owner's name or any part of it, the owner's links),
     plus the owner's literal e-mail and phone. An ad that happens to contain a part of the owner's name stops the run
-    too: fail closed."""
+    too: fail closed. The generic phone check reads an ad's digit runs by shape and context (redact._phone_in_ad): requisition numbers,
+    dates, pay ranges and amounts are not phones; the owner's literal number below is checked on every digit run, unchanged."""
     name, links = identity_of(profile)
-    found = list(find_leaks(text, name, links))
+    found = list(find_leaks(text, name, links, ad_text=True))
     basic = (profile or {}).get("basicProfile") or {}
     email = str(basic.get("email") or "").strip().lower()
     if email and email in text.lower():

@@ -101,11 +101,12 @@ def test_the_title_company_and_location_are_not_part_of_the_request(out):
 
 
 def test_a_hash_id_that_looks_like_a_phone_number_is_aliased_not_allowed_through_a_looser_scan(out):
-    candidate = {"evidence": [{"id": "ev-1234567890ab", "text": "x"}, {"id": "ev-abcdefabcdef", "text": "y"}]}
+    # A hash id whose digits read as a phone (a trunk 0 and 10 digits); a plain run that does not start with 0 is no longer one (redact._phone_in_ad).
+    candidate = {"evidence": [{"id": "ev-0641234567ab", "text": "x"}, {"id": "ev-abcdefabcdef", "text": "y"}]}
     fixed, aliases = eng.alias_unsafe_ids(candidate, PROFILE)
-    assert aliases == {"ev-cal-1": "ev-1234567890ab"}
+    assert aliases == {"ev-cal-1": "ev-0641234567ab"}
     assert [e["id"] for e in fixed["evidence"]] == ["ev-cal-1", "ev-abcdefabcdef"]
-    assert owner_leaks("ev-1234567890ab", PROFILE)  # the scan itself is unchanged
+    assert owner_leaks("ev-0641234567ab", PROFILE)  # the scan still flags it
 
 
 def test_a_live_call_scans_the_exact_text_again_and_refuses_on_a_hit(out, monkeypatch):

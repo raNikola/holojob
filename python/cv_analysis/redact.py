@@ -78,9 +78,12 @@ _SEP = r"[\s().\-/]"
 AD_PHONE_RES = (
     re.compile(r"(?<![\w+])\+\s?\d{1,3}" + _SEP + r"{0,3}\d(?:" + _SEP + r"{0,2}\d){6,13}"),  # +381 11 234 5678, +1 (555) 123-4567
     re.compile(r"(?<![\w+])(?<!\d[\s.\-/])00[1-9]\d{0,2}" + _SEP + r"{0,3}\d(?:" + _SEP + r"{0,2}\d){6,12}"),  # 00381 11 234 5678
+    re.compile(r"(?<![\w+])(?<!\d[\s.\-/])1[\s.\-]?\([2-9]\d{2}\)[\s.\-]?\d{3}[\s.\-]?\d{4}(?!\d)"),  # 1(555) 123-4567, 1 (555) 123 4567 (before the next one, which would leave the 1)
     re.compile(r"(?<![\w+])\(\d{2,5}\)[\s.\-]?\d{3,4}(?:[\s.\-]?\d{2,4}){1,2}(?!\d)"),  # (011) 234-5678
     re.compile(r"(?<![\w+])(?<!\d[\s.\-/])0[1-9]\d{0,2}[\s./\-]\d{3}(?:[\s.\-]?\d{2,4}){1,2}(?!\d)"),  # national: 011 234 5678, 064/123-4567 (a trunk 0 first)
     re.compile(r"(?i)\b(?:tel|phone|mobile|mob|call|whatsapp|fax)\b\.?:?\s*(\+?\d[\d\s().\-/]{6,}\d)"),  # a labelled number
+    # North American: 555-123-4567, 555.123.4567, 1-800-555-1234 (the area code starts 2-9). Real numbers in US ads (an accommodation line); masked, so the ad is kept.
+    re.compile(r"(?<![\w+])(?<!\d[\s.\-/])(?:1[\s.\-])?[2-9]\d{2}[\s.\-]\d{3}[\s.\-]\d{4}(?!\d)"),
 )
 _DATE_LIKE = re.compile(r"\d{1,2}[./\-]\d{1,2}[./\-](?:19|20)\d{2}|(?:19|20)\d{2}[./\-]\d{1,2}[./\-]\d{1,2}")
 
@@ -112,15 +115,68 @@ def mask_ad_contacts(text: str) -> tuple[str, dict]:
     return text, {"emails": emails, "phones": phones}
 
 
-def find_leaks(text: str, name: str = "", links: list[str] | None = None) -> list[str]:
+# --- the phone check of an outgoing prompt that carries an AD (owner_leaks) ---------------------------------------------------------------
+# An ad is full of digit runs that are not phones: requisition and job numbers, dates, pay ranges, amounts, ZIP+4. PHONE_RE cannot tell them
+# from a phone, so a prompt with one of them was refused (measured 2026-11-21: 20 of 21 plannable Strong ads). `_phone_in_ad` reads each run
+# with its shape and the words before it. It is used ONLY for a prompt with ad text (find_leaks(..., ad_text=True)); CV redaction and every
+# other caller keep the strict `_is_phone`. The owner's own number is caught separately and unchanged (prelabel.owner_leaks, literal digits).
+_AD_RUN_RE = re.compile(r"\+?\(?\d[\d \t ().\-/]{6,}\d")  # PHONE_RE, but never across a line break
+# A phone word directly before the run ("Tel:", "call us on", "WhatsApp number -"), not anywhere earlier in the sentence.
+_PHONE_WORD_RE = re.compile(
+    r"(?i)\b(?:tel|telephone|telefon|phone|mobile|mob|cell|call|whatsapp|viber|fax)\b\.?\W{0,4}(?:(?:us|me)\W{1,3})?(?:(?:no|nr|number|on|at)\b\.?\W{0,4})?$")
+_CURRENCY_RE = re.compile(r"(?i)[$€£]|\b(?:eur|usd|rsd|chf|gbp|cad|aud|sek|pln|czk|din)\b")
+_DATE_ANY_RE = re.compile(r"\d{1,2}[./\-]\d{1,2}[./\-](?:19|20)\d{2}|(?:19|20)\d{2}[./\-]\d{1,2}[./\-]\d{1,2}")
+_RANGE_SPLIT_RE = re.compile(r"\s[-–—]\s")
+_AMOUNT_PART_RE = re.compile(r"[1-9][\d .,]*\d|[1-9]")
+_THOUSANDS_RE = re.compile(r"[1-9]\d{0,2}(?:[ . ]\d{3})+")
+
+
+def _phone_in_ad(run: str, before: str, after: str) -> bool:
+    """Whether one digit run of an ad reads as a phone number. Ambiguous separated groups count as a phone (fail closed); what is excused is
+    listed here: dates, year ranges, amounts (currency, thousands groups, a range of two amounts), ZIP+4, an id of two long groups, and a plain digit
+    run (a requisition or job number) unless a phone word stands before it, it starts with + or 00 (11+ digits) or with one trunk 0 (9-11 digits)."""
+    s = run.strip()
+    digits = re.sub(r"\D", "", s)
+    if len(digits) < 8:
+        return False
+    if sum(c.isdigit() for c in _DATE_ANY_RE.sub(" ", s)) < 8:
+        return False  # dates and ranges of dates
+    if not _is_phone(s):
+        return False  # a year range
+    if _CURRENCY_RE.search(before[-6:]) or _CURRENCY_RE.search(after[:6]):
+        return False
+    if re.search(r"\d,$", before) or re.match(r",\d", after):
+        return False  # a piece of a number grouped with commas ("120,000.00 - 150,000.00"): a phone is never written that way
+    if _PHONE_WORD_RE.search(before[-30:].rsplit("\n", 1)[-1]):
+        return True
+    if s.startswith("+") or re.match(r"\(\d{2,5}\)", s):
+        return True
+    if re.fullmatch(r"\d+", s):
+        if s.startswith("00"):
+            return len(digits) >= 11
+        return s.startswith("0") and 9 <= len(digits) <= 11
+    if _THOUSANDS_RE.fullmatch(s) or re.fullmatch(r"\d{5}-\d{4}", s) or re.fullmatch(r"[1-9]\d{3,}-\d{4,}", s):
+        return False
+    parts = _RANGE_SPLIT_RE.split(s)
+    if len(parts) == 2 and all(_AMOUNT_PART_RE.fullmatch(p.strip()) for p in parts):
+        return False  # "120 000 - 150 000", "100.00 - 130"
+    return True
+
+
+def _has_phone_in_ad(text: str) -> bool:
+    return any(_phone_in_ad(m.group(0), text[max(0, m.start() - 40): m.start()], text[m.end(): m.end() + 8]) for m in _AD_RUN_RE.finditer(text))
+
+
+def find_leaks(text: str, name: str = "", links: list[str] | None = None, *, ad_text: bool = False) -> list[str]:
     """What of the owner's is still in `text` after redaction; empty when it is clean.
 
     The final check of every caller that sends redacted text: it fails closed, so a pattern the redaction missed
-    stops the call instead of reaching the provider."""
+    stops the call instead of reaching the provider. `ad_text=True` is for a prompt that carries a job ad: its digit runs are read by
+    `_phone_in_ad` instead of the strict `_is_phone`."""
     leaks = []
     if EMAIL_RE.search(text):
         leaks.append("an e-mail address")
-    if any(_is_phone(m.group(0)) for m in PHONE_RE.finditer(text)):
+    if _has_phone_in_ad(text) if ad_text else any(_is_phone(m.group(0)) for m in PHONE_RE.finditer(text)):
         leaks.append("a phone number")
     if name and _name_spans(text, [name]):
         leaks.append("the owner's name")

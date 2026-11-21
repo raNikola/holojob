@@ -1,5 +1,6 @@
-"""A recruiter's e-mail or phone in the ad text is masked before the matcher prompt is built; numbers that are not contacts are never touched,
-and the owner-identifier scan itself is not loosened."""
+"""A recruiter's e-mail or phone in the ad text is masked before the matcher prompt is built; numbers that are not contacts are never touched.
+The owner-identifier scan is unchanged for the owner's own e-mail, phone and name; its generic phone check reads an ad's digit runs by shape
+(test_scan_ad_digits.py)."""
 
 import pytest
 
