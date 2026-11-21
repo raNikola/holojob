@@ -81,16 +81,16 @@ describe('eligibility sub-state inside Unconfirmed (owner decision 2026-11-18, d
   })
 })
 
-describe('default order: band, then remote-feasible, then newest (no score or band change)', () => {
+describe('default order: tier, then remote-feasible, then newest (no score or tier change)', () => {
   const row = (jobId, matchScore, extra = {}) => ({ jobId, matchScore, matchLabel: 'x', eligibility: { state: 'unknown' }, llmFacts: { workMode: 'onsite', remoteEligibility: [] }, ...extra })
   const remote = { isRemote: true, llmFacts: { workMode: 'remote', remoteEligibility: [] } }
   const ids = (rows) => defaultOrder(rows).map((r) => r.jobId)
 
-  it('a higher band always stays above a lower one, whatever the date or feasibility', () => {
+  it('a higher tier always stays above a lower one, whatever the date or feasibility', () => {
     expect(ids([row('weak-remote-new', 50, { ...remote, datePosted: '2026-11-17' }), row('strong-old', 72, { datePosted: '2020-01-01' })])).toEqual(['strong-old', 'weak-remote-new'])
   })
 
-  it('inside a band, remote-feasible comes first, then newest first (datePosted, else firstSeen)', () => {
+  it('inside a tier, remote-feasible comes first, then newest first (datePosted, else firstSeen)', () => {
     const rows = [
       row('onsite-new', 60, { datePosted: '2026-11-16' }),
       row('remote-old', 56, { ...remote, datePosted: '2026-10-01' }),
@@ -100,13 +100,13 @@ describe('default order: band, then remote-feasible, then newest (no score or ba
     expect(ids(rows)).toEqual(['remote-new', 'remote-old', 'onsite-newest', 'onsite-new'])
   })
 
-  it('equal feasibility and date fall back to the score before caps, then the id; an ad with no date goes after dated ones', () => {
+  it('equal feasibility and date fall back to the id, never to a score; an ad with no date goes after dated ones', () => {
     const rows = [row('b', 60, { datePosted: '2026-11-01', scoreBeforeCaps: 70 }), row('a', 60, { datePosted: '2026-11-01', scoreBeforeCaps: 70 }), row('c', 60, { datePosted: '2026-11-01', scoreBeforeCaps: 80 }), row('nodate', 60)]
-    expect(ids(rows)).toEqual(['c', 'a', 'b', 'nodate'])
+    expect(ids(rows)).toEqual(['a', 'b', 'c', 'nodate'])
   })
 
-  it('reads the band from the Fit Score (85 / 70 / 55 / 40) and keeps unscored rows last', () => {
-    expect(ids([row('u', undefined), row('g', 55), row('s', 70), row('e', 85), row('w', 40), row('r', 39)])).toEqual(['e', 's', 'g', 'w', 'r', 'u'])
+  it('reads the tier from the Fit Score (70 / 55) and keeps unscored rows last', () => {
+    expect(ids([row('u', undefined), row('g', 55), row('s', 70), row('e', 85), row('w', 40), row('r', 39)])).toEqual(['e', 's', 'g', 'r', 'w', 'u'])
   })
 
   it('postedTimeOf reads datePosted first, then firstSeen, and is null for neither or an unreadable date', () => {

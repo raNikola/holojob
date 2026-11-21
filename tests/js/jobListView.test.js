@@ -134,11 +134,12 @@ describe('badges and reasons per class', () => {
     expect(html).not.toContain('not shown')
   })
 
-  it('Not scored on a row with none, and the stored score on an absent row stays', () => {
+  it('Not scored on a row with none, and an absent row with a stored score keeps its tier (not the number)', () => {
     viewport(true)
     const html = table([serverOnly('a', 'absent'), { ...route('b', 'absent'), matchScore: 77, matchLabel: 'Strong', status: 'new' }])
     expect(html).toContain('Not scored')
-    expect(html).toContain('77')
+    expect(html).toContain('Strong fit')
+    expect(html).not.toMatch(/>77</)
   })
 })
 

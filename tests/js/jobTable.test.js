@@ -5,6 +5,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import FitScore from '../../src/components/jobs/FitScore.jsx'
+import FitTier from '../../src/components/jobs/FitTier.jsx'
 import JobTable from '../../src/components/jobs/JobTable.jsx'
 import {
   JOB_PAGE_SIZE, closedLast, defaultOrder, everySelected, pageLimit, selectedNotShown, selectionFor, showMore, toggleAllSelected, toggleSelected,
@@ -17,8 +18,8 @@ vi.mock('../../src/components/jobs/JobTailorActions.jsx', () => ({ default: () =
 afterEach(() => vi.unstubAllGlobals())
 
 const job = (n, extra = {}) => ({ jobId: `j${n}`, title: `Ad ${n}`, company: 'Acme', location: 'Remote', jobUrl: `https://x.example/${n}`, provider: 'jobspy', status: 'new', matchScore: 50, matchLabel: 'Good', ...extra })
-// Equal scores are ordered by scoreBeforeCaps, so the rows carry a falling one: the list keeps its index order.
-const list = (count) => Array.from({ length: count }, (_, n) => job(n, { scoreBeforeCaps: 1000 - n }))
+// The default order inside a tier is newest first, so the rows carry a falling posting date: the list keeps its index order.
+const list = (count) => Array.from({ length: count }, (_, n) => job(n, { datePosted: new Date(Date.UTC(2026, 0, 1) + (5000 - n) * 86400000).toISOString() }))
 const viewport = (matches) => vi.stubGlobal('matchMedia', () => ({ matches, addEventListener() {}, removeEventListener() {} }))
 const render = (jobs, props = {}) => renderToStaticMarkup(createElement(JobTable, { jobs, onStatusChange() {}, onJobSelect() {}, onToggleSelect() {}, onToggleSelectAll() {}, ...props }))
 const count = (html, text) => html.split(text).length - 1
@@ -28,7 +29,7 @@ describe('one layout', () => {
     viewport(true)
     const html = render(list(3))
     expect(count(html, '<table')).toBe(1)
-    expect(count(html, '<tr')).toBe(4)
+    expect(count(html, '<tr')).toBe(5) // the header, one group heading, three ads
     expect(html).not.toContain('Open link')
   })
 
@@ -61,7 +62,7 @@ describe('paging: the whole list is sorted, then a batch is taken', () => {
   it('a row that sorts first is in the first batch wherever it sits in the list', () => {
     viewport(true)
     const jobs = list(3500)
-    jobs[3200] = job(3200, { matchScore: 99, title: 'The best ad' })
+    jobs[3200] = job(3200, { matchScore: 80, title: 'The best ad' })
     const html = render(jobs)
     expect(html).toContain('The best ad')
     expect(html.indexOf('The best ad')).toBeLessThan(html.indexOf('Ad 0<'))
@@ -70,7 +71,7 @@ describe('paging: the whole list is sorted, then a batch is taken', () => {
   it('a row that sorts last is not, though it is first in the list', () => {
     viewport(true)
     const jobs = list(500)
-    jobs[0] = job(0, { matchScore: 1, title: 'The worst ad' })
+    jobs[0] = job(0, { blockedBy: [{ kind: 'language', text: 'needs German' }], title: 'The worst ad' })
     expect(render(jobs)).not.toContain('The worst ad')
   })
 
@@ -78,7 +79,7 @@ describe('paging: the whole list is sorted, then a batch is taken', () => {
     viewport(true)
     const html = render(list(3500))
     expect(JOB_PAGE_SIZE).toBe(100)
-    expect(count(html, '<tr')).toBe(101)
+    expect(count(html, '<tr')).toBe(102) // the header, one group heading, one batch
     expect(html).toContain('Showing 100 of 3500')
     expect(html).toContain('Show 100 more')
   })
@@ -86,7 +87,7 @@ describe('paging: the whole list is sorted, then a batch is taken', () => {
   it('the Provider column is judged on the whole list, not the batch', () => {
     viewport(true)
     const jobs = list(150).map((j) => ({ ...j, provider: '', site: '' }))
-    jobs[149] = { ...jobs[149], matchScore: 1, provider: 'greenhouse', title: 'Last in the sort' }
+    jobs[149] = { ...jobs[149], blockedBy: [{ kind: 'language', text: 'needs German' }], provider: 'greenhouse', title: 'Last in the sort' }
     const html = render(jobs)
     expect(html).not.toContain('Last in the sort')
     expect(html).toContain('Provider')
@@ -261,7 +262,7 @@ describe('closed ads and the sort', () => {
 describe('the Apply by column', () => {
   const reference = new Date(2026, 10, 8, 12).getTime()
 
-  it('the default sort stays the Fit Score', () => {
+  it('the default sort is the fit tier', () => {
     viewport(true)
     const html = render([job(1, { matchScore: 40, applyDeadline: '2026-11-08', title: 'Urgent low' }), job(2, { matchScore: 90, title: 'No date high' })], { reference })
     expect(html.indexOf('No date high')).toBeLessThan(html.indexOf('Urgent low'))
@@ -269,22 +270,53 @@ describe('the Apply by column', () => {
 
 })
 
-describe('the default order breaks score ties by the score before caps', () => {
+describe('inside a tier the default order is neutral: the score takes no part', () => {
   const ids = (rows) => defaultOrder(rows).map((row) => row.jobId)
 
-  it('orders equal Fit Scores by scoreBeforeCaps, then by jobId', () => {
-    const rows = [job('b', { matchScore: 45, scoreBeforeCaps: 70 }), job('a', { matchScore: 45, scoreBeforeCaps: 70 }), job('c', { matchScore: 45, scoreBeforeCaps: 84 }), job('d', { matchScore: 60, scoreBeforeCaps: 60 })]
-    expect(ids(rows)).toEqual(['jd', 'jc', 'ja', 'jb'])
+  it('orders rows of one tier by date, then jobId, whatever their Fit Score or score before caps', () => {
+    const rows = [
+      job('b', { matchScore: 45, scoreBeforeCaps: 70, datePosted: '2026-11-01' }),
+      job('a', { matchScore: 54, scoreBeforeCaps: 99, datePosted: '2026-11-01' }),
+      job('c', { matchScore: 40, datePosted: '2026-11-05' }),
+      job('d', { matchScore: 50 }),
+    ]
+    expect(ids(rows)).toEqual(['jc', 'ja', 'jb', 'jd'])
   })
 
-  it('a row without the field falls back to its Fit Score', () => {
-    const rows = [job(1, { matchScore: 45 }), job(2, { matchScore: 45, scoreBeforeCaps: 60 }), job(3, { matchScore: 45, scoreBeforeCaps: 40 })]
-    expect(ids(rows)).toEqual(['j2', 'j1', 'j3'])
-  })
-
-  it('never lifts a lower Fit Score over a higher one, and keeps unscored rows last', () => {
-    const rows = [job(1, { matchScore: 44, scoreBeforeCaps: 99 }), job(2, { matchScore: undefined }), job(3, { matchScore: 45, scoreBeforeCaps: 46 })]
+  it('never lifts a lower tier over a higher one, and keeps unscored rows last', () => {
+    const rows = [job(1, { matchScore: 54, datePosted: '2026-11-09' }), job(2, { matchScore: undefined }), job(3, { matchScore: 55, datePosted: '2020-01-01' })]
     expect(ids(rows)).toEqual(['j3', 'j1', 'j2'])
   })
 
+  it('a sort by the tier column breaks ties in the same neutral order', () => {
+    viewport(true)
+    const rows = [job('b', { matchScore: 60, datePosted: '2026-11-01' }), job('a', { matchScore: 69, datePosted: '2026-11-02' }), job('c', { matchScore: 80 })]
+    const html = render(rows)
+    expect(html.indexOf('Ad c<')).toBeLessThan(html.indexOf('Ad a<'))
+    expect(html.indexOf('Ad a<')).toBeLessThan(html.indexOf('Ad b<'))
+  })
+})
+
+describe('the list shows the tier, not the number', () => {
+  const cell = (row) => renderToStaticMarkup(createElement(FitTier, { job: row }))
+
+  it('shows the tier label and neither the score nor the band name', () => {
+    const html = cell(job(1, { matchScore: 77, matchLabel: 'Strong' }))
+    expect(html).toContain('Strong fit')
+    expect(html).not.toContain('77')
+    expect(html).not.toContain('>Strong<')
+  })
+
+  it('a table of rated ads carries no score digits or band chips', () => {
+    viewport(true)
+    const html = render([job(1, { matchScore: 77, matchLabel: 'Strong', priority: 'P1', applyRecommendation: 'Apply' })])
+    expect(html).toContain('Strong fit')
+    expect(html).not.toMatch(/>77</)
+    expect(html).not.toContain('>P1<')
+  })
+
+  it('blocked and unread ads say so instead of showing a tier', () => {
+    expect(cell(job(1, { matchScore: 90, blockedBy: [{ kind: 'location', text: 'x' }] }))).toContain('Blocked')
+    expect(cell(job(2, { matchScore: undefined, matchLabel: 'Not read', readStatus: 'not_read' }))).toContain('Not read')
+  })
 })

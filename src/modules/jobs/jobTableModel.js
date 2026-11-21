@@ -4,16 +4,14 @@
 // and no list change can reset by accident. A row's status changing rebuilds the list but keeps the key.
 
 import { isClosedAd } from './jobHistory.js'
-import { fitScoreOf, isNotRead, preCapScoreOf } from './matchScore.js'
+import { isNotRead } from './matchScore.js'
+import { tierIndexOf } from './fitTier.js'
 import { isRemoteFeasible } from './workAuthorization.js'
 
 export const JOB_PAGE_SIZE = 100
 const NOTHING = new Set()
 
 const byId = (a, b) => (a.jobId === b.jobId ? 0 : String(a.jobId) < String(b.jobId) ? -1 : 1)
-
-/** The band of a Fit Score, as labels.py `match_label`: 0 Excellent (85+), 1 Strong (70+), 2 Good (55+), 3 Weak (40+), 4 Reject. Rows with no score are not ranked here. */
-const bandOf = (score) => (score >= 85 ? 0 : score >= 70 ? 1 : score >= 55 ? 2 : score >= 40 ? 3 : 4)
 
 /** When the ad was posted (`datePosted`, else `firstSeen`) as a time, or null when neither is a readable date. */
 export function postedTimeOf(row) {
@@ -25,19 +23,31 @@ export function postedTimeOf(row) {
 }
 
 /**
- * The default order (owner decision 2026-11-18): by band; inside a band the ads that can be taken from Serbia as they stand first
- * (`isRemoteFeasible`), then newest first; then the Fit Score, the score before caps (descending) and jobId as tie-breaks. Rows with no Fit Score last.
- * It only orders: no score, band or verdict changes. Only the default sort uses this: a sort the owner picked is left as it is.
+ * The neutral order inside a group (owner decision 2026-11-21, option A): the ads that can be taken from Serbia as they stand first
+ * (`isRemoteFeasible`, eligibility, owner decision 2026-11-18), then newest first (`datePosted`, else `firstSeen`; no readable date after
+ * dated ones), then jobId. The Fit Score takes no part in it: no ordering inside a tier is proven (experiment B, docs/DECISIONS.md).
+ */
+const neutralCompare = (a, b) => {
+  const desc = (x, y) => (x === y ? 0 : x === null ? 1 : y === null ? -1 : y - x)
+  return Number(isRemoteFeasible(b)) - Number(isRemoteFeasible(a)) || desc(postedTimeOf(a), postedTimeOf(b)) || byId(a, b)
+}
+
+/** Rows in the neutral order alone, for sorts whose ties would otherwise follow the arrival order. */
+export const neutralOrder = (rows) => [...rows].sort(neutralCompare)
+
+/**
+ * The default order (owner decision 2026-11-21, replaces 2026-11-18): by tier (`fitTier.js`: Strong, Possible, Weak fit), then the neutral
+ * order. Rows in no tier (no Fit Score, blocked) go last. It only orders: no score, tier or verdict changes. Only the default sort uses
+ * this: a sort the owner picked is left as it is.
  */
 export function defaultOrder(rows) {
-  const desc = (x, y) => (x === y ? 0 : x === null ? 1 : y === null ? -1 : y - x)
-  const band = (row) => { const score = fitScoreOf(row); return score === null ? null : -bandOf(score) }
-  return [...rows].sort((a, b) => desc(band(a), band(b))
-    || Number(isRemoteFeasible(b)) - Number(isRemoteFeasible(a))
-    || desc(postedTimeOf(a), postedTimeOf(b))
-    || desc(fitScoreOf(a), fitScoreOf(b))
-    || desc(preCapScoreOf(a), preCapScoreOf(b))
-    || byId(a, b))
+  const tier = (row) => tierIndexOf(row)
+  return [...rows].sort((a, b) => {
+    const ta = tier(a)
+    const tb = tier(b)
+    if (ta !== tb) return ta === null ? 1 : tb === null ? -1 : ta - tb
+    return neutralCompare(a, b)
+  })
 }
 
 /** Open ads before closed ones, each group in the order given. Only for the default sort: a sort the owner picked is left as it is. */

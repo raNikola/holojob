@@ -24,13 +24,13 @@ afterEach(async () => {
   vi.doUnmock('../../src/modules/jobs/useRescrapeRun')
 })
 
-const many = (count) => Array.from({ length: count }, (_, i) => storedJob(`j${String(i).padStart(4, '0')}`, { title: `Job ${i}`, matchScore: i % 100 }))
+const many = (count) => Array.from({ length: count }, (_, i) => storedJob(`j${String(i).padStart(4, '0')}`, { title: `Job ${i}`, matchScore: 50 }))
 
 describe('the table on a long list', () => {
   it('sorts the whole list, then shows a batch', async () => {
     stubServer({ health: false })
     const jobs = many(350)
-    jobs[349] = { ...jobs[349], matchScore: 100, title: 'The best ad' }
+    jobs[349] = { ...jobs[349], matchScore: 80, title: 'The best ad' } // the only Strong fit: the first tier comes first whatever its place in the list
     screen = await mountScreen({ stored: jobs })
     expect(screen.rows()).toHaveLength(100)
     expect(screen.rows()[0].textContent).toContain('The best ad')
@@ -120,13 +120,13 @@ describe('the table on a long list', () => {
     expect(document.activeElement?.getAttribute('role')).toBe('status')
   })
 
-  it('the Score column is judged on the whole list, also after a re-sort moves the only score out of the batch', async () => {
+  it('the Fit tier column is judged on the whole list, also after a re-sort moves the only score out of the batch', async () => {
     stubServer({ health: false })
     const jobs = many(150).map((j, i) => ({ ...j, matchScore: i === 0 ? 5 : undefined, title: i === 0 ? 'ZZZ last by title' : j.title }))
     screen = await mountScreen({ stored: jobs })
     await screen.click([...screen.container.querySelectorAll('th button')].find((b) => /title/i.test(b.textContent)))
     expect(screen.text()).not.toContain('ZZZ last by title')
-    expect([...screen.container.querySelectorAll('th button')].some((b) => /score/i.test(b.textContent))).toBe(true)
+    expect([...screen.container.querySelectorAll('th button')].some((b) => /tier/i.test(b.textContent))).toBe(true)
   })
 
 })

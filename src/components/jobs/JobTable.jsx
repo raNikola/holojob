@@ -3,49 +3,39 @@ import { Bookmark, CircleDot, ExternalLink, SquareCheckBig, X } from 'lucide-rea
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { JOB_PAGE_SIZE, everySelected, blockedLast, closedLast, defaultOrder, notReadFirst, pageLimit, selectedNotShown, showMore } from '../../modules/jobs/jobTableModel'
+import { JOB_PAGE_SIZE, everySelected, blockedLast, closedLast, defaultOrder, neutralOrder, notReadFirst, pageLimit, selectedNotShown, showMore } from '../../modules/jobs/jobTableModel'
 import { SERVER_ONLY_NOTE, classBadges, rowKind, selectableIds } from '../../modules/jobs/jobListView'
 import KeepAdButton from './KeepAdButton'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
-import { fitScoreOf, hasMatchScores, isNotRead } from '../../modules/jobs/matchScore'
+import { hasMatchScores } from '../../modules/jobs/matchScore'
+import { groupHeading, tierIndexOf } from '../../modules/jobs/fitTier'
 import { displayLocation } from '../../modules/jobs/locationDisplay'
 import { historyBadges } from '../../modules/jobs/jobHistory'
 import { APPROXIMATE_SALARY_NOTE, approximateMonthlyEur, salaryBadges, statedSalary } from '../../modules/jobs/jobSalary'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
-import { ApplyBadge, PriorityBadge } from './JobScoreBadge'
-import FitScore from './FitScore'
+import FitTier from './FitTier'
 import AuthorizationBadge from './AuthorizationBadge'
 import RoleClassBadge from './RoleClassBadge'
 import JobTailorActions from './JobTailorActions'
 import SortableTh, { useTableSort } from '../ui/SortableTh'
 import { sortRows } from '../../modules/tableSort'
-import { PRIORITIES } from '../../modules/jobs/matchScore'
 import { dayOf, deadlineSortValue, deadlineStatus } from '../../modules/jobs/jobDeadline'
 import { jobStatusLabel } from '../../modules/jobs/manualJob'
 
-/** The heading above row `index` in the default order: Not read ads are a group of their own (no Fit Score), the rated ones follow. */
-function groupHeading(grouped, rows, index) {
-  if (!grouped) return null
-  const notRead = isNotRead(rows[index])
-  if (notRead && (index === 0 || !isNotRead(rows[index - 1]))) return 'Not read: the description is empty or unreadable, so there is no Fit Score'
-  if (!notRead && index > 0 && isNotRead(rows[index - 1])) return 'Rated ads'
-  return null
-}
-
 const COLUMNS = {
-  score: { type: 'number', value: (j) => fitScoreOf(j) }, // insufficient data has no score: it sorts with the unscored, last either way
+  // Strong fit 3, Possible 2, Weak 1 (descending = best first); a row in no tier (blocked, no score) sorts last either way. Ties keep the neutral order.
+  tier: { type: 'number', value: (j) => { const i = tierIndexOf(j); return i === null ? null : 3 - i } },
   title: { type: 'text', value: (j) => j.title },
   company: { type: 'text', value: (j) => j.company },
   location: { type: 'text', value: (j) => j.location },
   salary: { type: 'number', value: (j) => j.salaryMonthlyEur?.max },
   deadline: { type: 'number', firstDir: 'asc', value: () => null }, // needs the date: filled in by columnsOn
   provider: { type: 'text', value: (j) => getJobProvider(j) },
-  priority: { type: 'rank', order: PRIORITIES, value: (j) => j.priority },
   status: { type: 'text', value: (j) => j.status || 'new' },
 }
 const columnsOn = (today) => ({ ...COLUMNS, deadline: { ...COLUMNS.deadline, value: (j) => deadlineSortValue(j, today) } })
-const DEFAULT_SORT = { key: 'score', dir: 'desc' }
+const DEFAULT_SORT = { key: 'tier', dir: 'desc' }
 const NO_SELECTION = new Set()
 const DESKTOP = '(min-width: 768px)' // Tailwind's md, the width the two layouts always switched at
 
@@ -210,7 +200,7 @@ function JobCard({
             <ReasonLine job={job} classView={classView} />
           </div>
           <div className="flex flex-col items-end gap-1">
-            {showScores && <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} emptyLabel="Not scored" />}
+            {showScores && <FitTier job={job} />}
             {showScores && <RoleClassBadge job={job} />}
             <StatusBadge status={job.status} historyOnly={rowKind(job) === 'server'} />
             <HistoryBadges job={job} classView={classView} />
@@ -218,12 +208,6 @@ function JobCard({
           </div>
         </div>
       </div>
-      {showScores && (job.priority || job.applyRecommendation) && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          <PriorityBadge priority={job.priority} />
-          <ApplyBadge recommendation={job.applyRecommendation} />
-        </div>
-      )}
       <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-stone-600 dark:text-stone-400">
         <div><dt className="font-medium text-stone-500">Location</dt><dd><LocationText job={job} /><AuthorizationBadge job={job} /></dd></div>
         <div><dt className="font-medium text-stone-500">Provider</dt><dd><ProviderBadge job={job} /></dd></div>
@@ -279,11 +263,12 @@ export default function JobTable({
   // The whole list is sorted first; only then is a batch taken from it. The list's other uses read the whole list too.
   const jobs = useMemo(() => {
     if (sort === DEFAULT_SORT) return notReadFirst(closedLast(blockedLast(defaultOrder(unsortedJobs)))) // by identity: any click replaces it, even back to the same column
-    return sortRows(unsortedJobs, sort, columnsOn(today))
+    return sortRows(sort.key === 'tier' ? neutralOrder(unsortedJobs) : unsortedJobs, sort, columnsOn(today))
   }, [unsortedJobs, sort, today])
   const pageKey = `${filterKey}|${sort.key}|${sort.dir}`
   const limit = pageLimit(paging, pageKey)
   const visibleJobs = useMemo(() => jobs.slice(0, limit), [jobs, limit])
+  const headingAt = (index) => (sort === DEFAULT_SORT ? groupHeading(visibleJobs, index) : null)
   const showScores = hasMatchScores(jobs)
   const showProvider = jobs.some((j) => getJobProvider(j))
   const selectable = useMemo(() => selectableIds(jobs), [jobs])
@@ -320,14 +305,13 @@ export default function JobTable({
               <th className="px-3 py-2">
                 {selectable.length > 0 && <input type="checkbox" checked={allSelected} onChange={onToggleSelectAll} aria-label={selectAllLabel} title={selectAllLabel} className="rounded border-stone-300 text-teal-600" />}
               </th>
-              {showScores && <SortableTh label="Score" sortKey="score" sort={sort} onSort={onSort} className="px-3 py-2" />}
+              {showScores && <SortableTh label="Fit tier" sortKey="tier" sort={sort} onSort={onSort} className="px-3 py-2" />}
               <SortableTh label="Title" sortKey="title" sort={sort} onSort={onSort} className="px-3 py-2" />
               <SortableTh label="Company" sortKey="company" sort={sort} onSort={onSort} className="px-3 py-2" />
               <SortableTh label="Location" sortKey="location" sort={sort} onSort={onSort} className="px-3 py-2" />
               <SortableTh label="Salary" sortKey="salary" sort={sort} onSort={onSort} className="px-3 py-2" />
               <SortableTh label="Apply by" sortKey="deadline" sort={sort} onSort={onSort} className="whitespace-nowrap px-3 py-2" />
               {showProvider && <SortableTh label="Provider" sortKey="provider" sort={sort} onSort={onSort} className="px-3 py-2" />}
-              {showScores && <SortableTh label="Priority" sortKey="priority" sort={sort} onSort={onSort} className="px-3 py-2" />}
               <SortableTh label="Status" sortKey="status" sort={sort} onSort={onSort} className="px-3 py-2" />
               <th className="px-3 py-2">Actions</th>
             </tr>
@@ -335,8 +319,8 @@ export default function JobTable({
           <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
             {visibleJobs.map((job, index) => (
               <Fragment key={job.jobId}>
-              {groupHeading(sort === DEFAULT_SORT, visibleJobs, index) && (
-                <tr className="bg-stone-50 dark:bg-stone-900"><th colSpan={12} className="px-3 py-1.5 text-left text-xs font-medium text-stone-600 dark:text-stone-400">{groupHeading(sort === DEFAULT_SORT, visibleJobs, index)}</th></tr>
+              {headingAt(index) && (
+                <tr className="bg-stone-50 dark:bg-stone-900"><th colSpan={12} className="px-3 py-1.5 text-left text-xs font-medium text-stone-600 dark:text-stone-400">{headingAt(index)}</th></tr>
               )}
               <tr
                 className={`${rowKind(job) === 'filtered' ? '' : 'cursor-pointer '}bg-white hover:bg-stone-50 dark:bg-stone-950 dark:hover:bg-stone-900`}
@@ -356,7 +340,7 @@ export default function JobTable({
                 </td>
                 {showScores && (
                   <td className="px-3 py-2 align-top">
-                    <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} emptyLabel="Not scored" />
+                    <FitTier job={job} />
                   </td>
                 )}
                 <td className="w-full px-3 py-2 align-top font-medium text-stone-900 dark:text-stone-100">
@@ -372,7 +356,6 @@ export default function JobTable({
                 <td className="max-w-[11rem] px-3 py-2 align-top text-stone-600 dark:text-stone-400"><SalaryText job={job} /></td>
                 <td className="whitespace-nowrap px-3 py-2 align-top text-stone-600 dark:text-stone-400"><ApplyBy job={job} today={today} /></td>
                 {showProvider && <td className="px-3 py-2 align-top"><ProviderBadge job={job} /></td>}
-                {showScores && <td className="px-3 py-2 align-top"><PriorityBadge priority={job.priority} /></td>}
                 <td className="px-3 py-2 align-top"><StatusBadge status={job.status} historyOnly={rowKind(job) === 'server'} /></td>
                 <td className="px-3 py-2 align-top" onClick={(e) => e.stopPropagation()}>
                   {rowKind(job) === 'filtered' ? <FilteredRowActions job={job} onAddFromRow={onAddFromRow} /> : <JobActions job={job} onStatusChange={onStatusChange} onApply={onApply} />}
@@ -388,8 +371,8 @@ export default function JobTable({
       <div className="space-y-3">
         {visibleJobs.map((job, index) => (
           <Fragment key={job.jobId}>
-          {groupHeading(sort === DEFAULT_SORT, visibleJobs, index) && (
-            <p className="px-1 text-xs font-medium text-stone-600 dark:text-stone-400">{groupHeading(sort === DEFAULT_SORT, visibleJobs, index)}</p>
+          {headingAt(index) && (
+            <p className="px-1 text-xs font-medium text-stone-600 dark:text-stone-400">{headingAt(index)}</p>
           )}
           <JobCard
             job={job}

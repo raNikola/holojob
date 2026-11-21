@@ -103,7 +103,7 @@ export async function mountScreen({ stored = [], file = '../../../src/components
     raw: () => localStorage.getItem(key),
     storedJobs: () => JSON.parse(localStorage.getItem(key)).jobs,
     text: () => container.textContent,
-    rows: () => [...container.querySelectorAll('tbody tr')],
+    rows: () => [...container.querySelectorAll('tbody tr')].filter((tr) => !tr.querySelector('th')), // group headings are rows too
     row: (text) => [...container.querySelectorAll('tbody tr')].find((tr) => tr.textContent.includes(text)),
     button: (pattern, within = container) => [...within.querySelectorAll('button')].find((b) => pattern.test(b.textContent)),
     box: (pattern) => [...container.querySelectorAll('label')].find((l) => pattern.test(l.textContent))?.querySelector('input'),

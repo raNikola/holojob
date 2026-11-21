@@ -20,12 +20,12 @@ describe('Blocked (Step 2b)', () => {
     expect(scoreRowChips(free('a', 80)).map((c) => c.text)).toEqual(['P2', 'Apply'])
   })
 
-  it('puts blocked ads after the others in the default order, each group by score, and hides nothing', () => {
+  it('puts blocked ads after the others in the default order, each group in the neutral order, and hides nothing', () => {
     const rows = [blocked, free('a', 70), free('c', 80)]
     const ordered = blockedLast(defaultOrder(rows))
-    expect(ordered.map((r) => r.jobId)).toEqual(['c', 'a', 'b'])
+    expect(ordered.map((r) => r.jobId)).toEqual(['a', 'c', 'b'])
     expect(ordered).toHaveLength(3)
-    expect(closedLast(ordered).map((r) => r.jobId)).toEqual(['c', 'a', 'b'])
+    expect(closedLast(ordered).map((r) => r.jobId)).toEqual(['a', 'c', 'b'])
   })
 
   it('shows an unconfirmed language as a flag, not as Blocked (Step 2c)', () => {
