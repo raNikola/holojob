@@ -1,12 +1,13 @@
 import Badge from '../ui/Badge'
-import { TIER_ORDER_NOTE, TIER_STRONG, TIER_POSSIBLE, isBlockedRow, tierOf, tierLabelOf } from '../../modules/jobs/fitTier'
+import { ENGINE_NOT_RUN_LABEL, ENGINE_NOT_RUN_NOTE, TIER_ORDER_NOTE, TIER_STRONG, TIER_POSSIBLE, isBlockedRow, isProvisionalTier, tierOf, tierLabelOf } from '../../modules/jobs/fitTier'
 import { INSUFFICIENT_LABEL, NOT_READ_LABEL, isInsufficientData } from '../../modules/jobs/matchScore'
 
 const VARIANT = { [TIER_STRONG]: 'high', [TIER_POSSIBLE]: 'medium' }
 
 /**
- * The fit cell of the Jobs list: the coarse tier, never the number or the band name (owner decision 2026-11-21). The Fit Score stays on
- * the ad's detail view. A blocked ad shows "Blocked", an unread one "Not read", and an ad with no score "Not scored".
+ * The fit cell of the Jobs list and the resume list: the coarse tier, never the number or the band name (owner decision 2026-11-21).
+ * The Fit Score stays on the ad's detail view. A blocked ad shows "Blocked", an unread one "Not read", and an ad with no score "Not scored".
+ * A Strong fit the engine has not evaluated carries an "Engine not run" marker: the placement is provisional.
  */
 export default function FitTier({ job }) {
   if (isBlockedRow(job)) return <Badge variant="warn">Blocked</Badge>
@@ -16,5 +17,11 @@ export default function FitTier({ job }) {
   }
   const tier = tierOf(job)
   if (tier === null) return <span className="text-stone-400">Not scored</span>
-  return <span title={`Tier: ${TIER_ORDER_NOTE}`}><Badge variant={VARIANT[tier] || 'low'}>{tierLabelOf(job)}</Badge></span>
+  const provisional = isProvisionalTier(job)
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1" title={provisional ? `${ENGINE_NOT_RUN_NOTE} ${TIER_ORDER_NOTE}.` : `Tier: ${TIER_ORDER_NOTE}`}>
+      <Badge variant={VARIANT[tier] || 'low'}>{tierLabelOf(job)}</Badge>
+      {provisional && <Badge variant="default">{ENGINE_NOT_RUN_LABEL}</Badge>}
+    </span>
+  )
 }

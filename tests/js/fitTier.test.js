@@ -1,6 +1,9 @@
 // Coarse tiers of the Jobs list (owner decision 2026-11-21, option A): assignment from existing scoring 1.6 output, and the group headings.
 import { describe, expect, it } from 'vitest'
-import { TIER_POSSIBLE, TIER_STRONG, TIER_WEAK, groupHeading, listGroupOf, tierOf } from '../../src/modules/jobs/fitTier.js'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import FitTier from '../../src/components/jobs/FitTier.jsx'
+import { TIER_POSSIBLE, TIER_STRONG, TIER_WEAK, groupHeading, isProvisionalTier, listGroupOf, tierCounts, tierOf } from '../../src/modules/jobs/fitTier.js'
 import { defaultOrder } from '../../src/modules/jobs/jobTableModel.js'
 
 const row = (jobId, matchScore, extra = {}) => ({ jobId, matchScore, matchLabel: 'x', ...extra })
@@ -44,5 +47,39 @@ describe('groups and headings in the default order', () => {
     expect(groupHeading(rows, 0)).toContain('Not ranked by fit')
     expect(groupHeading(rows, 1)).toBeNull()
     expect(groupHeading(rows, 2)).toContain('Possible fit')
+  })
+})
+
+describe('the Engine not run marker (a Strong fit without an engine answer is provisional)', () => {
+  const cell = (r) => renderToStaticMarkup(createElement(FitTier, { job: r }))
+  const notRun = { engineCoverage: { status: 'not_evaluated', reason: 'no_answer' } }
+
+  it('marks a Strong fit the engine has not evaluated, and says the placement is provisional', () => {
+    const r = row('a', 80, notRun)
+    expect(isProvisionalTier(r)).toBe(true)
+    const html = cell(r)
+    expect(html).toContain('Strong fit')
+    expect(html).toContain('Engine not run')
+    expect(html).toContain('provisional until the evidence engine has run')
+  })
+
+  it('marks no other case: answered, not applicable, or a tier the engine ceiling cannot lower', () => {
+    for (const r of [row('a', 80, { engineCoverage: { status: 'answered' } }), row('b', 80, { engineCoverage: { status: 'not_applicable' } }), row('c', 80), row('d', 60, notRun), row('e', 30, notRun), row('f', 90, { ...notRun, blockedBy: [{ kind: 'language', text: 'x' }] })]) {
+      expect(isProvisionalTier(r)).toBe(false)
+      expect(cell(r)).not.toContain('Engine not run')
+    }
+  })
+
+  it('a marked ad keeps its tier and its place: the marker changes no tier and no order', () => {
+    expect(tierOf(row('a', 80, notRun))).toBe(tierOf(row('a', 80)))
+    expect(defaultOrder([row('b', 80, notRun), row('a', 80)]).map((r) => r.jobId)).toEqual(['a', 'b'])
+  })
+})
+
+describe('tierCounts', () => {
+  it('counts the tiers, leaves blocked and unscored rows out, and honours the filter', () => {
+    const rows = [row('a', 80), row('b', 71, { isClosed: true }), row('c', 60), row('d', 20), row('e', 90, { blockedBy: [{ kind: 'location', text: 'x' }] }), row('f', undefined)]
+    expect(tierCounts(rows)).toEqual({ strong: 2, possible: 1, weak: 1 })
+    expect(tierCounts(rows, (r) => !r.isClosed)).toEqual({ strong: 1, possible: 1, weak: 1 })
   })
 })

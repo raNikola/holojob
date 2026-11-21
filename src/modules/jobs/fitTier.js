@@ -72,3 +72,23 @@ export function groupHeading(rows, index) {
   if (index > 0 && listGroupOf(rows[index - 1]) === group) return null
   return GROUP_HEADING[group]
 }
+
+/**
+ * "Engine not run" (owner decision 2026-11-21): the unmet-requirements ceiling (`ceilings.py`, caps 70+ at 69) only runs for an ad with
+ * a current engine answer; `engineCoverage.status` is `not_evaluated` for an ad without one. Such an ad is not capped, so a Strong fit
+ * placement is provisional until the engine has run. A Possible or Weak placement cannot be lowered by that ceiling, so only Strong is marked.
+ */
+export const ENGINE_NOT_RUN_LABEL = 'Engine not run'
+export const ENGINE_NOT_RUN_NOTE = 'Engine not run: this placement is provisional until the evidence engine has run for this ad. Its unmet-requirements check can still lower it to Possible fit.'
+
+export const isProvisionalTier = (row) => tierOf(row) === TIER_STRONG && row?.engineCoverage?.status === 'not_evaluated'
+
+/** How many of `rows` are in each tier (`{ strong, possible, weak }`); `include` leaves rows out, for example closed ads. */
+export function tierCounts(rows, include = () => true) {
+  const counts = { strong: 0, possible: 0, weak: 0 }
+  for (const row of rows || []) {
+    const tier = include(row) ? tierOf(row) : null
+    if (tier !== null) counts[tier] += 1
+  }
+  return counts
+}
