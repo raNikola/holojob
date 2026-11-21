@@ -21,6 +21,7 @@ import JobListControls from './JobListControls'
 import { useDemoBootstrapContext } from '../demo/DemoBootstrapGate'
 import { composeJobList, stripDisplayFields } from '../../modules/jobs/allAds'
 import { isClosedAd } from '../../modules/jobs/jobHistory'
+import { tierCounts } from '../../modules/jobs/fitTier'
 import { useAllAds } from '../../modules/jobs/useAllAds'
 import { ALL_SEARCH_NOTE, EXPORT_NOTE, OFF_LIST_NOTE, applyAllControls, classOptions, filterComposed, listNotices, selectableIds } from '../../modules/jobs/jobListView'
 import JobDetailDrawer from './JobDetailDrawer'
@@ -235,8 +236,8 @@ export default function JobDiscoveryScreen() {
     try {
       const jobs = await loadLatestScoredJobs()
       setState((prev) => importJobsFromFile(jobs, prev))
-      const p1 = (jobs.jobs || []).filter((j) => j.priority === 'P1').length
-      setRunToast({ kind: 'success', text: `Re-scrape done: ${jobs.jobs?.length || 0} jobs, ${p1} P1.` })
+      const strong = tierCounts(jobs.jobs, (j) => !isClosedAd(j)).strong
+      setRunToast({ kind: 'success', text: `Re-scrape done: ${jobs.jobs?.length || 0} jobs, ${strong} Strong fit.` })
     } catch (e) {
       setRunToast({ kind: 'error', text: `Re-scrape finished, but the new jobs could not be loaded: ${e.message}` })
     }
@@ -275,8 +276,8 @@ export default function JobDiscoveryScreen() {
       await runScoring()
       const jobs = await loadLatestScoredJobs()
       setState((prev) => importJobsFromFile(jobs, prev))
-      const p1 = (jobs.jobs || []).filter((j) => j.priority === 'P1').length
-      setRunToast({ kind: 'success', text: `Re-scored ${jobs.jobs?.length || 0} jobs, ${p1} P1.` })
+      const strong = tierCounts(jobs.jobs, (j) => !isClosedAd(j)).strong
+      setRunToast({ kind: 'success', text: `Re-scored ${jobs.jobs?.length || 0} jobs, ${strong} Strong fit.` })
     } catch (e) {
       setRunToast({ kind: 'error', text: `Re-score failed: ${e.message}` })
     } finally {

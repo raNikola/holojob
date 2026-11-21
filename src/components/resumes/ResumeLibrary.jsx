@@ -48,10 +48,10 @@ export default function ResumeLibrary({ onNavigate }) {
           <div>
             <p className="font-medium text-stone-900 dark:text-stone-100">No resumes generated yet</p>
             <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
-              Run the pipeline to generate a resume for each of your top jobs.
+              Run the pipeline to generate resumes for the first P1 jobs in the scored file (file order, not ranked by fit).
             </p>
           </div>
-          <Button onClick={goToPipeline}>Generate resumes for P1 jobs</Button>
+          <Button onClick={goToPipeline}>Generate resumes for the first 5 P1 jobs (file order)</Button>
         </div>
       </Card>
     )

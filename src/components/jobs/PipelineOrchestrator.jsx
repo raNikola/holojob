@@ -33,7 +33,7 @@ import SettingsLink from '../settings/SettingsLink'
 
 const PROVIDER_OPTIONS = ['ats', 'remote', 'startup', 'serbia', 'all', 'jobspy']
 const TAILOR_MODES = [
-  { value: 'p1', label: 'Top 5 P1 jobs' },
+  { value: 'p1', label: 'First 5 P1 jobs in file order (not ranked by fit)' },
   { value: 'apply', label: 'Apply recommendation = Apply' },
 ]
 
@@ -212,7 +212,7 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
         lastTailoringRun: new Date().toISOString(),
         runningStep: null,
       })
-      setSummary(describeRun(run.summary, run.jobCount))
+      setSummary(describeRun(run.summary, run.jobCount, run.payload?.jobs))
       setLog([run.stdout, tailored.stdout].filter(Boolean).join('\n'))
     } catch (e) {
       setError(e.message)

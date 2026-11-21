@@ -29,7 +29,7 @@ export default function BulkActionsBar({
         Generate documents: Apply jobs
       </Button>
       <Button variant="secondary" className="!text-xs" onClick={onTailorP1} disabled={running}>
-        Generate documents: P1 jobs
+        Generate documents: first 50 P1 jobs, in file order
       </Button>
       <Button variant="secondary" className="!text-xs" onClick={onMarkSaved} disabled={running}>Mark saved</Button>
       <Button variant="secondary" className="!text-xs" onClick={onMarkRejected} disabled={running}>Mark rejected</Button>

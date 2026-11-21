@@ -9,10 +9,11 @@ describe('full pipeline', () => {
       discovery: { deduped: 393, providerCounts: { jobspy: 300, greenhouse: 93, lever: 0 } },
       enrichment: { enrichedShare: 0.91 },
       scoring: { jobs: 393, priority: { P1: 143, P2: 83 }, hardCapped: 100 },
-    }, 393)
+    }, 393, [{ jobId: 'a', matchScore: 80 }, { jobId: 'b', matchScore: 60 }, { jobId: 'c', matchScore: 75, blockedBy: [{ kind: 'language', text: 'x' }] }])
     expect(line).toContain('393 discovered (jobspy 300, greenhouse 93)')
     expect(line).toContain('91% read by the model')
-    expect(line).toContain('P1 143 · P2 83')
+    expect(line).toContain('Strong fit 1 · Possible fit 1')
+    expect(line).not.toContain('P1')
     expect(line).not.toContain('lever')
   })
 

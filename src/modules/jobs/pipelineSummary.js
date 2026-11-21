@@ -1,5 +1,8 @@
+import { tierCounts } from './fitTier.js'
+import { isClosedAd } from './jobHistory.js'
+
 /** One line for the end of a full pipeline run, from the summary python/run_pipeline.py returns. */
-export function describeRun(summary, jobCount) {
+export function describeRun(summary, jobCount, scoredJobs = null) {
   if (!summary) return `Pipeline complete: ${jobCount} jobs scored, resumes generated`
   const parts = [`${summary.discovery?.deduped ?? jobCount} discovered`]
   const providers = Object.entries(summary.discovery?.providerCounts || {}).filter(([, n]) => n > 0)
@@ -8,8 +11,11 @@ export function describeRun(summary, jobCount) {
   const sc = summary.scoring
   if (sc) {
     parts.push(`${sc.jobs} scored`)
-    const p = sc.priority || {}
-    parts.push(`P1 ${p.P1 || 0} · P2 ${p.P2 || 0}`)
+    // Tier counts (owner decision 2026-11-21): P1 / P2 are score thresholds, not a proven better fit. Without the scored rows the line says nothing about them.
+    if (Array.isArray(scoredJobs)) {
+      const tiers = tierCounts(scoredJobs, (j) => !isClosedAd(j))
+      parts.push(`Strong fit ${tiers.strong} · Possible fit ${tiers.possible}`)
+    }
     if (sc.hardCapped) parts.push(`${sc.hardCapped} capped by a hard rule`)
   }
   // The AI budget gate refused enrichment (or it was skipped): the scores stand, read without the ad facts.

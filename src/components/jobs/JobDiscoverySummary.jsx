@@ -25,9 +25,9 @@ export default function JobDiscoverySummary({ stats, meta }) {
           <StatCard label="Scored" value={stats.scored} accent="border-violet-200 bg-violet-50/50 dark:border-violet-900 dark:bg-violet-950/30" />
           <StatCard label="Avg Score" value={stats.avgScore ?? '—'} accent="border-violet-200 bg-violet-50/50 dark:border-violet-900 dark:bg-violet-950/30" />
           <StatCard label="Apply" value={stats.apply} accent="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/30" />
-          <StatCard label="P1" value={stats.p1} accent="border-indigo-200 bg-indigo-50/50 dark:border-indigo-900 dark:bg-indigo-950/30" />
-          <StatCard label="P2" value={stats.p2} accent="border-indigo-200 bg-indigo-50/50 dark:border-indigo-900 dark:bg-indigo-950/30" />
-          <StatCard label="P3" value={stats.p3} accent="border-indigo-200 bg-indigo-50/50 dark:border-indigo-900 dark:bg-indigo-950/30" />
+          <StatCard label="Strong fit" value={stats.strong} accent="border-indigo-200 bg-indigo-50/50 dark:border-indigo-900 dark:bg-indigo-950/30" />
+          <StatCard label="Possible fit" value={stats.possible} accent="border-indigo-200 bg-indigo-50/50 dark:border-indigo-900 dark:bg-indigo-950/30" />
+          <StatCard label="Weak fit" value={stats.weak} accent="border-indigo-200 bg-indigo-50/50 dark:border-indigo-900 dark:bg-indigo-950/30" />
         </div>
       )}
 

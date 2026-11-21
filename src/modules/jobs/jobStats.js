@@ -3,6 +3,7 @@ import { isFollowUpDue } from './followUps'
 import { TERMINAL_STAGES } from './applicationTracking'
 import { isActionable } from './jobHistory'
 import { onListJobs } from './jobFilters.js'
+import { tierOf } from './fitTier.js'
 
 /** The Dashboard's count of jobs with a tailored resume, among current results. */
 export function countTailoredResumes(jobs) {
@@ -39,6 +40,9 @@ export function computeJobStats(jobs) {
     p1: 0,
     p2: 0,
     p3: 0,
+    strong: 0,
+    possible: 0,
+    weak: 0,
     avgScore: null,
     crmApplied: 0,
     crmInterviewing: 0,
@@ -67,6 +71,9 @@ export function computeJobStats(jobs) {
     if (open && job.priority === 'P1') stats.p1 += 1
     if (open && job.priority === 'P2') stats.p2 += 1
     if (job.priority === 'P3') stats.p3 += 1
+    // The tiers of the Jobs list (owner decision 2026-11-21): open ads only, as the list counts them; blocked and unscored ads are in none.
+    const tier = open ? tierOf(job) : null
+    if (tier) stats[tier] += 1
 
     countTracking(stats, job.applicationTracking)
   }
