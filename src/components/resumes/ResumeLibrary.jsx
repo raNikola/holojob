@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { ExternalLink, FileText } from 'lucide-react'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
-import FitScore from '../jobs/FitScore'
+import FitTier from '../jobs/FitTier'
+import { defaultOrder } from '../../modules/jobs/jobTableModel'
 import { loadJobs } from '../../modules/jobs/jobStorage'
 import { getTailoredFilenames, resumeDownloadUrl } from '../../modules/jobs/pipelineRunner'
 import { JOBS_TAB_STORAGE_KEY, VIEWS } from '../../modules/appNavigation'
@@ -23,14 +24,10 @@ export default function ResumeLibrary({ onNavigate }) {
     setJobs(loadJobs().jobs)
   }, [])
 
+  // The Jobs list's default order (owner decision 2026-11-21, option A): tier, then remote-feasible from Serbia, then newest, then ad id.
+  // The Fit Score takes no part in it and is not shown here.
   const resumeJobs = useMemo(
-    () => jobs
-      .filter((j) => j.tailoredAssets && (j.tailoredAssets.resumeMd || j.tailoredAssets.resumePdf))
-      .sort((a, b) => {
-        const sa = a.matchScore ?? -1
-        const sb = b.matchScore ?? -1
-        return sb - sa
-      }),
+    () => defaultOrder(jobs.filter((j) => j.tailoredAssets && (j.tailoredAssets.resumeMd || j.tailoredAssets.resumePdf))),
     [jobs],
   )
 
@@ -73,7 +70,7 @@ export default function ResumeLibrary({ onNavigate }) {
                 <p className="font-medium text-stone-900 dark:text-stone-100">{job.company}</p>
                 <p className="text-sm text-stone-600 dark:text-stone-400">{job.title}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {typeof job.matchScore === 'number' && <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} />}
+                  {typeof job.matchScore === 'number' && <FitTier job={job} />}
                   <span className="text-xs text-stone-500">Generated {formatDate(generatedAt)}</span>
                 </div>
               </div>
