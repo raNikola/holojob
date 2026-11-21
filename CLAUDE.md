@@ -1,6 +1,6 @@
 # Holojob — working notes
 
-Personal job-hunt pipeline in Podman on a home server (DS9). Single user (DECISIONS.md principle 15): a senior/technical product manager in Niš, Serbia, no relocation, remote or near-remote work. Read `docs/redesign/DECISIONS.md` before any redesign work. Codebase map: skill `holojob-architecture`.
+Personal job-hunt pipeline in Podman on a home server (DS9). Single user (DECISIONS.md principle 15): a senior/technical product manager in Niš, Serbia, open to relocation (the profile's relocation setting is on; owner decision 2026-11-22, the earlier "no relocation" was stale), remote or near-remote work preferred. Read `docs/redesign/DECISIONS.md` before any redesign work. Codebase map: skill `holojob-architecture`.
 
 ## Always
 
