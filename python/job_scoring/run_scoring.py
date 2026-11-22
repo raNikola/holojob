@@ -20,6 +20,7 @@ if str(ROOT / "python") not in sys.path:
     sys.path.append(str(ROOT / "python"))
 
 from atomic_write import write_text_atomic  # noqa: E402
+from auto_backup import write_text_with_backup  # noqa: E402
 from llm_client import LlmUnavailable, active_provider, judge_model, peek_provider  # noqa: E402
 from llm_enhancer import (  # noqa: E402
     DEFAULT_JUDGE_LIMIT,
@@ -347,7 +348,7 @@ def _score(args: argparse.Namespace) -> int:
     }
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(args.output, json.dumps(payload, indent=2))
+    write_text_with_backup(args.output, json.dumps(payload, indent=2))  # the previous scored_jobs.json is kept first (last 3)
 
     shown = args.output.relative_to(ROOT) if args.output.is_relative_to(ROOT) else args.output
     print(f"Scored {len(scored)} jobs -> {shown}")

@@ -326,6 +326,34 @@ Carried over from the former "Next, in order" list (nothing else from it is stil
    "Later" in [ROADMAP.md](ROADMAP.md).
 
 
+## Automatic backups and the save guard (2026-11-23)
+
+**Backups.** Before any write that changes one of `data/intelligence/candidate-intelligence.json`, `data/profile/candidate-profile.json`,
+`data/profile-enrichment.json` or `data/jobs/scored_jobs.json`, the file as it is now is copied to
+`data/backups/auto/<file name>/<YYYYMMDD-HHMMSS>.json` (UTC, files 600, folders 700, read back and hash-checked). The last 10 versions per file
+are kept, the last 3 for `scored_jobs.json`; the same code removes the older ones. Identical new content makes no backup (the profile is compared
+without its `meta.updatedAt`, which every save refreshes). If the backup cannot be written the write is refused with an error and nothing changes.
+Writers: `scripts/save-profile.js`, `scripts/save-intelligence.js` (so the two save routes, the pipeline run and the re-scrape push), the zip restore
+in `scripts/backup-handler.js`, `python/job_scoring/run_scoring.py`, `python/job_import/import_job_url.py` (a manual job add or delete rewrites
+`scored_jobs.json`, so it counts as one of its 3), `python/job_scoring/profile_enrichment.py`. Code: `scripts/auto-backup.js`, `python/job_scoring/auto_backup.py`.
+A file outside the data folder (a scratch or test file) is never backed up.
+
+**Restore is manual, one copy.** List the versions, pick one, copy it over the file (the next write backs the current one up in turn):
+
+    ls /srv/holojob/data/backups/auto/candidate-intelligence.json/
+    cp -p /srv/holojob/data/backups/auto/candidate-intelligence.json/<YYYYMMDD-HHMMSS>.json /srv/holojob/data/intelligence/candidate-intelligence.json
+
+(profile: `.../auto/candidate-profile.json/` to `data/profile/candidate-profile.json`; enrichment: `.../auto/profile-enrichment.json/` to `data/profile-enrichment.json`;
+scores: `.../auto/scored_jobs.json/` to `data/jobs/scored_jobs.json`.) The browser is still the master of the profile and the intelligence until Step 5:
+the next push from a browser overwrites a restored file, so restore the browser's copy as well, or do not save from a browser that holds an older one.
+
+**Save guard** (`scripts/save-guard.js`, inside `writeProfileFile` / `writeIntelligenceFile`): a save is refused (409, `would_lose_data`, nothing written)
+when it would empty, or cut by more than half (lists of 3 or more), at least 3 of the owner-set preference fields listed in that file (target roles,
+locations, languages, remote preference, role family, salary fields, work-authorization holds, role and search lists, preferred industries, questionnaire
+answers, GitHub links, CV library) that are filled in on the server. A first save, a server file with nothing filled in, and a normal edit (one or two fields) pass.
+The refusal is logged with field names only and shown in the app (`SaveRefusedNotice`). Limits: it stops emptying, not replacing with an older but filled copy;
+there is no override (save in smaller steps); scripts that write the files directly (restore, import, re-score) do not go through it.
+
 ## Container gotchas (detail)
 
 - **Bare `python` in the container is the venv.** `scripts/setup-job-discovery.sh`

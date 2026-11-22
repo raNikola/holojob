@@ -33,6 +33,7 @@ sys.path.insert(0, str(ROOT / "python" / "job_scoring"))
 sys.path.insert(0, str(ROOT / "python"))  # match_engine (role class stamp)
 
 from atomic_write import write_text_atomic  # noqa: E402
+from auto_backup import write_text_with_backup  # noqa: E402
 import claude_code  # noqa: E402
 import manual_jobs  # noqa: E402
 import pipeline_lock  # noqa: E402
@@ -234,7 +235,7 @@ def merge_into_scored(scored_new: list[dict], scored_path: Path, *, keep=("tailo
     scored_doc.setdefault("meta", {})["jobCount"] = len(scored_doc["jobs"])
     scored_doc["meta"][meta_key] = datetime.now(timezone.utc).isoformat()
     scored_path.parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(scored_path, json.dumps(scored_doc, indent=2))
+    write_text_with_backup(scored_path, json.dumps(scored_doc, indent=2))
 
 
 def _read_job_json(source: str):
@@ -285,7 +286,7 @@ def delete_manual_job(args) -> int:
     if scored_rows:
         scored_doc["jobs"] = [j for j in scored_doc["jobs"] if j.get("jobId") != job_id]
         scored_doc.setdefault("meta", {})["jobCount"] = len(scored_doc["jobs"])
-        write_text_atomic(args.scored, json.dumps(scored_doc, indent=2))
+        write_text_with_backup(args.scored, json.dumps(scored_doc, indent=2))
     return _ok(removed={"manual": int(in_manual), "scored": len(scored_rows)})
 
 

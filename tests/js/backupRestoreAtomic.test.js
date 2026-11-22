@@ -8,7 +8,8 @@ import { importBackupZip } from '../../scripts/backup-handler.js'
 const require = createRequire(import.meta.url)
 const AdmZip = require('adm-zip')
 
-const REL = 'data/jobs/scored_jobs.json'
+// Not one of the four owner files: those are copied to data/backups/auto first (tests/js/autoBackup.test.js), and these tests inject faults into the replace step.
+const REL = 'data/jobs/plain-list.json'
 const OLD = '{"jobs":["old"]}'
 const NEW = '{"jobs":["new"]}'
 

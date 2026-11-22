@@ -171,6 +171,15 @@ function sendJson(res, status, data) {
   res.end(JSON.stringify(maskErrorField(data)))
 }
 
+/**
+ * The two save routes' failures: a save the guard refused is 409 (`would_lose_data`, with the field names), a backup that could not be
+ * made is 500 (`backup_failed`, nothing was written), anything else (a bad payload) stays 400. Messages hold field names, never values.
+ */
+export function sendSaveFailure(res, e) {
+  const status = e.status === 409 || e.status === 500 ? e.status : 400
+  sendJson(res, status, { error: e.message, ...(e.code ? { code: e.code } : {}), ...(Array.isArray(e.fields) ? { fields: e.fields } : {}) })
+}
+
 function commitIncompleteAnswer(commit) {
   const files = commit.unreadable ? '' : ` Written: ${commit.written.join(', ') || 'none'}. Not written: ${commit.pending.join(', ') || 'none'}.`
   return {
@@ -832,7 +841,7 @@ export async function handleApiRequest(req, res) {
       const result = saveProfileToDisk(body.profile)
       sendJson(res, 200, { ok: true, ...result })
     } catch (e) {
-      sendJson(res, 400, { error: e.message })
+      sendSaveFailure(res, e)
     }
     return true
   }
@@ -881,7 +890,7 @@ export async function handleApiRequest(req, res) {
       const result = saveIntelligenceToDisk(body.intelligence)
       sendJson(res, 200, { ok: true, ...result })
     } catch (e) {
-      sendJson(res, 400, { error: e.message })
+      sendSaveFailure(res, e)
     }
     return true
   }

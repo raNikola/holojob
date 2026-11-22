@@ -1,5 +1,6 @@
 import { buildExportProfile } from '../../utils/exportJson'
 import { ensureApiAvailable } from '../../utils/apiAvailability.js'
+import { announceSaveRefused } from './saveRefused.js'
 
 export async function saveProfileToDataDir(profile) {
   const available = await ensureApiAvailable()
@@ -13,7 +14,10 @@ export async function saveProfileToDataDir(profile) {
       body: JSON.stringify({ profile: buildExportProfile(profile) }),
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Save failed')
+    if (!res.ok) {
+      if (res.status === 409 && data.code === 'would_lose_data') announceSaveRefused('profile') // the save guard (scripts/save-guard.js)
+      throw new Error(data.error || 'Save failed')
+    }
     return { ok: true, ...data }
   } catch (e) {
     return { ok: false, reason: e.message }
@@ -48,6 +52,7 @@ export async function backupProfileForImport(profile) {
 const HINTS = {
   0: 'the server could not be reached',
   403: 'the server refused this web address; open the app from an address listed in HOLOJOB_ALLOWED_ORIGINS',
+  409: 'the server refused the save because it would empty or cut several settings that are filled in there; nothing was changed',
   413: 'the request was too large for the server',
   415: 'the server did not accept the request type',
   429: 'the server is busy',
@@ -78,6 +83,7 @@ export async function syncProfileWithStatus(profile, { fetchFn = globalThis.fetc
     call(fetchFn, '/api/profile/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile: buildExportProfile(profile) }) }),
     call(fetchFn, '/api/pipeline/health'),
   ])
+  if (saved.status === 409) announceSaveRefused('profile') // the save guard refused it; the line below says so too
   const health = { ok: probed.ok, status: probed.status }
   if (probed.ok) {
     const body = await probed.res.json().catch(() => null)

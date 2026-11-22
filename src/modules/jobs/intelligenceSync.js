@@ -1,5 +1,6 @@
 import { buildIntelligenceExport } from '../intelligence/intelligenceExport'
 import { ensureApiAvailable } from '../../utils/apiAvailability.js'
+import { announceSaveRefused } from './saveRefused.js'
 
 export async function saveIntelligenceToDataDir(intelligence) {
   const available = await ensureApiAvailable()
@@ -16,7 +17,10 @@ export async function saveIntelligenceToDataDir(intelligence) {
       body: JSON.stringify({ intelligence: buildIntelligenceExport(intelligence) }),
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Save failed')
+    if (!res.ok) {
+      if (res.status === 409 && data.code === 'would_lose_data') announceSaveRefused('intelligence') // the save guard (scripts/save-guard.js)
+      throw new Error(data.error || 'Save failed')
+    }
     return { ok: true, ...data }
   } catch (e) {
     return { ok: false, reason: e.message }

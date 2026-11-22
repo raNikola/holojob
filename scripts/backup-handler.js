@@ -11,6 +11,7 @@ import { createRequire } from 'node:module'
 import { isStoreBackupEntry, mergeFromBackup } from './application-store.js'
 import { isJobStateBackupEntry, mergeStateFromBackup } from './job-state-store.js'
 import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE, replaceFileAtomic } from './atomic-file.js'
+import { backupBeforeWrite } from './auto-backup.js'
 import { isSecretPath, safeRelativePath } from './secret-paths.js'
 
 const require = createRequire(import.meta.url)
@@ -229,6 +230,8 @@ export async function importBackupZip(root, zipBuffer, options = {}) {
     if (!dest.startsWith(dataRoot)) {
       throw new Error(`Backup refused: path leaves data/ (${name.slice(0, 80)})`)
     }
+    // The four owner files are copied to data/backups/auto before a restore replaces them (a failed backup stops the restore here).
+    backupBeforeWrite(dest, entry.getData(), { dataRoot: path.resolve(root, 'data') })
     if (PRIVATE_RESTORE.test(name)) {
       fs.mkdirSync(path.dirname(dest), { recursive: true, mode: PRIVATE_DIR_MODE })
       replaceFileAtomic(dest, entry.getData(), { mode: PRIVATE_FILE_MODE })

@@ -23,7 +23,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from atomic_write import PRIVATE_FILE_MODE, write_text_atomic
+from atomic_write import PRIVATE_FILE_MODE
+from auto_backup import write_text_with_backup
 
 ROOT = Path(__file__).resolve().parents[2]
 ENRICHMENT_PATH = ROOT / "data" / "profile-enrichment.json"
@@ -59,7 +60,7 @@ def load(path: Path | None = None) -> dict:
 
 def save(data: dict, path: Path | None = None) -> None:
     path = Path(path or ENRICHMENT_PATH)
-    write_text_atomic(path, json.dumps(normalize(data), indent=1, ensure_ascii=False) + "\n", new_file_mode=PRIVATE_FILE_MODE)
+    write_text_with_backup(path, json.dumps(normalize(data), indent=1, ensure_ascii=False) + "\n", new_file_mode=PRIVATE_FILE_MODE)
 
 
 def evidence_items(enrichment: dict | None) -> list[dict]:
