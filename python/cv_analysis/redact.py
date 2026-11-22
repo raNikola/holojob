@@ -97,7 +97,7 @@ def mask_ad_contacts(text: str) -> tuple[str, dict]:
     """(text, {"emails": n, "phones": n}): the e-mail addresses and phone numbers an AD carries, replaced by [EMAIL] / [PHONE].
 
     For public ad text only (a recruiter's contact line); the owner-identifier scan is not loosened and still runs on the result.
-    Only real phone shapes are masked (AD_PHONE_RES); numbers in requirements, pay and dates stay as they are."""
+    Real phone shapes are masked (AD_PHONE_RES, then any run `_phone_in_ad` still reads as a phone); numbers in requirements, pay, dates, versions and ids stay as they are."""
     emails = len(EMAIL_RE.findall(text))
     text = EMAIL_RE.sub("[EMAIL]", text)
     phones = 0
@@ -112,6 +112,13 @@ def mask_ad_contacts(text: str) -> tuple[str, dict]:
 
     for pattern in AD_PHONE_RES:
         text = pattern.sub(phone, text)
+    # Whatever else of the ad still reads as a phone (`_phone_in_ad`: a trunk-0 run, separated groups nothing excuses, a number after a phone word) is a
+    # third party's: masked, so the ad is sent without it instead of refused. The owner's own number is never "let through" by this: the fill checks the
+    # raw ad text for the owner's identifiers first (prelabel.owner_in_text) and refuses an ad that carries one.
+    spans = [m.span() for m in _AD_RUN_RE.finditer(text)
+             if _phone_in_ad(m.group(0), text[max(0, m.start() - 40): m.start()], text[m.end(): m.end() + 8])]
+    phones += len(spans)
+    text = _replace_spans(text, spans, "[PHONE]")
     return text, {"emails": emails, "phones": phones}
 
 
@@ -147,6 +154,8 @@ def _phone_in_ad(run: str, before: str, after: str) -> bool:
         return False
     if re.search(r"\d,$", before) or re.match(r",\d", after):
         return False  # a piece of a number grouped with commas ("120,000.00 - 150,000.00"): a phone is never written that way
+    if re.fullmatch(r"\d{1,4}(?:\.\d{1,4}){3,}", s):
+        return False  # a version or an IP address ("3.14.159.2653"): four or more dotted groups; a dotted phone has three (555.123.4567)
     if _PHONE_WORD_RE.search(before[-30:].rsplit("\n", 1)[-1]):
         return True
     if s.startswith("+") or re.match(r"\(\d{2,5}\)", s):

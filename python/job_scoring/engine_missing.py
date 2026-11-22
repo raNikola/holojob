@@ -34,7 +34,7 @@ import pipeline_lock  # noqa: E402
 import run_scoring  # noqa: E402
 from ai_selection import require as require_selection  # noqa: E402
 from calibration.engine_sample import OUTPUT_BASE, OUTPUT_PER_REQUIREMENT, tokens_of  # noqa: E402
-from calibration.prelabel import owner_leaks  # noqa: E402
+from calibration.prelabel import owner_in_text, owner_leaks  # noqa: E402
 from job_fingerprint import job_fingerprint  # noqa: E402
 from llm_client import GuardrailRefused, LlmUnavailable, complete_json, preflight, service_tier_for  # noqa: E402
 from match_engine import matcher, shadow  # noqa: E402
@@ -93,7 +93,7 @@ def leaks_of(prompt: str, profile: dict, candidate: dict) -> list[str]:
 def estimate(engine, jobs, send, profile, selection) -> dict:
     """Builds every prompt (nothing is sent), scans it, prices it at the upper bound the calibration runners use."""
     price = ai_gate.classify(selection["provider"], selection["model"], selection.get("baseUrl") or None, tier=service_tier_for(selection["provider"]))
-    prompts, leaks = {}, []
+    prompts, leaks, owner_ads = {}, [], []
     for job in jobs:
         key = job.get("jobId") or id(job)
         if key not in send:
@@ -105,12 +105,16 @@ def estimate(engine, jobs, send, profile, selection) -> dict:
             raise Captured("dry run")
 
         posting = engine._posting(job)
+        # The ad's third-party contacts are masked in the prompt; the owner's own identifiers must never be "masked away": an ad that carries one is refused.
+        owner_here = bool(owner_in_text(posting.get("description") or "", profile))
         matcher.match_posting(posting, engine.candidate, confirmed=True, provider=selection["provider"], model=selection["model"],
                               complete=capture, identity=engine.identity, select=engine.select, compact=engine.compact)
         if not captured:
             continue  # every requirement settled locally: nothing to ask
         prompts[key] = captured[0]
-        if leaks_of(captured[0], profile, engine.candidate):
+        if owner_here:
+            owner_ads.append(key)
+        if owner_here or leaks_of(captured[0], profile, engine.candidate):
             leaks.append(key)
     cost = None
     if price.get("priceKnown") and prompts:
@@ -118,7 +122,7 @@ def estimate(engine, jobs, send, profile, selection) -> dict:
                          for p in prompts.values()), 4)
     settings = ai_gate.load_settings()
     totals = ai_gate.totals(None, settings)
-    return {"toAsk": len(prompts) - len(leaks), "maxChars": max((len(p) for p in prompts.values()), default=0), "planned": len(send), "send": set(send), "leaks": leaks, "price": price, "costUsd": cost,
+    return {"toAsk": len(prompts) - len(leaks), "maxChars": max((len(p) for p in prompts.values()), default=0), "planned": len(send), "send": set(send), "leaks": leaks, "ownerAds": owner_ads, "price": price, "costUsd": cost,
             "excluded": dict(engine.excluded),
             "budget": {"dailyLimit": settings.get("dailyLimit"), "monthlyLimit": settings.get("monthlyLimit"),
                        "dailySpent": totals["today"]["cost"], "monthlySpent": totals["thisMonth"]["cost"]}}
@@ -170,7 +174,7 @@ def describe(est: dict, selection: dict, max_usd: float | None) -> list[str]:
     else:
         lines.append(f"estimated cost (upper bound, no cache discount): ${est['costUsd']:.4f} at ${price['inputPerMTok']}/{price['outputPerMTok']} per 1M tokens")
     lines.append(f"budget: today {b['dailySpent']:.4f} of {b['dailyLimit']}; this month {b['monthlySpent']:.4f} of {b['monthlyLimit']}")
-    lines.append("privacy scan: " + (f"{len(est['leaks'])} ads hit it and are NOT sent (ids: {', '.join(map(str, est['leaks']))}); the rest pass" if est["leaks"] else "all requests pass"))
+    lines.append("privacy scan: " + (f"{len(est['leaks'])} ads hit it and are NOT sent (ids: {', '.join(map(str, est['leaks']))}; {len(est['ownerAds'])} of them carry the owner's own identifier in the ad text); the rest pass; third-party phone numbers are masked, not refused" if est["leaks"] else "all requests pass; third-party phone numbers in ads are masked"))
     m = matcher.MASKED_CONTACTS
     lines.append(f"contact data masked in ad text before sending: {m['ads']} ads ({m['emails']} e-mail addresses, {m['phones']} phone numbers); the owner-identifier scan is unchanged")
     if max_usd is not None:

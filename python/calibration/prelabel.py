@@ -186,10 +186,23 @@ def owner_leaks(text: str, profile: dict) -> list[str]:
     if len(digits) >= 7:
         for run in _PHONE_RUN.finditer(text):
             seen = re.sub(r"\D", "", run.group(0))
-            if len(seen) >= 7 and (digits in seen or seen in digits):
+            # The owner's number in any written form: the whole number, a piece of it, or its last 9 digits inside a longer run
+            # (national form "064 ..." against the stored "+381 64 ...", where the trunk 0 and the country code differ).
+            if len(seen) >= 7 and (digits in seen or seen in digits or digits[-9:] in seen):
                 found.append("the owner's phone number")
                 break
     return list(dict.fromkeys(found))
+
+
+_GENERIC_KINDS = ("an e-mail address", "a phone number")
+
+
+def owner_in_text(text: str, profile: dict) -> list[str]:
+    """Only the OWNER's identifiers in `text` (name or part of it, links, literal e-mail and phone in any shape), never a stranger's e-mail or phone.
+
+    For the raw text of an ad, before its third-party contacts are masked: an ad that carries one of these is refused, not masked
+    (engine_missing.estimate). Never returns the matched text."""
+    return [kind for kind in owner_leaks(text, profile) if kind not in _GENERIC_KINDS]
 
 
 # --- proposals ----------------------------------------------------------------------
