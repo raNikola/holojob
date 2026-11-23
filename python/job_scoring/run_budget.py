@@ -30,7 +30,10 @@ STRONG_MIN, POSSIBLE_MIN = 70, 55  # = fitTier.js; ordering only
 # The fixed stop codes (the Activity screen has the wording; free text of a stop never goes into a record).
 STOP_RUN_USD, STOP_RUN_ADS, STOP_DAILY, STOP_MONTHLY, STOP_CALL_CAP = "run_usd", "run_ads", "daily", "monthly", "call_cap"
 STOP_FAILURES, STOP_UNSET, STOP_GATE, STOP_ENGINE_NOT_ALLOWED = "failures", "unset", "gate", "engine_not_allowed"
-STOP_CODES = (STOP_RUN_USD, STOP_RUN_ADS, STOP_DAILY, STOP_MONTHLY, STOP_CALL_CAP, STOP_FAILURES, STOP_UNSET, STOP_GATE, STOP_ENGINE_NOT_ALLOWED)
+# not_sent: the step could not send (no price for the model, no profile for the privacy scan, an error); no_report: it ended without its summary line.
+STOP_NOT_SENT, STOP_NO_REPORT = "not_sent", "no_report"
+STOP_CODES = (STOP_RUN_USD, STOP_RUN_ADS, STOP_DAILY, STOP_MONTHLY, STOP_CALL_CAP, STOP_FAILURES, STOP_UNSET, STOP_GATE, STOP_ENGINE_NOT_ALLOWED,
+              STOP_NOT_SENT, STOP_NO_REPORT)
 
 
 def stop_code(text: str | None) -> str | None:

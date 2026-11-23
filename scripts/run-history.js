@@ -87,7 +87,7 @@ const WHOLE = [
   /^No source gave a usable result, so nothing was imported and the job list was not changed\.$/,
   /^(?:discovery|classification|reading|scoring-prepare|engine|scoring) failed with exit code -?\d+/, // a step's output tail follows the colon and is cut (see `message`)
   // A limit stopped a paid step: "Stopped: run spend limit, 12 ads waiting (reading)". The words are python run_rescrape.LIMIT_WORDS.
-  /^Stopped: (?:run spend limit|ads-per-run limit|daily AI budget|monthly AI budget|paid call limit|3 calls in a row failed|AI gate refused the next call|run limit not set in Settings|engine fill not allowed in Settings)(?:, \d+ ads? waiting)? \((?:classification|reading|engine fill)\)$/,
+  /^Stopped: (?:run spend limit|ads-per-run limit|daily AI budget|monthly AI budget|paid call limit|3 calls in a row failed|AI gate refused the next call|run limit not set in Settings|engine fill not allowed in Settings|nothing could be sent|the step did not report)(?:, \d+ ads? waiting)? \((?:classification|reading|engine fill)\)$/,
   /^Run \w+ left an incomplete save of the job files\. Written: [^.]*\. Not written: [^.]*\. They may not match each other\. Nothing was repaired\.$/,
   /^A save of the job files did not finish \(its marker is unreadable\); they may not match each other\. Nothing was repaired\.$/,
   /^The run did not finish: it stopped(?: during \w+)? \(killed, or the server restarted\)\. It was not resumed\.$/,
@@ -275,7 +275,7 @@ function projectImport(imported) {
   }
 }
 // The fixed stop codes of a paid step (python run_budget.STOP_CODES); `cap` is the code of an older record.
-const STOP_CODES = ['run_usd', 'run_ads', 'daily', 'monthly', 'call_cap', 'failures', 'unset', 'gate', 'engine_not_allowed', 'cap']
+const STOP_CODES = ['run_usd', 'run_ads', 'daily', 'monthly', 'call_cap', 'failures', 'unset', 'gate', 'engine_not_allowed', 'not_sent', 'no_report', 'cap']
 const PAID_STEP_KEYS = ['classification', 'reading', 'engine']
 const usd = (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < 1000 ? Math.round(value * 10000) / 10000 : null)
 

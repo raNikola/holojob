@@ -61,6 +61,7 @@ LIMIT_WORDS = {  # a stop code as the words the Activity screen may show (run-hi
     "run_usd": "run spend limit", "run_ads": "ads-per-run limit", "daily": "daily AI budget", "monthly": "monthly AI budget",
     "call_cap": "paid call limit", "failures": "3 calls in a row failed", "gate": "AI gate refused the next call",
     "unset": "run limit not set in Settings", "engine_not_allowed": "engine fill not allowed in Settings",
+    "not_sent": "nothing could be sent", "no_report": "the step did not report",
 }
 RUN_ID = re.compile(r"^[0-9A-Za-z]{1,32}$")
 OUTPUT_TAIL_LINES = 3
@@ -274,8 +275,13 @@ class PaidBudget:
             return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
         stopped = summary.get("stopped")
-        self.steps[name] = {"candidates": count("candidates"), "done": count(self.DONE_KEY[name]), "failed": count("failed"), "waiting": count("waiting"),
+        waiting = None if summary.get("waiting") is None else count("waiting")  # null: the step could not tell how many wait
+        self.steps[name] = {"candidates": count("candidates"), "done": count(self.DONE_KEY[name]), "failed": count("failed"), "waiting": waiting,
                             "stopped": stopped if stopped in self.rb.STOP_CODES else None, "spentUsd": round(usd, 4), "ads": len(ads)}
+
+    def no_report(self, name: str) -> None:
+        """A paid step ended well but printed no summary: never a silent step."""
+        self.skipped(name, self.rb.STOP_NO_REPORT)
 
     def skipped(self, name: str, code: str) -> None:
         self.steps[name] = {"candidates": 0, "done": 0, "failed": 0, "waiting": None, "stopped": code, "spentUsd": 0.0, "ads": 0}
@@ -284,8 +290,11 @@ class PaidBudget:
         """Write the run's one paid block and one issue per stopped step. Returns how many ads wait."""
         usd, ads = self.rb.usage_since(self.started)
         waiting = sum(s["waiting"] or 0 for s in self.steps.values())
+        # A step that could not say how many wait (it could not send, or reported nothing) still leaves work undone; a step skipped for an unset limit or
+        # a switched-off engine fill is a known state of Settings, not a limit that stopped work.
+        unknown = any(s["stopped"] in (self.rb.STOP_NOT_SENT, self.rb.STOP_NO_REPORT) and s["waiting"] is None for s in self.steps.values())
         record["paid"] = {"limits": None if self.limits is None else {"usd": self.limits[0], "ads": self.limits[1]},
-                          "spentUsd": round(usd, 4), "ads": len(ads), "waiting": waiting, "steps": self.steps}
+                          "spentUsd": round(usd, 4), "ads": len(ads), "waiting": waiting, "unknownWaiting": unknown, "steps": self.steps}
         for name, step in self.steps.items():
             if not step["stopped"]:
                 continue
@@ -317,7 +326,7 @@ def intake(record: dict, lock: pipeline_lock.Lock) -> tuple[dict, bool, bool]:
                 run_log.event(record, "step_skipped", step=name, reason="cancelled")
                 continue
             if name in PAID_STEPS:
-                if name != "classification" and budget.limits is None:
+                if name == "engine" and budget.limits is None:  # classification and reading still run: they count what waits and send nothing
                     budget.skipped(name, budget.rb.STOP_UNSET)
                     run_log.event(record, "step_skipped", step=name, reason="run_limit_not_set")
                     continue
@@ -333,7 +342,7 @@ def intake(record: dict, lock: pipeline_lock.Lock) -> tuple[dict, bool, bool]:
                 if name == "engine":
                     cmd += ["--jobs", str(scored_view)]
                 record, ok, summary = run_step(record, name, cmd, lock)
-                budget.note(name, summary)
+                budget.note(name, summary) if summary is not None or not ok else budget.no_report(name)
                 paid_failed = paid_failed or (not ok and not run_log.cancel_requested(record))
             elif name == "scoring-prepare":
                 record, view_ready, _ = run_step(record, name, [str(SCORING), "--output", str(scored_view)], lock)
@@ -383,7 +392,7 @@ def start(args) -> int:
         finished = run_log.finish(record, exit_ok=succeeded, cancelled=cancelled)
         if finished["status"] == "ok" and paid_failed:
             finished["status"] = "partial"  # a paid step failed (its issue says which); sources are fine
-        elif finished["status"] == "ok" and (finished.get("paid") or {}).get("waiting"):
+        elif finished["status"] == "ok" and ((finished.get("paid") or {}).get("waiting") or (finished.get("paid") or {}).get("unknownWaiting")):
             finished["status"] = "waiting"  # completed, but a limit left ads waiting: never shown as plainly finished
         run_log.save(finished)
         run_log.event(record, "run_end", status=record["status"])

@@ -283,6 +283,8 @@ def main(argv=None) -> int:
         return _main(args)
     except Exception as exc:  # noqa: BLE001  a step in a pipeline run must never fail it; the cause is named, not hidden
         print(f"classification: skipped, {type(exc).__name__}: {str(exc)[:160]}")
+        print(run_budget.summary_line("classification", candidates=0, classified=0, failed=0, privacyRefused=0, left=0, waiting=None, stopped=run_budget.STOP_NOT_SENT,
+                                      anchoringFailed=0, spentUsd=0.0))
         return 0
 
 
@@ -324,7 +326,7 @@ def _main(args) -> int:
             if not profile:
                 print("\n".join(describe(groups, None, limits.ads)))
                 print("classification: skipped, no profile on disk, so the privacy scan cannot run; nothing was sent")
-                return 0
+                return _finish(args, _empty_summary(len(groups["todo"]), len(groups["todo"]), run_budget.STOP_NOT_SENT, len(groups["anchoringFailed"]), limits))
             if limits.stop:
                 print("\n".join(describe(groups, None, limits.ads)))
                 print("classification: run limit not set in Settings; nothing was sent" if limits.stop == run_budget.STOP_UNSET
@@ -344,7 +346,10 @@ def _main(args) -> int:
                 return 0
             if not est["priceKnown"] or not est["send"]:
                 print("classification: nothing sent" + ("" if est["priceKnown"] else " (no price for this model)"))
-                return 0
+                # No price: every ad waits. Every ad refused by the privacy scan: they are never sent, so none waits for a limit.
+                waiting = (len(groups["todo"]) if not est["priceKnown"] else len(over_limit))
+                summary = _empty_summary(len(groups["todo"]), waiting, run_budget.STOP_NOT_SENT if not est["priceKnown"] else None, len(groups["anchoringFailed"]), limits)
+                return _finish(args, {**summary, "privacyRefused": len(est["privacyRefused"])})
             os.environ.setdefault(ai_gate.TRIGGER_ENV, ai_gate.MANUAL)  # a standalone run is manual; a pipeline step keeps the trigger it was given
             base = enrich_jobs.make_guard(limits.usd, est["provider"], est["model"])
             guard = Guard(base.cap, base.price, base.max_output)

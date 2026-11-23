@@ -46,7 +46,7 @@ export function formatDuration(seconds) {
 /** The badge words. A run that completed with ads left behind a limit says how many: "Completed, 12 ads waiting". */
 export function statusLabel(status, run) {
   const waiting = run?.paid?.waiting
-  if (status === 'waiting' && Number.isFinite(waiting)) return `Completed, ${waiting.toLocaleString()} ${waiting === 1 ? 'ad' : 'ads'} waiting`
+  if (status === 'waiting' && Number.isFinite(waiting) && waiting > 0) return `Completed, ${waiting.toLocaleString()} ${waiting === 1 ? 'ad' : 'ads'} waiting`
   return STATUS_LABELS[status] ?? STATUS_LABELS.unknown
 }
 export const triggerLabel = (trigger) => TRIGGER_LABELS[trigger] ?? TRIGGER_LABELS.unknown
@@ -81,6 +81,8 @@ const STOP_WORDS = {
   gate: 'the AI budget gate refused the next call',
   unset: 'run limit not set in Settings',
   engine_not_allowed: 'engine fill not allowed in Settings',
+  not_sent: 'nothing could be sent (no price for the model, no profile for the privacy scan, or an error)',
+  no_report: 'the step ended without reporting what it did',
   cap: 'the spending cap or the ad limit was reached',
 }
 const STEP_TITLES = { classification: 'Classification', reading: 'Reading', engine: 'Engine fill' }

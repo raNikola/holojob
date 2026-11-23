@@ -135,7 +135,7 @@ describe('the events', () => {
   it('shows the app\'s own message whole and withholds the rest, as for issues', () => {
     expect(projectEvent({ type: 'error', message: 'discovery failed with exit code 1: Traceback ... CANARY-TITLE' }).message).toBe('discovery failed with exit code 1')
     expect(projectEvent({ type: 'error', message: 'We could not parse the ad "CANARY-TITLE"' }).message).toBe('Message details withheld')
-    expect(projectEvent({ type: 'source_end', source: 'jobspy', status: 'failed', error: 'acme: HTTPError 404 CANARY-TITLE' }).error).toBe('acme: details withheld (HTTPError, HTTP 404)')
+    expect(projectEvent({ type: 'source_end', source: 'jobspy', status: 'failed', error: 'acme: HTTPError 404 CANARY-TITLE' }).error).toBe('acme: HTTPError, HTTP 404')
     expect(projectEvent({ type: 'source_end', source: 'infostud', status: 'skipped', skipReason: "Infostud covers Serbia only, not 'Germany'" }).skipReason).toBe("Infostud covers Serbia only, not 'Germany'")
     expect(projectEvent({ type: 'made_up' }).type).toBe('unknown')
     expect(projectEvent(null)).toBeNull()

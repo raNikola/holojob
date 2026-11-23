@@ -679,7 +679,11 @@ def _plan_rescrape(args: argparse.Namespace, pending: list[tuple[int, dict]]):
     role_class.label(stamped)  # on copies: nothing is written back to the jobs
     keep, skipped = [], 0
     for (index, job), row in zip(pending, stamped):
-        if row.get("roleClass") not in ("target", "adjacent") or run_budget.is_blocked(prior.get(str(job.get("jobId")))):
+        before = prior.get(str(job.get("jobId")))
+        # A block that needs no reading (a place outside the allowed ones) is settled. A row that was read before and carries a block may owe it to that
+        # reading (sponsorship, language); its text has changed since, so it is read again.
+        settled_block = run_budget.is_blocked(before) and not ((before or {}).get("llmFacts") or {}).get("_fingerprint")
+        if row.get("roleClass") not in ("target", "adjacent") or settled_block:
             skipped += 1
             continue
         keep.append((index, job))

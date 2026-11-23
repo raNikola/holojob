@@ -17,6 +17,14 @@ from types import SimpleNamespace
 
 import pytest
 
+# A paid step of Re-scrape that does nothing and says so (one summary line); every paid step is stubbed so that no test reads or writes real data.
+FAKE_PAID_STEP = (
+    "import json, sys\n"
+    "step = 'reading' if '--manual' in sys.argv else 'engine' if '--jobs' in sys.argv else 'classification'\n"
+    "print(json.dumps({'step': step, 'candidates': 0, 'waiting': 0, 'stopped': None}))\n"
+)
+
+
 ROOT = Path(__file__).resolve().parents[2]
 
 import filtered_ads  # noqa: E402
@@ -93,6 +101,8 @@ import run_rescrape
 run_rescrape.DISCOVERY = {discovery!r}
 run_rescrape.SCORING = {scoring!r}
 run_rescrape.CLASSIFY = {classify!r}
+run_rescrape.ENRICH = {classify!r}
+run_rescrape.ENGINE = {classify!r}
 sys.exit(run_rescrape.main(sys.argv[1:]))
 """
 
@@ -103,7 +113,7 @@ def fake(tmp_path):
     marks.mkdir()
     (tmp_path / "fake_discovery.py").write_text(FAKE_DISCOVERY.format(job_discovery=str(PY / "job_discovery"), job_scoring=str(PY / "job_scoring"), marks=str(marks)))
     (tmp_path / "fake_scoring.py").write_text(FAKE_SCORING.format(marks=str(marks)))
-    (tmp_path / "fake_classify.py").write_text("print(\"classification: nothing to classify\")\n")
+    (tmp_path / "fake_classify.py").write_text(FAKE_PAID_STEP)
     (tmp_path / "driver.py").write_text(DRIVER.format(python=str(PY), discovery=str(tmp_path / "fake_discovery.py"), scoring=str(tmp_path / "fake_scoring.py"),
                                                       classify=str(tmp_path / "fake_classify.py")))
     started = []
@@ -230,7 +240,7 @@ def test_cancel_during_scoring_stops_scoring_and_keeps_the_import(fake):
     assert run_rescrape.cancel(RUN_ID)["result"] == "cancel_requested"
     assert proc.wait(30) == 0
     saved = on_disk(RUN_ID)
-    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("classification", "ok"), ("scoring", "cancelled")]
+    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("classification", "ok"), ("reading", "ok"), ("scoring", "cancelled")]
     assert saved["status"] == "ok" and saved["cancel"]["outcome"] == "imported_before_cancel", "the scrape was imported and counts"
     assert not (fake.marks / "scoring-done").exists() and lock_is_free()
 
@@ -294,7 +304,7 @@ def test_a_request_for_one_run_never_reaches_the_next(fake):
     proc = fake.start(run_id="second0000002")
     assert proc.wait(30) == 0
     saved = on_disk("second0000002")
-    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok", "ok", "ok"]
+    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok", "ok", "ok", "ok"]
 
 
 def test_the_run_after_a_cancelled_one_starts_at_once_and_finishes(fake):
@@ -579,6 +589,8 @@ sys.path.insert(0, {python!r})
 import run_rescrape
 run_rescrape.SCORING = {scoring!r}
 run_rescrape.CLASSIFY = {classify!r}
+run_rescrape.ENRICH = {classify!r}
+run_rescrape.ENGINE = {classify!r}
 sys.exit(run_rescrape.main(sys.argv[1:]))
 """
 
@@ -598,7 +610,7 @@ def scratch(tmp_path):
     (repo / "data/intelligence/candidate-intelligence.json").write_text(json.dumps({"searchStrategy": {
         "country": "Serbia", "jobSpySearchTerms": ["pm"], "locationFilters": ["Remote"], "remoteFilters": ["remote"]}}))
     (tmp_path / "scoring.py").write_text(TRIVIAL_SCORING)
-    (tmp_path / "fake_classify.py").write_text("print(\"classification: nothing to classify\")\n")
+    (tmp_path / "fake_classify.py").write_text(FAKE_PAID_STEP)
     (tmp_path / "driver.py").write_text(SCRATCH_DRIVER.format(python=str(repo / "python"), scoring=str(tmp_path / "scoring.py"), classify=str(tmp_path / "fake_classify.py")))
     marks = tmp_path / "slow-marks"
     marks.mkdir()
@@ -730,6 +742,6 @@ def test_the_real_run_cancelled_mid_scrape_commit_point_and_hard_kill(scratch):
     # E: the next run starts at once and runs to its end, scoring included, whatever was requested before.
     assert scratch.start("runE00000005").wait(60) == 0
     saved = on_disk("runE00000005")
-    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok", "ok", "ok"]
+    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok", "ok", "ok", "ok"]
     assert ledger()["generation"] == 4 and counted_runs()[-1] == "runE00000005" and applied_runs()[-1] == "runE00000005"
     assert view_lock_free(jobs) and lock_is_free()

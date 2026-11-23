@@ -571,8 +571,11 @@ from pathlib import Path
 marks = Path({marks!r})
 argv = sys.argv[1:]
 step = "reading" if "--manual" in argv else "engine" if "--jobs" in argv else "classification"
+counted = json.loads(Path(argv[argv.index("--counted-ids") + 1]).read_text()) if "--counted-ids" in argv else None
 with (marks / "paid-args.jsonl").open("a") as out:
-    out.write(json.dumps({{"step": step, "argv": argv, "trigger": os.environ.get("HOLOJOB_AI_TRIGGER")}}) + "\\n")
+    out.write(json.dumps({{"step": step, "argv": argv, "trigger": os.environ.get("HOLOJOB_AI_TRIGGER"), "counted": counted}}) + "\\n")
+if os.environ.get("FAKE_PAID_SILENT"):
+    sys.exit(0)
 spec = json.loads(os.environ.get("FAKE_PAID", "{{}}")).get(step, {{}})
 ledger = Path(os.environ["HOLOJOB_AI_DIR"]) / "usage-ledger.jsonl"
 ledger.parent.mkdir(parents=True, exist_ok=True)
@@ -644,9 +647,9 @@ def test_a_full_run_ends_ok_with_every_event_and_frees_the_lock(fake):
     assert not (fake.marks / "discovery-no-lock").exists(), "the step used the lock it was handed"
     saved = on_disk(RUN_ID)
     assert saved["status"] == "ok" and saved["finishedAt"] and saved["trigger"] == "manual"
-    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("classification", "ok"), ("scoring", "ok")]
+    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("classification", "ok"), ("reading", "ok"), ("scoring", "ok")]
     assert [s["name"] for s in saved["sources"]] == ["greenhouse"], "the record the step filled is the one finished"
-    assert [e["type"] for e in events_of(saved)] == ["run_start", "step_start", "step_end", "step_start", "step_end", "step_skipped", "step_skipped", "step_start", "step_end", "run_end"]
+    assert [e["type"] for e in events_of(saved)] == ["run_start", "step_start", "step_end", "step_start", "step_end", "step_start", "step_end", "step_skipped", "step_start", "step_end", "run_end"]
     assert lock_is_free()
 
 
@@ -776,14 +779,25 @@ def flag(call, name):
     return call["argv"][call["argv"].index(name) + 1]
 
 
-def test_an_unset_run_limit_runs_no_paid_step_beyond_the_count_and_says_so(fake, tmp_path):
-    assert fake.start(FAKE_PAID=json.dumps({"classification": {"waiting": 7, "stopped": "unset"}})).wait(30) == 0
-    assert [c["step"] for c in paid_calls(fake)] == ["classification"], "reading and engine fill are not started"
-    assert not any("--max-usd" in c["argv"] for c in paid_calls(fake)), "no limit is passed: the step reads Settings and finds it unset"
+def test_an_unset_run_limit_sends_nothing_but_the_steps_still_count_what_waits(fake, tmp_path):
+    plan = {"classification": {"waiting": 7, "stopped": "unset"}, "reading": {"waiting": 4, "stopped": "unset"}}
+    assert fake.start(FAKE_PAID=json.dumps(plan)).wait(30) == 0
+    calls = paid_calls(fake)
+    assert [c["step"] for c in calls] == ["classification", "reading"], "both only count; engine fill is not started"
+    assert not any("--max-usd" in c["argv"] for c in calls), "no limit is passed: the step reads Settings and finds it unset"
     saved = on_disk(RUN_ID)
-    assert saved["paid"]["limits"] is None and saved["paid"]["steps"]["reading"]["stopped"] == "unset"
-    assert any("Stopped: run limit not set in Settings, 7 ads waiting (classification)" == i["message"] for i in saved["issues"])
+    assert saved["paid"]["limits"] is None and saved["paid"]["steps"]["engine"]["stopped"] == "unset" and saved["paid"]["waiting"] == 11
+    messages = [i["message"] for i in saved["issues"]]
+    assert "Stopped: run limit not set in Settings, 7 ads waiting (classification)" in messages and "Stopped: run limit not set in Settings, 4 ads waiting (reading)" in messages
     assert (fake.marks / "scoring-done").exists() and saved["status"] == "waiting", "scoring still ran; ads wait, so it is not shown as plainly finished"
+
+
+def test_a_step_that_ends_without_its_summary_is_never_a_silent_step(fake, tmp_path):
+    assert fake.start(FAKE_PAID_SILENT="1").wait(30) == 0
+    saved = on_disk(RUN_ID)
+    assert saved["paid"]["steps"]["classification"]["stopped"] == "no_report"
+    assert "Stopped: the step did not report (classification)" in [i["message"] for i in saved["issues"]]
+    assert saved["status"] == "waiting" and (fake.marks / "scoring-done").exists()
 
 
 def test_the_steps_share_one_budget_and_each_gets_the_remainder(fake, tmp_path):
@@ -794,7 +808,7 @@ def test_the_steps_share_one_budget_and_each_gets_the_remainder(fake, tmp_path):
     assert [flag(calls["classification"], f) for f in ("--max-usd", "--max-ads")] == ["1.000000", "10"]
     # 0.3 USD and the distinct ads a, b, c are used: reading may spend 0.7 and take 7 NEW ads; b and c do not count twice
     assert [flag(calls["reading"], f) for f in ("--max-usd", "--max-ads")] == ["0.700000", "7"]
-    assert json.loads(Path(flag(calls["reading"], "--counted-ids")).read_text() if Path(flag(calls["reading"], "--counted-ids")).exists() else "[]") in ([], ["a", "b", "c"])
+    assert calls["reading"]["counted"] == ["a", "b", "c"], "the ads already counted are handed on, so they do not use the ads limit again"
     assert all(c["trigger"] == "manual" for c in calls.values()), "Re-scrape is manual, whatever automation says"
     saved = on_disk(RUN_ID)
     assert round(saved["paid"]["spentUsd"], 4) == 0.9 and saved["paid"]["ads"] == 4, "the total is measured from the ledger, and an ad counts once"

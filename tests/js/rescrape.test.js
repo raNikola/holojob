@@ -61,7 +61,8 @@ import os
 open(os.path.join(os.environ["FAKE_MARKS"], "scored"), "w").write("x")
 `)
   const classify = path.join(dir, 'fake_classify.py')
-  fs.writeFileSync(classify, 'print("classification: nothing to classify")\n')
+  // the paid steps print one summary line (a step that ends without it is reported as such)
+  fs.writeFileSync(classify, 'import json, sys\nstep = "reading" if "--manual" in sys.argv else "engine" if "--jobs" in sys.argv else "classification"\nprint(json.dumps({"step": step, "candidates": 0, "waiting": 0, "stopped": None}))\n')
   const script = path.join(dir, 'driver.py')
   fs.writeFileSync(script, `
 import sys
@@ -257,7 +258,7 @@ describe.skipIf(!hasPython)('a real run over fake steps', () => {
     expect(fs.existsSync(path.join(dir, 'scored'))).toBe(true)
     expect(after.run.status).toBe('ok')
     expect(after.events.map((e) => e.type)).toEqual([
-      'run_start', 'step_start', 'source_start', 'source_end', 'step_end', 'step_start', 'step_end', 'step_skipped', 'step_skipped', 'step_start', 'step_end', 'run_end',
+      'run_start', 'step_start', 'source_start', 'source_end', 'step_end', 'step_start', 'step_end', 'step_start', 'step_end', 'step_skipped', 'step_start', 'step_end', 'run_end',
     ])
     expect((await startRescrape(body, opts)).status).toBe(202)
     await until(async () => !(await rescrapeStatus(0, opts)).body.active)

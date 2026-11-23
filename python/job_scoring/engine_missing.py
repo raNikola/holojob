@@ -193,7 +193,7 @@ def describe(est: dict, selection: dict, max_usd: float | None) -> list[str]:
     return lines
 
 
-def _summary(candidates: int, filled: int, failed: int, waiting: int, stopped: str | None, reserved: float = 0.0) -> str:
+def _summary(candidates: int, filled: int, failed: int, waiting: int | None, stopped: str | None, reserved: float = 0.0) -> str:
     return run_budget.summary_line("engine", candidates=candidates, filled=filled, failed=failed, waiting=waiting, stopped=stopped, reservedUsd=reserved)
 
 
@@ -210,6 +210,7 @@ def rescrape_main(args) -> int:
             engine, jobs, send, profile, selection = build(args.jobs, None, None, rescrape=True, run_start=args.run_start)
         except SystemExit as exc:
             print(f"engine: skipped, {exc}")
+            print(_summary(0, 0, 0, None, run_budget.STOP_NOT_SENT))
             return 0
         order = [k for k in engine.plan_order if k in send]
         candidates = len(order)

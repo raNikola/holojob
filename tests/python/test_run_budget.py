@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import ai_gate
+import classify_new
 import enrich_jobs
 import run_budget
 
@@ -126,6 +127,49 @@ def test_reading_plan_takes_target_and_adjacent_only_skips_blocked_and_reads_wea
     chosen, candidates, over, limits, skipped = enrich_jobs._plan_rescrape(args, pending)
     assert [j["jobId"] for _, j in chosen] == ["n1", "t1", "a1"], "this run's ad first, then Strong, Possible; the ads limit leaves the weak one waiting"
     assert (candidates, over, skipped) == (4, 1, 2), "an ad of another class and an already blocked ad are never read"
+
+
+def test_an_ad_read_before_keeps_its_block_unsettled_and_is_read_again(monkeypatch, tmp_path):
+    import role_class
+
+    monkeypatch.setattr(role_class, "label", lambda rows, path=None: [r.update(roleClass="target") for r in rows])
+    scored = tmp_path / "scored.json"
+    scored.write_text(json.dumps({"jobs": [{"jobId": "loc", "matchScore": 90, "blockedBy": ["location"]},
+                                           {"jobId": "spons", "matchScore": 90, "blockedBy": ["sponsorship"], "llmFacts": {"_fingerprint": "abc"}}]}))
+    args = type("A", (), {"max_usd": 1.0, "max_ads": 9, "scored": scored, "run_start": None, "counted_ids": None})()
+    chosen, candidates, over, limits, skipped = enrich_jobs._plan_rescrape(args, [(1, {"jobId": "loc"}), (2, {"jobId": "spons"})])
+    assert [j["jobId"] for _, j in chosen] == ["spons"] and skipped == 1, "a block that needs no reading is settled; one owed to an earlier reading is checked again"
+
+
+def test_the_three_steps_name_an_ad_by_the_same_job_id_in_the_ledger():
+    """The distinct-ads count is read from the ledger: classification, reading and the engine must all record the row's jobId."""
+    from match_engine import matcher
+
+    row = {"jobId": "ad-1", "title": "PM", "description": "x"}
+    assert matcher.posting_from_job(row)["id"] == "ad-1"
+    assert classify_new.posting_for_prompt(row)[0]["id"] == "ad-1"
+    assert 'ai_gate.context(feature="enrichment", job_id=job.get("jobId"))' in (ROOT / "python/job_scoring/enrich_jobs.py").read_text()
+
+
+@pytest.mark.parametrize("profile, price_known", [(False, True), (True, False)])
+def test_classification_that_cannot_send_still_reports_what_waits(monkeypatch, tmp_path, capsys, profile, price_known):
+    import pipeline_lock
+    import role_class
+    from test_classify_new import PROFILE, row
+    from test_classify_new_pipeline import FakeLock
+
+    path = tmp_path / "profile.json"
+    if profile:
+        path.write_text(json.dumps(PROFILE))
+    monkeypatch.setattr(pipeline_lock, "acquire", lambda: FakeLock())
+    monkeypatch.setattr(role_class, "store_path", lambda: tmp_path / "fit3.json")
+    monkeypatch.setattr(classify_new, "scoring_rows", lambda *a: [row("n1"), row("n2", description="a different ad text two")])
+    budget = {"dailyLimit": 1, "monthlyLimit": 1, "dailySpent": 0, "monthlySpent": 0}
+    monkeypatch.setattr(classify_new, "estimate", lambda todo, *a: {"send": [], "privacyRefused": [], "beyondAdLimit": 0, "provider": "p", "model": "m",
+                                                                  "priceKnown": price_known, "inputOnlyUsd": None, "worstCaseUsd": None, "maxUsd": 1, "budget": budget})
+    assert classify_new.main(["--profile", str(path), "--scored", str(tmp_path / "s.json"), "--confirm", "--rescrape", "--max-usd", "1", "--max-ads", "5"]) == 0
+    summary = json.loads(next(l for l in reversed(capsys.readouterr().out.splitlines()) if l.startswith("{")))
+    assert summary["step"] == "classification" and summary["stopped"] == "not_sent" and summary["waiting"] == 2
 
 
 def test_an_unset_limit_reads_nothing_but_counts_what_waits(monkeypatch, tmp_path):
