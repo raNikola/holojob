@@ -4,9 +4,9 @@ Principles: [redesign/DECISIONS.md](redesign/DECISIONS.md). Later decisions and 
 
 This is the only phase list; DECISIONS.md, CLAUDE.md and the README link here.
 
-## Status at a glance (2026-11-23)
+## Status at a glance
 
-`main` is `4a64657` (tag `release-20261123-rescrape-intake`) and equals `origin/main`. The owner deployed it on 2026-11-23, so everything merged before it is in the running image. Source: owner statement; the commit log shows no later commit.
+As of 2026-11-23. The deployed image is built from `4a64657` (tag `release-20261123-rescrape-intake`), the tip of `main` that day; the owner deployed it on 2026-11-23. Everything merged before it is in that image (an inference from the commit history; the owner named the 2026-11-23 items).
 
 | State | Items |
 |---|---|

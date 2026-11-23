@@ -13,18 +13,8 @@ Author: **Nikola Randjelovic** ([@raNikola](https://github.com/raNikola) · [cv.
 
 ## Status
 
-Holojob is being redesigned around evidence-based matching. The phase list, what is built and what is open:
-[docs/ROADMAP.md](docs/ROADMAP.md) (the only place that states a status).
-
-- Working today: discovery from six sources, enrichment of every ad into facts, six-dimension local
-  scoring (scoring 1.7) with caps and Blocked verdicts (sponsorship, language, place, clearance), a
-  Fit 3 role class per ad, three fit tiers in the Jobs list, optional LLM fit judgement, application
-  tracker, profile import, CV library with verified CV analysis, CV and cover letter tailoring behind
-  a fact gate, outreach contacts, Activity screen, automatic backups of the owner's files.
-- Re-scrape: one manual run does the whole intake of new ads (discovery, role classification,
-  reading, engine fill, scoring) under one per-run budget set in Settings > AI budget.
-- Evidence-based Fit (the redesign engine) runs in shadow mode; two of its outputs are live: the
-  role class and the engine-status ceiling.
+Holojob is being redesigned around evidence-based matching. What is built, deployed and open is stated
+in one place: [docs/ROADMAP.md](docs/ROADMAP.md). How it works today: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## How scoring works
 
@@ -123,14 +113,14 @@ Browser AI features (copilot, interview coach) keep their own provider settings 
 ## Privacy
 
 - Everything under `data/`, CVs, `.env` and keys are git-ignored and stay on the server.
-- Steps that send candidate data to an AI provider, each behind an explicit confirm and a redaction pass that fails
-  closed (name, phones, e-mails and links removed):
+- Steps that send candidate data to an AI provider, each behind a redaction pass that fails closed (name, phones,
+  e-mails and links removed) and, except engine fill, an explicit confirm:
   - **CV analysis** - the CV text, redacted first.
   - **Fit judgement** - a digest that never contains name, contacts, links, salary, locations, raw CV text or
     questionnaire answers.
   - **LLM tailoring** - the parsed CV sections, redacted, behind the fact gate, a server-enforced confirm and a preview.
-  - **Evidence matcher and engine fill** - a redacted evidence index built from the profile; in Re-scrape only when
-    Settings allow engine fill (off by default).
+  - **Evidence matcher and engine fill** - a redacted evidence index built from the profile. Engine fill in Re-scrape
+    has no per-run confirm: the confirm is on turning `allowEngineFill` on in Settings > AI budget (off by default).
 - Enrichment, role classification and reading of ads send the ad text only, never candidate data.
 - Every provider call goes through the budget gate. The full list of what each step sends:
   [`.claude/rules/privacy-inventory.md`](.claude/rules/privacy-inventory.md). Known gap: the browser AI features
@@ -160,10 +150,10 @@ podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work dock
 podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run test:js
 podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run build
 .venv/bin/python -m pytest tests/python -q
-sh scripts/test-tier.sh fast      # or full: the two pre-push tiers
+sh scripts/test-tier.sh fast|full    # the two pre-push tiers
 ```
 
-`npm test` and `npm run test:python` need Node and the `.venv` on one machine, so they work on neither side on DS9. Details: [CLAUDE.md](CLAUDE.md) (Tests).
+`npm test` and `npm run test:python` need Node and the `.venv` on one machine, so they work on neither side on DS9. Details: [CLAUDE.md](CLAUDE.md) (Test commands).
 
 ## Troubleshooting
 

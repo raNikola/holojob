@@ -185,7 +185,7 @@ A short separate lock would not be enough: `run_scoring.py` reads `manual_jobs.j
 **Why:** one process fetched, merged into the ledger, wrote four files and scored. A stop at any point either lost what was collected or left the files
 disagreeing, and "an ad was not in this search" was allowed to read as "the ad is gone". The run becomes three steps, each safe to repeat:
 **scrape** (collect, write staging only) -> **import** (the one commit) -> **scoring** (reads the committed data). Slice names: **S1 to S7**
-([ROADMAP.md](ROADMAP.md#status-at-a-glance-2026-11-23)); "slice 2b / 3 / 4" in older entries mean S6 / S7 / S5.
+([ROADMAP.md](ROADMAP.md#status-at-a-glance)); "slice 2b / 3 / 4" in older entries mean S6 / S7 / S5.
 
 **Approved decisions (owner, 2026-11-03):**
 
@@ -300,7 +300,7 @@ Nothing is imported for real in S3: `import_run.py` refuses without `--dry-run` 
 
 ## Owner decisions: baseline score, role filter, Infostud, testing (2026-11-03)
 
-Recorded from the owner's addendum. Docs only; no code changed. Backlog entries: [ROADMAP.md](ROADMAP.md#status-at-a-glance-2026-11-23).
+Recorded from the owner's addendum. Docs only; no code changed. Backlog entries: [ROADMAP.md](ROADMAP.md#status-at-a-glance).
 
 1. **Scoring baseline.** A made-up manual job with a junk description scored 44 (Weak, P3, Maybe; Role 45, Skill 20, Industry 55, Experience 65, Location 50, Culture 58).
    The owner expects at most about 5 and an "insufficient data" label. **Deferred** to the end of the current Activity work and solved with the scoring fix
@@ -1225,7 +1225,7 @@ list from 56 to 1,990 rows, cut the corpus from 55 to 8 and moved the generation
 
 ## Roadmap v2 and the single discovery safety rule (2026-11-04)
 
-Owner-approved, GPT-reviewed. Documentation only: no code, test or data changed. History above is not rewritten; where an earlier entry conflicts with this section, this section wins. The wave table is in [ROADMAP.md](ROADMAP.md#status-at-a-glance-2026-11-23). Goal: Scoring -> Matching -> Application Tracking.
+Owner-approved, GPT-reviewed. Documentation only: no code, test or data changed. History above is not rewritten; where an earlier entry conflicts with this section, this section wins. The wave table is in [ROADMAP.md](ROADMAP.md#status-at-a-glance). Goal: Scoring -> Matching -> Application Tracking.
 
 **State:** S1 to S8b are built, deployed from a clean build and merged to main at `e8995ed`. The "Built, not deployed" statuses in ROADMAP.md were stale and are corrected.
 
@@ -1284,7 +1284,7 @@ Planning only. No application code, dependency, test or data changed, and the re
 
 **Implementation choices (standard, not owner decisions):** `src/components/ds/` for registry files; exact version pins; `shadcn` and `tw-animate-css` as dev dependencies; `native-select` before `select`; the repo's dark variant kept until the `dark:` colour uses are gone; `window.confirm` kept in MVP; a ratchet test for palette classes.
 
-**Open PO decisions** (details in [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md#approved-decisions)):
+**Open PO decisions** (details in [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md)):
 
 - O1: approval of the extension token values and aliases.
 - O2: sequencing of slices against Waves 2 to 5.
@@ -1312,7 +1312,7 @@ Owner decision. Still planning only: no application code, dependency, test or da
 - **New:** `--font-sans` collides by name with the repo's DM Sans, and `body` reads it, so it moves only in the global cutover. Dark `--primary` as text fell from 2.72:1 to 2.23:1. `shadcn apply` over an existing preset leaves the old font import and dependency behind.
 - **Closed assumptions:** Geist has Serbian Latin and Cyrillic glyphs and a working `tnum`, read from the font files.
 
-**Open decisions re-evaluated** ([details](design-system/REDESIGN_BACKLOG.md#approved-decisions)): O4 closed, as serif is gone. O1 changed and still open: values are the same, and `--info` now sits near the blue primary. O10 is new: what replaces `text-teal-*` given dark `--primary` as text. O2, O3, O5, O6, O7, O8 and O9 are unchanged.
+**Open decisions re-evaluated** ([details](design-system/REDESIGN_BACKLOG.md)): O4 closed, as serif is gone. O1 changed and still open: values are the same, and `--info` now sits near the blue primary. O10 is new: what replaces `text-teal-*` given dark `--primary` as text. O2, O3, O5, O6, O7, O8 and O9 are unchanged.
 
 **Constraints kept:** React and Vite, no React Router, `src/components/ds/` isolated until migration, no change to business logic, APIs, routing or state, no new browser storage keys, current sidebar and Settings draft behaviour preserved, semantic colours centralized as extension tokens, no invented token values without approval, small independent branches and PRs later.
 
@@ -2485,4 +2485,4 @@ The full pipeline and Re-scrape run `classify_new.py --confirm --max-usd 0.05 --
 
 ## Deployed 2026-11-23: scoring 1.7 and packages 12 to 15 (owner statement; deploy record)
 
-The owner deployed on 2026-11-23, from `main` at `4a64657` (tag `release-20261123-rescrape-intake`, equal to `origin/main`): scoring 1.7 (a target role class is on-track), kept and applied ads in the scored list (packages 12 and 13), automatic backups with the save guard, the display labels, role classification in Re-scrape (package 14) and the Re-scrape full intake with its budget priority (package 15 and both follow-ups). The same image contains everything merged before it. Open after the deploy: the first real Re-scrape (the run limit and `allowEngineFill` are set in Settings > AI budget first), and the warning "36 ads could not be loaded with their text", whose cause is not known. Earlier tags `release-20261118-*` to `release-20261123-*` mark the commits each release was built from; a per-release deploy date is recorded only where an entry above says so (scoring 1.5 and 1.6).
+The owner deployed on 2026-11-23, from `main` at `4a64657` (tag `release-20261123-rescrape-intake`, equal to `origin/main`): scoring 1.7 (a target role class is on-track), kept and applied ads in the scored list (packages 12 and 13), automatic backups with the save guard, the display labels, role classification in Re-scrape (package 14) and the Re-scrape full intake with its budget priority (package 15 and both follow-ups). The same image contains everything merged before it. What is still open after the deploy: [ROADMAP.md](ROADMAP.md#open-items). Earlier tags `release-20261118-*` to `release-20261123-*` mark the commits each release was built from; a per-release deploy date is recorded only where an entry above says so (scoring 1.5 and 1.6).
