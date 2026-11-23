@@ -78,7 +78,8 @@ export async function runDiscovery({ providers, country, locations, intelligence
 export async function runScoring() {
   // Hand-entered jobs saved while the server was away are handed over first, so this re-score includes them.
   await syncManualJobs()
-  await syncKeptIds().catch(() => false) // forget re-scored ads whose Keep was removed
+  // Forget re-scored ads whose Keep was removed and register the owner's ads. A failure does not stop the run; the caller shows a notice.
+  const keptSynced = await syncKeptIds().catch(() => false)
   const res = await fetch('/api/scoring/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -88,7 +89,7 @@ export async function runScoring() {
   if (!res.ok) {
     throw new Error(data.stderr || data.error || 'Scoring run failed')
   }
-  return data
+  return { ...data, keptSynced }
 }
 
 /** What a judged run would send, to whom, and how many jobs; sends nothing. */

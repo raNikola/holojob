@@ -106,3 +106,18 @@ def test_prune_never_touches_scored_rows(env):
     before = env["scored"].read_text()
     assert rescore_kept.main(["--prune", "", "--kept", str(env["kept"])]) == 0
     assert kept_ads.load(env["kept"]) == {} and env["scored"].read_text() == before
+
+
+def test_the_route_entry_point_starts_and_registers_owner_ads_without_the_test_path(env, tmp_path):
+    """Regression (package 13): /api/jobs/kept/sync starts rescore_kept.py by path. Under pytest `python/` is on sys.path, in the container it is not,
+    so `import match_engine` failed, the sync answered 500 and no owner ad was ever registered. Run it as the route does: a clean interpreter."""
+    import subprocess
+    import sys
+
+    script = ROOT / "python" / "job_scoring" / "rescore_kept.py"
+    args = [sys.executable, "-I", str(script), "--prune=kept1,gone1", "--register", "--jobs", str(env["jobs"]), "--kept", str(env["kept"])]
+    done = subprocess.run(args, cwd=tmp_path, capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr[-400:]
+    out = json.loads(done.stdout.strip().splitlines()[-1])
+    assert out["ok"] is True and out["registered"]["registered"] == 1
+    assert set(kept_ads.load(env["kept"])) == {"kept1"}

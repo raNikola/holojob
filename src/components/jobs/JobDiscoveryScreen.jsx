@@ -273,11 +273,14 @@ export default function JobDiscoveryScreen() {
     setBusyAction('score')
     setRunToast(null)
     try {
-      await runScoring()
+      const run = await runScoring()
       const jobs = await loadLatestScoredJobs()
       setState((prev) => importJobsFromFile(jobs, prev))
       const strong = tierCounts(jobs.jobs, (j) => !isClosedAd(j)).strong
-      setRunToast({ kind: 'success', text: `Re-scored ${jobs.jobs?.length || 0} jobs, ${strong} Strong fit.` })
+      const text = `Re-scored ${jobs.jobs?.length || 0} jobs, ${strong} Strong fit.`
+      setRunToast(run?.keptSynced === false
+        ? { kind: 'warn', text: `${text} Your kept and applied ads could not be registered for scoring, so some may be missing from this run. Check the server, then Re-score again.` }
+        : { kind: 'success', text })
     } catch (e) {
       setRunToast({ kind: 'error', text: `Re-score failed: ${e.message}` })
     } finally {

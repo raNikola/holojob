@@ -19,6 +19,9 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 for extra in (SCRIPT_DIR, ROOT / "python" / "job_import"):
     if str(extra) not in sys.path:
         sys.path.insert(0, str(extra))
+# match_engine (imported by role_class) lives under python/. The route starts this file by path, so nothing else puts it on sys.path.
+if str(ROOT / "python") not in sys.path:
+    sys.path.append(str(ROOT / "python"))
 
 import job_history  # noqa: E402
 import kept_ads  # noqa: E402

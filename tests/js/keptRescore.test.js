@@ -57,6 +57,21 @@ describe('rescoreKeptAd', () => {
   })
 })
 
+describe('runScoring and a failed kept sync', () => {
+  it('still scores, and reports that the owner ads were not registered', async () => {
+    const { runScoring } = await import('../../src/modules/jobs/pipelineRunner.js')
+    const calls = []
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      calls.push(url)
+      if (url === '/api/jobs/kept/sync') return { ok: false, status: 500, json: async () => ({ ok: false, error: 'prune_failed' }) }
+      return { ok: true, status: 200, json: async () => ({ jobCount: 1 }) }
+    }))
+    const result = await runScoring()
+    expect(calls).toContain('/api/scoring/run')
+    expect(result.keptSynced).toBe(false)
+  })
+})
+
 describe('syncKeptIds', () => {
   it('sends only the ids that are kept', async () => {
     const fetchFn = reply(200, { ok: true })
