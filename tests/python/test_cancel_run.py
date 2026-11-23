@@ -92,6 +92,7 @@ sys.path.insert(0, {python!r})
 import run_rescrape
 run_rescrape.DISCOVERY = {discovery!r}
 run_rescrape.SCORING = {scoring!r}
+run_rescrape.CLASSIFY = {classify!r}
 sys.exit(run_rescrape.main(sys.argv[1:]))
 """
 
@@ -102,7 +103,9 @@ def fake(tmp_path):
     marks.mkdir()
     (tmp_path / "fake_discovery.py").write_text(FAKE_DISCOVERY.format(job_discovery=str(PY / "job_discovery"), job_scoring=str(PY / "job_scoring"), marks=str(marks)))
     (tmp_path / "fake_scoring.py").write_text(FAKE_SCORING.format(marks=str(marks)))
-    (tmp_path / "driver.py").write_text(DRIVER.format(python=str(PY), discovery=str(tmp_path / "fake_discovery.py"), scoring=str(tmp_path / "fake_scoring.py")))
+    (tmp_path / "fake_classify.py").write_text("print(\"classification: nothing to classify\")\n")
+    (tmp_path / "driver.py").write_text(DRIVER.format(python=str(PY), discovery=str(tmp_path / "fake_discovery.py"), scoring=str(tmp_path / "fake_scoring.py"),
+                                                      classify=str(tmp_path / "fake_classify.py")))
     started = []
 
     def start(run_id=RUN_ID, **env):
@@ -227,7 +230,7 @@ def test_cancel_during_scoring_stops_scoring_and_keeps_the_import(fake):
     assert run_rescrape.cancel(RUN_ID)["result"] == "cancel_requested"
     assert proc.wait(30) == 0
     saved = on_disk(RUN_ID)
-    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("scoring", "cancelled")]
+    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("classification", "ok"), ("scoring", "cancelled")]
     assert saved["status"] == "ok" and saved["cancel"]["outcome"] == "imported_before_cancel", "the scrape was imported and counts"
     assert not (fake.marks / "scoring-done").exists() and lock_is_free()
 
@@ -291,7 +294,7 @@ def test_a_request_for_one_run_never_reaches_the_next(fake):
     proc = fake.start(run_id="second0000002")
     assert proc.wait(30) == 0
     saved = on_disk("second0000002")
-    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok", "ok"]
+    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok", "ok", "ok"]
 
 
 def test_the_run_after_a_cancelled_one_starts_at_once_and_finishes(fake):
@@ -575,6 +578,7 @@ import sys
 sys.path.insert(0, {python!r})
 import run_rescrape
 run_rescrape.SCORING = {scoring!r}
+run_rescrape.CLASSIFY = {classify!r}
 sys.exit(run_rescrape.main(sys.argv[1:]))
 """
 
@@ -725,6 +729,6 @@ def test_the_real_run_cancelled_mid_scrape_commit_point_and_hard_kill(scratch):
     # E: the next run starts at once and runs to its end, scoring included, whatever was requested before.
     assert scratch.start("runE00000005").wait(60) == 0
     saved = on_disk("runE00000005")
-    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok", "ok"]
+    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok", "ok", "ok"]
     assert ledger()["generation"] == 4 and counted_runs()[-1] == "runE00000005" and applied_runs()[-1] == "runE00000005"
     assert view_lock_free(jobs) and lock_is_free()

@@ -211,8 +211,10 @@ def start(args) -> int:
         succeeded = True
         try:
             for name, cmd in step_commands(args):
-                if name == "scoring" and run_log.cancel_requested(record):
+                if name in ("classification", "scoring") and run_log.cancel_requested(record):
                     run_log.event(record, "step_skipped", step=name, reason="cancelled")
+                    if name == "classification":
+                        continue  # the count is skipped too; the scoring check below ends the run
                     break  # the scrape was imported before the request came: it counts, and only scoring is left undone
                 record, succeeded = run_step(record, name, cmd, lock)
                 if not succeeded:
