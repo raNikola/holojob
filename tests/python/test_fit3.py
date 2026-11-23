@@ -607,7 +607,7 @@ def test_production_candidate_is_i1():
         fit3.clear_candidate()
 
 
-def test_stamp_reads_a_temp_store_under_i1_and_restores_the_prompt(tmp_path):
+def test_label_reads_a_temp_store_under_i1_and_restores_the_prompt(tmp_path):
     import role_class
     job = {"jobId": "a", "title": "Product Manager", "company": "Acme", "description": AD}
     roles, comps = fit3.load_roles(), fit3.closed_competencies("product")
@@ -617,7 +617,7 @@ def test_stamp_reads_a_temp_store_under_i1_and_restores_the_prompt(tmp_path):
     store = tmp_path / "fit3.json"
     store.write_text(json.dumps({"version": 1, "entries": {key: {"reply": reply(), "answers": None}}}))
     rows = [dict(job), {**job, "jobId": "b", "description": AD + " other"}]
-    counts = role_class.stamp(rows, store)
+    counts = role_class.label(rows, store)
     assert [r["roleClass"] for r in rows] == ["target", "not available"] and counts["target"] == 1
     assert fit3.PROMPT_VERSION == 2
-    assert role_class.stamp([dict(job)], tmp_path / "missing.json")["not available"] == 1
+    assert role_class.label([dict(job)], tmp_path / "missing.json")["not available"] == 1

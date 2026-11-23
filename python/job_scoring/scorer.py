@@ -36,13 +36,13 @@ WEIGHTS_FILE = Path(__file__).resolve().parents[2] / "src" / "data" / "scoringWe
 DEFAULT_WEIGHTS = json.loads(WEIGHTS_FILE.read_text(encoding="utf-8"))
 
 # Stamped on every scored row. 1.6 (owner briefs 2026-11-18 and 2026-11-19; the fixes that passed the pre-registered guard): role class other caps
-# at Weak (ceilings.py, applied by role_class.stamp); a security clearance or US-status requirement is a blocker; an onsite or hybrid job outside the
+# at Weak (ceilings.py, applied by role_class.ceiling); a security clearance or US-status requirement is a blocker; an onsite or hybrid job outside the
 # relocation scope is capped at Weak; clear remote wording in the ad wins over a structured onsite field; an ad whose engine answers mark 30% or more of its
 # decided must requirements unmet or not evidenced is capped at Good (ceilings.py, applied by run_scoring where engine answers exist). The Skill-dimension
 # change (role-title tokens out) failed the guard and is off. 1.5: the visa caps (25 / 40 / 45) and the language cap are gone from matchScore and
 # shown as eligibility states beside it; "Not read" ads get no Fit Score and the cap-5 insufficient rule is replaced by
 # read status; a profile with no skills gets no score above 50; extraction facts of an unknown shape count as no facts.
-SCORING_VERSION = "1.6"
+SCORING_VERSION = "1.7"
 # A profile with no skill stack scores every ad on neutral baselines: capped, with a marker (never a confident score).
 NO_PROFILE_STACK_CAP = 50
 
@@ -104,6 +104,27 @@ def track_has_evidence(facts: dict) -> bool:
     return facts.get("roleTrack") != "other" and bool((facts.get("roleTrackEvidence") or "").strip())
 
 
+def role_class_is_target(job: dict) -> bool:
+    """Whether the ad's Fit 3 role class (from its responsibilities, stamped before scoring: role_class.label) is "target"."""
+    return job.get("roleClass") == "target"
+
+
+def role_on_track(job: dict, family_tracks: set[str] | None) -> bool | None:
+    """The one answer to "is this the right job", read by the engine gate, the off-track cap and the unrelated-title cap (scoring 1.7).
+
+    True: the ad's role class is target (what the ad's responsibilities describe), whatever its title or track says. Industry is never read.
+    Otherwise as before 1.7: True/False by the extracted role track against the family's accepted tracks, None (unknown) when there is no family
+    or no usable track. Adjacent, other and "not available" take that track test. Unknown never lowers.
+    """
+    if role_class_is_target(job):
+        return True
+    facts = job.get("llmFacts") or {}
+    track = facts.get("roleTrack")
+    if not track or family_tracks is None or not track_has_evidence(facts):
+        return None
+    return track in family_tracks
+
+
 def accepted_tracks(intelligence: dict) -> tuple[str | None, set[str] | None]:
     """The candidate's role family and the role tracks it accepts; (None, None) when none is set."""
     family = intelligence.get("roleFamily") or None
@@ -132,7 +153,9 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
     # The title tier is read first: an ad whose title is outside the target roles gets no industry transfer (and is capped below).
     facts = job.get("llmFacts") or {}
     family, family_tracks = accepted_tracks(intelligence)
-    title_capped = title_tier(job.get("title") or "", role_score, family, facts) == UNRELATED
+    # 1.7: an ad whose responsibilities are a target role is never capped for its title (the title is not an exception: only the class is).
+    title_capped = (title_tier(job.get("title") or "", role_score, family, facts) == UNRELATED
+                    and not role_class_is_target(job))
     industry_score, industry_reasons, transferability = score_industry_match_detail(
         job, intelligence, transfer_allowed=not title_capped)
     exp_score, exp_reasons = score_experience_match(job, intelligence)
@@ -158,8 +181,7 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         match_score = min(match_score, 54)
 
     track = facts.get("roleTrack")
-    off_track = (bool(track) and track_has_evidence(facts)
-                 and family_tracks is not None and track not in family_tracks)
+    off_track = role_on_track(job, family_tracks) is False
     if off_track:
         match_score = min(match_score, OFF_TRACK_CAP)
     if title_capped:

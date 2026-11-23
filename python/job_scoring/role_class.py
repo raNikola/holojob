@@ -1,7 +1,7 @@
 """Role class stamp (Fit 3, production): `roleClass` / `roleName` on scored rows, from the stored classification in data/cache/fit3.json.
 
 Badge, filter and (1.6) the role ceiling of ceilings.py: nothing here orders or calls a model. Every path that scores rows (a full run, a manual job, a kept ad's Re-score) calls
-`stamp`, so a row is the same whichever path wrote it. The classification key carries the prompt version, so the lookup runs under the frozen candidate i1
+`label` before scoring and `ceiling` after it (1.7), so a row is the same whichever path wrote it. The classification key carries the prompt version, so the lookup runs under the frozen candidate i1
 (`fit3.PRODUCTION_CANDIDATE`); a prompt change needs a new classification run.
 """
 
@@ -20,8 +20,9 @@ def store_path():
     return shadow.CACHE_PATH.with_name("fit3.json")
 
 
-def stamp(scored: list[dict], path=None) -> dict[str, int]:
-    """Stamp every row; no store or an unreadable one means every ad is "not available". Returns the counts per class."""
+def label(rows: list[dict], path=None) -> dict[str, int]:
+    """Stamp `roleClass` / `roleName` on every row, BEFORE scoring (1.7: the scorer's gate and caps read the class). No store or an unreadable one means
+    every ad is "not available". Returns the counts per class."""
     path = path or store_path()
     store = None
     if path.exists():
@@ -30,8 +31,9 @@ def stamp(scored: list[dict], path=None) -> dict[str, int]:
         except (OSError, ValueError) as exc:
             print(f"role class: fit3.json unreadable ({type(exc).__name__}), every ad is 'not available'", file=sys.stderr)
     with fit3.production_candidate():
-        counts = fit3.role_labels(scored, store, fit3.load_roles(), fit3.closed_competencies("product"))
-    # Scoring 1.6: a class of other / not available caps the Fit Score at Weak. The class is known only here, so the ceiling is applied here,
-    # on every path that stamps.
-    counts["ceilingLowered"] = ceilings.apply_role_ceiling(scored)
-    return counts
+        return fit3.role_labels(rows, store, fit3.load_roles(), fit3.closed_competencies("product"))
+
+
+def ceiling(scored: list[dict]) -> int:
+    """Scoring 1.6: a class of other / not available caps the Fit Score at Weak. Runs AFTER scoring (it caps the finished score). Returns rows lowered."""
+    return ceilings.apply_role_ceiling(scored)

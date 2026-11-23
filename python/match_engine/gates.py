@@ -32,7 +32,7 @@ import re
 import work_authorization as wa
 from dimensions import location_match as lm
 from salary import below_minimum, parse_monthly_eur
-from scorer import accepted_tracks, track_has_evidence
+from scorer import accepted_tracks, role_on_track
 from text_utils import normalize_text
 
 from .verify import CONFIRMED_FACT_STRENGTH, _resolved
@@ -444,14 +444,13 @@ def role_family_result(job: dict, role_family: str | None) -> str:
 
     Unknown when the profile sets no family, the ad's track was not read, or
     the track is "other" or has no evidence quote: nothing is assumed in any
-    of those cases (scorer.track_is_off_track).
+    of those cases. An ad whose Fit 3 role class is target passes (scorer.role_on_track, scoring 1.7).
     """
-    facts = job.get("llmFacts") or {}
-    track = facts.get("roleTrack")
-    if not track or not role_family or not track_has_evidence(facts):
+    if not role_family:
         return UNKNOWN
     _, tracks = accepted_tracks({"roleFamily": role_family})
-    return PASS if track in tracks else FAIL
+    on_track = role_on_track(job, tracks)  # the scorer's one answer (1.7): a target role class passes
+    return UNKNOWN if on_track is None else PASS if on_track else FAIL
 
 
 def gate_results(job: dict, candidate: dict, quotes=None, requirements: list[dict] | None = None) -> list[dict]:

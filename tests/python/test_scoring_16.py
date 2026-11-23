@@ -326,9 +326,9 @@ def test_the_ceiling_can_be_switched_off_for_the_measurement(monkeypatch):
 
 # --- the version --------------------------------------------------------------------------------------------------------
 
-def test_the_scoring_version_is_1_6():
-    assert scorer.SCORING_VERSION == "1.6"
-    assert score_job(job(), intel(**BANK))["scoringVersion"] == "1.6"
+def test_the_scoring_version_is_1_7():
+    assert scorer.SCORING_VERSION == "1.7"
+    assert score_job(job(), intel(**BANK))["scoringVersion"] == "1.7"
 
 
 def test_only_the_fixes_that_passed_the_guard_run_in_production():

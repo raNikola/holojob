@@ -2,7 +2,7 @@
 
   ROLE_CEILING   role class "other" caps the Fit Score at Weak (benchmarks: CareerPulse role_match cap, ApplyPack role-type ceiling).
                  "not available" never lowers a score: unknown does not lower (owner decision 2026-11-19). The class is stamped after
-                 scoring (role_class.stamp), so this runs there.
+                 scoring (role_class.ceiling), so this runs there.
   LOCATION_CAP   an onsite or hybrid job outside the profile's relocation scope: Weak, not Blocked (scorer.py).
   UNMET_CAP      the share of the ad's must requirements the evidence engine marks unmet reaches theta: Good. Applied after the engine
                  answers are read (run_scoring), only while a theta is set; an ad with no engine answers is never capped.

@@ -225,8 +225,11 @@ def _score(args: argparse.Namespace) -> int:
         # replaced with one that raises.
         enhancer = local_enhancer(identity, provider, model, args.judge_threshold)
 
+    # 1.7: the role class is stamped before scoring (the gate and two caps read it); the role ceiling stays after.
+    role_counts = role_class.label(jobs)
     scored = score_jobs(jobs, intelligence, enhancer, workers=args.workers)
-    print(f"role class: {role_class.stamp(scored)}", file=sys.stderr)
+    role_counts["ceilingLowered"] = role_class.ceiling(scored)
+    print(f"role class: {role_counts}", file=sys.stderr)
     c = enhancer.counts
 
     # Shadow mode (ENGINE_CONTRACT.md section 7): adds engineShadow to each job

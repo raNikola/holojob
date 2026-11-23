@@ -51,11 +51,12 @@ def run(job_id: str, *, intelligence: Path, jobs: Path, manual: Path, scored: Pa
         import run_scoring  # noqa: PLC0415
 
         # The one Re-score path: cached judgements re-applied, a model call raises (run_scoring.local_enhancer).
+        role_class.label(rows)  # before scoring (1.7)
         scored_rows = score_jobs(rows, json.loads(intelligence.read_text(encoding="utf-8")), run_scoring.local_enhancer(run_scoring.identity_of(run_scoring._load_profile())))
         row = next((r for r in scored_rows if r.get("jobId") == job_id), None)
         if row is None:
             return 4, {"ok": False, "error": "not_in_history"}
-        role_class.stamp([row])
+        role_class.ceiling([row])
         ceilings.stamp_engine_coverage([row], False)
         import_job_url.merge_into_scored([row], scored, meta_key="lastKeptRescoreAt")
         return 0, {"ok": True, "job": row}

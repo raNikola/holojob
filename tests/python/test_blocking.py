@@ -178,7 +178,7 @@ def test_rescore_blocks_without_a_model_call(tmp_path, monkeypatch):
     assert run_scoring.main() == 0
     row = json.loads(output.read_text())["jobs"][0]
     assert row["priority"] == "Blocked" and row["applyRecommendation"] == "Blocked" and row["blockedBy"][0]["kind"] == "sponsorship_refused"
-    assert row["scoringVersion"] == "1.6"
+    assert row["scoringVersion"] == "1.7"
 
 
 # --- Step 2c: language blocks must be confirmed; the original verdict is kept ------------------------------------------

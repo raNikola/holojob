@@ -351,10 +351,12 @@ def run_job_json(args) -> int:
         intelligence = json.loads(args.intelligence.read_text(encoding="utf-8"))
         # The corpus a full run scores (term rarity is measured over it), so the row equals the one Re-score writes.
         corpus = manual_jobs.with_manual(discovered_jobs, stored)
-        scored = [j for j in score_jobs([dict(j) for j in corpus], intelligence) if j.get("jobId") in ids]
+        corpus_rows = [dict(j) for j in corpus]
+        role_class.label(corpus_rows)  # before scoring (1.7)
+        scored = [j for j in score_jobs(corpus_rows, intelligence) if j.get("jobId") in ids]
         for job in scored:
             manual_jobs.mark_missing_facts(job)
-        role_class.stamp(scored)
+        role_class.ceiling(scored)
         ceilings.stamp_engine_coverage(scored, False)  # no engine in this path
         merge_into_scored(scored, args.scored, keep=("tailoredAssets", "status"), meta_key="lastManualJobAt")
     except Exception as exc:  # the message may quote job text; only the class is reported
@@ -440,8 +442,10 @@ def import_locked(args) -> int:
         # Score only the new jobs and merge into scored_jobs.json (preserves tailoredAssets)
         if args.intelligence.exists():
             intelligence = json.loads(args.intelligence.read_text(encoding="utf-8"))
-            imported_rows = score_jobs([dict(j) for j in imported], intelligence)
-            role_class.stamp(imported_rows)
+            to_score = [dict(j) for j in imported]
+            role_class.label(to_score)  # before scoring (1.7)
+            imported_rows = score_jobs(to_score, intelligence)
+            role_class.ceiling(imported_rows)
             ceilings.stamp_engine_coverage(imported_rows, False)
             merge_into_scored(imported_rows, args.scored)
         else:

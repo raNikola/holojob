@@ -357,6 +357,11 @@ answers, GitHub links, CV library) that are filled in on the server. A first sav
 The refusal is logged with field names only and shown in the app (`SaveRefusedNotice`). Limits: it stops emptying, not replacing with an older but filled copy;
 there is no override (save in smaller steps); scripts that write the files directly (restore, import, re-score) do not go through it.
 
+
+## Role class before scoring (scoring 1.7, 2026-11-23)
+
+`role_class.label(rows)` stamps `roleClass` / `roleName` from `data/cache/fit3.json` before `score_jobs`; `role_class.ceiling(scored)` applies the 1.6 role ceiling after it. The scorer reads the class through `scorer.role_on_track` (engine gate `role_family`, off-track cap 50) and `scorer.role_class_is_target` (unrelated-title cap 40 is skipped for a target class). The class is as fresh as the last paid Fit 3 classification (2026-11-18); ads added since are "not available" and take the old track test. Classifying new ads automatically is a later package.
+
 ## Container gotchas (detail)
 
 - **Bare `python` in the container is the venv.** `scripts/setup-job-discovery.sh`
