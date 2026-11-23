@@ -82,26 +82,79 @@ describe('how many versions are kept', () => {
     expect(fs.readFileSync(path.join(root, 'backups/auto/candidate-intelligence.json', kept[9]), 'utf8')).toBe('v13')
   })
 
-  it('the last 3 for scored_jobs.json', () => {
+  it('scored_jobs.json is not backed up by an ordinary write: no manual add, delete or restore uses up a version', () => {
     rewrite('jobs/scored_jobs.json', 6)
-    expect(versions('scored_jobs.json')).toHaveLength(3)
+    expect(versions('scored_jobs.json')).toEqual([])
+    expect(fs.existsSync(path.join(root, 'backups', 'auto', 'scored_jobs.json'))).toBe(false)
+  })
+
+  it('scored_jobs.json is backed up before a re-score only, as <stamp>-pre-rescore.json, the last 3', () => {
+    const f = put('jobs/scored_jobs.json', 'v0')
+    for (let i = 1; i <= 5; i += 1) {
+      const result = backupBeforeWrite(f, `v${i}`, { dataRoot: root, now: at(i), event: 'rescore' })
+      expect(path.basename(result.path)).toMatch(/^20261123-1000\d\d-pre-rescore\.json$/)
+      fs.writeFileSync(f, `v${i}`)
+    }
+    const kept = versions('scored_jobs.json')
+    expect(kept).toEqual(['20261123-100003-pre-rescore.json', '20261123-100004-pre-rescore.json', '20261123-100005-pre-rescore.json'])
+    expect(fs.readFileSync(path.join(root, 'backups/auto/scored_jobs.json', kept[0]), 'utf8')).toBe('v2')
+  })
+
+  it('ordinary writes in between never remove or add a pre-re-score version', () => {
+    const f = put('jobs/scored_jobs.json', 'v0')
+    for (let i = 1; i <= 3; i += 1) {
+      backupBeforeWrite(f, `v${i}`, { dataRoot: root, now: at(i), event: 'rescore' })
+      fs.writeFileSync(f, `v${i}`)
+    }
+    const before = versions('scored_jobs.json')
+    for (let i = 10; i < 20; i += 1) { // manual job adds and deletes: plain writes, no event
+      expect(backupBeforeWrite(f, `manual${i}`, { dataRoot: root, now: at(i) })).toBeNull()
+      fs.writeFileSync(f, `manual${i}`)
+    }
+    expect(versions('scored_jobs.json')).toEqual(before)
+    expect(before).toHaveLength(3)
+  })
+
+  it('the other three files are still backed up on every change, with plain names (no event needed)', () => {
+    const f = put('profile-enrichment.json', 'v0')
+    const first = backupBeforeWrite(f, 'v1', { dataRoot: root, now: at(1) })
+    expect(path.basename(first.path)).toBe('20261123-100001.json')
+    fs.writeFileSync(f, 'v1')
+    expect(backupBeforeWrite(f, 'v2', { dataRoot: root, now: at(2) })).not.toBeNull()
+  })
+
+  it('a re-score with identical content makes no backup', () => {
+    const f = put('jobs/scored_jobs.json', 'same')
+    expect(backupBeforeWrite(f, 'same', { dataRoot: root, event: 'rescore' })).toBeNull()
   })
 })
 
 describe('a restore from a backup zip', () => {
-  it('copies an owner file to data/backups/auto before it replaces it, and a failed backup stops the restore', async () => {
+  const zipOf = (name, data) => {
     const require = createRequire(import.meta.url)
     const AdmZip = require('adm-zip')
-    const zipOf = (name, data) => { const zip = new AdmZip(); zip.addFile(name, Buffer.from(data)); return zip.toBuffer() }
+    const zip = new AdmZip()
+    zip.addFile(name, Buffer.from(data))
+    return zip.toBuffer()
+  }
+
+  it('copies an owner file to data/backups/auto before it replaces it, and a failed backup stops the restore', async () => {
+    put('profile-enrichment.json', '{"v":"old"}')
+    await importBackupZip(tmp, zipOf('data/profile-enrichment.json', '{"v":"new"}'))
+    expect(fs.readFileSync(path.join(root, 'profile-enrichment.json'), 'utf8')).toBe('{"v":"new"}')
+    const [only] = versions('profile-enrichment.json')
+    expect(fs.readFileSync(path.join(root, 'backups/auto/profile-enrichment.json', only), 'utf8')).toBe('{"v":"old"}')
+    fs.rmSync(path.join(root, 'backups'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'backups'), 'a file where the folder should be')
+    await expect(importBackupZip(tmp, zipOf('data/profile-enrichment.json', '{"v":"newer"}'))).rejects.toThrow(/nothing was changed/)
+    expect(fs.readFileSync(path.join(root, 'profile-enrichment.json'), 'utf8')).toBe('{"v":"new"}')
+  })
+
+  it('restoring scored_jobs.json makes no backup and uses up none of the pre-re-score versions', async () => {
     put('jobs/scored_jobs.json', '{"jobs":["old"]}')
     await importBackupZip(tmp, zipOf('data/jobs/scored_jobs.json', '{"jobs":["new"]}'))
     expect(fs.readFileSync(path.join(root, 'jobs/scored_jobs.json'), 'utf8')).toBe('{"jobs":["new"]}')
-    const [only] = versions('scored_jobs.json')
-    expect(fs.readFileSync(path.join(root, 'backups/auto/scored_jobs.json', only), 'utf8')).toBe('{"jobs":["old"]}')
-    fs.rmSync(path.join(root, 'backups'), { recursive: true })
-    fs.writeFileSync(path.join(root, 'backups'), 'a file where the folder should be')
-    await expect(importBackupZip(tmp, zipOf('data/jobs/scored_jobs.json', '{"jobs":["newer"]}'))).rejects.toThrow(/nothing was changed/)
-    expect(fs.readFileSync(path.join(root, 'jobs/scored_jobs.json'), 'utf8')).toBe('{"jobs":["new"]}')
+    expect(fs.existsSync(path.join(root, 'backups'))).toBe(false)
   })
 })
 

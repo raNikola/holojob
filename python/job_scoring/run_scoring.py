@@ -348,7 +348,8 @@ def _score(args: argparse.Namespace) -> int:
     }
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    write_text_with_backup(args.output, json.dumps(payload, indent=2))  # the previous scored_jobs.json is kept first (last 3)
+    # The re-score is the one writer whose old scored_jobs.json is kept first (<stamp>-pre-rescore.json, the last 3); manual jobs come back from manual_jobs.json.
+    write_text_with_backup(args.output, json.dumps(payload, indent=2), event="rescore")
 
     shown = args.output.relative_to(ROOT) if args.output.is_relative_to(ROOT) else args.output
     print(f"Scored {len(scored)} jobs -> {shown}")

@@ -328,14 +328,17 @@ Carried over from the former "Next, in order" list (nothing else from it is stil
 
 ## Automatic backups and the save guard (2026-11-23)
 
-**Backups.** Before any write that changes one of `data/intelligence/candidate-intelligence.json`, `data/profile/candidate-profile.json`,
-`data/profile-enrichment.json` or `data/jobs/scored_jobs.json`, the file as it is now is copied to
-`data/backups/auto/<file name>/<YYYYMMDD-HHMMSS>.json` (UTC, files 600, folders 700, read back and hash-checked). The last 10 versions per file
-are kept, the last 3 for `scored_jobs.json`; the same code removes the older ones. Identical new content makes no backup (the profile is compared
-without its `meta.updatedAt`, which every save refreshes). If the backup cannot be written the write is refused with an error and nothing changes.
-Writers: `scripts/save-profile.js`, `scripts/save-intelligence.js` (so the two save routes, the pipeline run and the re-scrape push), the zip restore
-in `scripts/backup-handler.js`, `python/job_scoring/run_scoring.py`, `python/job_import/import_job_url.py` (a manual job add or delete rewrites
-`scored_jobs.json`, so it counts as one of its 3), `python/job_scoring/profile_enrichment.py`. Code: `scripts/auto-backup.js`, `python/job_scoring/auto_backup.py`.
+**Backups.** Before any write that changes one of `data/intelligence/candidate-intelligence.json`, `data/profile/candidate-profile.json` or
+`data/profile-enrichment.json`, the file as it is now is copied to `data/backups/auto/<file name>/<YYYYMMDD-HHMMSS>.json` (UTC, files 600, folders 700,
+read back and hash-checked). The last 10 versions per file are kept; the same code removes the older ones. Identical new content makes no backup (the
+profile is compared without its `meta.updatedAt`, which every save refreshes). If the backup cannot be written the write is refused with an error and
+nothing changes. Writers: `scripts/save-profile.js`, `scripts/save-intelligence.js` (so the two save routes, the pipeline run and the re-scrape push),
+the zip restore in `scripts/backup-handler.js`, `python/job_scoring/profile_enrichment.py`.
+**`data/jobs/scored_jobs.json` is different (owner decision 2026-11-23): it is backed up only immediately before a re-score** (`run_scoring.py`, the one
+writer that rebuilds it), as `data/backups/auto/scored_jobs.json/<YYYYMMDD-HHMMSS>-pre-rescore.json`, the last 3 of those. The other writers of that file (a
+manual job add, edit or delete in `import_job_url.py`, and the zip restore) make no backup and never use up the 3. That loses nothing: a manual job is
+saved in `manual_jobs.json` first and every re-score rebuilds the scored file from the discovered jobs plus that file. A re-score whose backup cannot
+be written is refused (the old file stays). Code: `scripts/auto-backup.js`, `python/job_scoring/auto_backup.py` (`event="rescore"`).
 A file outside the data folder (a scratch or test file) is never backed up.
 
 **Restore is manual, one copy.** List the versions, pick one, copy it over the file (the next write backs the current one up in turn):

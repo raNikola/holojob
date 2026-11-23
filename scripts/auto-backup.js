@@ -4,7 +4,10 @@
  *   data/backups/auto/<file name>/<YYYYMMDD-HHMMSS>.json     (UTC; files 600, folders 700; read back and hash-checked)
  *
  * Files: candidate-intelligence.json, candidate-profile.json, profile-enrichment.json, scored_jobs.json. Nothing else.
- * Kept: the last 10 versions per file, the last 3 for scored_jobs.json; older ones are removed here, after a successful backup.
+ * Kept: the last 10 versions per file; older ones are removed here, after a successful backup.
+ * scored_jobs.json is the exception (owner decision 2026-11-23): it is backed up ONLY immediately before a re-score (the caller passes
+ * `event: 'rescore'`; python/job_scoring/run_scoring.py), as `<stamp>-pre-rescore.json`, the last 3 of those. No other writer of that file
+ * (a manual job add or delete, a restore) makes a backup or uses up the 3: manual jobs are rebuilt from manual_jobs.json at every re-score.
  * A file that does not exist yet has nothing to back up. New content equal to the current content (the profile ignoring its
  * `meta.updatedAt`, which every save refreshes) makes no backup. When the backup cannot be written, `BackupError` is thrown and the
  * caller must not write. Restore is manual: copy a version back over the file (docs/ARCHITECTURE.md, "Automatic backups").
@@ -24,7 +27,10 @@ export const DATA_ROOT = path.join(ROOT, 'data')
 export const AUTO_BACKUP_FILES = ['candidate-intelligence.json', 'candidate-profile.json', 'profile-enrichment.json', 'scored_jobs.json']
 export const KEEP_DEFAULT = 10
 export const KEEP_BY_FILE = { 'scored_jobs.json': 3 }
-const VERSION_NAME = /^\d{8}-\d{6}(-\d+)?\.json$/
+/** Files that are backed up only for the named event, and the marker that event puts in the version's name. */
+export const EVENT_ONLY = { 'scored_jobs.json': 'rescore' }
+const EVENT_MARKER = { rescore: '-pre-rescore' }
+const VERSION_NAME = /^\d{8}-\d{6}(-\d+)?(-pre-rescore)?\.json$/
 
 export class BackupError extends Error {
   constructor(file) {
@@ -55,10 +61,11 @@ function insideDir(file, dir) {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
 }
 
-/** Keep the newest `keep` versions in `dir`. A failure to remove an old one never blocks the write that follows. */
-function prune(dir, keep) {
+/** Keep the newest `keep` versions of one kind (with or without the event marker) in `dir`. A failure to remove an old one never blocks the write that follows. */
+function prune(dir, keep, marker) {
   try {
-    const names = fs.readdirSync(dir).filter((n) => VERSION_NAME.test(n)).sort()
+    const marked = (n) => n.endsWith('-pre-rescore.json')
+    const names = fs.readdirSync(dir).filter((n) => VERSION_NAME.test(n) && marked(n) === (marker !== '')).sort()
     for (const old of names.slice(0, Math.max(0, names.length - keep))) {
       try { fs.unlinkSync(path.join(dir, old)) } catch (e) { console.warn(`[auto-backup] could not remove an old version of ${path.basename(dir)}: ${e.code || 'error'}`) }
     }
@@ -69,11 +76,14 @@ function prune(dir, keep) {
 
 /**
  * Back up `file` as it is now, if `newData` would change it. Returns { path, sha256 } of the backup, or null when none was needed
- * (not a guarded file, outside the data folder, no file yet, or identical content). Throws BackupError when it cannot be made.
+ * (not a guarded file, outside the data folder, no file yet, identical content, or a file that is backed up only for an event this
+ * call does not name). Throws BackupError when it cannot be made.
  */
-export function backupBeforeWrite(file, newData, { dataRoot = DATA_ROOT, now = new Date() } = {}) {
+export function backupBeforeWrite(file, newData, { dataRoot = DATA_ROOT, now = new Date(), event = null } = {}) {
   const name = path.basename(file)
   if (!AUTO_BACKUP_FILES.includes(name) || !insideDir(file, dataRoot)) return null
+  if (EVENT_ONLY[name] && EVENT_ONLY[name] !== event) return null // scored_jobs.json: only before a re-score
+  const marker = EVENT_MARKER[event] ?? ''
   let current
   try {
     current = fs.readFileSync(file)
@@ -89,8 +99,8 @@ export function backupBeforeWrite(file, newData, { dataRoot = DATA_ROOT, now = n
   try {
     fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE })
     const base = stamp(now)
-    target = path.join(dir, `${base}.json`)
-    for (let n = 2; fs.existsSync(target); n += 1) target = path.join(dir, `${base}-${n}.json`)
+    target = path.join(dir, `${base}${marker}.json`)
+    for (let n = 2; fs.existsSync(target); n += 1) target = path.join(dir, `${base}-${n}${marker}.json`)
     const fd = fs.openSync(target, 'wx', PRIVATE_FILE_MODE)
     try {
       fs.fchmodSync(fd, PRIVATE_FILE_MODE)
@@ -105,6 +115,6 @@ export function backupBeforeWrite(file, newData, { dataRoot = DATA_ROOT, now = n
     if (target) { try { fs.unlinkSync(target) } catch { /* nothing to remove */ } }
     throw new BackupError(name)
   }
-  prune(dir, KEEP_BY_FILE[name] ?? KEEP_DEFAULT)
+  prune(dir, KEEP_BY_FILE[name] ?? KEEP_DEFAULT, marker)
   return { path: target, sha256: sha256(current) }
 }
