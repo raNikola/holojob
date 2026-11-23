@@ -34,12 +34,17 @@ def env(tmp_path, monkeypatch):
     return tmp_path
 
 
-def fake_steps(monkeypatch, *, enriched=10, total=10, fail=None, deduped=10, calls=None, refused=None):
+def fake_steps(monkeypatch, *, enriched=10, total=10, fail=None, deduped=10, calls=None, refused=None, classify_out="", commands=None):
     """Replace run_step: each step writes the file the real one would."""
     calls = calls if calls is not None else []
 
     def run_step(name, cmd, steps):
         calls.append(name)
+        if commands is not None:
+            commands[name] = cmd
+        if name == "classification" and classify_out and name != fail:
+            steps.append({"step": name, "seconds": 0.1, "exitCode": 0})
+            return classify_out
         steps.append({"step": name, "seconds": 0.1, "exitCode": 1 if name == fail else 0})
         if name == fail:
             raise rp.StepFailed(name, "exited with code 1: boom")
@@ -235,3 +240,49 @@ def test_ads_enrichment_skipped_on_purpose_do_not_count_against_the_share():
     # an unread ad inside the allowed places still counts as missing
     jobs.append({"title": "PM", "location": "Berlin, Germany"})
     assert rp.enriched_share(jobs, prefs) == 8 / 9
+
+
+# --- package 14: the classification step runs with confirm inside the caps ----------------------------------------------------------------------------
+
+SUMMARY_LINE = ('{"candidates": 12, "classified": 7, "failed": 1, "failedKinds": {}, "privacyRefused": 1, "left": 4, "stopped": "cap", '
+                '"anchoringFailed": 0, "spentUsd": 0.0498, "capUsd": 0.05, "maxAds": 100}')
+
+
+def test_the_pipeline_classifies_with_confirm_and_the_caps_between_enrichment_and_scoring(env, monkeypatch):
+    commands = {}
+    calls = fake_steps(monkeypatch, commands=commands)
+    assert rp.main(["--json"]) == 0
+    assert calls == ["discovery", "enrichment", "classification", "scoring"]
+    cmd = commands["classification"]
+    assert cmd[0].endswith("job_scoring/classify_new.py") and cmd[1:] == ["--confirm", "--max-usd", "0.05", "--max-ads", "100"]
+
+
+def test_the_pipeline_caps_are_the_scripts_own_defaults():
+    import classify_new
+    assert rp.CLASSIFY_ARGS == ["--confirm", "--max-usd", str(classify_new.DEFAULT_MAX_USD), "--max-ads", str(classify_new.DEFAULT_MAX_ADS)]
+
+
+def test_a_cap_stop_is_counted_in_the_run_record_and_the_summary(env, monkeypatch, capsys):
+    fake_steps(monkeypatch, classify_out=f"ads with text...\n{SUMMARY_LINE}\nclasses are in fit3.json\n")
+    assert rp.main(["--json"]) == 0
+    c = json.loads(rp.LAST_RUN.read_text())["classification"]
+    assert (c["candidates"], c["classified"], c["left"], c["stopped"], c["privacyRefused"]) == (12, 7, 4, "cap", 1)
+    assert "failedKinds" not in c
+    out = capsys.readouterr().out
+    assert "7 of 12 new ads" in out and "4 stay 'not available'" in out and "the cost cap was reached" in out
+
+
+def test_a_gate_refusal_never_fails_the_run_and_is_named(env, monkeypatch, capsys):
+    gate = SUMMARY_LINE.replace('"classified": 7', '"classified": 0').replace('"stopped": "cap"', '"stopped": "gate"').replace('"left": 4', '"left": 12')
+    fake_steps(monkeypatch, classify_out=gate + "\n")
+    assert rp.main([]) == 0
+    assert json.loads(rp.LAST_RUN.read_text())["classification"]["stopped"] == "gate"
+    assert "the AI gate refused" in capsys.readouterr().out
+
+
+def test_a_classification_step_that_dies_is_reported_and_scoring_still_runs(env, monkeypatch, capsys):
+    calls = fake_steps(monkeypatch, fail="classification")
+    assert rp.main([]) == 0
+    assert calls[-1] == "scoring"
+    assert "skipped" in json.loads(rp.LAST_RUN.read_text())["classification"]
+    assert "Classify  : not done" in capsys.readouterr().out

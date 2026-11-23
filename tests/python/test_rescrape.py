@@ -518,7 +518,7 @@ def test_the_steps_are_today_s_no_enrichment_and_no_judge():
     steps = run_rescrape.step_commands(args)
     assert [name for name, _ in steps] == ["discovery", "classification", "scoring"]
     discovery_cmd, classify_cmd, scoring_cmd = steps[0][1], steps[1][1], steps[2][1]
-    assert classify_cmd[0].endswith("job_scoring/classify_new.py") and classify_cmd[1:] == [], "the orchestrator never passes --confirm"
+    assert classify_cmd[0].endswith("job_scoring/classify_new.py") and classify_cmd[1:] == ["--confirm", "--max-usd", "0.05", "--max-ads", "100"], "package 14: confirmed, inside the default caps"
     assert discovery_cmd[0].endswith("job_discovery/run_discovery.py")
     assert discovery_cmd[1:] == ["--providers", "serbia", "--run-id", RUN_ID, "--country", "Serbia"]
     assert scoring_cmd[0].endswith("job_scoring/run_scoring.py") and scoring_cmd[1:] == []
@@ -735,3 +735,26 @@ def test_hold_answers_75_when_a_run_holds_it(held):
     done = subprocess.run([sys.executable, str(ROOT / "python" / "run_rescrape.py"), "hold"],
                           stdin=subprocess.DEVNULL, capture_output=True, text=True, env=dict(os.environ))
     assert done.returncode == pipeline_lock.EXIT_LOCKED and "locked" not in done.stdout
+
+
+# --- package 14: what the classification step reports reaches the run's issues -----------------------------------------------------------------------
+
+def _out(tmp_path, text):
+    f = tmp_path / "step-output.txt"
+    f.write_bytes(text.encode())
+    return f.open("rb")
+
+
+def test_the_rescrape_caps_are_the_scripts_own_defaults():
+    import classify_new
+    assert run_rescrape.CLASSIFY_ARGS == ["--confirm", "--max-usd", str(classify_new.DEFAULT_MAX_USD), "--max-ads", str(classify_new.DEFAULT_MAX_ADS)]
+
+
+def test_a_clean_classification_adds_no_issue_and_a_stop_adds_counts_and_a_fixed_reason(tmp_path):
+    ok = '{"candidates": 3, "classified": 3, "failed": 0, "privacyRefused": 0, "left": 0, "stopped": null}'
+    assert run_rescrape._classification_note(_out(tmp_path, ok)) is None
+    assert run_rescrape._classification_note(_out(tmp_path, "classification: nothing to classify\n")) is None
+    gate = '{"candidates": 9, "classified": 0, "failed": 0, "privacyRefused": 1, "left": 9, "stopped": "gate"}'
+    note = run_rescrape._classification_note(_out(tmp_path, gate))
+    assert "0 of 9" in note and "9 stay 'not available'" in note and "1 not sent" in note and "AI gate refused" in note
+    assert "skipped, ValueError" in (run_rescrape._classification_note(_out(tmp_path, "classification: skipped, ValueError: boom\n")) or "")

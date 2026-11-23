@@ -9,8 +9,10 @@ reads "not available" and falls back to the old track test. This step gives it a
 
 Which ads (the scoring set: the job list, hand-entered jobs, registered kept ads): open, not "not found by this run", text present, and NO entry in
 fit3.json under the production prompt (candidate i1). An ad that has an entry whose role did not anchor is never called again: it is only counted
-("anchoring failed"). Plain Re-score never calls a model and stays free; the pipeline and Re-scrape run this file WITHOUT --confirm (they print the
-count and the estimate only: they run as automatic tasks and the AI gate refuses them anyway).
+("anchoring failed"). Plain Re-score never calls a model and stays free. The full pipeline and Re-scrape run this file WITH --confirm and the default
+caps (package 14, owner decision 2026-11-23), after discovery / enrichment and before scoring, so the same run scores the new ads with their class.
+A standalone run is a manual AI task; inside the pipeline the trigger the pipeline set is kept (a pipeline step is an automatic task, so the gate
+refuses it while automation is off: that stop is counted like any other).
 
 Limits (stop points, never a silent wait): --max-usd (default 0.05, per-call worst case counted against it) and --max-ads (default 100). When one is hit,
 or the AI gate refuses, or 3 calls in a row fail, classifying stops; the ads left stay "not available" and the run record and the console say how many.
@@ -314,7 +316,7 @@ def _main(args) -> int:
             if not est["priceKnown"] or not est["send"]:
                 print("classification: nothing sent" + ("" if est["priceKnown"] else " (no price for this model)"))
                 return 0
-            os.environ[ai_gate.TRIGGER_ENV] = ai_gate.MANUAL
+            os.environ.setdefault(ai_gate.TRIGGER_ENV, ai_gate.MANUAL)  # a standalone run is manual; a pipeline step keeps the trigger it was given
             base = enrich_jobs.make_guard(args.max_usd, est["provider"], est["model"])
             guard = Guard(base.cap, base.price, base.max_output)
             with ai_gate.context(feature=FEATURE):

@@ -215,6 +215,28 @@ def summarize(args, steps: list[dict], enrich_line: str | None, share: float | N
     return summary
 
 
+CLASSIFY_ARGS = ["--confirm", "--max-usd", "0.05", "--max-ads", "100"]  # = classify_new's defaults, spelled out so the run is explicit (a test keeps them equal)
+STOP_WORDS = {"cap": "the cost cap was reached", "gate": "the AI gate refused", "failures": "3 calls in a row failed"}
+
+
+def classification_result(out: str) -> dict:
+    """What the classification step reported: its JSON summary line (counts, cost, a stop code), or the line that says it did not run."""
+    lines = out.splitlines()
+    for line in reversed(lines):
+        if line.startswith("{"):
+            try:
+                found = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(found, dict) and "candidates" in found:
+                keep = ("candidates", "classified", "failed", "privacyRefused", "left", "stopped", "anchoringFailed", "spentUsd", "capUsd", "maxAds")
+                return {k: found.get(k) for k in keep}
+    note = next((l for l in reversed(lines) if l.startswith("classification: ")), "")[len("classification: "):][:160]
+    if "nothing to classify" in note:
+        return {"candidates": 0, "classified": 0, "note": note}
+    return {"skipped": note or "no summary"}
+
+
 def print_summary(s: dict) -> None:
     print("\n=== Summary ===")
     d = s.get("discovery")
@@ -234,8 +256,12 @@ def print_summary(s: dict) -> None:
               + (f" ({e['extracted']} read, {e['cached']} cached, {e['failed']} failed, {e.get('notRead', 0)} outside allowed places not read"
                  f", {e.get('refused', 0)} refused by the AI gate)" if "extracted" in e else ""))
     c = s.get("classification")
-    if c and c.get("waiting"):
-        print(f"Classify  : {c['waiting']} new ads wait for a Fit 3 role class (classify_new.py --confirm, then Re-score); until then they read 'not available'")
+    if c and c.get("skipped"):
+        print(f"Classify  : not done ({c['skipped']}); new ads read 'not available' until the next run")
+    elif c and c.get("candidates"):
+        stop = f"; stopped: {STOP_WORDS.get(c.get('stopped'), c.get('stopped'))}" if c.get("stopped") else ""
+        print(f"Classify  : {c.get('classified', 0)} of {c['candidates']} new ads got a role class (${c.get('spentUsd') or 0:.4f} of ${c.get('capUsd')}); "
+              f"{c.get('left', 0)} stay 'not available', {c.get('failed', 0)} failed, {c.get('privacyRefused', 0)} not sent (privacy){stop}")
     q = s.get("quality")
     if q:
         print(f"Quality   : REDUCED - {q['reason']}")
@@ -271,15 +297,16 @@ def execute(args: argparse.Namespace, steps: list[dict]) -> dict:
 
     if args.skip_enrich and not reduced:
         reduced = "enrichment skipped (--skip-enrich)"
-    # New ads get a Fit 3 role class before scoring (scoring 1.7). Here the step only counts and estimates: it sends nothing (it runs as an automatic
-    # AI task, and the paid run needs the owner's --confirm and --max-usd). It never stops the pipeline.
+    # New ads get a Fit 3 role class before scoring (scoring 1.7), in the same run: the ad text exists after discovery, and scoring reads the class.
+    # Owner decision 2026-11-23 (package 14): the paid step runs with --confirm inside fixed caps. It is an automatic AI task here, so the AI gate
+    # (automation switch, daily and monthly limits, feature allowlist) decides; a refusal, a cap or a failed call leaves the ads "not available", counted.
+    # It never stops the pipeline.
     try:
-        out = run_step("classification", [str(PY / "job_scoring" / "classify_new.py")], steps)
-        waiting = re.search(r"(\d+) new ads wait", out)
-        classification = {"waiting": int(waiting[1]) if waiting else 0}
+        out = run_step("classification", [str(PY / "job_scoring" / "classify_new.py"), *CLASSIFY_ARGS], steps)
+        classification = classification_result(out)
     except StepFailed as exc:
         print(f"classification skipped: {exc.reason}", flush=True)
-        classification = {"waiting": None}
+        classification = {"skipped": exc.reason[:160]}
     scoring = [str(PY / "job_scoring" / "run_scoring.py")]
     if reduced:
         # Written into scored_jobs.json meta, where the scores are read.

@@ -41,7 +41,8 @@ import run_log  # noqa: E402
 
 DISCOVERY = PY / "job_discovery" / "run_discovery.py"
 SCORING = PY / "job_scoring" / "run_scoring.py"
-CLASSIFY = PY / "job_scoring" / "classify_new.py"  # counts and estimates only (no --confirm): the paid run is the owner's
+CLASSIFY = PY / "job_scoring" / "classify_new.py"  # paid, with --confirm and the default caps (package 14); the AI gate still decides
+CLASSIFY_ARGS = ["--confirm", "--max-usd", "0.05", "--max-ads", "100"]  # = classify_new's defaults (a test keeps them equal)
 RUN_ID = re.compile(r"^[0-9A-Za-z]{1,32}$")
 OUTPUT_TAIL_LINES = 3
 CANCEL_POLL_SECONDS = 0.2
@@ -59,7 +60,7 @@ def step_commands(args) -> list[tuple[str, list[str]]]:
         discovery += ["--country", args.country]
     if getattr(args, "exclude", None):
         discovery += ["--exclude", args.exclude]
-    return [("discovery", discovery), ("classification", [str(CLASSIFY)]), ("scoring", [str(SCORING)])]
+    return [("discovery", discovery), ("classification", [str(CLASSIFY), *CLASSIFY_ARGS]), ("scoring", [str(SCORING)])]
 
 
 def _tail(output) -> str:
@@ -157,6 +158,32 @@ def descendants_left(tree: dict[int, str]) -> dict[int, str]:
     return {pid: started for pid, started in tree.items() if _start_time(pid) == started}
 
 
+STOP_WORDS = {"cap": "the cost cap was reached", "gate": "the AI gate refused the next call", "failures": "3 calls in a row failed"}
+
+
+def _classification_note(output) -> str | None:
+    """One line for the run's issues when the classification step did not finish all it set out to: counts and a fixed reason only. None when all went well."""
+    output.seek(0)
+    lines = output.read().decode("utf-8", "replace").strip().splitlines()
+    for line in reversed(lines):
+        if not line.startswith("{"):
+            continue
+        try:
+            found = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(found, dict) or "candidates" not in found:
+            continue
+        left, failed, refused = (int(found.get(k) or 0) for k in ("left", "failed", "privacyRefused"))
+        if not (found.get("stopped") or left or failed or refused):
+            return None
+        why = f" Stopped: {STOP_WORDS.get(found.get('stopped'), 'a limit')}." if found.get("stopped") else ""
+        return (f"Role classification: {int(found.get('classified') or 0)} of {int(found.get('candidates') or 0)} new ads classified, {left} stay 'not available', "
+                f"{failed} failed (tried again next run), {refused} not sent (privacy scan).{why}")
+    last = next((l for l in reversed(lines) if l.startswith("classification: ")), "")
+    return f"Role classification {last[len('classification: '):][:160]}" if last and "nothing to classify" not in last else None
+
+
 def run_step(record: dict, name: str, cmd: list[str], lock: pipeline_lock.Lock) -> tuple[dict, bool]:
     """Run one step, holding the lock with it. Returns the record as it now stands on disk, and whether the step succeeded.
 
@@ -174,6 +201,7 @@ def run_step(record: dict, name: str, cmd: list[str], lock: pipeline_lock.Lock) 
         )
         code, signalled, killed = wait_for_step(proc, record, name)
         tail = _tail(output) if code != 0 else ""
+        classified = _classification_note(output) if name == "classification" and code == 0 else None
 
     # Discovery wrote to the record meanwhile; only one process writes it at a time, and now it is this one again.
     fresh = run_log.find_record(record["runId"]) or record
@@ -183,6 +211,9 @@ def run_step(record: dict, name: str, cmd: list[str], lock: pipeline_lock.Lock) 
     step.update(status="ok" if code == 0 else "cancelled" if stopped else "failed", finishedAt=_now(), exitCode=code)
     if killed and stopped:
         fresh.setdefault("cancel", {"requestedAt": run_log.cancel_info(fresh).get("requestedAt"), "outcome": "stopped_nothing_imported"})
+    if classified:
+        run_log.add_issue(fresh, "warning", classified)
+        run_log.event(fresh, "classification_note", message=classified)
     if code != 0 and not stopped:
         message = f"{name} failed with exit code {code}" + (f": {tail}" if tail else "")
         run_log.add_issue(fresh, "error", message)
