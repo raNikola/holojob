@@ -383,8 +383,8 @@ def test_a_failed_board_among_working_boards_is_partial_and_named_and_its_ad_sta
     source = source_of(record, "greenhouse")
     assert record["status"] == "partial"
     assert (source["status"], source["boardsFailed"], source["read"], source["kept"]) == ("partial", ["bad"], 1, 1)
-    assert source["error"] == "bad: boom"
-    assert [(i["level"], i["source"], i["message"]) for i in record["issues"]] == [("error", "greenhouse", "bad: boom")]
+    assert source["error"] == "bad: connection_failed (ConnectionError)"
+    assert [(i["level"], i["source"], i["message"]) for i in record["issues"]] == [("error", "greenhouse", "bad: connection_failed (ConnectionError)")]
 
     payload = discovered(tmp_path)
     boards = {j["title"]: j["isClosed"] for j in payload["jobs"] if j["provider"] == "greenhouse"}
@@ -675,7 +675,7 @@ def test_lever_and_ashby_report_a_failed_board_with_its_error(monkeypatch, name,
     provider._load_companies = lambda: ["acme", "beta"]
     assert fetch(provider) == []
     assert provider.last_outcome.status == "failed" and provider.last_outcome.boards_failed == ["acme", "beta"]
-    assert provider.last_outcome.error == "acme: no route; beta: no route"
+    assert provider.last_outcome.error == "acme: connection_failed (ConnectionError); beta: connection_failed (ConnectionError)", "a fixed reason, never the exception text"
 
 
 def test_every_registered_provider_is_covered_here():

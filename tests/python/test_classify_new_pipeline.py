@@ -16,7 +16,7 @@ class FakeLock:
         pass
 
 
-def drive_main(monkeypatch, tmp_path, *, trigger, refuse):
+def drive_main(monkeypatch, tmp_path, *, trigger, refuse, limits=True):
     """classify_new.main with --confirm: returns (exit code, run records written, the trigger the gate saw)."""
     profile = tmp_path / "profile.json"
     profile.write_text(json.dumps(PROFILE))
@@ -48,7 +48,8 @@ def drive_main(monkeypatch, tmp_path, *, trigger, refuse):
         monkeypatch.setenv(ai_gate.TRIGGER_ENV, trigger)
     else:
         monkeypatch.delenv(ai_gate.TRIGGER_ENV, raising=False)
-    code = classify_new.main(["--profile", str(profile), "--confirm"])
+    flags = ["--max-usd", "0.5", "--max-ads", "10"] if limits else []
+    code = classify_new.main(["--profile", str(profile), "--scored", str(tmp_path / "scored.json"), "--confirm", *flags])
     return code, records, seen
 
 
@@ -62,7 +63,7 @@ def test_inside_the_pipeline_the_gate_sees_an_automatic_task_and_its_refusal_is_
     code, records, seen = drive_main(monkeypatch, tmp_path, trigger="automation", refuse=True)
     summary = summary_line(capsys)
     assert code == 0 and seen["trigger"] == "automation"
-    assert summary["classified"] == 0 and summary["left"] == 2 and summary["stopped"].startswith("stopped: AI gate refused")
+    assert summary["classified"] == 0 and summary["left"] == 2 and summary["stopped"] == "gate"
     assert records and records[0]["left"] == 2
 
 
@@ -72,5 +73,20 @@ def test_a_standalone_run_is_a_manual_task_and_classifies(monkeypatch, tmp_path,
     assert code == 0 and seen["trigger"] == "manual" and summary["classified"] == 2 and summary["left"] == 0
 
 
-def test_the_default_caps_are_the_owner_decision():
-    assert (classify_new.DEFAULT_MAX_USD, classify_new.DEFAULT_MAX_ADS) == (0.05, 100)
+def test_no_limit_is_in_code_and_an_unset_limit_sends_nothing(monkeypatch, tmp_path, capsys):
+    assert not hasattr(classify_new, "DEFAULT_MAX_USD") and not hasattr(classify_new, "DEFAULT_MAX_ADS")
+    code, records, seen = drive_main(monkeypatch, tmp_path, trigger=None, refuse=False, limits=False)
+    out = capsys.readouterr().out
+    summary = json.loads(next(l for l in out.splitlines() if l.startswith("{")))
+    assert code == 0 and "run limit not set in Settings" in out
+    assert summary["classified"] == 0 and summary["waiting"] == 2 and summary["stopped"] == "unset" and not seen
+
+
+def test_the_limits_come_from_settings_when_the_flags_are_omitted(monkeypatch, tmp_path, capsys):
+    ai_gate.save_settings({"runLimitUsd": 0.5, "runLimitAds": 1}, confirm=True)
+    flags = []
+    monkeypatch.setattr(classify_new.run_budget, "resolve_limits", lambda u, a, settings=None: flags.append((u, a)) or classify_new.run_budget.Limits(0.5, 1))
+    code, records, seen = drive_main(monkeypatch, tmp_path, trigger=None, refuse=False, limits=False)
+    summary = summary_line(capsys)
+    assert code == 0 and flags == [(None, None)]
+    assert summary["classified"] == 1 and summary["waiting"] == 1 and summary["stopped"] == "run_ads", "one ad fits the ads limit, the other waits and is counted"

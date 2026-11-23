@@ -244,7 +244,7 @@ def test_ads_enrichment_skipped_on_purpose_do_not_count_against_the_share():
 
 # --- package 14: the classification step runs with confirm inside the caps ----------------------------------------------------------------------------
 
-SUMMARY_LINE = ('{"candidates": 12, "classified": 7, "failed": 1, "failedKinds": {}, "privacyRefused": 1, "left": 4, "stopped": "cap", '
+SUMMARY_LINE = ('{"candidates": 12, "classified": 7, "failed": 1, "failedKinds": {}, "privacyRefused": 1, "left": 4, "stopped": "run_usd", '
                 '"anchoringFailed": 0, "spentUsd": 0.0498, "capUsd": 0.05, "maxAds": 100}')
 
 
@@ -254,26 +254,25 @@ def test_the_pipeline_classifies_with_confirm_and_the_caps_between_enrichment_an
     assert rp.main(["--json"]) == 0
     assert calls == ["discovery", "enrichment", "classification", "scoring"]
     cmd = commands["classification"]
-    assert cmd[0].endswith("job_scoring/classify_new.py") and cmd[1:] == ["--confirm", "--max-usd", "0.05", "--max-ads", "100"]
+    assert cmd[0].endswith("job_scoring/classify_new.py") and cmd[1:] == ["--confirm"], "no limit of its own: classify_new reads Settings"
 
 
-def test_the_pipeline_caps_are_the_scripts_own_defaults():
-    import classify_new
-    assert rp.CLASSIFY_ARGS == ["--confirm", "--max-usd", str(classify_new.DEFAULT_MAX_USD), "--max-ads", str(classify_new.DEFAULT_MAX_ADS)]
+def test_the_pipeline_has_no_limit_in_code():
+    assert rp.CLASSIFY_ARGS == ["--confirm"], "the limits are Settings (runLimitUsd, runLimitAds), read by classify_new itself"
 
 
 def test_a_cap_stop_is_counted_in_the_run_record_and_the_summary(env, monkeypatch, capsys):
     fake_steps(monkeypatch, classify_out=f"ads with text...\n{SUMMARY_LINE}\nclasses are in fit3.json\n")
     assert rp.main(["--json"]) == 0
     c = json.loads(rp.LAST_RUN.read_text())["classification"]
-    assert (c["candidates"], c["classified"], c["left"], c["stopped"], c["privacyRefused"]) == (12, 7, 4, "cap", 1)
+    assert (c["candidates"], c["classified"], c["left"], c["stopped"], c["privacyRefused"]) == (12, 7, 4, "run_usd", 1)
     assert "failedKinds" not in c
     out = capsys.readouterr().out
-    assert "7 of 12 new ads" in out and "4 stay 'not available'" in out and "the cost cap was reached" in out
+    assert "7 of 12 new ads" in out and "4 stay 'not available'" in out and "the run spend limit was reached" in out
 
 
 def test_a_gate_refusal_never_fails_the_run_and_is_named(env, monkeypatch, capsys):
-    gate = SUMMARY_LINE.replace('"classified": 7', '"classified": 0').replace('"stopped": "cap"', '"stopped": "gate"').replace('"left": 4', '"left": 12')
+    gate = SUMMARY_LINE.replace('"classified": 7', '"classified": 0').replace('"stopped": "run_usd"', '"stopped": "gate"').replace('"left": 4', '"left": 12')
     fake_steps(monkeypatch, classify_out=gate + "\n")
     assert rp.main([]) == 0
     assert json.loads(rp.LAST_RUN.read_text())["classification"]["stopped"] == "gate"

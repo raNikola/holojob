@@ -32,7 +32,8 @@ export function elapsedText(run, receivedAt) {
 export function currentStepText(run) {
   const step = (run?.steps ?? []).find((one) => one.status === 'running')
   if (!step) return null
-  return step.name === 'scoring' ? 'Scoring the jobs' : 'Reading the sources'
+  const words = { scoring: 'Scoring the jobs', classification: 'Classifying new ads', reading: 'Reading ads', 'scoring-prepare': 'Scoring for the engine', engine: 'Filling the engine' }
+  return words[step.name] ?? 'Reading the sources'
 }
 
 /**

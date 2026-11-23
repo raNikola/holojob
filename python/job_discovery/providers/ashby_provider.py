@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-from providers.base_provider import JobProvider, board_read, build_canonical_job, dropped_ad, filter_jobs, format_pay_range, parts_outcome, split_by_filter
+from providers.base_provider import JobProvider, failure_reason, board_read, build_canonical_job, dropped_ad, filter_jobs, format_pay_range, parts_outcome, split_by_filter
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ class AshbyProvider(JobProvider):
                 postings = self._fetch_company(slug)
             except Exception as exc:
                 logger.warning("Ashby company %s failed: %s", slug, exc)
-                failures[slug] = str(exc)
+                failures[slug] = failure_reason(exc)
                 continue
             if not postings:
                 empty.append(slug)

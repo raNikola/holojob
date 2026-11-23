@@ -13,11 +13,12 @@ try { execFileSync('python3', ['--version']) } catch { hasPython = false }
 
 let dir
 let saved
-const ENV = ['HOLOJOB_ANALYTICS_DIR', 'HOLOJOB_PIPELINE_LOCK', 'PYTHONDONTWRITEBYTECODE', 'FAKE_MARKS']
+const ENV = ['HOLOJOB_AI_DIR', 'HOLOJOB_ANALYTICS_DIR', 'HOLOJOB_PIPELINE_LOCK', 'PYTHONDONTWRITEBYTECODE', 'FAKE_MARKS']
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'holojob-rescrape-'))
   saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]))
+  process.env.HOLOJOB_AI_DIR = path.join(dir, 'ai') // the paid steps read their limits here: never the real data/ai
   process.env.HOLOJOB_ANALYTICS_DIR = path.join(dir, 'analytics')
   process.env.HOLOJOB_PIPELINE_LOCK = path.join(dir, 'pipeline.lock')
   process.env.PYTHONDONTWRITEBYTECODE = '1'
@@ -69,6 +70,8 @@ import run_rescrape
 run_rescrape.DISCOVERY = ${JSON.stringify(discovery)}
 run_rescrape.SCORING = ${JSON.stringify(scoring)}
 run_rescrape.CLASSIFY = ${JSON.stringify(classify)}
+run_rescrape.ENRICH = ${JSON.stringify(classify)}
+run_rescrape.ENGINE = ${JSON.stringify(classify)}
 sys.exit(run_rescrape.main(sys.argv[1:]))
 `)
   return { python: 'python3', script }
@@ -254,7 +257,7 @@ describe.skipIf(!hasPython)('a real run over fake steps', () => {
     expect(fs.existsSync(path.join(dir, 'scored'))).toBe(true)
     expect(after.run.status).toBe('ok')
     expect(after.events.map((e) => e.type)).toEqual([
-      'run_start', 'step_start', 'source_start', 'source_end', 'step_end', 'step_start', 'step_end', 'step_start', 'step_end', 'run_end',
+      'run_start', 'step_start', 'source_start', 'source_end', 'step_end', 'step_start', 'step_end', 'step_skipped', 'step_skipped', 'step_start', 'step_end', 'run_end',
     ])
     expect((await startRescrape(body, opts)).status).toBe(202)
     await until(async () => !(await rescrapeStatus(0, opts)).body.active)

@@ -1662,12 +1662,17 @@ A source counts as on only with `active: true` and a consent time. `history` kee
   "monthlyLimit": "<number>",
   "maxCallsDaily": "<number>|null",
   "maxCallsMonthly": "<number>|null",
+  "runLimitUsd": "<number>|null",
+  "runLimitAds": "<number>|null",
+  "allowEngineFill": "<boolean>",
   "estimatedOutputTokens": "<number>",
   "timezone": "<IANA name>",
   "automation": { "enabled": "<boolean>" },
   "claudeCodeSubscription": { "enabled": "<boolean>", "maxCallsDaily": "<number>", "features": [ "<feature name>" ] }
 }
 ```
+
+`runLimitUsd` / `runLimitAds` (package 15): the one per-run limit of Re-scrape's paid steps (classification, reading, engine fill), US dollars and DISTINCT ads; `null` or 0 = not set, and then those steps spend nothing and Activity says "run limit not set in Settings". There is no default in code. `allowEngineFill` (default false): Re-scrape's engine fill sends a redacted evidence index (candidate data), so it runs only when this is on. Raising a run limit or turning engine fill on needs `"confirm": true`.
 
 `pricing-overrides.json` (`PUT /api/ai/pricing`; the request replaces the whole list, at most 200 entries):
 

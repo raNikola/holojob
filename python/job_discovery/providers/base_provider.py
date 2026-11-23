@@ -23,6 +23,28 @@ _spec.loader.exec_module(_geography)
 logger = logging.getLogger(__name__)
 
 
+def failure_reason(exc: BaseException) -> str:
+    """Why a board could not be read, in words the Activity screen may show: a fixed code, an HTTP status and the exception class, never the exception's
+    own text (it can hold a URL or a token). The screen's summariser passes exactly these three kinds of token."""
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status is None and isinstance(exc, LookupError):
+        status = next(iter(re.findall(r"\b([45]\d\d)\b", str(exc))), None)  # "404 on both Lever hosts"
+    if status is not None:
+        code = "board_not_found" if str(status) in ("404", "410") else "http_error"
+        return f"{code} (HTTP {status})"
+    name = type(exc).__name__
+    text = name.lower()
+    if "timeout" in text:
+        code = "request_timeout"
+    elif "connection" in text or "ssl" in text:
+        code = "connection_failed"
+    elif "json" in text or isinstance(exc, ValueError):
+        code = "bad_answer"
+    else:
+        code = "unexpected_error"
+    return f"{code} ({name})"
+
+
 @dataclass
 class ProviderOutcome:
     """How a fetch went, beside the jobs it returned. run_discovery passes boards_failed and boards_empty to the ledger,

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-from providers.base_provider import JobProvider, board_read, build_canonical_job, dropped_ad, filter_jobs, parts_outcome, split_by_filter
+from providers.base_provider import JobProvider, failure_reason, board_read, build_canonical_job, dropped_ad, filter_jobs, parts_outcome, split_by_filter
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ class GreenhouseProvider(JobProvider):
                 postings = self._fetch_board(board)
             except Exception as exc:
                 logger.warning("Greenhouse board %s failed: %s", board, exc)
-                failures[board] = str(exc)
+                failures[board] = failure_reason(exc)
                 continue
             if not postings:
                 empty.append(board)

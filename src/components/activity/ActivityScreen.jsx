@@ -8,7 +8,7 @@ import LiveRunPanel from './LiveRunPanel'
 import RunDetails from './RunDetails'
 import { useRunHistory } from '../../modules/activity/useRunHistory.js'
 import {
-  NUMBER_HELP, PROOF_HELP, RETENTION_NOTE, STATUS_TONES, formatDuration, formatTime, savedShort, show, statusLabel, statusSentence, triggerLabel,
+  NUMBER_HELP, PROOF_HELP, RETENTION_NOTE, STATUS_TONES, formatDuration, formatTime, paidSummary, savedShort, show, statusLabel, statusSentence, triggerLabel,
 } from '../../modules/activity/runView.js'
 
 const muted = 'text-stone-500 dark:text-stone-400'
@@ -24,12 +24,13 @@ function Figure({ label, value }) {
 
 function RunCard({ run, open, onToggle }) {
   const sentence = statusSentence(run)
+  const paid = paidSummary(run)
   const id = `run-details-${run.runId}`
   return (
     <li className="rounded-lg border border-stone-200 p-3 dark:border-stone-800" data-testid="run-row">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="font-medium">{formatTime(run.startedAt)}</span>
-        <Badge variant={STATUS_TONES[run.status] ?? 'low'}>{statusLabel(run.status)}</Badge>
+        <Badge variant={STATUS_TONES[run.status] ?? 'low'}>{statusLabel(run.status, run)}</Badge>
         <span className={`text-sm ${muted}`}>{triggerLabel(run.trigger)}</span>
         <span className={`text-sm ${muted}`}>{run.status === 'running' ? 'In progress' : formatDuration(run.durationSeconds)}</span>
         <span className={`text-sm ${muted}`}>{run.issuesCount === 0 ? 'No issues' : `${run.issuesCount} ${run.issuesCount === 1 ? 'issue' : 'issues'}`}</span>
@@ -43,6 +44,12 @@ function RunCard({ run, open, onToggle }) {
         </dl>
       )}
       {sentence && <p className="mt-2 text-sm text-stone-700 dark:text-stone-300">{sentence}</p>}
+      {paid && (
+        <div className="mt-2 text-sm text-stone-700 dark:text-stone-300" data-testid="paid-summary">
+          <p>{paid.headline}</p>
+          {paid.lines.length > 0 && <ul className="mt-1 list-disc pl-5">{paid.lines.map((line) => <li key={line}>{line}</li>)}</ul>}
+        </div>
+      )}
       <button
         type="button"
         className="mt-2 text-sm font-medium text-stone-700 underline underline-offset-2 dark:text-stone-300"

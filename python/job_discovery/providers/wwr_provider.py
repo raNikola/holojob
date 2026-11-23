@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from providers.base_provider import JobProvider, build_canonical_job, dropped_ad, filter_jobs, parts_outcome, split_by_filter
+from providers.base_provider import JobProvider, failure_reason, build_canonical_job, dropped_ad, filter_jobs, parts_outcome, split_by_filter
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class WWRProvider(JobProvider):
                 postings = self._parse_feed(feed_url)
             except Exception as exc:
                 logger.warning("WWR feed %s failed: %s", feed_url, exc)
-                failures[feed_url] = str(exc)
+                failures[feed_url] = failure_reason(exc)
                 continue
             feed_jobs, external, dropped = [], {}, []
             for posting in postings:

@@ -14,6 +14,7 @@ import stat
 import pytest
 
 import classify_new
+import run_budget
 import job_history
 import kept_ads
 import role_class
@@ -128,7 +129,7 @@ def test_a_cap_stops_the_run_and_says_how_many_are_left(lists):
     rows = [row(f"a{i}", description=AD + f" variant {i}") for i in range(5)]
     result, todo = run_with(lists, rows, lambda prompt, **kw: good_reply(), guard=Guard(2))
     assert len(result["entries"]) == 2 and result["left"] == 3 and "cap" in result["stopped"]
-    assert classify_new.stop_code(result["stopped"]) == "cap"
+    assert run_budget.stop_code(result["stopped"]) == "run_usd"
 
 
 def test_a_provider_failure_skips_the_ad_and_never_raises(lists):
@@ -151,7 +152,7 @@ def test_three_failures_in_a_row_stop_the_run(lists):
 
     rows = [row(f"c{i}", description=AD + f" v{i}") for i in range(6)]
     result, _ = run_with(lists, rows, down)
-    assert result["entries"] == {} and result["left"] == 3 and classify_new.stop_code(result["stopped"]) == "failures"
+    assert result["entries"] == {} and result["left"] == 3 and run_budget.stop_code(result["stopped"]) == "failures"
 
 
 def test_a_failed_step_never_fails_a_pipeline_run(monkeypatch, capsys):
@@ -183,9 +184,11 @@ def test_plain_rescore_calls_no_model(monkeypatch, tmp_path):
     assert rows[0]["roleClass"] == "not available" and counts["not available"] == 1
 
 
-def test_a_failed_run_record_has_fixed_codes_not_free_text():
-    assert classify_new.stop_code("stopped: AI gate refused: anything the provider said") == "gate"
-    assert classify_new.stop_code(None) is None
+def test_a_stop_is_one_fixed_code_never_free_text():
+    code = run_budget.stop_code
+    assert code("stopped: AI gate refused: anything the provider said") == "gate"
+    assert code("daily AI budget reached (1.0 + 0.1 > 1 USD)") == "daily" and code("monthly AI budget reached (5 + 1 > 5 USD)") == "monthly"
+    assert code("daily paid call limit reached (3)") == "call_cap" and code(None) is None
 
 
 # --- item 11: the owner's ads stay in every scoring run ----------------------------------------------------------------

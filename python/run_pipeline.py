@@ -215,8 +215,8 @@ def summarize(args, steps: list[dict], enrich_line: str | None, share: float | N
     return summary
 
 
-CLASSIFY_ARGS = ["--confirm", "--max-usd", "0.05", "--max-ads", "100"]  # = classify_new's defaults, spelled out so the run is explicit (a test keeps them equal)
-STOP_WORDS = {"cap": "the cost cap was reached", "gate": "the AI gate refused", "failures": "3 calls in a row failed"}
+CLASSIFY_ARGS = ["--confirm"]  # the limits are read from Settings (runLimitUsd, runLimitAds) by classify_new itself; no number lives in code. With automation off the gate refuses this step anyway
+STOP_WORDS = {"run_usd": "the run spend limit was reached", "run_ads": "the ads-per-run limit was reached", "daily": "the daily AI budget was reached", "monthly": "the monthly AI budget was reached", "call_cap": "a paid call limit was reached", "gate": "the AI gate refused", "failures": "3 calls in a row failed", "unset": "run limit not set in Settings"}
 
 
 def classification_result(out: str) -> dict:

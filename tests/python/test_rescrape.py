@@ -513,17 +513,15 @@ def test_a_direct_discovery_sweeps_a_dead_record_first(discovery):
 # --- the orchestrator ----------------------------------------------------------------------------------------------
 
 
-def test_the_steps_are_today_s_no_enrichment_and_no_judge():
+def test_the_steps_never_judge_and_carry_no_limit_in_code():
     args = SimpleNamespace(run_id=RUN_ID, providers="serbia", country="Serbia")
     steps = run_rescrape.step_commands(args)
-    assert [name for name, _ in steps] == ["discovery", "classification", "scoring"]
-    discovery_cmd, classify_cmd, scoring_cmd = steps[0][1], steps[1][1], steps[2][1]
-    assert classify_cmd[0].endswith("job_scoring/classify_new.py") and classify_cmd[1:] == ["--confirm", "--max-usd", "0.05", "--max-ads", "100"], "package 14: confirmed, inside the default caps"
-    assert discovery_cmd[0].endswith("job_discovery/run_discovery.py")
-    assert discovery_cmd[1:] == ["--providers", "serbia", "--run-id", RUN_ID, "--country", "Serbia"]
-    assert scoring_cmd[0].endswith("job_scoring/run_scoring.py") and scoring_cmd[1:] == []
-    assert "enrich" not in " ".join(discovery_cmd + scoring_cmd)
-    assert "--judge" not in discovery_cmd + scoring_cmd
+    assert [name for name, _ in steps] == ["discovery"]
+    assert steps[0][1][1:] == ["--providers", "serbia", "--run-id", RUN_ID, "--country", "Serbia"] and steps[0][1][0].endswith("job_discovery/run_discovery.py")
+    for name, (_script, fixed, _feature) in run_rescrape.PAID_STEPS.items():
+        assert "--judge" not in fixed and not any(f in fixed for f in ("--max-usd", "--max-ads")), f"{name}: the limits are Settings, passed as the remainder"
+    source = (ROOT / "python" / "run_rescrape.py").read_text() + (ROOT / "python" / "run_pipeline.py").read_text()
+    assert "0.05" not in source and '"100"' not in source, "no cap literal in the orchestrators"
 
 
 FAKE_DISCOVERY = """
@@ -566,6 +564,29 @@ if os.environ.get("FAKE_SCORING_WAIT"):
 sys.exit(int(os.environ.get("FAKE_SCORING_EXIT", "0")))
 """
 
+FAKE_PAID = """
+import json, os, sys, uuid
+from datetime import datetime, timezone
+from pathlib import Path
+marks = Path({marks!r})
+argv = sys.argv[1:]
+step = "reading" if "--manual" in argv else "engine" if "--jobs" in argv else "classification"
+with (marks / "paid-args.jsonl").open("a") as out:
+    out.write(json.dumps({{"step": step, "argv": argv, "trigger": os.environ.get("HOLOJOB_AI_TRIGGER")}}) + "\\n")
+spec = json.loads(os.environ.get("FAKE_PAID", "{{}}")).get(step, {{}})
+ledger = Path(os.environ["HOLOJOB_AI_DIR"]) / "usage-ledger.jsonl"
+ledger.parent.mkdir(parents=True, exist_ok=True)
+feature = {{"classification": "fit3-classify", "reading": "enrichment", "engine": "evidence-matcher"}}[step]
+with ledger.open("a") as out:
+    for job_id in spec.get("ids", []):
+        call = uuid.uuid4().hex
+        out.write(json.dumps({{"type": "call", "id": call, "ts": datetime.now(timezone.utc).isoformat(), "feature": feature, "decision": "allowed", "jobId": job_id}}) + "\\n")
+        out.write(json.dumps({{"type": "result", "id": call, "cost": spec.get("each", 0)}}) + "\\n")
+done_key = {{"classification": "classified", "reading": "read", "engine": "filled"}}[step]
+print(json.dumps({{"step": step, "candidates": len(spec.get("ids", [])) + spec.get("waiting", 0), done_key: len(spec.get("ids", [])), "failed": 0,
+                   "waiting": spec.get("waiting", 0), "stopped": spec.get("stopped")}}))
+"""
+
 DRIVER = """
 import sys
 sys.path.insert(0, {python!r})
@@ -573,6 +594,8 @@ import run_rescrape
 run_rescrape.DISCOVERY = {discovery!r}
 run_rescrape.SCORING = {scoring!r}
 run_rescrape.CLASSIFY = {classify!r}
+run_rescrape.ENRICH = {paid!r}
+run_rescrape.ENGINE = {paid!r}
 sys.exit(run_rescrape.main(sys.argv[1:]))
 """
 
@@ -588,8 +611,8 @@ def fake(tmp_path):
     (tmp_path / "fake_scoring.py").write_text(FAKE_SCORING.format(marks=str(marks)))
     (tmp_path / "driver.py").write_text(DRIVER.format(
         python=str(py), discovery=str(tmp_path / "fake_discovery.py"), scoring=str(tmp_path / "fake_scoring.py"),
-        classify=str(tmp_path / "fake_classify.py")))
-    (tmp_path / "fake_classify.py").write_text("print(\"classification: nothing to classify\")\n")
+        classify=str(tmp_path / "fake_paid.py"), paid=str(tmp_path / "fake_paid.py")))
+    (tmp_path / "fake_paid.py").write_text(FAKE_PAID.format(marks=str(marks)))
     started = []
 
     def start(*, run_id=RUN_ID, stdout=subprocess.DEVNULL, **env):
@@ -623,7 +646,7 @@ def test_a_full_run_ends_ok_with_every_event_and_frees_the_lock(fake):
     assert saved["status"] == "ok" and saved["finishedAt"] and saved["trigger"] == "manual"
     assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("classification", "ok"), ("scoring", "ok")]
     assert [s["name"] for s in saved["sources"]] == ["greenhouse"], "the record the step filled is the one finished"
-    assert [e["type"] for e in events_of(saved)] == ["run_start", "step_start", "step_end", "step_start", "step_end", "step_start", "step_end", "run_end"]
+    assert [e["type"] for e in events_of(saved)] == ["run_start", "step_start", "step_end", "step_start", "step_end", "step_skipped", "step_skipped", "step_start", "step_end", "run_end"]
     assert lock_is_free()
 
 
@@ -737,24 +760,64 @@ def test_hold_answers_75_when_a_run_holds_it(held):
     assert done.returncode == pipeline_lock.EXIT_LOCKED and "locked" not in done.stdout
 
 
-# --- package 14: what the classification step reports reaches the run's issues -----------------------------------------------------------------------
+# --- the paid steps and their one budget ----------------------------------------------------------------------------------------------------------
 
-def _out(tmp_path, text):
-    f = tmp_path / "step-output.txt"
-    f.write_bytes(text.encode())
-    return f.open("rb")
-
-
-def test_the_rescrape_caps_are_the_scripts_own_defaults():
-    import classify_new
-    assert run_rescrape.CLASSIFY_ARGS == ["--confirm", "--max-usd", str(classify_new.DEFAULT_MAX_USD), "--max-ads", str(classify_new.DEFAULT_MAX_ADS)]
+def set_settings(tmp_path, **values):
+    (tmp_path / "ai").mkdir(exist_ok=True)
+    (tmp_path / "ai" / "settings.json").write_text(json.dumps({"dailyLimit": 10, "monthlyLimit": 50, **values}))
 
 
-def test_a_clean_classification_adds_no_issue_and_a_stop_adds_counts_and_a_fixed_reason(tmp_path):
-    ok = '{"candidates": 3, "classified": 3, "failed": 0, "privacyRefused": 0, "left": 0, "stopped": null}'
-    assert run_rescrape._classification_note(_out(tmp_path, ok)) is None
-    assert run_rescrape._classification_note(_out(tmp_path, "classification: nothing to classify\n")) is None
-    gate = '{"candidates": 9, "classified": 0, "failed": 0, "privacyRefused": 1, "left": 9, "stopped": "gate"}'
-    note = run_rescrape._classification_note(_out(tmp_path, gate))
-    assert "0 of 9" in note and "9 stay 'not available'" in note and "1 not sent" in note and "AI gate refused" in note
-    assert "skipped, ValueError" in (run_rescrape._classification_note(_out(tmp_path, "classification: skipped, ValueError: boom\n")) or "")
+def paid_calls(fake):
+    path = fake.marks / "paid-args.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def flag(call, name):
+    return call["argv"][call["argv"].index(name) + 1]
+
+
+def test_an_unset_run_limit_runs_no_paid_step_beyond_the_count_and_says_so(fake, tmp_path):
+    assert fake.start(FAKE_PAID=json.dumps({"classification": {"waiting": 7, "stopped": "unset"}})).wait(30) == 0
+    assert [c["step"] for c in paid_calls(fake)] == ["classification"], "reading and engine fill are not started"
+    assert not any("--max-usd" in c["argv"] for c in paid_calls(fake)), "no limit is passed: the step reads Settings and finds it unset"
+    saved = on_disk(RUN_ID)
+    assert saved["paid"]["limits"] is None and saved["paid"]["steps"]["reading"]["stopped"] == "unset"
+    assert any("Stopped: run limit not set in Settings, 7 ads waiting (classification)" == i["message"] for i in saved["issues"])
+    assert (fake.marks / "scoring-done").exists() and saved["status"] == "waiting", "scoring still ran; ads wait, so it is not shown as plainly finished"
+
+
+def test_the_steps_share_one_budget_and_each_gets_the_remainder(fake, tmp_path):
+    set_settings(tmp_path, runLimitUsd=1.0, runLimitAds=10, allowEngineFill=False)
+    plan = {"classification": {"ids": ["a", "b", "c"], "each": 0.1}, "reading": {"ids": ["b", "c", "d"], "each": 0.2}}
+    assert fake.start(FAKE_PAID=json.dumps(plan)).wait(30) == 0
+    calls = {c["step"]: c for c in paid_calls(fake)}
+    assert [flag(calls["classification"], f) for f in ("--max-usd", "--max-ads")] == ["1.000000", "10"]
+    # 0.3 USD and the distinct ads a, b, c are used: reading may spend 0.7 and take 7 NEW ads; b and c do not count twice
+    assert [flag(calls["reading"], f) for f in ("--max-usd", "--max-ads")] == ["0.700000", "7"]
+    assert json.loads(Path(flag(calls["reading"], "--counted-ids")).read_text() if Path(flag(calls["reading"], "--counted-ids")).exists() else "[]") in ([], ["a", "b", "c"])
+    assert all(c["trigger"] == "manual" for c in calls.values()), "Re-scrape is manual, whatever automation says"
+    saved = on_disk(RUN_ID)
+    assert round(saved["paid"]["spentUsd"], 4) == 0.9 and saved["paid"]["ads"] == 4, "the total is measured from the ledger, and an ad counts once"
+    assert saved["paid"]["spentUsd"] <= saved["paid"]["limits"]["usd"]
+    assert saved["paid"]["steps"]["engine"]["stopped"] == "engine_not_allowed" and "engine" not in calls, "engine fill is off in Settings"
+
+
+def test_a_limit_stop_still_scores_and_the_run_is_not_shown_as_plainly_finished(fake, tmp_path):
+    set_settings(tmp_path, runLimitUsd=1.0, runLimitAds=2)
+    plan = {"classification": {"ids": ["a", "b"], "each": 0.05, "waiting": 5, "stopped": "run_ads"}}
+    assert fake.start(FAKE_PAID=json.dumps(plan)).wait(30) == 0
+    saved = on_disk(RUN_ID)
+    assert (fake.marks / "scoring-done").exists()
+    assert saved["status"] == "waiting" and saved["paid"]["waiting"] == 5
+    assert "Stopped: ads-per-run limit, 5 ads waiting (classification)" in [i["message"] for i in saved["issues"]]
+    calls = {c["step"]: c for c in paid_calls(fake)}
+    assert flag(calls["reading"], "--max-ads") == "0", "the ads limit is used up: reading is told so and sends nothing"
+
+
+def test_a_failing_paid_step_makes_the_run_partial_and_scoring_still_runs(fake, tmp_path):
+    set_settings(tmp_path, runLimitUsd=1.0, runLimitAds=10)
+    (tmp_path / "fake_paid.py").write_text("import sys\nsys.exit(3)\n")
+    assert fake.start().wait(30) == 0
+    saved = on_disk(RUN_ID)
+    assert (fake.marks / "scoring-done").exists() and saved["status"] == "partial"
+    assert any("classification failed with exit code 3" in i["message"] for i in saved["issues"])

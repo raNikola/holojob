@@ -31,6 +31,7 @@ sys.path.append(str(ROOT / "python"))
 
 import ai_gate  # noqa: E402
 import pipeline_lock  # noqa: E402
+import run_budget  # noqa: E402
 import run_scoring  # noqa: E402
 from ai_selection import require as require_selection  # noqa: E402
 from calibration.engine_sample import OUTPUT_BASE, OUTPUT_PER_REQUIREMENT, tokens_of  # noqa: E402
@@ -46,8 +47,10 @@ class Captured(LlmUnavailable):
     """Raised by the dry-run `complete` after it has kept the prompt: nothing is sent."""
 
 
-def build(jobs_path: Path, max_ads: int | None, first_ids: set | None = None):
-    """(engine, jobs, send ids): the production shadow engine in judge mode, over the scored rows, with the plan of what it would send."""
+def build(jobs_path: Path, max_ads: int | None, first_ids: set | None = None, *, rescrape: bool = False, run_start: str | None = None):
+    """(engine, jobs, send ids): the production shadow engine in judge mode, over the scored rows, with the plan of what it would send.
+
+    rescrape: only Strong and Possible rows are planned (Weak and Blocked are skipped), this run's ads first (`first`), then by the engine's own order."""
     os.environ[shadow.SHADOW_ENV] = "1"
     intelligence = json.loads(run_scoring.INTELLIGENCE_PATH.read_text(encoding="utf-8"))
     profile = run_scoring._load_profile()
@@ -58,7 +61,11 @@ def build(jobs_path: Path, max_ads: int | None, first_ids: set | None = None):
     engine.limit = max_ads
     engine.first = set(first_ids or ())
     jobs = json.loads(jobs_path.read_text(encoding="utf-8"))["jobs"]
-    jobs = jobs + ledger_rows(jobs_path, {str(j.get("jobId")) for j in jobs}, first_ids)
+    if rescrape:
+        jobs = [j for j in jobs if run_budget.tier_rank(j) in (0, 1)]
+        engine.first = {str(j.get("jobId")) for j in jobs if run_budget.first_seen_after(j, run_start)}
+    else:
+        jobs = jobs + ledger_rows(jobs_path, {str(j.get("jobId")) for j in jobs}, first_ids)
     return engine, jobs, engine.plan(jobs), profile, selection
 
 
@@ -128,7 +135,7 @@ def estimate(engine, jobs, send, profile, selection) -> dict:
                        "dailySpent": totals["today"]["cost"], "monthlySpent": totals["thisMonth"]["cost"]}}
 
 
-def run(engine, jobs, est: dict, max_usd: float, profile: dict) -> dict:
+def run(engine, jobs, est: dict, max_usd: float, profile: dict, order: list | None = None) -> dict:
     """The paid run. Worst-case accounting per call, stop at the cap; the AI gate still enforces the owner's daily and monthly limits."""
     price = est["price"]
     spent = {"usd": 0.0, "calls": 0, "reason": None}
@@ -157,7 +164,11 @@ def run(engine, jobs, est: dict, max_usd: float, profile: dict) -> dict:
         return {"stopped": f"AI gate refused: {decision.reason}", "asked": 0}
     # Only the ads the estimate scanned: with a limit, apply() would plan again over the list minus the refused ads and reach ads nobody scanned.
     engine.limit = None
-    engine.apply([j for j in jobs if (j.get("jobId") or id(j)) in est["send"] and (j.get("jobId") or id(j)) not in set(est["leaks"])])
+    chosen = [j for j in jobs if (j.get("jobId") or id(j)) in est["send"] and (j.get("jobId") or id(j)) not in set(est["leaks"])]
+    if order:  # Re-scrape may stop part-way: the strongest ads, this run's first, must be the ones asked
+        position = {k: i for i, k in enumerate(order)}
+        chosen.sort(key=lambda j: position.get(j.get("jobId") or id(j), len(position)))
+    engine.apply(chosen)
     engine.save()  # whatever was paid for is kept, also after a stop
     stop = spent["reason"] or engine.refusal
     return {"stopped": stop, "newCalls": engine.counts["matched"], "failed": engine.counts["failed"], "refused": engine.counts["refused"],
@@ -182,6 +193,60 @@ def describe(est: dict, selection: dict, max_usd: float | None) -> list[str]:
     return lines
 
 
+def _summary(candidates: int, filled: int, failed: int, waiting: int, stopped: str | None, reserved: float = 0.0) -> str:
+    return run_budget.summary_line("engine", candidates=candidates, filled=filled, failed=failed, waiting=waiting, stopped=stopped, reservedUsd=reserved)
+
+
+def rescrape_main(args) -> int:
+    """The engine fill as a step of Re-scrape. It asks about as many ads as the shared run budget allows and stops there (exit 0, a stop code in
+    the summary); it never refuses everything because the whole estimate is over the remainder."""
+    limits = run_budget.resolve_limits(args.max_usd, args.max_ads)
+    lock = pipeline_lock.acquire()
+    if lock is None:
+        print(pipeline_lock.BUSY_MESSAGE, file=sys.stderr)
+        return pipeline_lock.EXIT_LOCKED
+    try:
+        try:
+            engine, jobs, send, profile, selection = build(args.jobs, None, None, rescrape=True, run_start=args.run_start)
+        except SystemExit as exc:
+            print(f"engine: skipped, {exc}")
+            return 0
+        order = [k for k in engine.plan_order if k in send]
+        candidates = len(order)
+        if not candidates:
+            print("engine: nothing to ask")
+            print(_summary(0, 0, 0, 0, None))
+            return 0
+        if not ai_gate.engine_fill_allowed():
+            print("engine fill not allowed in Settings; nothing was sent")
+            print(_summary(candidates, 0, 0, candidates, run_budget.STOP_ENGINE_NOT_ALLOWED))
+            return 0
+        if limits.stop:
+            print("engine: run limit not set in Settings; nothing was sent" if limits.stop == run_budget.STOP_UNSET else f"engine: stopped, {limits.stop}; nothing was sent")
+            print(_summary(candidates, 0, 0, candidates, limits.stop))
+            return 0
+        by_text = {str(k): k for k in order}
+        selected, over = run_budget.trim([str(k) for k in order], limits.ads, run_budget.read_counted(args.counted_ids))
+        keys = [by_text[s] for s in selected]
+        est = estimate(engine, jobs, set(keys), profile, selection)
+        print("\n".join(describe(est, selection, limits.usd)))
+        if not args.confirm or not est["toAsk"]:
+            print("engine: nothing sent" + ("" if est["toAsk"] else " (nothing to ask)"))
+            print(_summary(candidates, 0, 0, len(over) if not est["toAsk"] else candidates, run_budget.STOP_RUN_ADS if over and not est["toAsk"] else None))
+            return 0
+        if est["costUsd"] is None:
+            print("engine: stopped, no price for this model; nothing was sent")
+            print(_summary(candidates, 0, 0, candidates, run_budget.STOP_GATE))
+            return 0
+        result = run(engine, jobs, est, limits.usd, profile, order=keys)
+        waiting = len(over) + int(result.get("refused") or 0) + (est["toAsk"] if not result.get("modelCalls") and result.get("stopped") else 0)
+        stopped = run_budget.stop_code(result.get("stopped")) or (run_budget.STOP_RUN_ADS if over else None)
+        print(_summary(candidates, int(result.get("newCalls") or 0), int(result.get("failed") or 0), waiting, stopped, float(result.get("worstCaseUsd") or 0)))
+        return 0
+    finally:
+        lock.release()
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--jobs", type=Path, default=JOBS_PATH)
@@ -189,7 +254,12 @@ def main(argv=None) -> int:
     ap.add_argument("--first-ids", type=Path, default=None, help="a JSON file of ad ids (a list, or {\"ids\": [...]}) planned before all other ads, then the rest by score; an id the job list does not hold is read from the job ledger")
     ap.add_argument("--max-usd", type=float, default=None, help="the run's hard stop in US dollars; required with --confirm")
     ap.add_argument("--confirm", action="store_true", help="make the paid calls")
+    ap.add_argument("--rescrape", action="store_true", help="a step of Re-scrape: Strong and Possible ads only, this run's first, as many as the limits allow "
+                                                          "(--max-usd / --max-ads, omitted: Settings), a summary line, exit 0 on a limit stop; needs Settings allowEngineFill")
+    run_budget.add_args(ap)
     args = ap.parse_args(argv)
+    if args.rescrape:
+        return rescrape_main(args)
     if args.confirm and args.max_usd is None:
         print("--confirm needs --max-usd", file=sys.stderr)
         return 2

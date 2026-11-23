@@ -3,7 +3,7 @@ import Badge from '../ui/Badge'
 import FitScore from './FitScore'
 import KeptRescoreButton from './KeptRescoreButton'
 import { scoreRowChips } from '../../modules/jobs/fitScore'
-import { manyUnknownMustsLabel } from '../../modules/jobs/fitTier'
+import { adNotReadLabel, manyUnknownMustsLabel } from '../../modules/jobs/fitTier'
 import JobTailorActions from './JobTailorActions'
 import ApplicationTrackerPanel from './ApplicationTrackerPanel'
 import JobAIToolsPanel, { AiToolsSection } from '../ai/JobAIToolsPanel'
@@ -139,6 +139,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
             <RoleClassBadge job={job} />
             {scoreRowChips(job).map((c) => <Badge key={c.kind} variant={c.variant}>{c.text}</Badge>)}
             {manyUnknownMustsLabel(job) && <Badge variant="default">{manyUnknownMustsLabel(job)}</Badge>}
+            {adNotReadLabel(job) && <Badge variant="default">{adNotReadLabel(job)}</Badge>}
             <EngineShadowBadge shadow={job.engineShadow} />
           </div>
           <ConfidenceNote job={job} />

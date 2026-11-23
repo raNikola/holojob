@@ -1,5 +1,5 @@
 import Badge from '../ui/Badge'
-import { ENGINE_NOT_RUN_LABEL, ENGINE_NOT_RUN_NOTE, TIER_ORDER_NOTE, TIER_STRONG, TIER_POSSIBLE, isBlockedRow, isProvisionalTier, manyUnknownMustsLabel, tierOf, tierLabelOf } from '../../modules/jobs/fitTier'
+import { ENGINE_NOT_RUN_LABEL, ENGINE_NOT_RUN_NOTE, TIER_ORDER_NOTE, TIER_STRONG, TIER_POSSIBLE, isBlockedRow, adNotReadLabel, isProvisionalTier, manyUnknownMustsLabel, tierOf, tierLabelOf } from '../../modules/jobs/fitTier'
 import { INSUFFICIENT_LABEL, NOT_READ_LABEL, isInsufficientData } from '../../modules/jobs/matchScore'
 
 const VARIANT = { [TIER_STRONG]: 'high', [TIER_POSSIBLE]: 'medium' }
@@ -25,6 +25,7 @@ export default function FitTier({ job }) {
       <Badge variant={VARIANT[tier] || 'low'}>{tierLabelOf(job)}</Badge>
       {provisional && <Badge variant="default">{ENGINE_NOT_RUN_LABEL}</Badge>}
       {unknownMusts && <Badge variant="default">{unknownMusts}</Badge>}
+      {adNotReadLabel(job) && <Badge variant="default">{adNotReadLabel(job)}</Badge>}
     </span>
   )
 }

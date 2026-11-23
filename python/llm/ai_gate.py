@@ -92,6 +92,12 @@ DEFAULT_SETTINGS = {
     "monthlyLimit": 0,
     "maxCallsDaily": None,
     "maxCallsMonthly": None,
+    # Re-scrape's per-run limit (owner decision 2026-11-23): one budget shared by its paid steps. null = not set, and then those steps spend nothing.
+    # No number is ever supplied by code.
+    "runLimitUsd": None,
+    "runLimitAds": None,
+    # Re-scrape's engine fill sends a redacted evidence index (candidate data): off until the owner turns it on (a loosening, so it needs the confirm).
+    "allowEngineFill": False,
     # Reserved per call for the answer before its size is known.
     "estimatedOutputTokens": 1000,
     # Day and month boundaries of the limits (IANA name).
@@ -172,6 +178,20 @@ def _limit(value) -> float:
     except (TypeError, ValueError):
         return 0.0
     return number if number > 0 and math.isfinite(number) else 0.0
+
+
+def run_limits(settings: dict | None = None) -> tuple[float, int] | None:
+    """The per-run limit of Re-scrape's paid steps: (US dollars, ads), or None when either is unset or 0 (then they spend nothing)."""
+    settings = load_settings() if settings is None else settings
+    usd = _limit(settings.get("runLimitUsd"))
+    ads = settings.get("runLimitAds")
+    ads = ads if isinstance(ads, int) and not isinstance(ads, bool) and ads > 0 else 0
+    return (usd, ads) if usd > 0 and ads > 0 else None
+
+
+def engine_fill_allowed(settings: dict | None = None) -> bool:
+    settings = load_settings() if settings is None else settings
+    return settings.get("allowEngineFill") is True
 
 
 def _call_cap(value) -> int | None:
@@ -829,6 +849,14 @@ def validate_settings(candidate) -> tuple[dict, list[str]]:
         if key in candidate and candidate[key] is not None and not (
                 _integer(candidate[key]) and 0 <= candidate[key] <= MAX_COUNT):
             errors.append(f"{key} must be a whole number from 0 to {MAX_COUNT}, or empty for no limit")
+    if "runLimitUsd" in candidate and candidate["runLimitUsd"] is not None and not (
+            _number(candidate["runLimitUsd"]) and 0 <= candidate["runLimitUsd"] <= MAX_AMOUNT):
+        errors.append(f"runLimitUsd must be a number from 0 to {MAX_AMOUNT}, or empty for not set")
+    if "runLimitAds" in candidate and candidate["runLimitAds"] is not None and not (
+            _integer(candidate["runLimitAds"]) and 0 <= candidate["runLimitAds"] <= MAX_COUNT):
+        errors.append(f"runLimitAds must be a whole number from 0 to {MAX_COUNT}, or empty for not set")
+    if "allowEngineFill" in candidate and not isinstance(candidate["allowEngineFill"], bool):
+        errors.append("allowEngineFill must be true or false")
     if "estimatedOutputTokens" in candidate and not (
             _integer(candidate["estimatedOutputTokens"]) and 0 <= candidate["estimatedOutputTokens"] <= MAX_COUNT):
         errors.append(f"estimatedOutputTokens must be a whole number from 0 to {MAX_COUNT}")
@@ -853,6 +881,12 @@ def _loosening(old: dict, new: dict) -> list[str]:
             out.append(f"{label} removed (was {before})")
         elif after is not None and before is not None and after > before:
             out.append(f"{label} up: {before} -> {after}")
+    if _limit(new["runLimitUsd"]) > _limit(old["runLimitUsd"]):
+        out.append(f"Re-scrape run limit up: {_limit(old['runLimitUsd']):g} -> {_limit(new['runLimitUsd']):g} {new['currency']} per run")
+    if (new["runLimitAds"] or 0) > (old["runLimitAds"] or 0):
+        out.append(f"Re-scrape ads per run up: {old['runLimitAds'] or 0} -> {new['runLimitAds']}")
+    if new["allowEngineFill"] and not old["allowEngineFill"]:
+        out.append("Re-scrape engine fill allowed: it sends the ad and a redacted evidence index built from your profile to the AI provider")
     if new["estimatedOutputTokens"] < old["estimatedOutputTokens"]:
         out.append(f"estimated output tokens down: {old['estimatedOutputTokens']} -> {new['estimatedOutputTokens']} "
                    "(each call reserves less budget)")

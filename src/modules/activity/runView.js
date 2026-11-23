@@ -6,9 +6,9 @@ import { cancelledText } from '../jobs/rescrapeRun.js'
 export const NOT_RECORDED = 'Not recorded'
 
 export const STATUS_LABELS = {
-  ok: 'OK', partial: 'Partial', failed: 'Failed', skipped: 'Skipped', running: 'Running', interrupted: 'Interrupted', cancelled: 'Cancelled', unknown: 'Unknown',
+  ok: 'OK', waiting: 'Completed, ads waiting', partial: 'Partial', failed: 'Failed', skipped: 'Skipped', running: 'Running', interrupted: 'Interrupted', cancelled: 'Cancelled', unknown: 'Unknown',
 }
-export const STATUS_TONES = { ok: 'high', partial: 'medium', failed: 'warn', skipped: 'low', running: 'derived', interrupted: 'warn', cancelled: 'medium', unknown: 'low' }
+export const STATUS_TONES = { ok: 'high', waiting: 'medium', partial: 'medium', failed: 'warn', skipped: 'low', running: 'derived', interrupted: 'warn', cancelled: 'medium', unknown: 'low' }
 export const TRIGGER_LABELS = { manual: 'Manual', pipeline: 'Pipeline', scheduled: 'Scheduled', unknown: 'Unknown' }
 export const SOURCE_STATUS_LABELS = { ok: 'OK', partial: 'Partly read', failed: 'Failed', skipped: 'Skipped', unfinished: 'Unfinished', unknown: 'Unknown' }
 export const SOURCE_STATUS_TONES = { ok: 'high', partial: 'medium', failed: 'warn', skipped: 'low', unfinished: 'medium', unknown: 'low' }
@@ -43,7 +43,12 @@ export function formatDuration(seconds) {
   return `${Math.floor(seconds / 3600)} h ${Math.floor((seconds % 3600) / 60)} min`
 }
 
-export const statusLabel = (status) => STATUS_LABELS[status] ?? STATUS_LABELS.unknown
+/** The badge words. A run that completed with ads left behind a limit says how many: "Completed, 12 ads waiting". */
+export function statusLabel(status, run) {
+  const waiting = run?.paid?.waiting
+  if (status === 'waiting' && Number.isFinite(waiting)) return `Completed, ${waiting.toLocaleString()} ${waiting === 1 ? 'ad' : 'ads'} waiting`
+  return STATUS_LABELS[status] ?? STATUS_LABELS.unknown
+}
 export const triggerLabel = (trigger) => TRIGGER_LABELS[trigger] ?? TRIGGER_LABELS.unknown
 export const sourceStatusLabel = (status) => SOURCE_STATUS_LABELS[status] ?? SOURCE_STATUS_LABELS.unknown
 
@@ -65,10 +70,43 @@ export function savedShort(run) {
   return Number.isFinite(added) ? `${saved.toLocaleString()} (${added.toLocaleString()} new)` : saved.toLocaleString()
 }
 
+// The limit that stopped a paid step, as the owner reads it (the codes are python run_budget.STOP_CODES; `cap` is an older record's).
 const STOP_WORDS = {
-  cap: 'the spending cap or the ad limit was reached',
-  gate: 'the AI budget gate refused the next call',
+  run_usd: 'the run spend limit in Settings was reached',
+  run_ads: 'the ads-per-run limit in Settings was reached',
+  daily: 'the daily AI budget was reached',
+  monthly: 'the monthly AI budget was reached',
+  call_cap: 'a paid call limit was reached',
   failures: 'three calls in a row failed',
+  gate: 'the AI budget gate refused the next call',
+  unset: 'run limit not set in Settings',
+  engine_not_allowed: 'engine fill not allowed in Settings',
+  cap: 'the spending cap or the ad limit was reached',
+}
+const STEP_TITLES = { classification: 'Classification', reading: 'Reading', engine: 'Engine fill' }
+const DONE_WORDS = { classification: 'classified', reading: 'read', engine: 'filled' }
+const adWord = (n) => `${n.toLocaleString()} ${n === 1 ? 'ad' : 'ads'}`
+
+/**
+ * What a Re-scrape's paid steps did, from the one `paid` block of its record: a headline (limit, spend, distinct ads) and one line per step
+ * (done, failed, spend, "Stopped: <limit>, N ads waiting"). Null for a run with none.
+ */
+export function paidSummary(run) {
+  const paid = run.paid
+  if (!paid) return null
+  const limit = paid.limits
+    ? `Run limit: $${paid.limits.usd?.toFixed(2) ?? '?'} and ${paid.limits.ads ?? '?'} ads.`
+    : 'Run limit not set in Settings: the paid steps spent nothing.'
+  const spent = paid.spentUsd === null ? '' : ` Spent $${paid.spentUsd.toFixed(4)} on ${adWord(paid.ads ?? 0)}.`
+  const lines = Object.entries(paid.steps).flatMap(([key, step]) => {
+    if (!step) return []
+    const parts = [`${Number.isFinite(step.done) ? step.done : 0} ${DONE_WORDS[key]}`]
+    if (step.failed) parts.push(`${step.failed} failed (tried again next run)`)
+    if (step.spentUsd) parts.push(`$${step.spentUsd.toFixed(4)} spent`)
+    const stop = step.stopped ? ` Stopped: ${STOP_WORDS[step.stopped] ?? step.stopped}${Number.isFinite(step.waiting) ? `, ${adWord(step.waiting)} waiting` : ''}.` : ''
+    return [`${STEP_TITLES[key]}: ${parts.join(', ')}.${stop}`]
+  })
+  return { headline: `${limit}${spent}`, lines }
 }
 
 /** The Fit 3 classification run in words (Re-score applies the classes). Null for any other run. */
@@ -90,6 +128,8 @@ export function classificationSentence(run) {
 export function statusSentence(run) {
   if (run.classification) return classificationSentence(run)
   switch (run.status) {
+    case 'waiting':
+      return 'The run finished, but a limit stopped some work and the ads that waited are counted below. The next Re-scrape continues with them; nothing already paid for is repeated.'
     case 'cancelled':
       return cancelledText(run.cancel ? { ...run.cancel, saved: run.cancel.saved ?? run.counts.saved } : undefined)
     case 'interrupted':
@@ -101,7 +141,7 @@ export function statusSentence(run) {
     case 'failed':
       return run.import?.nothingSaved === 'no_usable_source' ? 'No source gave a usable result, so nothing was imported and the job list was not changed.' : 'This run failed. The issues below say where.'
     case 'partial':
-      return 'Some sources did not finish or did not read everything. The sources below say which.'
+      return run.paid ? 'A source did not finish, or a paid step failed. The issues below say which.' : 'Some sources did not finish or did not read everything. The sources below say which.'
     case 'running':
       return 'This run is in progress. Refresh to see where it is.'
     default:

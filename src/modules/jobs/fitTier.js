@@ -106,6 +106,14 @@ export function manyUnknownMustsLabel(row) {
   return `${counts.unknown} of ${counts.total} musts unknown`
 }
 
+/**
+ * "Ad not read: sponsorship and language not checked" (owner decision 2026-11-23, display only): a row scored without the ad's extracted facts
+ * (`aiEnrichment: 'missing'`, set by run_scoring) has had no sponsorship or language check, so no Blocked flag from those can apply yet.
+ * Same style as "N of M musts unknown"; it changes no tier, score or order. Null for a row whose ad was read.
+ */
+export const AD_NOT_READ_LABEL = 'Ad not read: sponsorship and language not checked'
+export const adNotReadLabel = (row) => (row?.aiEnrichment === 'missing' ? AD_NOT_READ_LABEL : null)
+
 /** How many of `rows` are in each tier (`{ strong, possible, weak }`); `include` leaves rows out, for example closed ads. */
 export function tierCounts(rows, include = () => true) {
   const counts = { strong: 0, possible: 0, weak: 0 }

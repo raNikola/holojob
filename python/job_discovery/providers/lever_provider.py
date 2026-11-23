@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-from providers.base_provider import JobProvider, board_read, build_canonical_job, dropped_ad, filter_jobs, format_pay_range, parts_outcome, split_by_filter
+from providers.base_provider import JobProvider, failure_reason, board_read, build_canonical_job, dropped_ad, filter_jobs, format_pay_range, parts_outcome, split_by_filter
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ class LeverProvider(JobProvider):
                 postings = self._fetch_company(company)
             except Exception as exc:
                 logger.warning("Lever company %s failed: %s", company, exc)
-                failures[company] = str(exc)
+                failures[company] = failure_reason(exc)
                 continue
             if not postings:
                 empty.append(company)

@@ -33,9 +33,9 @@ const NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,40}$/
 const BOARD = /^[A-Za-z0-9][A-Za-z0-9_. -]{0,59}$/
 const CODE = /^[a-z][a-z_]{0,39}$/
 const TRIGGERS = ['manual', 'pipeline', 'scheduled']
-const RUN_STATUSES = ['ok', 'partial', 'failed', 'skipped', 'running', 'interrupted', 'cancelled']
+const RUN_STATUSES = ['ok', 'waiting', 'partial', 'failed', 'skipped', 'running', 'interrupted', 'cancelled']
 const SOURCE_STATUSES = ['ok', 'partial', 'failed', 'skipped']
-const STEP_NAMES = ['discovery', 'classification', 'scoring']
+const STEP_NAMES = ['discovery', 'classification', 'reading', 'scoring-prepare', 'engine', 'scoring']
 const CANCEL_OUTCOMES = ['collected_ads_saved', 'stopped_nothing_imported', 'imported_before_cancel', 'finished_before_cancel']
 const IMPORT_KINDS = ['complete', 'partial', 'nothing', 'refused']
 const MAX_EVENTS = 200
@@ -85,7 +85,9 @@ const WHOLE = [
   /^0 ads kept \((?:read \d+, all filtered out|read 0)\); nothing was closed for this source$/,
   /^Every source was skipped: no source searched in this run$/,
   /^No source gave a usable result, so nothing was imported and the job list was not changed\.$/,
-  /^(?:discovery|scoring) failed with exit code -?\d+/, // a step's output tail follows the colon and is cut (see `message`)
+  /^(?:discovery|classification|reading|scoring-prepare|engine|scoring) failed with exit code -?\d+/, // a step's output tail follows the colon and is cut (see `message`)
+  // A limit stopped a paid step: "Stopped: run spend limit, 12 ads waiting (reading)". The words are python run_rescrape.LIMIT_WORDS.
+  /^Stopped: (?:run spend limit|ads-per-run limit|daily AI budget|monthly AI budget|paid call limit|3 calls in a row failed|AI gate refused the next call|run limit not set in Settings|engine fill not allowed in Settings)(?:, \d+ ads? waiting)? \((?:classification|reading|engine fill)\)$/,
   /^Run \w+ left an incomplete save of the job files\. Written: [^.]*\. Not written: [^.]*\. They may not match each other\. Nothing was repaired\.$/,
   /^A save of the job files did not finish \(its marker is unreadable\); they may not match each other\. Nothing was repaired\.$/,
   /^The run did not finish: it stopped(?: during \w+)? \(killed, or the server restarted\)\. It was not resumed\.$/,
@@ -113,21 +115,31 @@ const PREFIXES = [
 ]
 
 /** Exception class names, an HTTP status and snake_case codes found in a text; nothing else of it. */
-export function summarise(value) {
+function foundTokens(value) {
   const found = []
   const raw = typeof value === 'string' ? value : ''
   for (const match of raw.matchAll(/\b([A-Z][A-Za-z]{2,40}(?:Error|Exception|Timeout))\b/g)) found.push(match[1])
   for (const match of raw.matchAll(/\b(?:HTTP\w*|status(?: code)?)[ :]*(\d{3})\b/gi)) found.push(`HTTP ${match[1]}`)
   for (const match of raw.matchAll(/\b([a-z]{2,15}(?:_[a-z]{2,15}){1,4})\b/g)) if (!/key|token|secret|pass|auth|cookie/.test(match[1])) found.push(match[1])
-  const unique = [...new Set(found)].slice(0, 6)
+  return [...new Set(found)].slice(0, 6)
+}
+
+export function summarise(value) {
+  const unique = foundTokens(value)
   return unique.length ? `details withheld (${unique.join(', ')})` : 'details withheld'
+}
+
+/** A board's failure as words: the fixed reason codes the providers write ("board_not_found (HTTP 404)") read "HTTP 404, board not found". */
+export function reasonWords(value) {
+  const tokens = foundTokens(value)
+  return tokens.length ? tokens.map((token) => token.replace(/_/g, ' ')).join(', ') : 'details withheld'
 }
 
 /** An issue or step message as it may be shown. */
 export function message(value) {
   const cleaned = text(value)
   if (cleaned === null) return null
-  if (WHOLE.some((pattern) => pattern.test(cleaned))) return cleaned.replace(/^((?:discovery|scoring) failed with exit code -?\d+).*$/, '$1')
+  if (WHOLE.some((pattern) => pattern.test(cleaned))) return cleaned.replace(/^((?:discovery|classification|reading|scoring-prepare|engine|scoring) failed with exit code -?\d+).*$/, '$1')
   const prefix = PREFIXES.find((one) => cleaned.startsWith(one))
   return prefix ? `${prefix.replace(/[:\s]+$/, '')}: ${summarise(cleaned.slice(prefix.length))}` : `Message ${summarise(cleaned)}`
 }
@@ -139,7 +151,7 @@ export function errorSummary(value) {
   return cleaned.split('; ').slice(0, 20).map((part) => {
     const match = /^([\w.-]{1,60}): (.*)$/s.exec(part)
     const summary = summarise(part)
-    return match ? `${match[1]}: ${summarise(match[2])}` : `${summary[0].toUpperCase()}${summary.slice(1)}`
+    return match ? `${match[1]}: ${reasonWords(match[2])}` : `${summary[0].toUpperCase()}${summary.slice(1)}`
   }).join('; ')
 }
 
@@ -262,13 +274,29 @@ function projectImport(imported) {
     nothingSaved: typeof imported.nothingSaved === 'string' && CODE.test(imported.nothingSaved) ? imported.nothingSaved : null,
   }
 }
+// The fixed stop codes of a paid step (python run_budget.STOP_CODES); `cap` is the code of an older record.
+const STOP_CODES = ['run_usd', 'run_ads', 'daily', 'monthly', 'call_cap', 'failures', 'unset', 'gate', 'engine_not_allowed', 'cap']
+const PAID_STEP_KEYS = ['classification', 'reading', 'engine']
+const usd = (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < 1000 ? Math.round(value * 10000) / 10000 : null)
 
-const STOP_CODES = ['cap', 'gate', 'failures']
+/** The Re-scrape's paid steps (python run_rescrape.PaidBudget): the run's limit, what was spent, and per step counts, spend, ads waiting, a fixed stop code. */
+function projectPaid(block) {
+  if (!block || typeof block !== 'object') return null
+  const limits = block.limits && typeof block.limits === 'object' ? { usd: usd(block.limits.usd), ads: count(block.limits.ads) } : null
+  const steps = Object.fromEntries(PAID_STEP_KEYS.map((key) => {
+    const one = block.steps?.[key]
+    if (!one || typeof one !== 'object') return [key, null]
+    return [key, {
+      candidates: count(one.candidates), done: count(one.done), failed: count(one.failed), waiting: count(one.waiting),
+      stopped: pick(one.stopped, STOP_CODES, null), spentUsd: usd(one.spentUsd), ads: count(one.ads),
+    }]
+  }))
+  return { limits, spentUsd: usd(block.spentUsd), ads: count(block.ads), waiting: count(block.waiting), steps }
+}
 
 /** The Fit 3 classification run (python classify_new.py): counts, the cost and a fixed stop code only. Null for any other run. */
 function projectClassification(block) {
   if (!block || typeof block !== 'object') return null
-  const usd = (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < 1000 ? Math.round(value * 10000) / 10000 : null)
   return {
     candidates: count(block.candidates),
     classified: count(block.classified),
@@ -315,12 +343,13 @@ export function project(record, { alive = true, cancelRequested = false } = {}) 
     startedAt,
     finishedAt,
     durationSeconds: status === 'running' ? null : seconds(startedAt, finishedAt),
-    steps: (Array.isArray(record.steps) ? record.steps : []).slice(0, 4).map((step) => ({
+    steps: (Array.isArray(record.steps) ? record.steps : []).slice(0, 8).map((step) => ({
       name: pick(step?.name, STEP_NAMES, '?'),
       status: pick(step?.status, [...RUN_STATUSES, 'running'], 'unknown'),
       exitCode: Number.isInteger(step?.exitCode) && Math.abs(step.exitCode) < 256 ? step.exitCode : null,
     })),
     classification: projectClassification(record.classification),
+    paid: projectPaid(record.paid),
     canCancel: record.orchestrator === 'rescrape' && status === 'running',
     cancelRequested: Boolean(cancelRequested) && status === 'running',
     cancel: cancel ? { requestedAt: time(cancel.requestedAt), outcome: pick(cancel.outcome, CANCEL_OUTCOMES, 'unknown'), saved: count(cancel.saved) } : null,

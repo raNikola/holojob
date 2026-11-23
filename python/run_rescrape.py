@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""One Re-scrape as one background process: discovery, then scoring, under one lock.
+"""One Re-scrape as one background process under one lock: the whole intake of new ads in one manual run.
 
-The browser only starts it and reads its status (scripts/run-rescrape.js), so closing the tab cannot skip scoring. Same
-source order and arguments as the Re-scrape the browser used to chain itself: no enrichment, no judge, no model call.
+Order (owner decision 2026-11-23): discovery; classification of every ad with no role class; reading (llmFacts) of the Target / Adjacent ads not yet
+read; a free scoring pass into a scratch file; engine fill for the ads that pass the gates and have no current engine answer (only when Settings allow it);
+the real scoring. The three paid steps share ONE run budget set in Settings (runLimitUsd, runLimitAds); the orchestrator reads the real spend from the
+AI ledger and passes each step the remainder. A limit stop is a stop point that is counted ("Stopped: <limit>, N ads waiting"), never a failure and
+never a silent wait. Re-scrape is manual: independent of `automation.enabled`. No judge.
+
+The browser only starts it and reads its status (scripts/run-rescrape.js), so closing the tab cannot skip scoring.
 
     run_rescrape.py start --run-id ID --providers P [--country C]    0 ok, 1 failed, 2 bad input, 75 another run holds the lock
     run_rescrape.py reconcile      JSON: is a run alive; marks dead records interrupted; reports a stale commit marker
@@ -41,13 +46,27 @@ import run_log  # noqa: E402
 
 DISCOVERY = PY / "job_discovery" / "run_discovery.py"
 SCORING = PY / "job_scoring" / "run_scoring.py"
-CLASSIFY = PY / "job_scoring" / "classify_new.py"  # paid, with --confirm and the default caps (package 14); the AI gate still decides
-CLASSIFY_ARGS = ["--confirm", "--max-usd", "0.05", "--max-ads", "100"]  # = classify_new's defaults (a test keeps them equal)
+# The three paid steps (classification, reading, engine fill) share ONE run budget that lives in Settings (runLimitUsd, runLimitAds); the orchestrator
+# measures the spend from the AI ledger and passes each step the REMAINDER. No limit is in code. The AI gate still decides every call.
+CLASSIFY = PY / "job_scoring" / "classify_new.py"
+ENRICH = PY / "job_scoring" / "enrich_jobs.py"
+ENGINE = PY / "job_scoring" / "engine_missing.py"
+PAID_STEPS = {  # step -> (script attribute, fixed flags, the AI ledger feature it spends under)
+    "classification": ("CLASSIFY", ["--confirm", "--rescrape"], "fit3-classify"),
+    "reading": ("ENRICH", ["--rescrape", "--manual"], "enrichment"),
+    "engine": ("ENGINE", ["--confirm", "--rescrape"], "evidence-matcher"),
+}
+STEP_WORDS = {"classification": "classification", "reading": "reading", "engine": "engine fill"}
+LIMIT_WORDS = {  # a stop code as the words the Activity screen may show (run-history.js allows exactly these)
+    "run_usd": "run spend limit", "run_ads": "ads-per-run limit", "daily": "daily AI budget", "monthly": "monthly AI budget",
+    "call_cap": "paid call limit", "failures": "3 calls in a row failed", "gate": "AI gate refused the next call",
+    "unset": "run limit not set in Settings", "engine_not_allowed": "engine fill not allowed in Settings",
+}
 RUN_ID = re.compile(r"^[0-9A-Za-z]{1,32}$")
 OUTPUT_TAIL_LINES = 3
 CANCEL_POLL_SECONDS = 0.2
 CANCEL_GRACE_SECONDS = float(os.environ.get("HOLOJOB_CANCEL_GRACE_SECONDS") or 20)
-FINISHED = ("ok", "partial", "failed", "skipped", "interrupted", "cancelled")
+FINISHED = ("ok", "waiting", "partial", "failed", "skipped", "interrupted", "cancelled")
 
 
 def _now() -> str:
@@ -60,7 +79,7 @@ def step_commands(args) -> list[tuple[str, list[str]]]:
         discovery += ["--country", args.country]
     if getattr(args, "exclude", None):
         discovery += ["--exclude", args.exclude]
-    return [("discovery", discovery), ("classification", [str(CLASSIFY), *CLASSIFY_ARGS]), ("scoring", [str(SCORING)])]
+    return [("discovery", discovery)]
 
 
 def _tail(output) -> str:
@@ -158,36 +177,26 @@ def descendants_left(tree: dict[int, str]) -> dict[int, str]:
     return {pid: started for pid, started in tree.items() if _start_time(pid) == started}
 
 
-STOP_WORDS = {"cap": "the cost cap was reached", "gate": "the AI gate refused the next call", "failures": "3 calls in a row failed"}
-
-
-def _classification_note(output) -> str | None:
-    """One line for the run's issues when the classification step did not finish all it set out to: counts and a fixed reason only. None when all went well."""
+def _summary_of(output) -> dict | None:
+    """The one JSON line a paid step prints last ({"step": name, ...counts and a fixed stop code}); None when it printed none."""
     output.seek(0)
-    lines = output.read().decode("utf-8", "replace").strip().splitlines()
-    for line in reversed(lines):
+    for line in reversed(output.read().decode("utf-8", "replace").strip().splitlines()):
         if not line.startswith("{"):
             continue
         try:
             found = json.loads(line)
         except ValueError:
             continue
-        if not isinstance(found, dict) or "candidates" not in found:
-            continue
-        left, failed, refused = (int(found.get(k) or 0) for k in ("left", "failed", "privacyRefused"))
-        if not (found.get("stopped") or left or failed or refused):
-            return None
-        why = f" Stopped: {STOP_WORDS.get(found.get('stopped'), 'a limit')}." if found.get("stopped") else ""
-        return (f"Role classification: {int(found.get('classified') or 0)} of {int(found.get('candidates') or 0)} new ads classified, {left} stay 'not available', "
-                f"{failed} failed (tried again next run), {refused} not sent (privacy scan).{why}")
-    last = next((l for l in reversed(lines) if l.startswith("classification: ")), "")
-    return f"Role classification {last[len('classification: '):][:160]}" if last and "nothing to classify" not in last else None
+        if isinstance(found, dict) and isinstance(found.get("step"), str):
+            return found
+    return None
 
 
-def run_step(record: dict, name: str, cmd: list[str], lock: pipeline_lock.Lock) -> tuple[dict, bool]:
-    """Run one step, holding the lock with it. Returns the record as it now stands on disk, and whether the step succeeded.
+def run_step(record: dict, name: str, cmd: list[str], lock: pipeline_lock.Lock) -> tuple[dict, bool, dict | None]:
+    """Run one step, holding the lock with it. Returns the record as it now stands on disk, whether the step succeeded, and (a paid step) its summary.
 
     The step's output goes to an unnamed temp file, not a pipe: no reader can go away and kill it with EPIPE.
+    A Re-scrape is a manual action: every step runs with the manual AI trigger, whatever `automation.enabled` says.
     """
     step = {"name": name, "status": "running", "startedAt": _now(), "finishedAt": None, "exitCode": None}
     record.setdefault("steps", []).append(step)
@@ -196,12 +205,12 @@ def run_step(record: dict, name: str, cmd: list[str], lock: pipeline_lock.Lock) 
     with tempfile.TemporaryFile() as output:
         proc = subprocess.Popen(
             [sys.executable, *cmd], cwd=ROOT, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
-            pass_fds=(lock.fd,), env={**lock.child_env(), "PYTHONIOENCODING": "utf-8"},
+            pass_fds=(lock.fd,), env={**lock.child_env(), "PYTHONIOENCODING": "utf-8", "HOLOJOB_AI_TRIGGER": "manual"},
             start_new_session=True,  # its own group: a cancel can stop the step and everything it started, and nothing else
         )
         code, signalled, killed = wait_for_step(proc, record, name)
         tail = _tail(output) if code != 0 else ""
-        classified = _classification_note(output) if name == "classification" and code == 0 else None
+        summary = _summary_of(output) if name in PAID_STEPS and code == 0 else None
 
     # Discovery wrote to the record meanwhile; only one process writes it at a time, and now it is this one again.
     fresh = run_log.find_record(record["runId"]) or record
@@ -211,16 +220,128 @@ def run_step(record: dict, name: str, cmd: list[str], lock: pipeline_lock.Lock) 
     step.update(status="ok" if code == 0 else "cancelled" if stopped else "failed", finishedAt=_now(), exitCode=code)
     if killed and stopped:
         fresh.setdefault("cancel", {"requestedAt": run_log.cancel_info(fresh).get("requestedAt"), "outcome": "stopped_nothing_imported"})
-    if classified:
-        run_log.add_issue(fresh, "warning", classified)
-        run_log.event(fresh, "classification_note", message=classified)
     if code != 0 and not stopped:
         message = f"{name} failed with exit code {code}" + (f": {tail}" if tail else "")
         run_log.add_issue(fresh, "error", message)
         run_log.event(fresh, "error", step=name, message=message)
     run_log.save(fresh)
     run_log.event(fresh, "step_end", step=name, status=step["status"], exitCode=code)
-    return fresh, code == 0
+    return fresh, code == 0, summary
+
+
+# --- the paid steps and their one budget ------------------------------------------------------------------------------------------------------------
+class PaidBudget:
+    """The run's one budget for classification, reading and engine fill. Settings hold the limits; the AI ledger holds what was spent.
+
+    Nothing here is trusted from a step's own print: before each step the spend and the distinct ads so far are read from the ledger (rows since the
+    run began, the three paid features), and the step gets the remainder as flags. The imports are lazy: `reconcile` stays stdlib-only.
+    """
+
+    DONE_KEY = {"classification": "classified", "reading": "read", "engine": "filled"}
+
+    def __init__(self, record: dict, scratch: Path):
+        sys.path.append(str(PY / "llm"))
+        import ai_gate  # noqa: PLC0415
+        import run_budget  # noqa: PLC0415
+
+        settings = ai_gate.load_settings()
+        self.rb = run_budget
+        self.limits = ai_gate.run_limits(settings)  # (USD, ads) or None: not set, so the paid steps spend nothing
+        self.engine_allowed = ai_gate.engine_fill_allowed(settings)
+        self.run_start = record["startedAt"]
+        self.started = datetime.fromisoformat(self.run_start)
+        self.counted = scratch / "counted-ads.json"
+        self.steps: dict[str, dict] = {}
+
+    def flags(self) -> list[str]:
+        """The remainder of the run's budget as the flags of the next step. Unset limits pass no flag: the step then finds them unset itself."""
+        if self.limits is None:
+            return []
+        usd, ads = self.rb.usage_since(self.started)
+        self.counted.write_text(json.dumps(sorted(ads)), encoding="utf-8")
+        os.chmod(self.counted, 0o600)
+        return ["--max-usd", f"{max(0.0, self.limits[0] - usd):.6f}", "--max-ads", str(max(0, self.limits[1] - len(ads))),
+                "--run-start", self.run_start, "--counted-ids", str(self.counted)]
+
+    def note(self, name: str, summary: dict | None) -> None:
+        """What one step did: counts, its spend and the distinct ads it handled (from the ledger), and a fixed stop code."""
+        if summary is None:
+            return
+        usd, ads = self.rb.usage_since(self.started, features=(PAID_STEPS[name][2],))
+
+        def count(key):
+            value = summary.get(key)
+            return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+        stopped = summary.get("stopped")
+        self.steps[name] = {"candidates": count("candidates"), "done": count(self.DONE_KEY[name]), "failed": count("failed"), "waiting": count("waiting"),
+                            "stopped": stopped if stopped in self.rb.STOP_CODES else None, "spentUsd": round(usd, 4), "ads": len(ads)}
+
+    def skipped(self, name: str, code: str) -> None:
+        self.steps[name] = {"candidates": 0, "done": 0, "failed": 0, "waiting": None, "stopped": code, "spentUsd": 0.0, "ads": 0}
+
+    def finish(self, record: dict) -> int:
+        """Write the run's one paid block and one issue per stopped step. Returns how many ads wait."""
+        usd, ads = self.rb.usage_since(self.started)
+        waiting = sum(s["waiting"] or 0 for s in self.steps.values())
+        record["paid"] = {"limits": None if self.limits is None else {"usd": self.limits[0], "ads": self.limits[1]},
+                          "spentUsd": round(usd, 4), "ads": len(ads), "waiting": waiting, "steps": self.steps}
+        for name, step in self.steps.items():
+            if not step["stopped"]:
+                continue
+            count = step["waiting"]
+            tail = f", {count} ads waiting" if count is not None else ""
+            run_log.add_issue(record, "warning", f"Stopped: {LIMIT_WORDS[step['stopped']]}{tail} ({STEP_WORDS[name]})")
+        return waiting
+
+
+def intake(record: dict, lock: pipeline_lock.Lock) -> tuple[dict, bool, bool]:
+    """After a good discovery: classification, reading, a free scoring pass for the engine to read, engine fill, then the real scoring.
+    Returns (the record, the final scoring succeeded, a paid step failed).
+
+    A limit stop is not a failure: the step ends, the ads left are counted, and the next step still runs. A paid step that fails adds an issue and the run
+    goes on to scoring. The engine plans from a scored list (its score, requirements and gates), so it reads a scratch scoring written beside the real one,
+    never `scored_jobs.json`: the pre-re-score backups are not used up and the list the owner sees changes only once, at the end.
+    """
+    paid_failed = False
+    with tempfile.TemporaryDirectory(prefix="holojob-rescrape-") as scratch:
+        budget = PaidBudget(record, Path(scratch))
+        scored_view = Path(scratch) / "scored-for-engine.json"
+        view_ready = False
+        succeeded = True
+        engine_wanted = budget.limits is not None and budget.engine_allowed
+        for name in ("classification", "reading", "scoring-prepare", "engine", "scoring"):
+            if name == "scoring-prepare" and not engine_wanted:
+                continue
+            if run_log.cancel_requested(record):
+                run_log.event(record, "step_skipped", step=name, reason="cancelled")
+                continue
+            if name in PAID_STEPS:
+                if name != "classification" and budget.limits is None:
+                    budget.skipped(name, budget.rb.STOP_UNSET)
+                    run_log.event(record, "step_skipped", step=name, reason="run_limit_not_set")
+                    continue
+                if name == "engine" and not budget.engine_allowed:
+                    budget.skipped(name, budget.rb.STOP_ENGINE_NOT_ALLOWED)
+                    run_log.event(record, "step_skipped", step=name, reason="engine_not_allowed")
+                    continue
+                if name == "engine" and not view_ready:
+                    run_log.event(record, "step_skipped", step=name, reason="no_scored_view")
+                    continue
+                script, fixed, _ = PAID_STEPS[name]
+                cmd = [str(globals()[script]), *fixed, *budget.flags()]
+                if name == "engine":
+                    cmd += ["--jobs", str(scored_view)]
+                record, ok, summary = run_step(record, name, cmd, lock)
+                budget.note(name, summary)
+                paid_failed = paid_failed or (not ok and not run_log.cancel_requested(record))
+            elif name == "scoring-prepare":
+                record, view_ready, _ = run_step(record, name, [str(SCORING), "--output", str(scored_view)], lock)
+                paid_failed = paid_failed or (not view_ready and not run_log.cancel_requested(record))
+            else:
+                record, succeeded, _ = run_step(record, name, [str(SCORING)], lock)
+        budget.finish(record)
+    return record, succeeded, paid_failed
 
 
 def start(args) -> int:
@@ -240,25 +361,31 @@ def start(args) -> int:
             return 1
         run_log.event(record, "run_start", trigger="manual")
         succeeded = True
+        paid_failed = False
         try:
-            for name, cmd in step_commands(args):
-                if name in ("classification", "scoring") and run_log.cancel_requested(record):
-                    run_log.event(record, "step_skipped", step=name, reason="cancelled")
-                    if name == "classification":
-                        continue  # the count is skipped too; the scoring check below ends the run
-                    break  # the scrape was imported before the request came: it counts, and only scoring is left undone
-                record, succeeded = run_step(record, name, cmd, lock)
+            for name, cmd in step_commands(args):  # discovery
+                record, succeeded, _ = run_step(record, name, cmd, lock)
                 if not succeeded:
                     break  # as the browser did: a failed discovery is not scored
                 if name == "discovery" and (record.get("import") or {}).get("nothingSaved") == "no_usable_source":
                     run_log.event(record, "step_skipped", step="scoring", reason="nothing_imported")
                     break  # S8b: no source was usable, the list did not change, so there is nothing to score
+                if run_log.cancel_requested(record):
+                    # the scrape was imported before the request came: it counts, and only the paid steps and scoring are left undone
+                    run_log.event(record, "step_skipped", step="scoring", reason="cancelled")
+                    break
+                record, succeeded, paid_failed = intake(record, lock)
         except Exception as exc:
             succeeded = False
             run_log.add_issue(record, "error", f"The run stopped: {exc}")
             run_log.event(record, "error", message=f"The run stopped: {exc}")
         cancelled, succeeded = settle_cancel(record, succeeded)
-        run_log.save(run_log.finish(record, exit_ok=succeeded, cancelled=cancelled))
+        finished = run_log.finish(record, exit_ok=succeeded, cancelled=cancelled)
+        if finished["status"] == "ok" and paid_failed:
+            finished["status"] = "partial"  # a paid step failed (its issue says which); sources are fine
+        elif finished["status"] == "ok" and (finished.get("paid") or {}).get("waiting"):
+            finished["status"] = "waiting"  # completed, but a limit left ads waiting: never shown as plainly finished
+        run_log.save(finished)
         run_log.event(record, "run_end", status=record["status"])
         return 0 if succeeded else 1
     finally:

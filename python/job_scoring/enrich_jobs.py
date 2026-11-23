@@ -43,6 +43,7 @@ from geography import WORLDWIDE, is_known  # noqa: E402
 from work_authorization import outside_allowed_before_enrichment  # noqa: E402
 from atomic_write import write_text_atomic  # noqa: E402
 import pipeline_lock  # noqa: E402
+import run_budget  # noqa: E402
 import job_history  # noqa: E402
 import row_state  # noqa: E402
 import view_guard  # noqa: E402
@@ -654,7 +655,41 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="job history ledger (default: job_history.json beside --jobs)",
     )
+    # A step of Re-scrape (owner decision 2026-11-23). Off: the pipeline's enrichment is unchanged.
+    p.add_argument("--rescrape", action="store_true", help="a step of Re-scrape: only Target / Adjacent ads, this run's first, strongest first, "
+                                                          "under --max-usd / --max-ads (omitted: Settings), and a summary line; a limit stop exits 0")
+    p.add_argument("--max-ads", type=int, default=None, help="with --rescrape: at most this many distinct ads (omitted: Settings runLimitAds; 0 = used up)")
+    p.add_argument("--scored", type=Path, default=None, help="with --rescrape: the last scored list, read only to order the work (default data/jobs/scored_jobs.json)")
+    run_budget.add_args(p)
     return p.parse_args()
+
+
+def _plan_rescrape(args: argparse.Namespace, pending: list[tuple[int, dict]]):
+    """Re-scrape's reading plan: (ads to read, candidates, ads over the ads limit, limits, ads skipped for their class or a block).
+
+    Only ads whose role class is target or adjacent are read (an ad of another class is never sent for reading), minus an ad whose last scored row is
+    already blocked by a fact that needs no reading (a place outside the allowed ones). Weak ads stay in, last: an unread ad can look weak only
+    because it is unread. This run's ads come first, then the backlog; inside each Strong, Possible, not scored, Weak.
+    """
+    import role_class  # noqa: PLC0415 - only Re-scrape needs the class store
+
+    limits = run_budget.resolve_limits(args.max_usd, args.max_ads)
+    prior = run_budget.prior_view(args.scored or ROOT / "data" / "jobs" / "scored_jobs.json")
+    stamped = [dict(job) for _, job in pending]
+    role_class.label(stamped)  # on copies: nothing is written back to the jobs
+    keep, skipped = [], 0
+    for (index, job), row in zip(pending, stamped):
+        if row.get("roleClass") not in ("target", "adjacent") or run_budget.is_blocked(prior.get(str(job.get("jobId")))):
+            skipped += 1
+            continue
+        keep.append((index, job))
+    keep.sort(key=lambda item: run_budget.order_key(item[1], prior, args.run_start))
+    candidates = len(keep)
+    if limits.stop:
+        return [], candidates, 0, limits, skipped
+    selected, over = run_budget.trim([str(job.get("jobId")) for _, job in keep], limits.ads, run_budget.read_counted(args.counted_ids))
+    chosen = set(selected)
+    return [item for item in keep if str(item[1].get("jobId")) in chosen], candidates, len(over), limits, skipped
 
 
 def main() -> int:
@@ -727,6 +762,15 @@ def enrich(args: argparse.Namespace) -> int:
         if args.limit and len(pending) >= args.limit:
             break
 
+    plan_info = None
+    if args.rescrape:
+        pending, candidates, over_limit, limits, skipped_class = _plan_rescrape(args, pending)
+        plan_info = (candidates, over_limit, limits)
+        print(f"  Re-scrape reading plan: {candidates} Target / Adjacent ads unread, {len(pending)} within the limits, "
+              f"{over_limit} over the ads limit, {skipped_class} not read (other class or already blocked)", flush=True)
+        if limits.stop == run_budget.STOP_UNSET:
+            print("reading: run limit not set in Settings; nothing was sent", flush=True)
+
     mapper = competency_mapping.load_mapper(_role_family(args.intelligence))
     remap = mapper.remap if mapper else competency_mapping.load_remap()
     frames = requirement_frames.load()
@@ -749,7 +793,8 @@ def enrich(args: argparse.Namespace) -> int:
     # its own job dict, so nothing is shared between threads.
     stop = threading.Event()
     try:
-        guard = make_guard(args.max_usd, args.provider, args.model) if args.max_usd is not None and pending else None
+        cap = plan_info[2].usd if plan_info else args.max_usd
+        guard = make_guard(cap, args.provider, args.model) if cap is not None and pending else None
     except (LlmUnavailable, LlmRefused) as exc:
         print(f"enrichment: {exc}", file=sys.stderr)
         return 1
@@ -837,6 +882,12 @@ def enrich(args: argparse.Namespace) -> int:
     if refusal:
         # run_pipeline.py reads this line: refused work degrades the run, it does not stop it.
         print(f"ai gate refused: {refusal}")
+    if plan_info:
+        candidates, over_limit, limits = plan_info
+        waiting = candidates if limits.stop else over_limit + refused
+        stopped = limits.stop or run_budget.stop_code(refusal) or (run_budget.STOP_RUN_ADS if over_limit else None)
+        print(run_budget.summary_line("reading", candidates=candidates, read=done, failed=failed, waiting=waiting, stopped=stopped,
+                                      spentUsd=round(guard.spent(), 4) if guard else 0.0), flush=True)
     # Every call failing means the provider is down: say so rather than let a
     # pipeline carry on with jobs nobody read. Refused calls are not failures.
     if pending and done == 0 and not refused:

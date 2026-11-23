@@ -140,6 +140,7 @@ class ShadowEngine:
                        "closed": 0, "failed": 0, "excluded": 0, "refused": 0, "notActive": 0}
         # The AI budget gate refused a call: the rest of the run makes none (ai_gate.py).
         self.refusal: str | None = None
+        self.plan_order: list = []
         # Ads the cheap gates ruled out of the send, by gate (an ad failing two counts in both).
         self.excluded: dict[str, int] = {g: 0 for g in CHEAP_GATES}
         self._excluded_keys: set = set()
@@ -186,6 +187,7 @@ class ShadowEngine:
                              job_fingerprint(posting), str(_key(job)), _key(job)))
         eligible.sort()
         chosen = eligible if self.limit is None else eligible[: max(0, self.limit)]
+        self.plan_order = [row[-1] for row in chosen]  # the processing order of the plan (Re-scrape stops part-way, so the order is the strongest first)
         return {row[-1] for row in chosen}
 
     def _auxiliary(self, job: dict) -> dict:

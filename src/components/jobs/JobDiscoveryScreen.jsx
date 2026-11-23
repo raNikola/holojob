@@ -237,7 +237,10 @@ export default function JobDiscoveryScreen() {
       const jobs = await loadLatestScoredJobs()
       setState((prev) => importJobsFromFile(jobs, prev))
       const strong = tierCounts(jobs.jobs, (j) => !isClosedAd(j)).strong
-      setRunToast({ kind: 'success', text: `Re-scrape done: ${jobs.jobs?.length || 0} jobs, ${strong} Strong fit.` })
+      const waiting = run.status === 'waiting' ? run.paid?.waiting : null
+      setRunToast(waiting !== null && waiting !== undefined
+        ? { kind: 'warn', text: `Re-scrape finished, but ${waiting} ${waiting === 1 ? 'ad is' : 'ads are'} still waiting: a limit stopped the paid steps (${jobs.jobs?.length || 0} jobs, ${strong} Strong fit). The next Re-scrape continues; Activity says which limit.` }
+        : { kind: 'success', text: `Re-scrape done: ${jobs.jobs?.length || 0} jobs, ${strong} Strong fit.` })
     } catch (e) {
       setRunToast({ kind: 'error', text: `Re-scrape finished, but the new jobs could not be loaded: ${e.message}` })
     }

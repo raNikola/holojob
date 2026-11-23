@@ -38,6 +38,9 @@ export function settingsFromForm(form) {
     monthlyLimit: num(form.monthlyLimit),
     maxCallsDaily: count(form.maxCallsDaily),
     maxCallsMonthly: count(form.maxCallsMonthly),
+    runLimitUsd: count(form.runLimitUsd),
+    runLimitAds: count(form.runLimitAds),
+    allowEngineFill: Boolean(form.allowEngineFill),
     estimatedOutputTokens: num(form.estimatedOutputTokens),
     timezone: String(form.timezone).trim(),
     automation: { enabled: Boolean(form.automationEnabled) },
@@ -61,6 +64,7 @@ export function formFromSettings(s) {
   return {
     currency: s.currency, dailyLimit: text(s.dailyLimit), monthlyLimit: text(s.monthlyLimit),
     maxCallsDaily: text(s.maxCallsDaily), maxCallsMonthly: text(s.maxCallsMonthly),
+    runLimitUsd: text(s.runLimitUsd), runLimitAds: text(s.runLimitAds), allowEngineFill: Boolean(s.allowEngineFill),
     estimatedOutputTokens: text(s.estimatedOutputTokens), timezone: s.timezone,
     automationEnabled: Boolean(s.automation?.enabled),
     subscriptionEnabled: Boolean(s.claudeCodeSubscription?.enabled),

@@ -195,6 +195,8 @@ export default function AIBudgetPanel() {
             <Input label="Monthly limit" type="number" min="0" step="any" value={form.monthlyLimit} onChange={set('monthlyLimit')} />
             <Input label="Max paid calls per day (empty = none)" type="number" min="0" step="1" value={form.maxCallsDaily} onChange={set('maxCallsDaily')} />
             <Input label="Max paid calls per month (empty = none)" type="number" min="0" step="1" value={form.maxCallsMonthly} onChange={set('maxCallsMonthly')} />
+            <Input label="Re-scrape: spend limit per run (empty = not set, no paid step runs)" type="number" min="0" step="any" value={form.runLimitUsd} onChange={set('runLimitUsd')} />
+            <Input label="Re-scrape: ads per run (empty = not set, no paid step runs)" type="number" min="0" step="1" value={form.runLimitAds} onChange={set('runLimitAds')} />
             <Input label="Estimated output tokens per call" type="number" min="0" step="1" value={form.estimatedOutputTokens} onChange={set('estimatedOutputTokens')} />
             <Input label="Currency" value={form.currency} onChange={set('currency')} />
             <Input label="Timezone (IANA)" value={form.timezone} onChange={set('timezone')} placeholder="Europe/Belgrade" />
@@ -203,6 +205,14 @@ export default function AIBudgetPanel() {
             <input type="checkbox" className="mt-1" checked={form.automationEnabled}
               onChange={(e) => setForm({ ...form, automationEnabled: e.target.checked })} />
             <span>Automatic AI tasks (scheduled pipeline, enrichment without --manual). Off by default; on needs a confirm.</span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1" checked={form.allowEngineFill}
+              onChange={(e) => setForm({ ...form, allowEngineFill: e.target.checked })} />
+            <span>
+              Allow engine fill in Re-scrape (sends the ad and a redacted evidence index built from your profile, never your name, e-mail, phone or links, to the AI provider).
+              Off by default; on needs a confirm.
+            </span>
           </label>
           <div className="space-y-2 rounded-lg border border-stone-200 p-3 dark:border-stone-700">
             <label className="flex items-start gap-2 text-sm">

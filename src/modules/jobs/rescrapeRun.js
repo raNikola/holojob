@@ -35,7 +35,9 @@ export function applyStatus(view, status) {
   return { ...shared, events: [...view.events, ...(status.events ?? [])], next: status.next ?? view.next, reread: false }
 }
 
-const STEP_NAMES = { discovery: 'Discovery', scoring: 'Scoring' }
+const STEP_NAMES = {
+  discovery: 'Discovery', classification: 'Classification', reading: 'Reading', 'scoring-prepare': 'Scoring for the engine', engine: 'Engine fill', scoring: 'Scoring',
+}
 
 /** One event in words. A kind this build does not know is shown by name rather than hidden. */
 export function eventText(event) {

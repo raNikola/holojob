@@ -108,6 +108,45 @@ describe('what a run shows', () => {
     expect(run.sources.map((s) => [s.returned, s.collected, s.filteredOut])).toEqual([[100, 40, 60], [50, 10, 40]])
   })
 
+  it('shows a Re-scrape\'s paid steps through an allow-list: counts, spend, a fixed stop code, nothing else', () => {
+    plant(1, {
+      status: 'waiting',
+      steps: ['discovery', 'classification', 'reading', 'scoring-prepare', 'engine', 'scoring'].map((name) => ({ name, status: 'ok', exitCode: 0 })),
+      issues: [
+        { level: 'warning', source: null, message: 'Stopped: run spend limit, 12 ads waiting (classification)' },
+        { level: 'warning', source: null, message: 'Stopped: engine fill not allowed in Settings (engine fill)' },
+        { level: 'warning', source: null, message: 'Stopped: run limit not set in Settings, 3 ads waiting (reading)' },
+        { level: 'error', source: null, message: 'reading failed with exit code 3: Traceback CANARY-TITLE' },
+        { level: 'warning', source: null, message: 'Stopped: CANARY-TITLE, 2 ads waiting (reading)' },
+      ],
+      paid: {
+        limits: { usd: 1, ads: 50, extra: 'x' }, spentUsd: 0.4321, ads: 20, waiting: 14, secret: 'CANARY-TITLE',
+        steps: { classification: { candidates: 30, done: 18, failed: 1, waiting: 12, stopped: 'run_usd', spentUsd: 0.2, ads: 18, note: 'CANARY-TITLE' },
+          reading: { candidates: 2, done: 0, failed: 0, waiting: 2, stopped: 'CANARY-TITLE', spentUsd: 0, ads: 0 }, engine: { stopped: 'engine_not_allowed', waiting: null }, other: { done: 1 } },
+      },
+    })
+    const [run] = list().body.runs
+    expect(run.status).toBe('waiting')
+    expect(run.steps.map((s) => s.name)).toEqual(['discovery', 'classification', 'reading', 'scoring-prepare', 'engine', 'scoring'])
+    expect(run.paid.limits).toEqual({ usd: 1, ads: 50 })
+    expect(run.paid.steps.classification).toEqual({ candidates: 30, done: 18, failed: 1, waiting: 12, stopped: 'run_usd', spentUsd: 0.2, ads: 18 })
+    expect(run.paid.steps.reading.stopped).toBeNull()
+    expect(run.paid.steps.engine).toMatchObject({ stopped: 'engine_not_allowed', waiting: null })
+    expect(Object.keys(run.paid.steps)).toEqual(['classification', 'reading', 'engine'])
+    expect(JSON.stringify(run)).not.toContain('CANARY')
+    expect(run.issues.map((i) => i.message).slice(0, 3)).toEqual([
+      'Stopped: run spend limit, 12 ads waiting (classification)', 'Stopped: engine fill not allowed in Settings (engine fill)',
+      'Stopped: run limit not set in Settings, 3 ads waiting (reading)',
+    ])
+    expect(run.issues[3].message).toBe('reading failed with exit code 3')
+    expect(run.issues[4].message).toMatch(/^Message details withheld/)
+  })
+
+  it('reads a board\'s failure from the fixed reason code and names it in words', () => {
+    plant(1, { sources: [{ name: 'lever', status: 'partial', read: 10, kept: 5, new: 0, error: 'holycode: board_not_found (HTTP 404)', boardsFailed: ['holycode'], skipReason: null }] })
+    expect(list().body.runs[0].sources[0].error).toBe('holycode: HTTP 404, board not found')
+  })
+
   it('passes the held counts of an import through, and drops anything else in the block', () => {
     plant(1, { sources: [], import: { kind: 'complete', complete: true, saved: 1, new: 0, refreshed: 1, ledger: { closed: 0, absent: 0, reopened: 0, changed: 0, known: 1 }, held: { keptFailedBoard: 3, keptUnproven: 'x', listedButFiltered: 4, extra: 9 }, sources: [] } })
     const [run] = list().body.runs
@@ -289,7 +328,7 @@ describe('the allow-list', () => {
   it('returns exactly the listed fields at every level, and keeps what is safe in the messages', () => {
     seeded()
     const [run] = list().body.runs
-    expect(Object.keys(run).sort()).toEqual(['canCancel', 'cancel', 'cancelRequested', 'classification', 'counts', 'durationSeconds', 'finishedAt', 'import', 'incompleteCommit', 'inferred', 'issues', 'issuesCount',
+    expect(Object.keys(run).sort()).toEqual(['canCancel', 'cancel', 'cancelRequested', 'classification', 'counts', 'durationSeconds', 'finishedAt', 'import', 'incompleteCommit', 'inferred', 'issues', 'issuesCount', 'paid',
       'recorded', 'runId', 'sources', 'staging', 'startedAt', 'status', 'steps', 'trigger'])
     expect(Object.keys(run.sources[0]).sort()).toEqual(['boardsFailed', 'collected', 'completeRead', 'durationSeconds', 'error', 'filterReasons', 'filteredOut', 'finishedAt', 'name', 'new', 'proof', 'readClass', 'returned', 'skipReason', 'startedAt', 'status'])
     expect(Object.keys(run.issues[0]).sort()).toEqual(['level', 'message', 'source'])
@@ -379,7 +418,7 @@ describe('messages', () => {
   })
 
   it('summarises a source error part by part and keeps the board names', () => {
-    expect(errorSummary('acme: HTTPError 404 CANARY-TITLE; beta: timeout CANARY-DESCRIPTION')).toBe('acme: details withheld (HTTPError, HTTP 404); beta: details withheld')
+    expect(errorSummary('acme: HTTPError 404 CANARY-TITLE; beta: timeout CANARY-DESCRIPTION')).toBe('acme: HTTPError, HTTP 404; beta: details withheld')
     expect(errorSummary('something with CANARY-TITLE')).toBe('Details withheld')
     expect(summarise('status code 429 and TimeoutError')).toBe('details withheld (TimeoutError, HTTP 429)')
   })
