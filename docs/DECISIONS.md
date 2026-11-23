@@ -185,7 +185,7 @@ A short separate lock would not be enough: `run_scoring.py` reads `manual_jobs.j
 **Why:** one process fetched, merged into the ledger, wrote four files and scored. A stop at any point either lost what was collected or left the files
 disagreeing, and "an ad was not in this search" was allowed to read as "the ad is gone". The run becomes three steps, each safe to repeat:
 **scrape** (collect, write staging only) -> **import** (the one commit) -> **scoring** (reads the committed data). Slice names: **S1 to S7**
-([ROADMAP.md](ROADMAP.md#activity-screen---planned)); "slice 2b / 3 / 4" in older entries mean S6 / S7 / S5.
+([ROADMAP.md](ROADMAP.md#status-at-a-glance-2026-11-23)); "slice 2b / 3 / 4" in older entries mean S6 / S7 / S5.
 
 **Approved decisions (owner, 2026-11-03):**
 
@@ -300,11 +300,11 @@ Nothing is imported for real in S3: `import_run.py` refuses without `--dry-run` 
 
 ## Owner decisions: baseline score, role filter, Infostud, testing (2026-11-03)
 
-Recorded from the owner's addendum. Docs only; no code changed. Backlog entries: [ROADMAP.md](ROADMAP.md#activity-screen---planned).
+Recorded from the owner's addendum. Docs only; no code changed. Backlog entries: [ROADMAP.md](ROADMAP.md#status-at-a-glance-2026-11-23).
 
 1. **Scoring baseline.** A made-up manual job with a junk description scored 44 (Weak, P3, Maybe; Role 45, Skill 20, Industry 55, Experience 65, Location 50, Culture 58).
    The owner expects at most about 5 and an "insufficient data" label. **Deferred** to the end of the current Activity work and solved with the scoring fix
-   ([ROADMAP.md](ROADMAP.md#fix-scoring-skill-extraction-scope-requirement-weighting-domain-transferability---todo)). Any fix stays in `scorer.py`, not in a prompt (architectural rule).
+   ([ROADMAP.md](ROADMAP.md#2-evaluation-quality)). Any fix stays in `scorer.py`, not in a prompt (architectural rule).
 2. **Role filter too strict.** `python/job_discovery/providers/role_filter.py` checks `TITLE_EXCLUDE` ("project manager", ...) first, and an ad with no include term is dropped
    silently with the reason `title_not_matched` (Infostud: 392 of 409 dropped, for example ad 765172 "Medior Dev Project Manager Niš", position "IT Project Manager").
    Idea: three tiers (clear no / clear yes / borderline kept with a "for review" flag; AI only on a borderline title plus a short description, which needs its own approval with cost, see
@@ -1225,7 +1225,7 @@ list from 56 to 1,990 rows, cut the corpus from 55 to 8 and moved the generation
 
 ## Roadmap v2 and the single discovery safety rule (2026-11-04)
 
-Owner-approved, GPT-reviewed. Documentation only: no code, test or data changed. History above is not rewritten; where an earlier entry conflicts with this section, this section wins. The wave table is in [ROADMAP.md](ROADMAP.md#roadmap-v2-recorded-2026-11-04). Goal: Scoring -> Matching -> Application Tracking.
+Owner-approved, GPT-reviewed. Documentation only: no code, test or data changed. History above is not rewritten; where an earlier entry conflicts with this section, this section wins. The wave table is in [ROADMAP.md](ROADMAP.md#status-at-a-glance-2026-11-23). Goal: Scoring -> Matching -> Application Tracking.
 
 **State:** S1 to S8b are built, deployed from a clean build and merged to main at `e8995ed`. The "Built, not deployed" statuses in ROADMAP.md were stale and are corrected.
 
@@ -1284,7 +1284,7 @@ Planning only. No application code, dependency, test or data changed, and the re
 
 **Implementation choices (standard, not owner decisions):** `src/components/ds/` for registry files; exact version pins; `shadcn` and `tw-animate-css` as dev dependencies; `native-select` before `select`; the repo's dark variant kept until the `dark:` colour uses are gone; `window.confirm` kept in MVP; a ratchet test for palette classes.
 
-**Open PO decisions** (details in [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md#open-po-decisions)):
+**Open PO decisions** (details in [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md#approved-decisions)):
 
 - O1: approval of the extension token values and aliases.
 - O2: sequencing of slices against Waves 2 to 5.
@@ -1312,7 +1312,7 @@ Owner decision. Still planning only: no application code, dependency, test or da
 - **New:** `--font-sans` collides by name with the repo's DM Sans, and `body` reads it, so it moves only in the global cutover. Dark `--primary` as text fell from 2.72:1 to 2.23:1. `shadcn apply` over an existing preset leaves the old font import and dependency behind.
 - **Closed assumptions:** Geist has Serbian Latin and Cyrillic glyphs and a working `tnum`, read from the font files.
 
-**Open decisions re-evaluated** ([details](design-system/REDESIGN_BACKLOG.md#open-po-decisions)): O4 closed, as serif is gone. O1 changed and still open: values are the same, and `--info` now sits near the blue primary. O10 is new: what replaces `text-teal-*` given dark `--primary` as text. O2, O3, O5, O6, O7, O8 and O9 are unchanged.
+**Open decisions re-evaluated** ([details](design-system/REDESIGN_BACKLOG.md#approved-decisions)): O4 closed, as serif is gone. O1 changed and still open: values are the same, and `--info` now sits near the blue primary. O10 is new: what replaces `text-teal-*` given dark `--primary` as text. O2, O3, O5, O6, O7, O8 and O9 are unchanged.
 
 **Constraints kept:** React and Vite, no React Router, `src/components/ds/` isolated until migration, no change to business logic, APIs, routing or state, no new browser storage keys, current sidebar and Settings draft behaviour preserved, semantic colours centralized as extension tokens, no invented token values without approval, small independent branches and PRs later.
 
@@ -1339,7 +1339,7 @@ Owner decisions. Approved preset: `b1a1cZcRs` (Blue / Mist / Geist / Base UI / L
 
 ## Design System final planning decisions, Epic postponed (2026-11-04)
 
-Owner decisions. Documentation only. **The redesign is POSTPONED: the Epic "UI Redesign & Design System" and all its work are To Do until the PO explicitly authorizes implementation. All colours are PROVISIONAL.** Roadmap: [the Epic](ROADMAP.md#epic-ui-redesign--design-system---deferred--to-do). Backlog: [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md).
+Owner decisions. Documentation only. **The redesign is POSTPONED: the Epic "UI Redesign & Design System" and all its work are To Do until the PO explicitly authorizes implementation. All colours are PROVISIONAL.** Roadmap: [the Epic](ROADMAP.md#later-deferred-and-ideas). Backlog: [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md).
 
 **O1, semantic tokens: the proposed structure, aliases and values are approved FOR PLANNING PURPOSES ONLY.** No current value is permanently approved. All semantic extension values and contrast corrections remain provisional; before implementation, the complete palette is reviewed again, finalized and approved by the PO.
 
@@ -1383,7 +1383,7 @@ During the job-relevance analysis a read-only Python one-off printed entries of 
 **Decision:** a rule in `CLAUDE.md` against printing values from these files, and `scripts/inspect-private-data.py`, which reports shape, counts and hashes. [`tests/python/test_inspect_private_data.py` plants a canary in values and keys.] A hook blocking such commands was not added: a pattern cannot reliably recognise a one-off script. The CV paragraphs in the bank are a generator problem left to Wave 3, a2.
 ## Graph tooling: Graphify output, update cycle and backup (2026-11-08)
 
-Owner decisions for Graphify adapter Milestone 1 (B0, S0, S1, S2). The adapter is a planned, minimal, removable stdlib tool that reads `graphify-out/graph.json` and writes derived files only; no services, databases, network access or LLM extraction. S3 to S6 need separate approval. Roadmap: [Graph tooling](ROADMAP.md#graph-tooling-graphify-adapter---in-progress).
+Owner decisions for Graphify adapter Milestone 1 (B0, S0, S1, S2). The adapter is a planned, minimal, removable stdlib tool that reads `graphify-out/graph.json` and writes derived files only; no services, databases, network access or LLM extraction. S3 to S6 need separate approval. Roadmap: [Graph tooling](ROADMAP.md#later-deferred-and-ideas).
 
 - **D1, graphify-out/ is git-ignored; `graph.json` is not committed.** It is about 10 MB and rewritten whole on every build. It holds no personal data (no `data/` nodes, no absolute paths), but its semantic layer (about 830k tokens to build) is the one part that cannot be rebuilt for free; D4 protects it, not Git. The CLAUDE.md line that expected a committed `graph.json` came from the Graphify installer and was removed. Check: `git check-ignore graphify-out/graph.json` matches.
 - **D2, graphify-out/ is in `.dockerignore`.** The Dockerfile copies none of it and `docker-compose.yml` mounts none of it; the app needs nothing from it at build or runtime. Check: `grep -n graphify Dockerfile docker-compose.yml` finds nothing; `.dockerignore` ends with `graphify-out`.
@@ -1586,7 +1586,7 @@ when the owner next saves that source) and drops a bad history or migrations val
 
 ## Idea: browser extension, parked notes (2026-11-09)
 
-Owner correction: the browser extension was meant as a **business idea**, not a set of defined tasks. It is **Idea / Not planned for implementation**, parked until the owner decides to plan it. Nothing here is a decision to build. Description: [ROADMAP.md](ROADMAP.md#idea-holyjobs-browser-extension-linkedin-job-and-profile-import---idea--not-planned-for-implementation).
+Owner correction: the browser extension was meant as a **business idea**, not a set of defined tasks. It is **Idea / Not planned for implementation**, parked until the owner decides to plan it. Nothing here is a decision to build. Description: [ROADMAP.md](ROADMAP.md#later-deferred-and-ideas).
 
 Notes kept for when it is considered again:
 
@@ -1602,7 +1602,7 @@ Notes kept for when it is considered again:
 
 Owner request, separate from the extension idea.
 
-**Company information standardization:** P1, Discovery roadmap. First step is the provider audit; the target record is one company record per normalised key, apart from jobs, with per-field source and observed time and a `known` / `unverified` / `missing` state. No private data and no personal contacts. Details: [ROADMAP.md](ROADMAP.md#discovery-improvement-company-information-standardization---planned--to-do).
+**Company information standardization:** P1, Discovery roadmap. First step is the provider audit; the target record is one company record per normalised key, apart from jobs, with per-field source and observed time and a `known` / `unverified` / `missing` state. No private data and no personal contacts. Details: [ROADMAP.md](ROADMAP.md#later-deferred-and-ideas).
 
 ## Shared job database for several users: plan recorded (2026-11-09)
 
@@ -2035,6 +2035,8 @@ UI-only; storage keys, data shapes, scoring and routes unchanged. "Where you can
 
 ## Language cap 25 for a confirmed required-language mismatch, and two clause-reading fixes (2026-11-14, branch `competency-memory-mvp`)
 
+**Superseded (2026-11-17, scoringVersion 1.5):** the language cap is no longer applied to `matchScore`; a confirmed language demand makes the verdict Blocked ([Step 2b](#step-2b-blocked-verdicts-location-state-2026-11-17-branch-park-m9-m10-scoringversion-stays-15), [Step 2c](#step-2c-language-blocks-must-be-confirmed-blocked-rows-keep-the-original-verdict-2026-11-17-branch-park-m9-m10-scoringversion-stays-15)). The two clause-reading fixes stand.
+
 **Decision (owner, 2026-11-14).** Production scoring caps `matchScore` at 25 (`LANGUAGE_CAP`, `scorer.py`, cap type `language(25)`) when the engine's language gate fails: a required language demand that no profile language covers (close relatives count, `covered_languages`). One detector, no second one: `gates.uncovered_required_languages` wraps `language_result` / `language_demands`, fed the description plus the row's `llmFacts.requirements`, the same inputs as the engine's pre-send exclusion (`cheap_gate_report`). The profile list is `intelligence["languages"]`, the input `build_candidate` gives the gates. Reason: `Capped: the ad requires Russian, which your profile does not list` (several languages joined with "and"; an uncovered alternative group reads "A or B"). The UI shows any `Capped:` reason (`isCapReason`), so no UI change; the calibration helpers (`report._cap`, `stage_a.cap_type`) now read it as `language`. It sets `hardCapped`, stacks with the other caps by `min`, and keeps their reasons. `meta.scoringVersion` is now `1.1`; Re-score recomputes every row, nothing was re-scored here.
 
 **Scope.** Caps only a confirmed mismatch. No cap: a "plus"/preferred language, a bare mention, an "or" alternative the profile covers, an unknown language, a profile with no languages, and a text the detector cannot read well: fewer than 100 words, empty, ending in "..." / "read more", marked a teaser, or English stop-word ratio below 0.12 (`language_text_readable`). Unknown never caps.
@@ -2046,6 +2048,8 @@ UI-only; storage keys, data shapes, scoring and routes unchanged. "Where you can
 **Known limits.** (a) Detector thresholds (100 words, 0.12 stop-word ratio) are unvalidated. (b) Three ads may be falsely non-English (and so not capped); one French ad may be missed. (c) "C1 or higher" still turns "German and English" into an either/or group (Kiteworks has a spurious `English or German` group beside the real `German` one; harmless there, but it could hide a German-and-English demand elsewhere); not changed by decision. (d) The heading rule is a heuristic: a short line without punctuation ends a preferred section. (e) Only the language is compared, not the level. (f) Tracklab-style "The main language is French, but English proficiency is a must-have" is detected only because "proficiency" falls within the marker window of "French"; a variant without that marker would be missed (safe direction, no fix now). Tests: `tests/python/test_language_cap.py`, `test_gates.py` (clause-reading section). The existing test `test_the_extraction_wins_over_the_clause_for_a_language_it_extracted` used "highly recommended" as its required example; the phrase is now optional, so its example text changed, its intent did not.
 
 ## Eligibility gate for remote and board-country ads (2026-11-14, branch `competency-memory-mvp`)
+
+**Superseded in part (2026-11-17, scoringVersion 1.5):** the cap of 45 is gone; the same reading of remote and board-country ads is now a location state beside the score ([Step 2](#step-2-eligibility-states-and-read-status-2026-11-17-branch-park-m9-m10-scoringversion-15)).
 
 **Decision (owner, 2026-11-14).** `work_authorization.py` restricts two kinds of ad to the country the board names. No new cap type: results come from the existing `authorization_status` paths (a held country is authorized; otherwise the visa path decides: silent 45, offered sponsored, refused 25). `scorer.py` is unchanged; `scoringVersion` 1.1 -> 1.2.
 - **R1 (corrected 2026-11-14, same day).** Remote by the board, no `llmFacts.remoteEligibility`, and `resolve_countries` over the board location returns exactly one country (`sole_board_country`): places = that country. One country, a city or state inside it does not matter ("Cambridge, MA, USA", "Tampa, FL, USA", "Berlin, Germany", two German cities). "Remote - Germany", "Remote: Germany" and "Remote, Germany" read the same. Unrestricted: several countries, a region only, and any region word in the text ("Amsterdam, Netherlands; Remote - Europe"; the word list is `_REGION_WORDS`). `remoteEligibility`, when present, still wins. The first build treated any city as an onsite place and left Akamai and BenefitHub unrestricted; that was a misreading of the decision.
@@ -2061,6 +2065,8 @@ UI-only; storage keys, data shapes, scoring and routes unchanged. "Where you can
 **Known limits.** (a) `visaSponsorship` is read from the facts; rows without facts count as "not mentioned". (b) Regions and city-plus-remote are unrestricted. (c) B2B contracting is not modelled, so US remote rows sit at 45 although a contractor may not need a work permit. (d) The cap is the visa path's, so the reason text says "needs a work permit for X".
 
 ## Tie-break the Jobs list by the score before caps (2026-11-14, branch `competency-memory-mvp`)
+
+**Superseded (2026-11-21):** the Jobs list shows three tiers and no longer orders by score or `scoreBeforeCaps` ([Jobs list: three coarse tiers](#jobs-list-three-coarse-tiers-no-order-claim-inside-a-tier-2026-11-21-owner-decision-option-a-scoring-16-numbers-unchanged)). `scoreBeforeCaps` is still stored.
 
 **Owner decision 2026-11-14:** tie-break by pre-cap score, no ranking change otherwise. About 463 open rows sat at exactly 45 (visa cap) and their visible order was file order.
 
@@ -2132,6 +2138,8 @@ UI-only; storage keys, data shapes, scoring and routes unchanged. "Where you can
 - A No answer closes a line without raising Fit: many absence lines are tool or technology skills (Terraform, cloud architecture), so answering resolves a line but may not raise Fit.
 
 ## Package A: visa refusal needs a refusing quote, "unverified" display, no years comparison (2026-11-16, branch `park-m9-m10`, scoringVersion 1.4)
+
+**Superseded in part (2026-11-17, scoringVersion 1.5):** the visa caps became states beside the score ([Step 2](#step-2-eligibility-states-and-read-status-2026-11-17-branch-park-m9-m10-scoringversion-15)); the rule that a refusal needs a refusing quote stands.
 
 **Why.** (1) `visaSponsorship` "not_offered" capped a row at 25 ("Reject") even where the ad's own quote only required an existing right to work ("must be legally authorized to work in X", "must be based in ES/IT/FR and have a work permit"). That is not a refusal; the ad is silent on sponsorship. (2) 439 of the 528 `needs_visa_silent` rows have no `llmFacts` at all; the reason said "the ad does not mention sponsorship", which is false for an ad nobody read. (3) The `yearsRequired` branch of `experience_match.py` compared the candidate's total professional years with an ad's "N years in product management" (+5 / -25 / -10): different quantities, so the delta was noise.
 
@@ -2420,6 +2428,8 @@ Order change: the class is now stamped BEFORE scoring (`role_class.label`; run_s
 
 ## Package 12: automatic Fit 3 classification of new ads, and the owner's ads stay in every scoring run (2026-11-23, no scoring rule changed)
 
+**Superseded in part (2026-11-23):** the defaults `--max-usd 0.05` and 100 ads are gone; limits live only in Settings ([Package 15](#package-15-re-scrape-does-the-whole-intake-of-new-ads-in-one-manual-run-every-limit-in-settings-2026-11-23-owner-decision-no-scoring-rule-changed)).
+
 **Item 1: `python/job_scoring/classify_new.py`** (a separate, visible step; own proposal, pattern from `engine_missing.py` and `measure_fit3.py`). Ads of the scoring set (job list, hand-entered jobs, registered kept ads) that are open, found by the last run, have text and have NO `fit3.json` entry under the production prompt (i1) get one gated call each. An ad whose entry exists but whose role did not anchor is counted and never called again (13 today). Owner-run with an estimate first, `--max-usd` (default 0.05) and `--confirm`, at most 100 ads (own proposal for both defaults). A cap, an AI-gate refusal or 3 failed calls in a row is a stop point: the rest stay "not available", counted in the console and in the run record (Activity shows it: counts, cost, a fixed stop code). A provider failure is counted, the ad gets no entry and is tried again next time; the step always exits 0. The pipeline and Re-scrape run the step WITH `--confirm` inside the same caps (superseded by package 14 below); plain Re-score stays free. Privacy: title and ad text only (ad contacts masked), owner-identifier refusal and scan, no profile on disk means nothing is sent; inventory updated. Only new entries are added to `data/cache/fit3.json` (600, last 3 pre-run copies).
 Benchmarks (files read by a subagent, paths under `~/holojob-eval/benchmarks/`): ApplyPack `src/jobs/process-jobs.ts` (classifier on new postings only, failed ones not stored and retried; `classifier.ts`), JobOps `orchestrator/src/server/pipeline/steps/score-jobs.ts` and `repositories/jobs.ts getUnscoredDiscoveredJobs` (unscored only, failure leaves the job unscored, 3 early failures stop the run), CareerPulse `app/main.py score_unscored`, `app/database.py get_unscored_jobs` (hourly, unscored only, stops after consecutive empty batches). Deviations: all three run the model automatically on every pipeline run; here it is owner-confirmed and capped in dollars (none of the three has a dollar cap; ApplyPack has a monthly budget). career-ops has no automatic step (`classify-tier.mjs` is a title regex; evaluation is a manual batch with `--limit`): closest to this design.
 **Live run (2026-11-23):** estimate 1 ad (a hand-entered job), worst case $0.0048; run with `--confirm`: 1 classified, $0.0009, budget before $0.066 of $3 today and $3.606 of $10 this month. Rows with no entry: 1; entry but role not anchored: 13 (not called again).
@@ -2428,6 +2438,8 @@ Benchmarks (files read by a subagent, paths under `~/holojob-eval/benchmarks/`):
 **Re-score effect (trial on a private copy of the data, the live files untouched):** 582 -> 586 rows; the only changed existing row is the hand-entered job (`manual-6f64270a-...`: role class "not available" -> "target", score, label and tier unchanged); the 4 added rows are the owner's applied ads (ids 4e46e77b..., b5744c9c..., cea37b26..., fc9534b9...: scores 73, 40, 80, 73). Fingerprints evidenceVersion 80c1e5, profileVersion ad4a63, answersVersion 893a16, languagesVersion 282b4d unchanged; profile, intelligence and application files unchanged. Tests: `tests/python/test_classify_new.py`, `tests/js/runHistory.test.js`, `tests/js/keptRescore.test.js`.
 
 ## Package 14: the pipeline and Re-scrape classify new ads themselves (2026-11-23, owner decision; no scoring rule changed)
+
+**Superseded in part (2026-11-23):** the literal caps `0.05 USD / 100 ads` are gone; the step reads the run limit from Settings ([Package 15](#package-15-re-scrape-does-the-whole-intake-of-new-ads-in-one-manual-run-every-limit-in-settings-2026-11-23-owner-decision-no-scoring-rule-changed)). The rest stands.
 
 The full pipeline and Re-scrape run `classify_new.py --confirm --max-usd 0.05 --max-ads 100` after the ad text exists (discovery; enrichment in the pipeline) and before scoring, so the same run scores new ads with their Fit 3 class and scoring 1.7 does not decay. Plain Re-score (`POST /api/scoring/run`) stays free. The step keeps the gate trigger it is given: a pipeline step is an automatic AI task, so with `automation.enabled` false the gate refuses it (counted, ads stay "not available"); Re-scrape and a standalone run are manual. Every stop (cap, gate, 3 failures), privacy refusal and failed call is counted in the step's own Activity record, the pipeline summary (`classification`) and a Re-scrape issue line; it never fails a run. Deviation from the benchmarks (ApplyPack `process-jobs.ts`, JobOps `score-jobs.ts`, CareerPulse `score_unscored`: automatic, no dollar cap): the caps stay. Open (owner): `automation.enabled` is false, so the full pipeline's classification is refused until the owner turns it on or runs Re-scrape; no kill switch added (use the AI settings and feature gate). Test: `tests/python/test_entry_scripts_clean_interpreter.py` (defect class of package 13).
 
@@ -2456,3 +2468,21 @@ The full pipeline and Re-scrape run `classify_new.py --confirm --max-usd 0.05 --
 **Measured today (free estimates, no call).** 246 ads have no role class (worst case 1.19 USD, input-only 0.15 USD); 59 classified Target / Adjacent ads are unread (34 Strong, 25 Possible, 0 Weak; worst case 0.30 USD), and more will join after classification; 7 ads lack an engine answer today (5 Strong or Possible, 0.02 USD) before reading adds requirements. Settings had no run limit set and `allowEngineFill` off, so a Re-scrape today would spend nothing until the owner sets them.
 
 **Open decisions (owner).** (1) A standalone `classify_new.py` run keeps its own Activity record (default). (2) The headline "N ads waiting" sums the steps; an ad waits at one step only (it cannot be read before it is classified), so the sum does not double count. (3) Engine fill today uses `engine_missing`'s worst-case per-call reservation, which can stop a little before the ledger shows the limit is reached. (4) Weak Target / Adjacent ads are read last, so with a small limit they may wait for several runs.
+
+## Package 13: the kept-ads sync works in the container (2026-11-23, bug fix; no scoring rule changed)
+
+`POST /api/jobs/kept/sync` runs `rescore_kept.py --prune ... --register`, which did not put `python/` on its path and so failed in the container, where the owner's kept and applied ads (package 12) could not be registered. Fixed in `rescore_kept.py`; a failed sync now shows a notice in the Re-score toast (`JobDiscoveryScreen.jsx`, `pipelineRunner.js`). Tests: `tests/python/test_kept_ads.py`, `tests/js/keptRescore.test.js`. The defect class (a script that works from the repo root and fails in a clean interpreter) is covered for every entry script by package 14.
+
+## Commit author rule, standing rules and benchmark location (2026-11-11 and 2026-11-19, owner decisions)
+
+- **2026-11-11:** commits and PRs have the owner as the only author. `scripts/git-hooks/commit-msg` refuses a message with an attribution line (`Co-Authored-By:`, `Claude-Session:`, "Generated with Claude Code"); `pre-push` refuses a push of a commit with one that the remote does not have yet. History already pushed was left alone (ARCHITECTURE.md, "Tests and pre-push hook").
+- **2026-11-19, standing rules** (`.claude/rules/standing-rules.md`): a limit (USD, calls, rate) is a stop point, not an obstacle; the full suite runs only periodically, small changes run the targeted test; build, up and push are the owner's; a new test is written only for a rule or bug that would hurt the owner (not to pin implementation or text).
+- **2026-11-19, benchmarks:** the benchmark clones live at `~/holojob-eval/benchmarks/` (`applypack`, `career-ops`, `CareerPulse`, `job-ops`, `jobsync`, `jobapply`), read-only; read them there, never copy them (`.claude/rules/working-rules.md`).
+
+## Owner-run extraction for ledger-only ads (2026-11-19, no scoring rule changed)
+
+`python/job_scoring/extract_ledger_ads.py` extracts requirements (`llmFacts`) for ads that only the ledger holds, because `enrich_jobs.py` reads only the job list. Same prompt, extractor, `enrichment` gate feature and `--max-usd` guard; owner-run, estimate first, `--confirm`; the ledger is copied to `data/backups/` before the first write; the extractor never sees the candidate; it prints counts and ids only; the job list gains or loses no ad. `engine_missing.py` then reads such an ad from the ledger entry's stored facts and sends only the ads its estimate scanned.
+
+## Deployed 2026-11-23: scoring 1.7 and packages 12 to 15 (owner statement; deploy record)
+
+The owner deployed on 2026-11-23, from `main` at `4a64657` (tag `release-20261123-rescrape-intake`, equal to `origin/main`): scoring 1.7 (a target role class is on-track), kept and applied ads in the scored list (packages 12 and 13), automatic backups with the save guard, the display labels, role classification in Re-scrape (package 14) and the Re-scrape full intake with its budget priority (package 15 and both follow-ups). The same image contains everything merged before it. Open after the deploy: the first real Re-scrape (the run limit and `allowEngineFill` are set in Settings > AI budget first), and the warning "36 ads could not be loaded with their text", whose cause is not known. Earlier tags `release-20261118-*` to `release-20261123-*` mark the commits each release was built from; a per-release deploy date is recorded only where an entry above says so (scoring 1.5 and 1.6).

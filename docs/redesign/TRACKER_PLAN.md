@@ -5,7 +5,8 @@ the same day: decision 13 and O1-O4 decided, O5-O6 deferred (section 9). Decisio
 
 - **Built:** S1 store and stages, S2 migration (2.4), the first slice of S3 (2.5), and the board and Settings columns,
   which are the first parts of S4 and S5 (2.6).
-- **Not built:** posting snapshot view, Closed panel, "Show voided", removal of the legacy `applicationTracking` field
+- **Built since:** All records (the "Show voided" view, with each record's ad snapshot; `ApplicationRecordsList.jsx`), Job Details tracker.
+- **Not built:** Closed panel, removal of the legacy `applicationTracking` field
   (S4), follow-up nudges and the reminders switch's UI (S5), CSV import (S6).
 
 Everything else below is the plan as approved; where it differs from an "As built" note, the note describes the code. The

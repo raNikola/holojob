@@ -1,565 +1,81 @@
 # Holojob - Roadmap
 
-Principles and decisions: [redesign/DECISIONS.md](redesign/DECISIONS.md) and [DECISIONS.md](DECISIONS.md).
-Current-state audit and module decisions: [redesign/PHASE0_AUDIT.md](redesign/PHASE0_AUDIT.md).
-Engine contract (draft): [redesign/ENGINE_CONTRACT.md](redesign/ENGINE_CONTRACT.md). Terms: [GLOSSARY.md](GLOSSARY.md). How the system works today: [ARCHITECTURE.md](ARCHITECTURE.md).
+Principles: [redesign/DECISIONS.md](redesign/DECISIONS.md). Later decisions and the history of what was built: [DECISIONS.md](DECISIONS.md) (the roadmap keeps no history). Current-state audit: [redesign/PHASE0_AUDIT.md](redesign/PHASE0_AUDIT.md). Engine contract: [redesign/ENGINE_CONTRACT.md](redesign/ENGINE_CONTRACT.md). Terms: [GLOSSARY.md](GLOSSARY.md). How the system works today: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 This is the only phase list; DECISIONS.md, CLAUDE.md and the README link here.
 
-## Status at a glance (2026-11-10)
+## Status at a glance (2026-11-23)
 
-Built, merged and deployed are three different states; this table says only what the repo shows. "Merged" means in `main` (pushed to `origin/main`). Deployment is not recorded in the repo, so no row below claims it. Details are in the sections that follow; nothing else in this file was reorganized.
+`main` is `4a64657` (tag `release-20261123-rescrape-intake`) and equals `origin/main`. The owner deployed it on 2026-11-23, so everything merged before it is in the running image. Source: owner statement; the commit log shows no later commit.
 
 | State | Items |
 |---|---|
-| **Done** (built and merged) | Phase 0; Phase 1 steps 1-8c; Roadmap v2 waves 0-5; Phase 4 protections (fact gate, identifier redaction, confirm, verdicts); Wave 7 profile import S0-S4, S6, S7; per-source switches; Delete job for hand-entered jobs; Activity screen A1-S8b; Graphify adapter S0-S6 |
-| **Next** | Not decided. The owner has not set the next development priority. |
-| **Later** | Wave 7 S5 LinkedIn data ZIP (waits for the owner's real file); the rest of Phase 3 (Closed panel, nudges, CSV import); Phase 3b watched companies; Phase 2 (only the read side of confirmed facts exists); Phase 4 interview prep and market report; Phase 5; stable requirement ids phases 3 and 4 (Planned); Step 5 server master (not built; `job-state.json` v1 is built); wave 9 items; the list under "Later" |
-| **Deferred** | UI Redesign Epic; HolyJobs browser extension (idea, parked); Company information standardization (planned, To Do); Shared job database (goal only, draft reference); test isolation by per-test data directory; the items under "DEFERRED after S8" |
+| **Built and deployed** (in `main`) | Phase 0 audit; Phase 1 steps 1-8c (engine in shadow); scoring 1.7 (a Fit 3 target role class is on-track); the owner's kept and applied ads stay in every scoring run; automatic backups with the save guard; display labels; role classification of new ads; Re-scrape does the whole intake of new ads in one manual run under one budget set in Settings; three fit tiers in the Jobs list; Activity screen; per-source switches; application tracker (store, Board, Statistics); profile import (S0-S4, S6, S7); Phase 4 protections (fact gate, identifier redaction, confirm); delete for hand-entered jobs |
+| **Built, not merged** | Nothing. One unmerged branch exists: `scoring-16-held` (a scoring 1.6 package that failed its pre-registered guard: held, not deployed, kept as a record) |
+| **Next** | Not decided by the owner. The open items below are the candidates |
+| **Later** | Wave 7 S5 LinkedIn data ZIP (waits for the owner's real file); application tracker: Closed panel, follow-up nudges, CSV import of past applications; watched companies from a pasted URL; Phase 2 questionnaire and ask-user loop; Phase 4 interview prep from requirement statuses and market report; Phase 5 feedback loop; list under "Later, deferred and ideas" |
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Audit: what exists, per-module Reuse / Adapt / Build / Skip, engine contract | Done |
-| 1 | Scoring core: role-family config, requirement extraction with quotes and canonical ids, evidence index, evidence matcher + deterministic Fit, confidence, gates. Shadow mode next to the current score; stability test on fixtures | Steps 1-8c built (role families, requirements, evidence index, matcher, Fit and gates, stability test, shadow mode, privacy test); acceptance criteria pending owner confirmation; stable-id follow-up partly built (below) |
-| 2 | Evidence profile: restructured optional questionnaire (story bank, skills with evidence, preferences, gates), AI prefill from the CV through the review screen, ask-user loop that stores confirmed facts | Partially built: only the read side of confirmed facts. `python/job_scoring/confirmed_facts.py` loads and validates `data/profile/confirmed-facts.json` (a missing file is an empty store, a malformed entry is dropped) and the evidence index and matcher apply a confirmed fact over inferred evidence. Nothing writes the store yet (the module's own docstring says so; no caller of `save` and no route). Not built: the ask-user loop, the restructured questionnaire (story bank, skills with evidence), AI prefill through the review screen |
-| 3 | Application tracker independent of discovery: own store with a posting snapshot, append-only event history, channel, CV version, outcomes, follow-up nudges, import of past applications | In progress. Built: store with event history and configurable stages, migration from job records, Job Details tracker (Mark Applied, CV used, history, void and restore), Board with drag, Statistics, Settings > Applications (tracking switch, columns), applications that open and count without their ad ([decision](DECISIONS.md#applications-open-without-the-ad-history-read-path-2026-11-03)). "Show voided" is built as Applications > All records (Wave 5 j). Not built: Closed panel (code check 2026-11-10: the Board only counts applications with another outcome as a footnote "N closed (other outcomes)" in `boardModel.js`; `stageRegistry.js` mentions a Closed panel but no component renders one; whether All records is an equivalent view is not verified, so this stays open), removal of the legacy `applicationTracking` field (S4), follow-up nudges and the reminders switch's UI (S5), CSV import of past applications (S6), several contacts. See [redesign/TRACKER_PLAN.md](redesign/TRACKER_PLAN.md) |
-| 3b | Sources as user configuration: Settings > Sources with an on/off switch per job board, watched companies added from a pasted careers or board URL and probed live, stored server-side in `data/config/sources.json`; replaces the hard-coded `serbia` group and the repo's `companies/*.json` as runtime config (principle 16). Spec: [redesign/SOURCES_SPEC.md](redesign/SOURCES_SPEC.md). Independent of Phases 1-2; built next to Phase 3 because both are user-owned data that must persist | Built: `data/config/sources.json`, Settings > Sources > Job boards with the Joberty opt-in, and (2026-11-09, merged to `main`) a server-side on/off switch per source plus a one-run "Skip LinkedIn this time" ([decision](DECISIONS.md#per-source-switches-and-one-off-skip-linkedin-2026-11-09)). Not built: watched companies from a pasted URL with a live probe (providers still read `companies/*.json`); `serbia` is still the default provider group |
-| 4 | Interview prep from requirement statuses and the story bank; CV and cover letter tailoring behind a fact gate; market report of requirements per role family | In progress. Built and merged to `main` (2026-11-09): the protections around tailoring and applications (fact gate, identifier redaction with a fail-closed leak check, server-enforced confirm and preview, AI cover letter as a draft until accepted, fact-gate verdicts checked when a document is attached; [decision](DECISIONS.md#phase-4-protections-fact-gate-identifier-redaction-confirm-2026-11-09-branch-phase4-fact-gate)). Not built: interview prep, market report |
-| 5 | Feedback loop: conversion by channel and Fit band, calibration of Fit against real outcomes (report only, never auto-tuning) | Planned |
+| 0 | Audit and engine contract | Done |
+| 1 | Scoring core: requirements with quotes, evidence index, matcher, Fit and gates, shadow mode | Steps 1-8c built; acceptance criteria below not confirmed by the owner. Stable requirement ids: seed, report, audit tool and mapping in extraction built; version split (`evidenceVersion`, `answersVersion`) built with competency memory M1; the verdict cache per competency and local embeddings are not built |
+| 2 | Evidence profile: questionnaire, AI prefill, ask-user loop | Partly built: confirmed-facts store v2 with `record_answer` and `revoke` (`python/job_scoring/confirmed_facts.py`); no caller outside the module, no route or UI (verified by grep), so nothing writes it yet. The cross-ad question queue (M9, M10) is parked (owner, 2026-11-14) |
+| 3 | Application tracker | Built: store with event history, Job Details tracker, Board, Statistics, All records, Settings > Applications. Not built: Closed panel (`stageRegistry.js` names it, no component renders it), removal of the legacy `applicationTracking` field, nudges, CSV import, several contacts. Plan: [redesign/TRACKER_PLAN.md](redesign/TRACKER_PLAN.md) |
+| 3b | Sources as user configuration | Built: `data/config/sources.json`, on/off per source, one-run "Skip LinkedIn". Not built: watched companies from a pasted URL (providers still read `companies/*.json`); the `serbia` provider group is still the default (`run-discovery.js`, `run-rescrape.js`, `api-handler.js`). Spec: [redesign/SOURCES_SPEC.md](redesign/SOURCES_SPEC.md) |
+| 4 | Interview prep, tailoring behind a fact gate, market report | Protections built (fact gate, redaction, confirm, draft-then-accept cover letter, verdicts checked on attach). A browser "Generate Interview Prep" tool exists (`JobAIToolsPanel.jsx`); interview prep from requirement statuses and the market report are not built (not verified beyond a code search) |
+| 5 | Feedback loop: conversion by channel and band | Planned |
 
-## Rename to Holojob (2026-11-10)
+## Open items
 
-Stages 1 and 2 are merged: text, prompts, environment variables (no fallback to the old names), backups, compose project and
-container, docs, source link, folder path. The container runs from the new folder. The Git history was rewritten (the old name, a contributor's chat
-data and private calibration files are gone from it; commit hashes quoted in the docs point to the new commits). Record: [DECISIONS.md](DECISIONS.md), "Rename to Holojob".
+### 1. Hard-rule gaps
+
+- **Item 12, non-English ads.** A required-language demand is read only from a readable English text (`gates.language_text_readable`: enough words, English stop-word ratio, not cut off). An ad written in another language (a German ad, `5aaeb781`; 33 non-English rows when it was measured on 2026-11-14) has no confirmed language block. Separate owner decision, not started.
+- **B2B lower priority.** Not built. `eligibility.b2b_wording` only keeps a sponsorship refusal "unknown" when the profile says B2B is available; nothing lowers the tier or order of a B2B-only ad (code search).
+- **Unknown location.** A bare "Remote" or an unreadable place gives location state `unknown`: shown as a flag, never blocked, never lowers the score (`blocking.location_state`). Whether that is right for remote ads with only a region is an owner decision, not made.
+
+### 2. Evaluation quality
+
+- **Hard vs nice-to-have requirements.** The engine splits `must` and `preferred` and weights them (`match_engine/fit.py`); the keyword score reads only `mustHaves`. What is left: the extraction can still tag a "plus if you have X" line as a must. Not measured since 2026-11-10 (not verified); the 1.x skill score still has an unused constant `MUST_HAVE_SHARE` (`dimensions/skill_match.py`), to remove or explain.
+- **Low-confidence reasons only when the signal is absent.** Still needed. "Seniority not stated" comes from the model's `seniority` fact or the title (`experience_match.py`, `data_sufficiency.py`), "No strong culture signals" from a keyword match (`culture_match.py`); neither checks the source text, and there is no test for the salary-band example. Guarded by a computed signal already: "Requirements not extracted", "Short description", "Location not stated", "No keyword bank".
+- Related: recalibrate `TARGET_COVERAGE` and the flat scoring dimensions ([ARCHITECTURE.md](ARCHITECTURE.md), open problems).
+
+### 3. Step 5, server master of the job list (not blocking)
+
+The job list still lives in the browser (`localStorage`) and the screens save the whole list; `job-state.json` v1 (Saved, Rejected, Keep) is built. Not built: the server as master of the list. Plan: [redesign/STEP5_SERVER_MASTER_PLAN.md](redesign/STEP5_SERVER_MASTER_PLAN.md). `offList` rows migrate as orphans.
+
+### 4. Owner actions
+
+- Review the 11 of 17 CV documents that carry stale unverified-degree findings before they are used for applications.
+- Rotate the OpenAI key and `li_at` (not verifiable from the repo).
+- Label ads while applying: this is the path to a holdout and to a proof of the order inside a tier (the Jobs list makes no order claim inside a tier).
+- Run the first real Re-scrape: set the run limit (USD and ads) and the engine fill switch in Settings > AI budget first (until then a Re-scrape spends nothing and says so), then review the result in Activity.
+
+### 5. Open, cause unknown
+
+- The warning "36 ads could not be loaded with their text" (text in `src/modules/jobs/storageNoticeText.js`, raised from `JobTextGate`). The cause is not known; do not assume it.
 
 ## Phase 1 acceptance criteria - PROPOSED, owner to confirm
 
-Status at the close-out check: criteria 3 and 4 hold; criterion 2 is covered by tests on synthetic jobs; criterion 1 has not been
-measured on the current code (it needs live model calls) - pending owner confirmation.
+Measured on the ten postings in `tests/fixtures/postings/`; they implement the "Stable results", "Private by default" and "Every score is explainable" measures in [GOALS.md](GOALS.md). Status: criteria 3 and 4 hold at the close-out check (2026-11) and 2 is covered by tests on synthetic jobs; 1 has not been measured on the current code (needs live model calls). No owner confirmation is recorded (not verified).
 
-Phase 1 is done when all of these hold. They are measured on the ten postings in `tests/fixtures/postings/`
-(3 Greenhouse, 1 Ashby, 2 each of Infostud, LinkedIn and Workable) and the candidate profile used for the shadow
-run, and they implement the "Stable results", "Private by default" and "Every score is explainable" measures in
-[GOALS.md](GOALS.md).
-
-| # | Criterion | How it is measured | Goal |
-|---|---|---|---|
-| 1 | **Stability.** For each fixture, 3 runs with the same profile: requirement-id overlap >= 90%, status flips <= 5%, Fit spread <= 5 points | A test or script reports all three numbers per fixture and overall; overlap is the share of requirement ids present in all 3 runs, flips the share of shared requirements whose status differs between runs, spread the max minus min Fit | Stable results |
-| 2 | **Shadow mode changes nothing.** With Fit computed and stored, ranking, label and priority of every job are identical to a run without it | A test scores a fixture set both ways and asserts equal `matchScore`, `matchLabel`, `priority` and sort order | Rank by evidence of fit |
-| 3 | **No personal identifiers leave.** No name, phone, e-mail or personal link in any payload sent to a provider | A test builds every payload the engine sends from a profile that contains such strings and asserts none is present | Private by default |
-| 4 | **Checks pass.** Lint, vitest, pytest and the build pass | `npm run lint`, `npm run test:js` and `npm run build` in the throwaway `node:20-bookworm` container (`--security-opt label=disable`, never `:Z`), pytest against the host `.venv`, no failures; commands in [CLAUDE.md](../CLAUDE.md) (Tests) | - |
-
-Related GOALS.md measures that these criteria cover only in part, and the later phase that finishes them: "Every
-score is explainable" is shown in the job drawer in Phase 1 but its per-requirement quotes are verified by the
-engine invariants in [ENGINE_CONTRACT.md](redesign/ENGINE_CONTRACT.md) section 5.2; "Rank postings by evidence of
-fit" is judged by the owner on real runs after shadow mode; "Honest documents" and "Nothing is lost" belong to
-Phases 4 and 3.
-
-## Phase 1 follow-up: stable requirement ids - PARTLY BUILT
-
-Decided 2026-10-26 ([DECISIONS.md](redesign/DECISIONS.md)). Today 92% of requirement ids are provisional (a hash of
-the ad's own wording), so a requirement worded differently in another ad gets another id and the owner's answers
-could never be reused. Built in four phases, each measured by the share of provisional ids before moving on:
-
-1. **Seed, report and audit tool.** The curated competency list for the product family
-   (`src/data/competencies/product.json`), a local report (no model call) that groups frequent provisional texts and
-   proposes new competencies or aliases, and the audit tool for the accuracy gate (a sample of about 100 real
-   requirements: correct, wrong, legitimately provisional). The owner sets the acceptable wrong-merge rate after
-   the first measurement.
-   Seed, validator (`python/match_engine/competencies.py`), report (`podman exec holojob npm run competencies:report`, writes
-   `data/competency-report.json`) and audit tool (`python/match_engine/competency_audit.py`) exist. Mapping inside extraction
-   (phase 2, `python/job_scoring/competency_mapping.py`) is in the code. Phases 3 and 4 stay **Planned** (not built: no `evidenceVersion` / `answersVersion` in the code).
-2. **Mapping in extraction.** The model picks a `competencyId` from the list or NONE; code accepts only listed ids;
-   precedence previous frame > alias > dictionary > model suggestion > provisional; pending aliases and the
-   `prov:` -> canonical remap table under `data/`; one re-extraction of the stored ads.
-3. **Version split.** `evidenceVersion` and `answersVersion`; answers applied in code on top of cached verdicts
-   ([ENGINE_CONTRACT.md](redesign/ENGINE_CONTRACT.md) 6.1).
-4. **Gate quotes into extraction,** so an ad whose requirements all resolve locally makes zero matcher calls.
-
-Deferred (TODO, not scheduled):
-
-- A per-competency verdict cache keyed by (competency id, qualifier, evidence version), so a verdict is reused across
-  ads without a call.
-- Local embeddings as an extra mapping step, only if the mapping proves noisy in the audit.
-
-## Fix scoring: skill extraction scope, requirement weighting, domain transferability - TODO
-
-Found 2026-11-02 on a real posting (a PM role at a B2B-adjacent consumer marketplace): the tool gave 45 / Weak / P3 /
-"Maybe"; the owner's manual review put the real fit near 6/10, with the mismatch mainly on remote / location, not on
-skills or domain. GitHub Issues are disabled on this repo, so the work is tracked here. Not started.
-
-- [x] **Skill extraction covers the whole work history** (Wave 3). JavaScript, React, PHP, HTML, CSS, Git, Figma and REST APIs
-  were flagged missing although they are explicit in an earlier role (Senior Web Programmer, 2014-2021). Today only
-  recent roles are read.
-- [ ] **Hard vs. nice-to-have requirements** (stays open; Wave 2 reviewed it and did not redesign it). A "plus if you have X" line was weighted like a must-have. The model
-  tags each requirement hard or soft as a fact; `scorer.py` decides the weight (architectural rule in CLAUDE.md).
-- [x] **Domain transferability** (Wave 3; a fixed table of adjacent industries, so the marketplace example below is not covered). "No clear industry match" was emitted for B2B two-sided dynamics (carrier / shipper)
-  that are structurally similar to the posting's marketplace (host / guest). Judge structural similarity, not a flat
-  mismatch.
-- [ ] **Low-confidence reasons only when the signal is absent.** "seniority not stated" and "no strong culture
-  signals" fired on a posting that lists salary bands per seniority tier and 3-month / 6-month onboarding milestones.
-  Guard each string with a check of the source text. **Checked in the code 2026-11-10, stays open:** "Seniority not stated" comes from the model's `seniority` fact or the title (`experience_match.py`), not from a source-text check; "No strong culture signals" comes from a keyword match (`culture_match.py`); neither has a test for the salary-band example. Already guarded by a computed signal, not text: "Requirements not extracted", "Short description", "Location not stated", "No keyword bank" (`data_sufficiency.low_confidence`).
-- **Must NOT change: location mismatch detection.** It worked correctly in this test; the location cap rules, the
-  "Verify location" flag and the location gate stay untouched, and their tests must keep passing.
-
-Each item gets a fixture-based regression test; the Phase 1 stability test must keep passing. Related: "Recalibrate
-`TARGET_COVERAGE` and fix the flat scoring dimensions" under Later.
-
-## P1 scoring calibration (2026-11-11): Stage A done, Stage B S0-S2 (free) built
-
-Stage A measured the score against the owner's own labels (45 ads, 70 requirement lines; a small, purpose-chosen sample, not proof for all professions). Stage B decisions and the S0 (frozen test set), S1 (offline fit/confidence preview) and S2 free part (evidence-index diagnostic, dry-run estimate) tooling are recorded in [DECISIONS.md](DECISIONS.md#p1-scoring-calibration-stage-a-measured-stage-b-rules-decided-2026-11-11-branch-p1-stage-b). Next: the paid index diagnostic (about $0.03, needs the owner's explicit approval), then extraction v6, matching v3 and the exception review UX. No production scoring change is approved yet. Stale relocation lines to correct at P1 completion (D1 closed: "Yes, anywhere").
-
-## Competency memory MVP (2026-11-11): M1-M5, M7, M8 built on branch `competency-memory-mvp`, not pushed
-
-Spec: [redesign/COMPETENCY_MEMORY_MVP_SPEC.md](redesign/COMPETENCY_MEMORY_MVP_SPEC.md). Record: DECISIONS.md, "Competency memory MVP: slices built".
-
-- [x] M4 prior variants in the Stage B replay; M1 version split; M2 fact store v2; M3 answer application; M5 batch grouping (manual command); M7 evidence map in check mode; M8 years in extraction.
-- [x] Matcher-only run on the top-100 ads done (99 verdicts, ledger 0.1554 USD) and analysed offline: prior-0 Fit against `matchScore` Spearman 0.01 (n 99), question queue thin (128 distinct questions for 144 unknown lines); see DECISIONS.md. Earlier line: prepared (`calibration/matcher_ids.py`, `engine_sample.py --max-usd`; estimate 0.12 to 0.33 USD, cap 0.35). Not run yet: the owner runs it, then the free analysis follows (see DECISIONS.md, "Matcher-only run on the top-100 ads").
-- [ ] Owner: review the prior; approve the M8 re-extraction and deploy (bump to `PROMPT_VERSION` 6 is committed, must not deploy before that); push.
-- [ ] Not started: M6 audit of `auto` links, conflicts and local API, the prior in production Fit, the Stage B bucket hold and unconfirmed flag in production.
-- [~] **Parked (owner decision 2026-11-14): M9 queue and M10 UI**, the cross-ad question queue. Expected yield is insufficient on the measured data: scope B has 680 distinct questions, 647 asked in one ad only; the top 10 resolve 8% and the top 20 13% of unresolved musts; 75 / 186 / 297 questions are needed for 25 / 50 / 75%; the apply-ready subset (n 10) needs 23 questions for 50%. Limits: 522 of 609 absence lines have provisional ids (grouping incomplete), absence is an upper bound (17 matcher misses in 12 ads in an earlier sample), the sample is the top 100 by `scoreBeforeCaps` and not a sample of apply-ready ads, a No answer closes a line without raising Fit. Not a rejection of learning through ads. M1-M8 unchanged, prior 0 shadow-only, no production ranking change. See DECISIONS.md, "M9/M10 cross-ad question queue parked".
-
-## Roadmap v2 (recorded 2026-11-04)
-
-Goal: **Scoring -> Matching -> Application Tracking.** Execution order approved by the owner and reviewed by GPT. Priorities P0 to P3. Nothing below is built unless the S table above says so. Decisions: [DECISIONS.md](DECISIONS.md#roadmap-v2-and-the-single-discovery-safety-rule-2026-11-04).
-
-State at this point: S1 to S8b are built, deployed from a clean build and merged to main at `e8995ed`.
-
-| Wave | Priority | Content |
+| # | Criterion | Measured by |
 |---|---|---|
-| Before 0 | Planning complete; implementation deferred | **UI redesign and Design System planning** (shadcn/ui preset `b1a1cZcRs`, which superseded `b7CScIWmG` on 2026-11-04, plus a semantic extension). Documents only, in [design-system/](design-system/README.md); nothing is built. Implementation is postponed and needs separate PO approval: see [the Epic](#epic-ui-redesign--design-system---deferred--to-do). |
-| 0 | P0, minimal | **Built; merged to `main`** ([as built](DECISIONS.md#wave-0-verified-backup-and-restore-check-2026-11-08); owner still rotates the keys and runs one real backup through `scripts/backup-check.js`). Verified backup plus restore check covering server data and browser state (Keep, statuses, applications), with integrity hashes and a tested restore; include `data/analytics` if it cannot be reconstructed. Rotate the OpenAI key and `li_at` (the owner does this). Align the rules in ROADMAP.md and DECISIONS.md. |
-| 1 | P0 | **(k) + (q) discovery safety**, one rule (below): a throttled source never proves an ad disappeared; "ok with 0 read" is not automatically proof of closure; a confirmed-empty source is told apart from an incomplete or failed read; successful sources import independently (a partial source must not block the import); failed sources never affect closing. |
-| 2 | P0 | **Built; merged to `main`** ([as built](DECISIONS.md#wave-2-scoring-correctness-built-2026-11-08)). **(a1) scoring correctness:** junk baseline of at most about 5 plus a distinct Insufficient Data state, hard/soft requirement handling, low-confidence reasons. **(e)** manual Re-score and tailoring for kept ads. **(g)** exclude closed ads from the IDF corpus (approved; measured effect at most 1 point). **(i)** `scoringBehind` after a cancel. |
-| 3 | P0 | **Built; merged to `main`** ([as built](DECISIONS.md#wave-3-scoring-quality-and-the-three-level-role-filter-built-2026-11-08)). **(a2)** skills from the whole history, domain transferability (proven vs assumed), the keyword bank holds keywords only, `TARGET_COVERAGE` recalibrated. **(b)** the three-level role filter (Target / Near / Excluded). Owner steps: regenerate the intelligence, then Re-score. |
-| 4 | P1 | **Built; merged to `main`** ([as built](DECISIONS.md#wave-4-coverage-retention-and-import-meta-built-2026-11-09)). **(h)** `older_key` retention rule and guarded prune script (window 180 days chosen; the owner runs the report and `--apply`, nothing is automatic); **(c)** Infostud: why it returns irrelevant ads explained, per-category probe, complete-read proof recorded report-only (`SNAPSHOT_AFTER_PROOF` off until several complete runs are seen); **(n)** `lastImport.meta` v2, `lastPartial`, held counts in Activity. |
-| 5 | P1 | **Built; merged to `main`** ([as built](DECISIONS.md#wave-5--goal-j-application-tracking-built-2026-11-09)). **(j) Application Tracking:** all records including history-only and voided (Applications > All records), snapshots (existing, shown with their honesty), applied sync (Applied derived from the store, `job-state.json` v1 for Saved, Rejected and Keep with an owner-run export and import), the Applied button opens a confirm form, history-only rows no longer read "Unreviewed", shadow badge off the table, prune `--apply` checks the live store hash. Follow-up built: a failed status write (API unreachable included) changes nothing, and prune `--apply` also refuses unless applications without a job id are covered by URL / posting-key protection (`export-application-job-ids.js --check`). Owner steps listed in the decision. |
-| 6 | P2, release blocker | Phase 4 protections (fact gate, identifier redaction, confirm) are release blockers for AI and application workflows: **built and merged to `main`** (2026-11-09); deployment not recorded. Review the 11 of 17 resume docs with stale unverified-degree findings before they are used for applications (still open). |
-| 7 | P2 | **Profile Import** (branch `wave7-profile-import`, merged to `main`; deployment not recorded): S0-S4, S6, S7 built; S5 LinkedIn data ZIP waits for the owner's real file. Details: [Import redesign (Wave 7)](#import-redesign-wave-7---in-progress). Branch names are not renamed. |
-| - | P2 | UX, Settings, **(d)** (no wave number since the renumbering). (d) was a missing feature (the toggle existed only for Joberty): **built** as per-source switches (2026-11-09, merged to `main`; deployment not recorded), see "Per-source switches" below. |
-| 8 | P3 | Step 5 server master ([TRACKER_PLAN.md](redesign/TRACKER_PLAN.md)). A verified backup (Wave 0) is mandatory before bigger changes. |
-| 9 | P3 | **(f)** ledger growth; **(m)** hand-edited `appliedRuns` double-count; **(o)** truncated ledger with an unchanged generation; **(p)** never run the old `import_run --backfill-filtered` below S6; Step 6; tech debt. |
-
-**The single discovery safety rule (Wave 1).** A throttled source never proves an ad disappeared. A source that is `ok` with zero ads read is not automatically proof of closure: a confirmed-empty source is distinguished from an incomplete or failed read. Successful sources import independently, so a `partial` source does not block the import of the ads it did read. A failed source never affects closing. Status: **built on branch `wave1-discovery-safety` (local, not merged)**: read classes, JobSpy error signalling and the partial-source gate (DECISIONS.md, "Wave 1 discovery safety built").
-
-**Added to the backlog (2026-11-04):**
-
-- [ ] Rotate the OpenAI key and `li_at` (owner action, Wave 0).
-- [ ] Resume findings: 11 of 17 resume docs carry stale unverified-degree findings; review before use for applications (Wave 6).
-
-**Open decisions:**
-
-1. Whether the four items under [Fix scoring](#fix-scoring-skill-extraction-scope-requirement-weighting-domain-transferability---todo) split as proposed: hard/soft requirements and low-confidence reasons to a1 (Wave 2); whole-history skills and domain transferability to a2 (Wave 3).
-2. ~~The `older_key` retention window~~ decided: 180 days (Wave 4, h); the owner still runs the report and `--apply`.
-3. The Infostud snapshot switch (Wave 4, c): off until several consecutive complete runs are seen in Activity; then set `SNAPSHOT_AFTER_PROOF` in `job_history.py`. Any category change waits for several probes.
-
-## Wave 5 Infostud incomplete description - built (2026-11-09), owner steps pending
-
-- [x] Full ad text read from the detail page (`__NEXT_DATA__ job.textAd`), chosen by a real-content check, not length (`infostud_description.py`).
-- [x] `descriptionStatus` per ad: complete / teaser / failed / source_truncated; ledger keeps a complete text over a later teaser.
-- [x] Scoring: incomplete description = low-confidence reason; one-line switch to Insufficient Data (`data_sufficiency.py`).
-- [x] Repair script, dry run by default, throttled, counts only (`scripts/repair-infostud-descriptions.py`). Dry run: 9 of 9 stored Infostud ads are candidates.
-- [ ] Owner: run the dry run, decide `--apply`, then Re-score; check the next discovery run.
-- [ ] Follow-up: the Graphify adapter build exited non-zero in Wave 4 (cause not investigated).
-- [ ] Not started on purpose: Infostud snapshot switch (Wave 4) stays off.
-
-## Discovery improvement: Company information standardization - Planned / To Do
-
-**Status: PLANNED, P1. Part of Discovery, not of the browser extension.** Nothing is built. Recorded 2026-11-09.
-
-**Goal:** the normal discovery pipeline extracts and standardises company data across providers, so the company-level facts exist once and every job and every later source (including the extension) can use them.
-
-**Audit already done (code read, 2026-11-09):** the canonical job carries only a `company` string. Infostud's list API client keeps `companyName` and drops everything else it may return; Joberty has `companyUrlName` and `companyName`; no field for company website, industry, size or headquarters exists in the canonical job, the ledger or `data-shapes.md`. The claim that Infostud already provides a useful reference could not be confirmed from the code: the first Task step is to look at what its list and detail payloads actually carry.
-
-| Step | Content |
-|---|---|
-| 1 | Provider audit: per provider, which company fields are present in the raw payload (counts and field names only, no private data); decide the field list |
-| 2 | One company record shape, keyed by a normalised company key, kept **apart from the job** (no duplicate profile per job); fields: normalised name, website, industry, size, location / headquarters, provider company-page URL, description, source and observed-at per field |
-| 3 | Missing data is distinguished from unverified: each value is `known`, `unverified` or `missing` with its source and time; unchanged data is not re-fetched (a freshness window, as the AI findings store does) |
-| 4 | Providers fill the record from data they already read; no extra page fetch by default, no scraping of private or personal contacts |
-
-Acceptance: a fixture per provider shows which fields it fills; a job and its company are two records joined by the key; re-running discovery on unchanged data changes nothing; the shape is written so a future shared Company entity can take it over (no per-user field in it). Dependencies: Wave 4 import meta (built; merged into `main`). Open: the company key (name only is weak; domain when known), and where the record lives (a `data/companies` file beside the ledger).
-
-## Delete job for hand-entered jobs - built, merged to `main` (2026-11-09), owner check pending
-
-Details Delete for manual jobs only; the server re-checks the application store (voided records included) and removes the job from `manual_jobs.json`, `scored_jobs.json`, `job-state.json` and the browser. Decisions: `docs/DECISIONS.md` "Delete job for hand-entered jobs". Not built: Delete in the list row actions.
-
-## Per-source switches and one-off Re-scrape skip - built (2026-11-09), owner check pending
-
-Settings > Sources: every source can be switched off and on (server-side, `data/config/sources.json`); discovery and Re-scrape skip a
-switched-off source without closing or counting anything; Re-scrape has "Skip LinkedIn this time" (one run, nothing saved).
-Decisions: `docs/DECISIONS.md` "Per-source switches". Owner steps: rebuild/restart the API, then check in Settings > Sources and Activity.
-
-## Job relevance, lifecycle, salary, deadline - built (2026-11-08), owner visual check pending
-
-- [x] Three title tiers, cap 40 for an unrelated title, program work accepted for the product family.
-- [x] Fragment role variants no longer match; `stretchRoles` and "product management" are read.
-- [x] A closed ad leaves Active and stays in All Jobs and the Application Tracker ("Ad closed").
-- [x] Open before closed on the default sort only.
-- [x] Salary column (stated pay; EUR monthly only as an approximate second line); Lever and Ashby structured pay.
-- [x] Apply by column with warnings and sort.
-- [ ] Not started on purpose: "Urgent only" filter, Greenhouse per-job pay and deadline. (Keyword-bank recalibration: done in Wave 3.)
-
-Decisions: [DECISIONS.md](DECISIONS.md#job-relevance-lifecycle-salary-and-deadline-2026-11-08).
-
-## Epic: UI Redesign & Design System - deferred / To Do
-
-**Status: POSTPONED. The Epic and all its work are To Do.** Nothing is built or authorized. All colours are provisional. This Epic does not reorder scoring, matching, discovery or application tracking; the wave order above stands. Backlog with Sub-tasks, dependencies and acceptance criteria: [REDESIGN_BACKLOG.md](design-system/REDESIGN_BACKLOG.md). Decisions: [DECISIONS.md](DECISIONS.md#design-system-final-planning-decisions-epic-postponed-2026-11-04).
-
-| Task | Status | Aligned with |
-|---|---|---|
-| 1. Design System Integration & Foundations | To Do | |
-| 2. Application Layout & Navigation | To Do | |
-| 3. Jobs Listing & Filtering | To Do | Wave 3 role filter built (discovery side) |
-| 4. Job Details & Scoring UI | To Do | Wave 2 UI |
-| 5. Application Tracker | To Do | Wave 5 |
-| 6. Profile & Resume Management | To Do | Wave 7 profile import |
-| 7. Tailoring & Application Preparation | In progress | Wave 6 Phase 4 protections built and merged to `main`: fact gate, tailoring redaction and confirm, draft + accept for the AI cover letter, verdicts checked when a document is attached. Browser AI features confirm stays in Step 6 |
-| 8. Settings & Sources | To Do | (d) per-source switches (built, no wave number) |
-| 9. Responsive, Accessibility & Visual Consistency | To Do | |
-
-**Implementation prerequisites (future gates, not authorization to execute):**
-
-1. Complete and verify the minimal Wave 0 backup.
-2. Finalize and approve the colour palette.
-3. Recalculate contrast ratios against the final colours.
-4. Verify the semantic-token mappings.
-5. Recheck framework and dependency compatibility.
-6. Obtain separate PO implementation approval.
-
-## Idea: HolyJobs browser extension (LinkedIn job and profile import) - Idea / Not planned for implementation
-
-**Status: parked.** This is a product idea, not a plan. It has no tasks, no phases, no priorities and no dependencies on waves, and nothing is built. It becomes planning work only when the owner decides to plan it. Notes: [DECISIONS.md](DECISIONS.md#idea-browser-extension-parked-notes-2026-11-09).
-
-**Goal:** a browser extension that, on a LinkedIn page the user opened, sends what the page shows into HolyJobs, so the owner does not copy a posting or a profile by hand.
-
-**Value to the owner:** a job seen on LinkedIn lands in HolyJobs without retyping and without a duplicate of a job already known (open, closed, kept, rejected or applied); an existing job can gain missing details; the owner's own profile could be brought in without downloading a PDF.
-
-**Core principles:**
-- Only when the user acts; no background work.
-- No LinkedIn credentials or cookies stored or sent to HolyJobs.
-- No crawling, automatic navigation or continuous scraping.
-- No new AI call for extraction.
-- Preview and confirmation before any change; nothing is created or overwritten silently, and the owner's own job states are never touched.
-- Reuse the Wave 7 `ImportDraft` pipeline and the manual-job model; no second writer.
-
-**Candidate capabilities (loose, none committed):**
-- **Job import:** "find in HolyJobs" on an opened posting (match by LinkedIn id or URL, show candidates when unsure), or preview and create a new job through the Add job form.
-- **Enrichment:** offer missing details for a job already known (description, how to apply, external apply link, who posted it), shown as a difference to accept or refuse.
-- **Profile import:** the owner's own opened profile as an `ImportDraft` into the existing review, confirm and apply. The riskiest idea; the LinkedIn PDF and data ZIP imports stay the supported way.
-
-**Questions for later** (no answers decided):
-1. If it is ever planned: where it fits among the other work.
-2. How the extension would identify itself to HolyJobs, given there is no login today.
-3. How its data would reach the app screen (and whether anything may be held on the server meanwhile).
-4. Which browser: Chrome first.
-5. How the true source (LinkedIn) is kept apart from the import route for a job it creates.
-6. Where per-user and job-level data would live (see the notes).
-7. How a job poster would be kept, if at all.
-8. What the LinkedIn terms and account-risk assessment finds.
-
----
-## Graph tooling (Graphify adapter) - in progress
-
-A minimal, removable, stdlib-only adapter over the local Graphify graph (no services, databases, network or LLM extraction). Primary success measure: the graph reliably answers "if we change this Python module, which other parts of the system may be affected?". Decisions: [DECISIONS.md](DECISIONS.md#graph-tooling-graphify-output-update-cycle-and-backup-2026-11-08).
-
-**Milestone 1** (separate checkpoints, each approved by the owner):
-
-| Checkpoint | Status |
-|---|---|
-| B0. Restorable backup of `graphify-out/` and the Graphify config outside the repo | Done (2026-11-06) |
-| S0. `graphify-out/` git- and docker-ignored; CLAUDE.md Graphify section committed without the committed-graph line | Done |
-| S1. Adapter skeleton: identity pass, invariants, `report.md` with separate code, doc-link and semantic freshness | Done |
-| S2. Python import resolution, only where every run context proves the same file without executing project modules | Done |
-
-**Then (authorized 2026-11-08):**
-
-| Slice | Status |
-|---|---|
-| S3. Remove inferred call edges proven wrong at the call site | Done |
-| S4. `architecture.json` and `test-deps.json` views | Done |
-| S5. Doc-to-code links from exact backticked paths | Done |
-| S6. Zero-token cycle check in a throwaway copy (`zero_token_check.sh`) | Done |
-
-As built: [DECISIONS.md](DECISIONS.md#graph-tooling-the-graphify-adapter-as-built-2026-11-08). Open: run the cycle on the real repo; file the upstream Graphify issue (owner).
-
-## Activity screen - built
-
-A new screen named Activity, in the nav group System, built in this repo. Decisions and known gaps:
-[DECISIONS.md](DECISIONS.md#activity-screen-approved-2026-11-02).
-
-Two numberings meet here. **A1 and A2a** are the slices built earlier (run log; background Re-scrape). **S1 to S7** are the SCRAPE -> IMPORT -> SCORING
-slices approved 2026-11-03: a scrape writes staging only, an import (idempotent, its own step) commits, scoring follows and never undoes the import.
-Plan, approved decisions and rollback per slice: [DECISIONS.md](DECISIONS.md#scrape-import-scoring-approved-2026-11-03). Each S slice is small and shippable alone.
-
-| Slice | Content | Status (updated 2026-11-04) |
-|---|---|---|
-| A1 | Per-source outcome and run log, including a fix so a failed board cannot close its existing ads | **Built.** `python/job_discovery/run_log.py`, records in `data/analytics/runs/`. [Shape and deviations](DECISIONS.md#activity-slice-1-as-built-2026-11-02) |
-| A2a | Background Re-scrape: one job with a lock over discovery and scoring, an event log, the interrupted state, a commit marker | **Built and deployed.** `python/run_rescrape.py`, `python/job_scoring/pipeline_lock.py`, `scripts/run-rescrape.js`. Tailoring merges at write time and backup export refuses during a run or after an unfinished commit. [Mechanism and limits](DECISIONS.md#activity-slice-2a-background-re-scrape-2026-11-03) |
-| S1 | Staging store and ad records, then streaming. **1a:** `data/jobs/staging/<runId>/<source>.jsonl` (header, batches, footer), reader and validator, hard links of the ledger and the discovered file as the run found them, no automatic deletion (S4a deletes by status), excluded from backup and restore, Joberty reads the ledger read-only. **1b:** providers append while they collect. No behaviour change: the old commit path is untouched and nothing reads staging yet | **1a and 1b built and deployed.** `python/job_discovery/staging.py`; streaming in the providers. [What is staged, when, and what is not](DECISIONS.md#s1-as-built-1a-store-1b-streaming) |
-| S2 | Per-ad discard reasons plus `externalId`: every ad a provider drops is a line in `staging/<runId>/discards.jsonl` with a stable reason; kept ads carry the source's own id beside the canonical job; `read == kept + discarded` is checked per source. No filter rule changed | **Built and deployed.** `python/job_discovery/staging.py`, `providers/role_filter.py`, `providers/base_provider.py`. [Reasons, invariant, limits](DECISIONS.md#s2-as-built-discard-reasons-and-externalid) |
-| S3 | The importer (`apply_run` as it is, no new rule, full validation), `import_run.py --dry-run` (writes nothing) and the import report; replay compared with what the old commit wrote, `derive_view` rebuilt from the ledger alone. Staging failure marked in the run record. No staging run is deleted (disk use printed) | **Built and deployed.** `python/job_discovery/importer.py`, `import_run.py`. Run it on real runs before S4a. [Decisions, order behaviour, exit codes](DECISIONS.md#s3-as-built-the-importer-import---dry-run-and-the-import-report) |
-| S4a | The switch: scrape (staging) -> importer -> ledger as the single source of truth -> `discovered_jobs.json` derived from it, with a generation check before every reader (Python and Node), automatic rebuild or an explicit error, commit marker removed, ledger first then view (also in enrichment), import final and independent of scoring, order guard, status-based staging retention, 90-day ledger prune off, debug files best effort | **Built and deployed** (2026-11-03). `python/job_scoring/view_guard.py`, `scripts/view-guard.js`, `python/job_discovery/importer.py`, `run_discovery.py`. Owner gate: 3 real dry-runs with zero differences (none contained a closed or reopened ad). [Decisions, lock rules, tests](DECISIONS.md#s4a-as-built-the-switch-2026-11-03) |
-| S4a follow-up | `--allow-older` needs `--confirm-overwrite-newer` or a typed `OVERWRITE`, and is never reachable from automatic paths; `scripts/check-view-recovery.js` proves the Node view recovery in the real container on a copy of the data | **Built and deployed** (2026-11-03). [Decisions](DECISIONS.md#s4a-follow-up-2026-11-03-the-older-run-override-is-confirmed-by-a-human-node-view-recovery-has-a-safe-live-check) |
-| S4a follow-up 2 | The Node view-recovery check sends the Host the request guard allows; a guard 403 is an environment failure (exit 2), not a recovery failure | **Built and deployed** (2026-11-03). [Fix](DECISIONS.md#fix-to-the-node-view-recovery-check-the-host-guard-2026-11-03) |
-| S4b | Stop writing the debug mirrors `raw_jobs.csv` and `normalized_jobs.json` (no reader exists; re-confirmed 2026-11-03); old files are left on disk | **Built and deployed** (2026-11-03). [Decision](DECISIONS.md#s4b-as-built-the-debug-mirror-files-are-no-longer-written-2026-11-03) |
-| S5a | Lifecycle report: what the S5 rules would do, from the ledger and staged runs (`import_run.py --lifecycle-report`, read-only). No behaviour change | **Built and deployed** (2026-11-03). `python/job_discovery/lifecycle_report.py`. [Decisions](DECISIONS.md#s5-owner-decisions-so-far-and-s5a-as-built-the-lifecycle-report-2026-11-03) |
-| S5b | Board completeness evidence in the staging footer (`boardsRead`): Greenhouse `meta.total`, Lever end-of-list request, Ashby never complete. Nothing reads it yet | **Built and deployed** (2026-11-03). [Decisions](DECISIONS.md#s5b-as-built-board-completeness-evidence-2026-11-03) |
-| S5c | Two-fetch closing for snapshot sources: a board proven complete twice in a row, not listing the ad. Ashby never closes. A removed board closes nothing. Search-based sources unchanged | **Built and deployed** (2026-11-03). `job_history.apply_run`, `importer.board_evidence`. [Decisions](DECISIONS.md#s5c-as-built-two-fetch-closing-for-snapshot-sources-2026-11-03) |
-| S5d | Readers ready for rows a run did not find: out of the scoring corpus, no enrichment, judge or shadow call, own summary lines. No visible change | **Built and deployed** (2026-11-03). `python/job_scoring/row_state.py`. [Decisions](DECISIONS.md#s5d-as-built-readers-ready-for-rows-a-run-did-not-find-2026-11-03) |
-| S5d2 | A durable `notFoundThisRun` mark from the ledger's `heldRunId`, replacing the date test; closed rows in the corpus measured only | **Built and deployed** (2026-11-03). [Decisions](DECISIONS.md#s5d2-as-built-a-durable-not-found-this-run-mark-2026-11-03) |
-| S5e1 | `data/jobs/filtered_ads.json`: every dropped ad, one record per `jobId`, written at import before pruning; a run not yet counted is never pruned; `import_run.py --backfill-filtered`. No UI, no route | **Built and deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e1-as-built-dropped-ads-kept-in-filtered_adsjson-2026-11-03) |
-| S5e2 | `GET /api/jobs/all`: every ad known as slim rows with a class and a reason, from the ledger and `filtered_ads.json`. Read-only, no UI, no scores | **Built and deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e2-as-built-get-apijobsall-the-read-only-list-of-all-ads-2026-11-03) |
-| S5e2b | `all_ads.py`: a row whose source was not part of the latest run is `unclassified`, not absent. `filtered_ads.json`: `appliedRuns` only grows, the trim step is gone | **Built and deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e2b-as-built-two-fixes-after-s5e2-2026-11-03) |
-| S5e3a | Active/All logic: `copyGroup` on the route, `allAds.js` (per-field merge, `composeJobList`, copy choice, labels), `useAllAds.js` (in-memory fetch). Wired to nothing, no visible change | **Built and deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e3a-as-built-the-merge-and-the-two-lists-wired-to-nothing-2026-11-03) |
-| S5e3b | `JobTable`: one layout mounted, the whole list sorted then shown in batches of 100, selection as a Set, select all states what it covers; `FitScore` `emptyLabel`. No storage change | **Built and deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e3b-as-built-the-jobs-table-on-a-long-list-2026-11-03) |
-| S5e3c | The visible Active/All view: toggle, class and 14-day filters, badges and reasons, "Not scored", notices, read-only filtered rows with an "Add job" prefill. Server-only rows stay in memory; actions on them wait for S5e3d | **Built and deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e3c-as-built-the-visible-activeall-view-2026-11-03) |
-| S5e3d (1) | `jsdom` as a dev dependency; real clicks on the Jobs screen become permanent tests. No production change | **Built and deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e3d-commit-1-jsdom-and-permanent-click-tests-2026-11-03) |
-| S5e3d (2) | "Keep this ad": the only way a server-only row becomes a stored row, marked `keptByUser` so it lasts; Mark Applied the same in the drawer and Job Details, with no promotion; the reason line hidden on found rows | **Built and deployed** (2026-11-03). [Decisions](DECISIONS.md#s5e3d-commit-2-keep-this-ad-and-promotion-2026-11-03) |
-| S5f | Stale flag: 30 days and 3 proven runs of the same source and search, from a new additive ledger record. Class, reason with the counts, badge, filter; not actionable; out of Active unless worked | **Built and deployed** (2026-11-04). [Decisions](DECISIONS.md#s5f-as-built-the-stale-flag-2026-11-04) |
-| S5 | Lifecycle by source class (snapshot or search-based), Stale as a flag only | **Built in slices S5a to S5f; deployed** (2026-11-04) |
-| S6 | Cancel a running Re-scrape (was 2b): stop the scrape, **save only the ads it validly collected** (the list is not rebuilt; nothing held, absent, closed or Stale; no proven run; `appliedRuns` untouched; dropped ads saved once under `partialRuns`), skip scoring; its own outcome, not a failed run. `POST /api/rescrape/cancel`, run status `cancelled`; the button is S7 | **Built and deployed** (2026-11-04). [Decisions](DECISIONS.md#s6-as-built-cancel-a-running-re-scrape-2026-11-04) |
-| S7a | Run evidence in new records (`import` block: saved, new, refreshed, ledger effect, per-source proof with reason codes, per-board reasons, filter-reason counts; per-source times) and `GET /api/runs`: read-only, bounded, allow-listed, no lock, no process, no ledger or staging read | **Built and deployed** (2026-11-04). [Decisions](DECISIONS.md#s7a-as-built-run-evidence-in-the-record-and-get-apiruns-2026-11-04) |
-| S7b | The Activity screen, read-only: nav item first in System, history (30 a page, Show more), per-source Details with the proof reasons, Not recorded for old records, loading, empty and error states. Asks on open, Refresh and Show more only; no polling, nothing stored in the browser | **Built and deployed** (2026-11-04). [Decisions](DECISIONS.md#s7b-as-built-the-activity-screen-read-only-2026-11-04) |
-| S7c | Live view and Cancel: `GET /api/runs/<id>?after=N` (Node only, read-only), a 3 s poll only while Activity and the tab are visible and the run is active (back-off 3, 6, 12, 30 s), source rows and events as they arrive, Cancel with confirm on Activity and on the Jobs progress line ("Cancel requested" is not "Cancelled"), a Details link from Jobs, the list read once when the run ends | **Built and deployed** (2026-11-04). [Decisions](DECISIONS.md#s7c-as-built-the-live-view-and-cancel-on-activity-2026-11-04) |
-| S8a | The job list never silently loses data to the browser's storage limit: tiers full / lean / minimal / error, a visible notice that names what is kept and what is reloaded, ad text of dropped rows reloaded from the ledger before any screen (`POST /api/jobs/texts`, `jobTexts.js`, `JobTextGate`), error keeps the last saved copy and says the change is not saved. Tailoring a kept or no-longer-listed ad says it cannot be done. | **Built and deployed** (`e52ac4e`) |
-| S8b | A run in which no source gave a usable result (all skipped, failed, partial or unfinished, or held as not run) imports nothing: ledger, view, corpus, lifecycle, `lastImport`, `sourceRuns`, `appliedRuns` and generation are the same bytes. `require_usable` is opt-in (the live path and `import_run.py --import` turn it on). All skipped: exit 0, Activity status stays Skipped, scoring is not run. Attempted and unusable: exit 1, a failed run with the reason. The Jobs screen says the list was not changed. | **Built and deployed** |
-| later | Source order and per-source timeout policy (was 2c) | Not built |
-| deferred | Ledger growth: `job_history.json` grows about 550 MB a year (about 10 KB per entry, about 150 new ads a day), and every import reads and rewrites it. Likely fix: descriptions out of the main file | **Deferred** (recorded 2026-11-03). [Decisions](DECISIONS.md#s5e1-as-built-dropped-ads-kept-in-filtered_adsjson-2026-11-03) |
-
-**Review requirements for S3 / S4a (recorded 2026-11-03, not built):**
-
-1. **A staging write failure must not pass as a saved run.** Today a failed staging write is only a warning in the run record. Before anything imports staging, a failed
-   write (a source writer, the discards log or the run folder) must be marked in the run status, must stop the run from being treated as fully saved, and must stop
-   the import from taking incomplete staging as if it were a complete scrape. **Done in S3:** the run record gets a `staging` field and an `error` issue (status `partial`), the folder gets `status.json`, and the importer refuses such a run.
-2. **Retention must never delete a run that waits.** **Done in S4a (`staging.prune`):** staging is deleted by status, never a run still waiting for import or for recovery (S3 deleted nothing in between);
-   the disk use is logged and printed.
-3. **S3 import validates in full before it changes the ledger.** Staging validation (`staging.problems`) only requires `jobId`, `provider` and `title`; the import must
-   check everything the commit path relies on (types, URL, dates, sizes, duplicates) on every ad. **Done in S3 (`importer.validate_ad`):** an ad that fails is left out and reported with a code, and its source is held
-   like a source that did not run, so nothing is closed on the strength of an ad that went missing.
-
-Backlog: Infostud completeness measurement (end of this work). Infostud is **not** classified snapshot-based until it is done. The six checks are postponed to the end of this work (owner, 2026-11-03).
-
-**Backlog from owner decisions, 2026-11-03** (reasons in [DECISIONS.md](DECISIONS.md#owner-decisions-baseline-score-role-filter-infostud-testing-2026-11-03)). None is started:
-
-- [x] **Scoring baseline for junk or empty ads** (built in Wave 2, a1: Insufficient Data state). A made-up manual job with a junk description scored 44 (Weak, P3, Maybe; Role 45, Skill 20, Industry 55, Experience 65, Location 50, Culture 58). The owner expects at most about 5 and an "insufficient data" label. Deferred to the end of the current Activity work and solved with [Fix scoring](#fix-scoring-skill-extraction-scope-requirement-weighting-domain-transferability---todo).
-- [x] **Role filter too strict across platforms** (built in Wave 3, b: three-level role filter). `role_filter.py` checks `TITLE_EXCLUDE` ("project manager", ...) first, and an ad with no include term is dropped silently (Infostud: 392 of 409 dropped with no reason; for example ad 765172 "Medior Dev Project Manager Niš", position "IT Project Manager"). Idea: three tiers (clear no / clear yes / borderline kept with a "for review" flag; AI only on a borderline title plus a short description). Depends on the scoring fix and on the discard-reason data from S2. Deferred.
-- [ ] **Infostud stays unclassified** (not snapshot-based) until its fetch coverage is confirmed; the six checks are postponed to the end.
-- **Testing rule:** the owner tests everything at the end. No merge and no production before the real-container integration check.
-
-Owner corrections to slice A1, all done: an empty board holds its ads; a source that does not apply is `skipped`; a run where every
-source was skipped is `skipped`; a source that skipped or failed keeps its ads in `discovered_jobs.json`.
-
-**Built 2026-11-03, browser only, ahead of the lifecycle slice (S5):** an ad that leaves the file no longer takes the owner's data with it. The import keeps a row
-holding a status other than `new`, AI insights, tailored assets, outreach or legacy tracking, marked `offList` and hidden from default views. This is a
-temporary protection until the Step 5 overlay. [Rule, terms and limits](DECISIONS.md#offlist-rows-keep-the-owners-data-2026-11-03).
-
-**Built 2026-11-03, read-only:** every known ad and every non-voided application opens when its ad has left the list. `GET /api/jobs/history/<jobId>` serves one ledger snapshot, Job Details
-falls back from row to file to ledger to the application's frozen posting and says "Not in the latest run", and the tracker stat cards and AI application context count from the application store.
-No data migration; `localStorage` stays the job list until Step 5. [Rule and limits](DECISIONS.md#applications-open-without-the-ad-history-read-path-2026-11-03).
-
-**For slice 4, unchanged so far:** a search-based ad that a successful run did not return leaves the file, the scored list and the
-browser's default list with no badge, while the ledger keeps it open. A row with none of the owner's data is dropped from the browser. A skipped source's
-ads, on the other hand, stay active with no time limit. [Details](DECISIONS.md#activity-slice-1-as-built-2026-11-02).
-
-Left for a later slice from slice 1: scored, closed, missing and expired counts on the record.
-
-**Known limitation:** `jobspy_adapter` can report a blocked LinkedIn search as a successful fetch with 0 ads, so run statistics for that
-source are unreliable. It never closes ads automatically. `joberty_client.py` also drops listing pages it could not read
-([details](DECISIONS.md#activity-slice-1-as-built-2026-11-02)).
-
-## Import redesign (Wave 7) - in progress
-
-Sources and design: [DECISIONS.md](DECISIONS.md#import-redesign).
-
-| Slice | Content | Status |
-|---|---|---|
-| S0 | Atomic profile mirror write; import backup route (last 10, profile JSON only) | Built (2026-11-09); `wave7-profile-import` merged to `main` |
-| S1 | One source list + draft version; guarded apply (backup, one write, retry never re-applies, Undo); confirm step with cache impact | Built (2026-11-09); `wave7-profile-import` merged to `main` |
-| S2 | TXT / MD | Built (2026-11-09); `wave7-profile-import` merged to `main` |
-| S3 | JSON Resume | Built (2026-11-09); `wave7-profile-import` merged to `main` |
-| S4 | DOCX | Built (2026-11-09); `wave7-profile-import` merged to `main` |
-| S6 | PDF failure hardening (password, scanned, page cap, empty MIME type) | Built (2026-11-09); `wave7-profile-import` merged to `main`. Real-file check with one resume PDF and one LinkedIn PDF is still the owner's |
-| S7 | Manual "Start blank" through the same review, confirm and apply | Built (2026-11-09); `wave7-profile-import` merged to `main` |
-| S5 | LinkedIn data ZIP | Last: waits for the owner's real file names and header rows |
-| Gate | Full gate for S0-S4, S6, S7 on the real tree (2026-11-09): pytest 3040 passed, Vitest 2320 passed (the listed flaky `rescrape.test.js` failed once, passed on rerun), lint and build clean, mutation checks on the new logic, private files unchanged. Rerun the changed areas when S5 lands | Done |
-| 1a | Wizard, paste step, review screen. The earlier numbering 1a-5 is retired: old 1b is S2 + S4, old 3 is the PDF steps and S6, old 4 is S3, old 2 is S5; structured experience editors are covered by the S7 tests | Done |
-
-A browser-extension profile import is only an idea (parked), not a Wave 7 source: see [the idea](#idea-holyjobs-browser-extension-linkedin-job-and-profile-import---idea--not-planned-for-implementation). LinkedIn PDF and the data ZIP stay the supported LinkedIn sources.
-
-Also later: the Continue / Save wizard flow fix, the score 60/58 fix, and a LinkedIn PDF test on a real file.
-
-## Tech debt leftovers
-
-Known and left open on purpose. Checked against the code on 2026-11-02.
-
-**Tests:**
-
-- Flaky run-lock test in `tests/js/rescrape.test.js` ("a dead running record becomes interrupted at the first status; a live one does not"): `withRunLock` sometimes answers busy (seen 1 of 3 runs alone, and once in a full run). Deferred, not fixed.
-
-**Step 5 (server master), [STEP5_SERVER_MASTER_PLAN.md](redesign/STEP5_SERVER_MASTER_PLAN.md):**
-
-- ~~`applied_manually` vs the tracker~~ resolved in Wave 5 (j): Applied is derived from the application store and `updateJobStatus` refuses `applied_manually`; legacy rows keep the old value until migrated.
-- `offList` rows migrate as orphans, not active `record` entries ([decision](DECISIONS.md#offlist-rows-keep-the-owners-data-2026-11-03)).
-- Whole-list save: the Jobs, Applications and Outreach screens still save their whole list from memory (`saveJobs`).
-- Hard-coded `serbia` provider group: `scripts/run-discovery.js`, `run-pipeline.js`, `api-handler.js`, `PipelineOrchestrator.jsx`, `JobDiscoveryScreen.jsx` and `npm run discover:jobs`.
-
-**Phase 4, strict xfails in `tests/python/test_llm_tailor.py`:**
-
-- ~~The fact gate only sees metric-shaped numbers~~ built (Phase 4, area 2): `provenance_checker.check_draft` / `check_document` cover numbers, years of experience, named things, degrees and certifications; limits listed in the module docstring.
-- ~~Refusal and rejection reasons not shown~~ built: printed by the run and listed in `JobTailorActions.jsx`.
-- ~~Identifiers inside the sections LLM tailoring sends are not redacted~~ built (Phase 4, area 1).
-- ~~LLM tailoring has no confirm step~~ built (Phase 4, area 3): server-enforced confirm, preview route, dialog.
-
-**Untested:**
-
-- `scripts/run-tailor.js` and the `/api/tailor/*` routes.
-- A bulk tailoring run that aborts. A malformed draft in a bulk run is covered; a failure outside the draft is not (below).
-- Empty stdout with a non-zero exit from the Claude Code CLI: `claude_code._call` does not read the exit code, and the tests only use exit 0.
-- Project intelligence metrics count only when the profile states them too (owner decision, Phase 4); tested in `tests/python/test_fact_gate.py`.
-
-**Tailoring and audit behaviour:**
-
-- `provenance_auditor.py`: the metric, degree and certification checks match whole tokens, but the company check still uses `cl in k or k in cl`, so a short known name can vouch for a longer company name. A severe finding comes from it, so changing it can move jobs to `needs_review`.
-- A failure outside the draft (disk full, render crash) still stops `run_tailor.main()` before `scored_jobs.json` is saved. There is deliberately no catch-all, because it would hide real errors.
-
-**Manual owner steps:**
-
-- `chmod 600` the top-level files of `data/` (`competency-*`, `competencies-review.md`, `discovery-test.log`, `engine-snapshot.json`, `requirement-remap.json`). `scripts/tighten-data-permissions.sh` covers folders only, not these. Command: `find data -maxdepth 1 -type f -perm /077 -exec chmod 600 {} +`.
-- `chmod 700` the `audits`, `chat` and `data` folders. Already 700 on DS9 on 2026-11-02, with nothing inside `audits` or `chat` open to group or other; nothing is left to run.
-
-## Shared job database for several users - goal only (2026-11-09)
-
-Goal: one shared job database, private per-user data, shared discovery. A draft reference, not an approved plan, with no priority or wave: [redesign/SHARED_JOB_DB_PLAN.md](redesign/SHARED_JOB_DB_PLAN.md). Principle 15 (single user) stands.
-
-- Notes only (P1/P2): family subscriptions; new-ad notifications; canonical company dedupe (see [Company information standardization](#discovery-improvement-company-information-standardization---planned--to-do)); source coverage analytics.
-
-## Later
-
-- Multi-device access with server-side storage as the master.
-- Scheduled discovery (nightly run: discover, enrich, score).
-- More role families and their prompt variants for CVs and cover letters.
-- Recalibrate `TARGET_COVERAGE` and fix the flat scoring dimensions (open problems in [ARCHITECTURE.md](ARCHITECTURE.md)).
-- Judge a real run and compare the adjustments with the owner's own sense of the jobs.
-- ~~Redaction and a confirm step for LLM tailoring, with the Phase 4 fact gate~~ built (Phase 4, merged to `main` 2026-11-09).
-- Sources consent UI: replace the inline "I have read the terms" checkbox in Settings > Sources > Job boards with a
-  modal. The user opens it from the Job boards section, selects which opt-in sources to enable, reads the terms for
-  each, and confirms with one explicit action. Server behaviour stays as is: opt-in default off, the server stores its
-  own `consentAcceptedAt`, switching off keeps history, switching on again asks for consent again. UI-only change.
-  Reason: the inline checkbox under the chips looks bad and does not scale to more opt-in sources.
-- ~~Jobs table: Applied button to the tracker, and the shadow badge off the table~~ built in Wave 5 (j), merged to `main`.
-- Settings follow-ups:
-  - Usage & cost. Code check 2026-11-02: a section "AI budget, provider and usage" exists; what is still missing is not recorded.
-  - Clear cache. Code check: `AISettingsPanel.jsx` has a button for the browser AI cache.
-  - Remove the OpenAI key from `.env` after moving it to the store. Code check: `.env` still has `OPENAI_API_KEY`, and
-    `data/secrets/` has no `ai.json` yet, so the move comes first.
-  - Rotate the OpenAI key and `li_at`. Not verifiable from the repo.
-- Job Details: tabs and AI spend per job.
-- Step 6: browser AI confirm dialog ([redesign/BROWSER_STORAGE_POLICY.md](redesign/BROWSER_STORAGE_POLICY.md)).
-- Next big scoring task: [Fix scoring](#fix-scoring-skill-extraction-scope-requirement-weighting-domain-transferability---todo).
-
-## Ideas (not scheduled)
-
-- **Prompt templates (business idea).** When AI writes answers to application questions, offer a template picker. Starter
-  "humanizer" family, each wrapping a pasted text: Professional AI Humanizer; Natural Human Tone Converter; AI-Detection Safe
-  Rewrite; Conversational Human Rewrite; Emotion & Flow Humanizer; Human Language Converter; Human Rhythm & Style Fixer; Final
-  Humanized Master Edit. Any template run is an AI call, so the gate, redaction and confirm rules apply. Nothing is built.
-- **"Fill from ad" (AI field extraction).** Needs the allowlist plus owner confirmation. Code check 2026-11-02: both steps are
-  already built (Manual jobs in [CLAUDE.md](../CLAUDE.md)), and the AI step stays refused because `job-import` is not in
-  `claudeCodeSubscription.features`.
-
-## Inherited features
-
-Discovery across LinkedIn (JobSpy), Infostud, Workable, Greenhouse, Lever and Ashby; job
-history ledger; enrichment facts; work-authorization rules; fit judge; CV library and CV
-analysis with verification; tailoring; outreach contact scraping. See CHANGELOG.md.
-
-## DEFERRED after S8 (recorded 2026-11-04)
-
-Functional gap (must be fixed, not just noted):
-- [ ] **"Keep this ad" stores an ad but does not guarantee every action on it.** Documents cannot be generated for a kept ad that is not in the scored list, because the server reads only the scored file; the button says so (`NOT_IN_SCORED_LIST`). The fix is to let document generation read a kept ad from the ledger or send its text, with the fact gate (Phase 4). Stays Deferred until verified: Wave 2 (e) added a manual Re-score for kept ads, which puts the ad in the scored list, but nothing has verified that document generation then works end to end.
-
-Deferred items (known, not scheduled):
-- [ ] Runs with every source skipped used to hold rows of any search key (design 2026-11-02); with `require_usable` they no longer import. A caller that does not pass it (the plain importer) still holds them.
-- [x] **Discovery safety rule (Wave 1, replaces the two items previously here; built, local branch):** see [Roadmap v2](#roadmap-v2-recorded-2026-11-04). A source that is `ok` with zero reads is not automatically usable and is not proof of closure, and a `partial` source's real ads are imported without waiting for another source.
-- [ ] Text search covers only the rows that have text in the browser; ads whose text could not be reloaded are not found by it (the notice names how many).
-- [ ] No bulk restore of kept-ad text from the ledger beyond the start-up reload of the rows stored without it.
-- [ ] The 5,242,880-character localStorage limit is an assumption, not measured per browser.
-- [ ] Hand-entered jobs have no flag saying whether the server has them.
-- [ ] Direct `setItem` writers (the demo loader) bypass the storage budget in `saveJobs`.
-- [ ] **Lead to verify (recorded 2026-11-09, no code change):** `MUST_HAVE_SHARE = 0.5` in `python/job_scoring/dimensions/skill_match.py` appears unused, since must-haves are reported in `missingSkills` and no longer scored (`score = bank_score`). Confirm with a grep and the tests, then remove the constant or document why it stays.
-- [ ] A throttled source (`jobspy` read 4) can count as proven (Wave 1 now flags a search whose sites all raised as failed; a partly read search keeps its ads); about 1,934 `older_key` rows never go away (rule and prune script built in Wave 4; the owner runs it); `scoringBehind` is false after a cancel; the hand-edited `appliedRuns` xfail; no `init` in compose; pre-S6 backfill double-count; `lastImport.meta` is stale after a partial import (Wave 4: `lastPartial` records the attempt; `lastImport` stays the last complete import); a truncated ledger with a matching generation.
-
-- **Test isolation (recorded 2026-11-09, after the profile-mirror incident):** the pytest and Vitest fingerprint guards only detect a change to `data/profile`, `data/intelligence`, `data/applications`, `manual_jobs.json` and `job-state.json`; they do not prevent it, and no other `data/` folder is checked. Long term every test uses an isolated data directory and never resolves the real `data/` ([DECISIONS.md](DECISIONS.md), "Incident 2026-11-09").
-
-- [x] Profile wording (work authorization / job location blocks), preview card for them, single question numbering with confirmed-only counter, repo scan moved to the Repos step (2026-11-13; see DECISIONS).
-
-## Backlog item 11 (owner numbering, 2026-11-14)
-
-- [x] **(2026-11-23, package 12; owner data only)** **The scored_jobs view drops ads not seen in the latest run while the ledger keeps them open.** Verified: 3483 of 4056 ledger-open ads are absent from the scored file, 4 of them the owner's applied ads; the owner's ads are now registered by the kept-ads sync and stay in every scoring run ([DECISIONS.md](DECISIONS.md#package-12-automatic-fit-3-classification-of-new-ads-and-the-owners-ads-stay-in-every-scoring-run-2026-11-23-no-scoring-rule-changed)). Ads without owner data may still leave the scored list (open question, All Jobs shows them). Original report: Seen on 32 Fit controls and on the Cyrillic Software applied ad: `data/jobs/scored_jobs.json` no longer holds them, `job_history.json` still lists them open. Not started; decide whether the view keeps `notFoundThisRun` rows (see `row_state.py`). Items 1-10 of the owner's numbering are not in the repository.
-
-- [ ] **Item 12: ads written in a language the profile does not cover are not capped.** The language cap needs a readable English text, so a German-language ad such as gvf `5aaeb781` (a real German requirement) stays uncapped; 33 non-English rows in the current set, gvf included. Separate decision, not started.
-
-**Built 2026-11-14:** language cap 25 for a confirmed required-language mismatch, plus two clause-reading fixes ([DECISIONS.md](DECISIONS.md#language-cap-25-for-a-confirmed-required-language-mismatch-and-two-clause-reading-fixes-2026-11-14-branch-competency-memory-mvp)). Re-score not run.
-
-**Built 2026-11-14:** language cap 25 (above) and the remote and board-country eligibility gate ([DECISIONS.md](DECISIONS.md#eligibility-gate-for-remote-and-board-country-ads-2026-11-14-branch-competency-memory-mvp)): R1 corrected the same day (one board country, a city or state inside it does not matter; "Remote - Germany" read): 25 rows would change to 45, scoringVersion 1.2. Re-score not run. **Open:** B2B contracting is not modelled; non-English ads (Item 12); remote rows with a region only stay unrestricted.
-
-**Built 2026-11-14:** `scoreBeforeCaps` and the Jobs list tie-break ([DECISIONS.md](DECISIONS.md#tie-break-the-jobs-list-by-the-score-before-caps-2026-11-14-branch-competency-memory-mvp)): equal Fit Scores order by the pre-cap score, then `jobId`; scores, labels and priorities unchanged; scoringVersion 1.3. Re-score not run, so the order changes only after one.
-
-**Built 2026-11-14:** extraction of the top 100 open ads ([DECISIONS.md](DECISIONS.md#shadow-fit-prior-0-and-a-paid-extraction-of-the-top-100-ads-2026-11-14-branch-competency-memory-mvp)): `enrich_jobs.py --ids`, selection and ledger-spend scripts; shadow Fit prior 0 recorded as the owner's selected value (no production change). Paid run pending (owner), then a free local analysis of the changed statuses and caps.
-
-**Done 2026-11-14:** top-100 extraction ran (100/100 facts, ledger 0.1689 USD) and its effect was measured on a copy: 14 rows change, 7 to visa-refused 25, no sponsorship lifts, top 15/50/100 keep 14/44/89 ([DECISIONS.md](DECISIONS.md#result-of-the-top-100-extraction-and-its-local-effect-2026-11-14-free-analysis-no-model-call)). Owner next: Re-score if the effect is wanted; provider-billed figure for the reconciliation.
-
-**Built 2026-11-16:** Package A, scoringVersion 1.4 ([DECISIONS.md](DECISIONS.md#package-a-visa-refusal-needs-a-refusing-quote-unverified-display-no-years-comparison-2026-11-16-branch-park-m9-m10-scoringversion-14)): a visa refusal needs a refusing quote (right-to-work-only is silent, 45), `workAuthorization.basis` `ad_read` / `not_read` with a "Visa unverified" badge for unread ads, and the years comparison removed from `experience_match.py`. 3 rows go Reject -> Weak, 104 change `experienceMatch`. Re-score not run.
-
-**Built 2026-11-17:** Step 2, eligibility package and read status, scoringVersion 1.5 ([DECISIONS.md](DECISIONS.md#step-2-eligibility-states-and-read-status-2026-11-17-branch-park-m9-m10-scoringversion-15)): work authorization as a state beside the score (`eligibility.py`), no visa or language cap in `matchScore`, "Not read" (no Fit Score) and "Insufficient evidence" read statuses, blank-profile guard, facts-shape guard, one Re-score path, `ledger_row` merges stored facts. Role caps (unrelated title 40, off-track 50) untouched. **Not built:** location and language as full states (item 7 of the brief, next); the owner fills Profile > Work authorization (countries, B2B) and re-scores.
-
-**Built 2026-11-16:** Package B, measurement baseline ([DECISIONS.md](DECISIONS.md#package-b-measurement-baseline-2026-11-16-branch-park-m9-m10-no-behaviour-change)): `scripts/measure_*.py` (baseline snapshot, re-score impact, gate confusion on the 45 labelled ads, extraction variance script) and `~/holojob-eval/package-b-report.md`. Read-only, no provider call. The variance script is written and dry-run tested, not executed: the owner runs it with `--confirm`.
-
-**Built 2026-11-17:** Step 2b, Blocked verdicts and the location state ([DECISIONS.md](DECISIONS.md#step-2b-blocked-verdicts-location-state-2026-11-17-branch-park-m9-m10-scoringversion-stays-15)): no ad with a refused sponsorship, a required language gap or a place outside `allowedLocations` is Apply or P1; Fit numbers unchanged.
-
-**Built 2026-11-17:** Step 2c, language blocks must be confirmed (a must-have quote found in the ad, a declared language list) and blocked rows keep their original verdict in `blockedFrom` ([DECISIONS.md](DECISIONS.md#step-2c-language-blocks-must-be-confirmed-blocked-rows-keep-the-original-verdict-2026-11-17-branch-park-m9-m10-scoringversion-stays-15)). No score change.
-
-**Built 2026-11-17:** W2, engine 0.3.0 status split (CONTRADICTED / NOT_EVIDENCED), specificity weight, read freshness, extract-7 prepared ([DECISIONS.md](DECISIONS.md#w2-engine-semantics-requirement-units-responsibilities-prompt-2026-11-17-branch-park-m9-m10-shadow-only-engine_version-030)). Shadow only; matchScore, verdict, priority and order unchanged on the 598 stored ads. The pre-registered requirement-unit stability criterion failed (median 0.579 vs 0.80). extract-7 variance and the deferred read are owner-run, not run.
-
-**Built 2026-11-17:** W3, Professional Fit 2.0 in shadow (`engineShadow.fit2`, V0 and V1 side by side, [DECISIONS.md](DECISIONS.md#w3-professional-fit-20-on-canonical-competencies-2026-11-17-branch-park-m9-m10-shadow-only)). 1.x unchanged (0 differences on 598 ads). Offline measures failed the pre-registered bars (stability 0.528, unmapped share 0.829; holdout v1 criteria 1 and 2 failed for both variants). Not for use as a ranking yet; holdout v2 and the 45-ad matcher run are owner-run, not run.
-
-**Built 2026-11-17:** W4, Professional Fit 2.1 in shadow (`engineShadow.fit21`: requirements Fit V0/V1/V2 on dictionary skills + domain, domain signal, Role Fit from the responsibilities' role mix, no blended number; [DECISIONS.md](DECISIONS.md#w4-professional-fit-21-on-stable-signals-2026-11-17-branch-park-m9-m10-shadow-only)). Role Fit from responsibilities is untested until the owner-run extract-7 read and `measure_role_mix.py`; no variant chosen, holdout v2 not frozen.
-
-**Built 2026-11-18:** W5, Professional Fit 3 in shadow on closed lists (`engineShadow.fit3`: role class from the responsibilities, domain, requirements as core / secondary marks over the curated competency list plus the existing matcher statuses, seniority distance, a pre-declared ordering with no blended number; [DECISIONS.md](DECISIONS.md#w5-professional-fit-3-on-closed-lists-2026-11-18-branch-park-m9-m10-shadow-only)). Amended the same day (A1: anchoring with moves and core-without-quote to secondary, domain by industry synonym, coverage over resolved units with V0 / V1, tiered order with a separate Insufficient group, title demotion by specific Other role, bars B1-B5 pre-registered, merge and bar-check tools). Owner-run next: `scripts/measure_fit3.py` (estimate first, two passes), `measure_holdout_matcher.py --fit3`, `merge_fit3_answers.py`, `check_fit3_bars.py`; Amendment A2 (same day, before any paid run): Other list with exact names, domain from confirmed experience only (different needs a complete candidate set), misplaced items dropped, B5 rules for insufficient APPLY ads and passes without answers. Nothing was called, nothing is measured yet.
-
-**W5 step 2 (2026-11-18):** evaluation corrected (A5), candidate overlay and a one-iteration loop: frozen shadow candidate `fit3_candidates/i1` passes B1-B4 on holdout v1 (development result), B5 fails; loop stopped by the daily 500-call gate. Details in DECISIONS.md.
-
-**W5 step 3 (2026-11-18):** within-class ranking, benchmark first. Findings from the six clones' code and a pre-registered offline comparison of three shadow order variants (`match_engine/fit3_orders.py`, `scripts/eval_fit3_orders.py`, nothing wired): by the pre-registered rule two pass (C1 blend, C3 bands), with margins inside the noise of 19 ads; C3's stability gain is a tie-break artifact (post-hoc check) and its B5 collapses; no adoption, owner decision open. Report `~/holojob-eval/w5-benchmark-ranking.md`; DECISIONS.md.
-
-**W5 step 4 (2026-11-18):** one signal tested, embedding similarity (text-embedding-3-small, cleaned ad text of 67 labelled / dev ads, one gated request, USD 0.0014) against the role class alone, as a tie-break inside the class. Task 1 (Apply 3 vs FIT-skip 7): AUC gain -0.024, CI [-0.357, 0.333]; Task 2 (graded dev levels, 42 ads): Spearman gain -0.119, CI [-0.298, 0.006]; both INCONCLUSIVE by the pre-registered rule, not adopted, no new variant. Code: `llm_client.embed()` (gated, list of ad texts only), `scripts/measure_embedding_signal.py`; plan `~/holojob-eval/w5-embedding-plan.md`; DECISIONS.md.
-
-**Built 2026-11-18, production release (owner decision): scoring 1.5 and the Fit 3 role class live.** Role class (target / adjacent / other / not available) as a badge in the job list and detail and a "Role class" filter (More filters); default order stays the 1.5 band / priority order, Fit 3 does not rank and nothing new is scored. Classification candidate `i1` ran once over every ad with stored text (581 calls, USD 0.49 of a 1.50 cap, three batches each capped at the budget still unspent), stored in `data/cache/fit3.json`; `python/match_engine/fit3.role_labels` stamps `roleClass` / `roleName` on each scored row from the store (no model call). Details and decisions: [DECISIONS.md](DECISIONS.md#production-release-scoring-15-and-the-fit-3-role-class-2026-11-18).
-
-**2026-11-18, fix live bands:** 500 of 517 unread ads read (USD 0.83; 17 refused by the daily call limit), Re-score under 1.5: insufficient evidence 512 -> 12 open non-blocked rows; trigger (a) fired (Strong 45.4%), no valid Strong cutoff on the 25 labelled ads, so no 1.6 and 1.5 stays live. [DECISIONS.md](DECISIONS.md#fix-live-bands-read-the-unread-ads-re-measure-calibration-trigger-2026-11-18).
-
-**Built 2026-11-18, Blocked audit (Step 2d):** 72 Blocked rows audited (sponsorship 47, language 26, no location); 4 language blocks softened by the ad itself ("a plus", "beneficial") are now Language unconfirmed, not Blocked (`blocking.softened`). Details: [DECISIONS.md](DECISIONS.md#step-2d-audit-of-the-72-blocked-rows-softened-language-demands-no-longer-block-2026-11-18-scoringversion-stays-15).
-
-**Built 2026-11-18, missed-block audit:** markdown no longer hides a verbatim visa or language quote, and a refusal the extraction did not mark is found in the ad text (`eligibility.refusal_in_text`); Blocked 75 -> 84, scores unchanged. Details: [DECISIONS.md](DECISIONS.md#missed-block-audit-markdown-hid-verbatim-quotes-five-refusals-were-never-marked-2026-11-18-scoringversion-stays-15).
-
-**Built 2026-11-18 (not deployed):** eligibility sub-state inside Unconfirmed (Remote-feasible / Onsite, authorization needed), the in-band list order (remote-feasible first, then newest) and the default list leaving out ads the company's board no longer lists, with a filter to show them ([DECISIONS.md](DECISIONS.md#unconfirmed-sub-state-in-band-order-and-ads-not-on-the-board-2026-11-18-no-score-or-band-change)). Display and order only; scoringVersion stays 1.5.
-
-**Built 2026-11-19: scoring 1.6, the fixes that passed the pre-registered guard** ([DECISIONS.md](DECISIONS.md#scoring-16-the-fixes-that-passed-the-pre-registered-guard-2026-11-19-scoringversion-16)): role ceiling (class "other"), clearance / US-citizenship blocker, location eligibility with clear-text remote; the engine-status ceiling (variant B, theta 0.3) is live too: all 494 engine answers were run (about 0.77 USD) and put into the production cache, 74 Strong ads moved to Good. Deployed as image `release-20261119-scoring16`. The Skill-dimension change failed the guard and is off.
-
-**Prepared 2026-11-19, not run: experiment B** (one AI professional-fit number per ad against production 1.6 on the same candidate summary; [DECISIONS.md](DECISIONS.md#clearance-wording-engine-coverage-visibility-and-experiment-b-preparation-2026-11-19-owner-brief-scoring-numbers-unchanged-b-is-evaluation-only)): plan pre-registered (`~/holojob-eval/exp-b-plan.md`), estimate and dry run done, no provider call. Order: owner fills C, engine re-run and re-score, baseline frozen, B, independent evaluation. Also built: the clearance rule needs demand wording (a bare mention is an unconfirmed flag), and rows without a current engine answer say "Ceiling not evaluated" (`engine_missing.py` fills them on request).
-**Built 2026-11-21 (owner decision, option A): Jobs list shows three coarse tiers (Strong / Possible / Weak fit) with no order claim inside a tier.** Experiment B did not win on holdout-v2 (interval lower bound -0.025), scoring 1.6 stays; tiers come from the existing 70 / 55 boundaries, inside a tier the order is remote-feasible, newest, jobId, and the list no longer shows the number. See [DECISIONS.md](DECISIONS.md) "Jobs list: three coarse tiers".
-
-
-## Profile sync guard and automatic backups - built on branch `sync-guard-auto-backup` (2026-11-23), owner steps pending
-
-After the overwrite of 2026-11-21: every write that changes the profile, intelligence or enrichment file first keeps the old version in `data/backups/auto/` (last 10), the scored file is kept only before a re-score (last 3, `-pre-rescore`), and the two save routes refuse a save that would empty or cut 3 or more filled-in preference fields. Details and the restore command: [ARCHITECTURE.md](ARCHITECTURE.md#automatic-backups-and-the-save-guard-2026-11-23), [DECISIONS.md](DECISIONS.md#profile-sync-guard-and-automatic-backups-2026-11-23-owner-decision-no-change-to-scoring-prompts-or-what-leaves-the-machine). Owner: merge, deploy, then check one save in the app. Not built (owner: no extra complexity): automatic restore, a restore screen, a per-field merge, a guard for a replace by an older filled copy.
-
-**Built 2026-11-23: scoring 1.7, a Fit 3 target role class is on-track** ([DECISIONS.md](DECISIONS.md#scoring-17-a-target-role-class-is-on-track-2026-11-23-owner-decision-scoring_version-16-to-17)): one predicate for the engine gate and the off-track and unrelated-title caps; the class is stamped before scoring. Class freshness depends on the paid Fit 3 classification (last written 2026-11-18); automatic classification of new ads is a later, separate package (not built). Owner: merge, tag, rebuild, recreate.
-
-**Built 2026-11-23: package 12, automatic Fit 3 classification of new ads** ([DECISIONS.md](DECISIONS.md#package-12-automatic-fit-3-classification-of-new-ads-and-the-owners-ads-stay-in-every-scoring-run-2026-11-23-no-scoring-rule-changed)): `python/job_scoring/classify_new.py`, owner-run (`--max-usd` 0.05, `--confirm`, 100 ads), a count-and-estimate step in the pipeline and Re-scrape, shown in Activity; Re-score stays free. Live: 1 ad classified for $0.0009; 13 ads with an unanchored role are not called again.
-**Built 2026-11-23: package 14, new ads are classified inside the pipeline and Re-scrape** ([DECISIONS.md](DECISIONS.md#package-14-the-pipeline-and-re-scrape-classify-new-ads-themselves-2026-11-23-owner-decision-no-scoring-rule-changed)): `classify_new.py --confirm` with the 0.05 USD / 100 ad caps runs before scoring; the gate decides, every stop is counted; Re-score stays free; a clean-interpreter test covers every entry script.
-
-**Built 2026-11-23: package 15, Re-scrape does the whole intake of new ads in one manual run** ([DECISIONS.md](DECISIONS.md#package-15-re-scrape-does-the-whole-intake-of-new-ads-in-one-manual-run-every-limit-in-settings-2026-11-23-owner-decision-no-scoring-rule-changed)): discovery, classification, reading (Target / Adjacent), engine fill (only when Settings allow it), scoring, under ONE per-run budget (`runLimitUsd`, `runLimitAds`, distinct ads) that lives in Settings; no limit in code (the 0.05 USD / 100 ads literals of package 14 are gone). A limit stop is counted ("Stopped: <limit>, N ads waiting"), the run is shown as "Completed, N ads waiting", one Activity record per Re-scrape, board failure reasons, "Ad not read" label. Not built: nothing of the brief is left open; the owner sets the run limit and `allowEngineFill` in Settings > AI budget before the first run (until then a Re-scrape spends nothing and says so).
-
-**Built 2026-11-23: package 15 follow-up, budget priority across steps** ([DECISIONS.md](DECISIONS.md#package-15-re-scrape-does-the-whole-intake-of-new-ads-in-one-manual-run-every-limit-in-settings-2026-11-23-owner-decision-no-scoring-rule-changed)): the one run budget is spent in ordered passes, new ads first, then existing Strong / Possible ads, then the old backlog; the record and Activity say which group waits.
+| 1 | **Stability.** 3 runs per fixture with the same profile: requirement-id overlap >= 90%, status flips <= 5%, Fit spread <= 5 points | A script reports the three numbers per fixture and overall |
+| 2 | **Shadow mode changes nothing.** Ranking, label and priority are identical with and without Fit stored | A test scores a fixture set both ways |
+| 3 | **No personal identifiers leave.** No name, phone, e-mail or personal link in any payload sent to a provider | A test builds every payload from a profile with such strings |
+| 4 | **Checks pass.** Lint, Vitest, pytest and the build | Commands in [CLAUDE.md](../CLAUDE.md) (Test commands) |
+
+## Later, deferred and ideas
+
+- **Deferred (owner):** UI redesign epic and design system, planning only, nothing built ([design-system/](design-system/README.md)); Company information standardization (planned, nothing built; the canonical job carries only a `company` string); shared job database for several users (goal only, [redesign/SHARED_JOB_DB_PLAN.md](redesign/SHARED_JOB_DB_PLAN.md); principle 15, single user, stands). Notes only (P1/P2): family subscriptions, new-ad notifications, canonical company dedupe, source coverage analytics.
+- **Dev tool:** the Graphify adapter (`tools/graphify_adapter/`, slices S0-S6) is built; it is not part of the app.
+- **Idea, parked:** HolyJobs browser extension for LinkedIn job and profile import (no tasks, no plan; notes in [DECISIONS.md](DECISIONS.md#idea-browser-extension-parked-notes-2026-11-09)).
+- **Later:** multi-device access with server-side storage as master; scheduled discovery; more role families and prompt variants; sources consent modal; Job Details tabs and AI spend per job; Step 6, a confirm dialog for the browser AI features ([redesign/BROWSER_STORAGE_POLICY.md](redesign/BROWSER_STORAGE_POLICY.md)); the "Urgent only" filter and Greenhouse per-job pay and deadline; source order and per-source timeout policy.
+- **Ledger growth:** `job_history.json` grows about 550 MB a year (about 10 KB per entry, about 150 new ads a day) and every import rewrites it. Deferred; likely fix: descriptions out of the main file.
+- **Jobs list and storage gaps (deferred):** "Keep this ad" does not guarantee document generation for a kept ad outside the scored list (the kept-ads sync now registers kept and applied ads, but document generation end to end is not verified); text search covers only rows with text in the browser; the 5,242,880-character `localStorage` limit is an assumption, not measured per browser; hand-entered jobs have no flag saying whether the server has them; direct `setItem` writers bypass the storage budget.
+- **Discovery edge cases (deferred):** a throttled source can count as proven; about 1,934 `older_key` rows stay until the owner runs the prune report and `--apply`; the hand-edited `appliedRuns` double count; no `init` in compose; a truncated ledger with a matching generation; `jobspy_adapter` can report a blocked LinkedIn search as a successful read of 0 ads.
+- **Test and tooling debt:** a flaky run-lock test in `tests/js/rescrape.test.js` ("a dead running record becomes interrupted ...", still present); test isolation is by fingerprint guards that detect, not prevent, a change to the real `data/` (history: [DECISIONS.md](DECISIONS.md), "Incident 2026-11-09"); no tests for `scripts/run-tailor.js` and the `/api/tailor/*` routes; Graphify adapter: run the zero-token cycle on the real repo and file the upstream issue (owner).
+- **Tailoring audit debt:** `provenance_auditor.py` matches a company name with `cl in k or k in cl`, so a short known name can vouch for a longer one; a failure outside the draft (disk full, render crash) stops `run_tailor.main()` before `scored_jobs.json` is saved, on purpose.
+- **Manual owner step:** `chmod 600` the top-level files of `data/` (`find data -maxdepth 1 -type f -perm /077 -exec chmod 600 {} +`); not verified whether done.
+- **Ideas, not scheduled:** prompt templates for application answers (any run is an AI call: gate, redaction and confirm apply).
+- **Inherited features:** discovery (LinkedIn via JobSpy, Infostud, Workable, Greenhouse, Lever, Ashby), job history ledger, enrichment facts, work-authorization rules, CV library and analysis, tailoring, outreach contact scraping. See [CHANGELOG.md](../CHANGELOG.md).

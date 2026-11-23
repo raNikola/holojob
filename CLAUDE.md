@@ -71,8 +71,8 @@ Knowledge graph in `graphify-out/` (git-ignored, never committed).
 
 ## Where the rest lives
 
-Docs (read on demand): `docs/ARCHITECTURE.md` (pipeline, scoring, container gotchas, tests/hook detail, open problems), `docs/ROADMAP.md` (phases, Phase 1 criteria), `docs/redesign/DECISIONS.md` (principles), `docs/DECISIONS.md` (later decisions), `docs/redesign/ENGINE_CONTRACT.md`, `docs/redesign/data-shapes.md`, `docs/GLOSSARY.md`.
+Docs (read on demand): `docs/ARCHITECTURE.md` (pipeline, scoring, container gotchas, tests/hook detail, open problems), `docs/ROADMAP.md` (status, open items, phases, Phase 1 criteria), `docs/redesign/DECISIONS.md` (principles), `docs/DECISIONS.md` (later decisions), `docs/redesign/ENGINE_CONTRACT.md`, `docs/redesign/data-shapes.md`, `docs/GLOSSARY.md`.
 
-The owner's working rules (design sourcing, reports, standing constraints) are in `.claude/rules/working-rules.md`: no `paths:` filter, so they load in every session; read them before any task.
+The owner's working rules (design sourcing, reports, standing constraints) are in `.claude/rules/working-rules.md`, and the standing rules of 2026-11-19 (limits are stop points, targeted tests, build/up/push are the owner's, new tests only for a rule or bug that would hurt) in `.claude/rules/standing-rules.md`: neither has a `paths:` filter, so both load in every session; read them before any task. What is built and what is open: `docs/ROADMAP.md` (the only place that states it).
 
 Area rules in `.claude/rules/` load when matching files are touched: `scoring`, `resume` (CV, tailoring, CV analysis), `frontend`, `settings-screen`, `job-details`, `manual-jobs` (incl. Fill from ad), `request-guard` (`/api`, no-login decision, bind), `secret-store`, `ai-gate-and-selection`, `privacy-inventory`, `markets-and-data-source`, `container` (builds, fast deploy, `.env`), `private-file-modes`.

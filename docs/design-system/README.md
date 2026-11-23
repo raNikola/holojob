@@ -16,7 +16,7 @@ Status: **planning only** (2026-11-04). Nothing here is built. No application co
 | [REDESIGN_BACKLOG.md](REDESIGN_BACKLOG.md) | Epic, tasks, acceptance criteria, facts and assumptions, decisions |
 | [preset/](preset/) | Reference snapshot of the preset, not wired into the app |
 
-Decisions: [planning](../DECISIONS.md#design-system-and-ui-redesign-planning-2026-11-04), [preset change](../DECISIONS.md#design-system-preset-changed-to-b1a1czcrs-2026-11-04), [PO decisions](../DECISIONS.md#design-system-final-po-decisions-2026-11-04), [final planning decisions](../DECISIONS.md#design-system-final-planning-decisions-epic-postponed-2026-11-04). Roadmap: [ROADMAP.md](../ROADMAP.md#roadmap-v2-recorded-2026-11-04).
+Decisions: [planning](../DECISIONS.md#design-system-and-ui-redesign-planning-2026-11-04), [preset change](../DECISIONS.md#design-system-preset-changed-to-b1a1czcrs-2026-11-04), [PO decisions](../DECISIONS.md#design-system-final-po-decisions-2026-11-04), [final planning decisions](../DECISIONS.md#design-system-final-planning-decisions-epic-postponed-2026-11-04). Roadmap: [ROADMAP.md](../ROADMAP.md#status-at-a-glance-2026-11-23).
 
 ## Overview
 

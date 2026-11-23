@@ -30,6 +30,13 @@ automation on, a looser price) needs `"confirm": true`, else 409 with the list. 
 edits are overrides in `data/ai/pricing-overrides.json`, merged over `aiPricing.json`;
 free or priced needs a source note. No route writes or deletes ledger rows.
 
+**Limits live only in Settings > AI budget (owner, 2026-11-23); no limit is hard-coded for a paid step.** Beside the daily, monthly and call limits the
+settings hold `runLimitUsd` and `runLimitAds` (the one per-run limit of Re-scrape's classification, reading and engine fill; `null` or 0 = not set, the
+paid steps then send nothing and count what waits) and `allowEngineFill` (default off; a loosening that needs the confirm). A new paid step reads
+its limit through `python/job_scoring/run_budget.py` (`resolve_limits`), never from a constant; an explicit CLI flag of an owner-run tool wins. A
+limit is a stop point (`standing-rules.md` 1): the step exits 0 with a fixed stop code and counts what waits. Re-scrape is a manual gate trigger
+and does not depend on the automation switch. Design: `docs/ARCHITECTURE.md`, "Re-scrape".
+
 **Service tiers** (owner-selected `serviceTier`, `standard` or `flex`, in `data/config/ai-settings.json`): an `aiPricing.json` entry may carry `tiers` (price per tier of the same model) and `maxInputTokens`. A call is priced and recorded at the tier the response reports (`serviceTierActual`), not the one requested; an unpriced tier or input over `maxInputTokens` is refused before, or left unpriced after. Flex 429 / 503 is an error, never a retry or a fallback to standard. Details: `docs/DECISIONS.md`, "AI cost layer".
 
 **OpenAI parameter policy** (both paths): a reasoning model (`gpt-5*`, `gpt-6*`, `o<n>*`) is sent `reasoning_effort` (selection `reasoningEffort`, default `low`) and `max_completion_tokens` (selection `maxTokens`, floor 8000) and never `temperature`, `seed` or `max_tokens`; never `tools`, `stop`, `logprobs`, `n`, penalties, `prediction`, `verbosity`, `stream`, `user`, `metadata`, `safety_identifier`, `store`. Other OpenAI models keep temperature 0 and the seed, with the retry-without-a-rejected-setting fallback. A non-2xx response stores its status and masked message in the result row (`httpStatuses`, `httpErrors`) and, when every request failed, spends nothing (`notBilled`). Details: `docs/DECISIONS.md`, "OpenAI request parameters".

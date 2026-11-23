@@ -623,6 +623,8 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
 { "version": 1, "ids": { "<jobId>": { "rescoredAt": "<iso>" } } }
 ```
 
+Since package 12 the file also holds the ids the owner's data registers: `POST /api/jobs/kept/sync` (`kept_ads.register_owner_ads`) adds every id the browser holds as kept and every id with an application that the ledger still holds, then prunes. Registered ads are scored in every run.
+
 ## Scored jobs
 
 - **Path:** `data/jobs/scored_jobs.json`
@@ -630,6 +632,14 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
 - **Data status (Wave 2):** every row has `dataStatus` (`sufficient` | `insufficient`), `insufficientReasons` (list), and `confidence` (`{level: normal | low | none, reasons}`). `insufficient` means the ad says too little to score: `matchLabel` is `Insufficient data`, `priority` `Unrated`, `applyRecommendation` `Not assessed`, `matchScore` at most 5 (kept for older readers, never a Fit Score). `meta.summary.insufficient` counts them.
 - **Written by:** `run_scoring.py` (`--judge` adds `llmFit`; with `HOLOJOB_ENGINE_SHADOW` on, every job with an
   engine output gets `engineShadow` and `meta.engineShadow` counts them, see "Engine shadow output").
+- **Row fields added since scoring 1.4** (not repeated in the sample below; `SCORING_VERSION` is 1.7): `scoreBeforeCaps`; `readStatus`
+  and `readFreshness`; `eligibility` (work-authorization state), `languageGap`, `languageState`, `clearanceUnconfirmed`, `locationState`;
+  `blockedBy` and `blockedFrom` (a confirmed blocker sets the verdict to Blocked, `blockedFrom` keeps the unblocked verdict); `profileGuard`;
+  `engineCoverage` `{status, reason}` (`not_evaluated` when the ad has no current engine answer); `roleClass` (`target | adjacent | other | not available`)
+  and `roleName`, stamped before scoring from `data/cache/fit3.json`. A row of an owner's kept or applied ad carries `keptRescore: true`.
+  Meaning of each: `docs/ARCHITECTURE.md` (scoring) and `.claude/rules/scoring.md`.
+- **Automatic backups.** Before a re-score (`run_scoring.py`) the old file is copied to `data/backups/auto/scored_jobs.json/<stamp>-pre-rescore.json`
+  (last 3); see "Automatic backups" below.
 
 ```json
 {
@@ -1009,6 +1019,10 @@ Fields added later, in the browser job store and not in this file until saved:
 - **Evidence (S7a, new records only):** `sources[].startedAt`, `sources[].finishedAt`, and `import` = `{kind, complete, saved, new, refreshed, duplicatesRemoved, crosspostsMerged, rejected, ledger?, nothingSaved?, sources: [{name, proof {proven, why[], boards[{board, proven, why[], detail}]}, filterReasons {reason: count}}]}`. Codes: `python/job_discovery/proof_reasons.py`, texts: `src/data/proofReasons.json`. Older records have none of it and read as Not recorded. `GET /api/runs` returns a projection of this, never the record (DECISIONS.md, S7a).
 - **Cancel (S6):** status also `cancelled`; a Re-scrape record has `orchestrator: "rescrape"`, and a cancel-touched one adds `cancel: {requestedAt, outcome, saved?}` (`collected_ads_saved`, `stopped_nothing_imported`, `imported_before_cancel`, `finished_before_cancel`). `<startedAt>-<runId>.cancel` is the request and `.decision` the commit/kill claim (`commit` or `kill`), both pruned with the record. A cancelled run's staging folder holds `cancelled.json`; its `imported.json` adds `cancelled` and `saved`. The ledger gains `partialRuns` (ids of cancelled runs saved, newest 200) and `lastImport` is not changed by them. DECISIONS.md, S6.
 - **Commit marker:** `data/analytics/runs/.commit-in-progress.json` (`runId`, `startedAt`, `files`, `written`), on disk only during discovery's writes. There with the lock free: an incomplete commit.
+- **Re-scrape intake (package 15):** a Re-scrape record has the extra status `waiting` (shown "Completed, N ads waiting") and a `paid` block:
+  `{limits: {usd, ads} | null, spentUsd, ads, waiting, unknownWaiting, groups: {new | existing | backlog: {classification | reading | engine: {candidates, done, failed, waiting, stopped, spentUsd, ads}}}}`;
+  `stopped` is a fixed code (`run_usd`, `run_ads`, `daily`, `monthly`, `call_cap`, `failures`, `unset`, `gate`, `engine_not_allowed`, `not_sent`, `no_report`).
+  A board's failure is a fixed `failure_reason` code, never the exception text.
 - **Purpose:** What each discovery run did per source, for the Activity screen.
 - **Written by:** `run_discovery.py` through `run_log.py`. Field meanings: [DECISIONS.md](../DECISIONS.md#activity-slice-1-as-built-2026-11-02).
 
@@ -1136,6 +1150,21 @@ Fields added later, in the browser job store and not in this file until saved:
 ```
 
 
+
+## Automatic backups (`data/backups/auto/`)
+
+- **Path:** `data/backups/auto/<file name>/<YYYYMMDD-HHMMSS>.json` (UTC; folders 700, files 600).
+- **Purpose:** the previous version of a file, copied before a write that changes it: `candidate-intelligence.json`, `candidate-profile.json`,
+  `profile-enrichment.json` (last 10 each; identical content makes none), and `scored_jobs.json` only before a re-score, as `<stamp>-pre-rescore.json` (last 3).
+- **Written by:** `scripts/auto-backup.js` and `python/job_scoring/auto_backup.py`. A backup that cannot be written refuses the write. Not part of the
+  zip backup. Restore is one manual `cp`: `docs/ARCHITECTURE.md`, "Automatic backups and the save guard".
+
+## Fit 3 classification cache (`data/cache/fit3.json`)
+
+- **Purpose:** the stored Fit 3 answer per ad (role class, role name, domain, requirement marks) under the production prompt; read by `fit3.role_labels` to
+  stamp `roleClass` before scoring. Mode 600; the last 3 pre-run copies are kept.
+- **Written by:** `scripts/measure_fit3.py` (owner-run) and `python/job_scoring/classify_new.py` (new ads, Re-scrape and the pipeline). An entry whose role
+  did not anchor is kept and never called again. Privacy: `.claude/rules/privacy-inventory.md`.
 
 ## Other job files
 

@@ -1,6 +1,6 @@
 # Competency memory MVP: spec
 
-**Status: APPROVED (revision 4), 2026-11-11.** Slices M4, M1, M2, M5 started; M3, M7-M10 follow. Docs only: no code, no `data/` change, no model call, no migration. Implementation starts only after the owner approves this document, the P1 Stage B open decisions are settled, and the offline experiment in section 7 has run.
+**Status: APPROVED (revision 4), 2026-11-11.** **Built and merged to `main` (2026-11-11):** M1, M2, M3, M4, M5, M7, M8 ([../DECISIONS.md](../DECISIONS.md), "Competency memory MVP: slices built"). **Not started:** M6. **Parked (owner, 2026-11-14):** M9 and M10. The tables in sections 0 and 9 are the state at approval, not today.
 
 **Builds on P1 Stage B.** This branch is based on `p1-stage-b`. Its verdict vocabulary, Fit / confidence rules and open decisions (`DECISIONS.md`, "P1 scoring calibration: Stage A measured, Stage B rules decided" and "P1 Stage B: matcher stability, slices 1 and 2") come first; where this spec and Stage B differ, Stage B wins and the difference is listed in 0.1. Merge order: `p1-stage-b`, then this branch.
 
@@ -294,7 +294,7 @@ Stage B rules apply: fit and confidence are always shown separately; the Incompl
 
 Global knowledge graph and typed links; impact score; embeddings; staleness re-validation; feedback from answers into link quality; level kinds other than `years`; expanding `product.json` by hand; multi-user; any production ranking change.
 
-## 9. Proposed slices (not approved)
+## 9. Slices (approved 2026-11-11; status in the header)
 
 | # | Slice | Depends on |
 |---|---|---|

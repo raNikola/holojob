@@ -13,13 +13,18 @@ Author: **Nikola Randjelovic** ([@raNikola](https://github.com/raNikola) · [cv.
 
 ## Status
 
-Holojob is being redesigned around evidence-based matching.
+Holojob is being redesigned around evidence-based matching. The phase list, what is built and what is open:
+[docs/ROADMAP.md](docs/ROADMAP.md) (the only place that states a status).
 
-- Working today: discovery, enrichment of every ad into facts, six-dimension local scoring with
-  hard caps (role track, work authorization, red flags), optional LLM fit judgement, CV library
-  with verified CV analysis, CV and cover letter tailoring, outreach contacts.
-- In progress: Phase 1 of the redesign - evidence-based Fit, running in shadow mode next to the
-  current score. See [docs/ROADMAP.md](docs/ROADMAP.md).
+- Working today: discovery from six sources, enrichment of every ad into facts, six-dimension local
+  scoring (scoring 1.7) with caps and Blocked verdicts (sponsorship, language, place, clearance), a
+  Fit 3 role class per ad, three fit tiers in the Jobs list, optional LLM fit judgement, application
+  tracker, profile import, CV library with verified CV analysis, CV and cover letter tailoring behind
+  a fact gate, outreach contacts, Activity screen, automatic backups of the owner's files.
+- Re-scrape: one manual run does the whole intake of new ads (discovery, role classification,
+  reading, engine fill, scoring) under one per-run budget set in Settings > AI budget.
+- Evidence-based Fit (the redesign engine) runs in shadow mode; two of its outputs are live: the
+  role class and the engine-status ceiling.
 
 ## How scoring works
 
@@ -27,9 +32,11 @@ The rule of the codebase: **the model marks facts, the code scores.**
 
 1. **Enrichment** - an LLM reads each ad (never the candidate) and returns facts with the ad's
    own words: role track, seniority, years, must-haves, work mode, country, visa sponsorship.
-2. **Local scoring** - deterministic code scores six dimensions and applies hard caps: an
-   off-track role, a red flag or a visa the candidate lacks cannot be argued up by weights.
-3. **Fit judgement** (opt-in) - an LLM marks each requirement met / partly met / not met /
+2. **Local scoring** - deterministic code scores six dimensions and applies hard caps and
+   ceilings: an off-track role, a red flag or a role class "other" cannot be argued up by weights.
+   Work authorization, language and place are states beside the score; a confirmed refusal makes
+   the verdict Blocked, never the number.
+3. **Fit judgement** (opt-in, run on request only) - an LLM marks each requirement met / partly met / not met /
    unclear against a redacted digest of the candidate; code decides what that costs.
 4. **Evidence-based Fit** (redesign) - each requirement is matched to a quoted piece of the
    candidate's history; code verifies the quote and computes Fit, confidence and gates.
@@ -65,7 +72,7 @@ Changing `.env` needs `podman-compose up -d --force-recreate`; a restart does no
 
 ## Data and storage
 
-- The server as master is decided but not built. Until step 5 of
+- The server as master is decided but not built (ROADMAP, open item 3). Until step 5 of
   [the migration plan](docs/redesign/STEP5_SERVER_MASTER_PLAN.md) ships, the profile, the intelligence and the job list live in the browser's
   `localStorage`.
 - Applications (the tracker) are already on the server: `data/applications/` is the master and the browser keeps a
@@ -75,6 +82,10 @@ Changing `.env` needs `podman-compose up -d --force-recreate`; a restart does no
   git-ignored and private.
 - Edit profile data in the profile form, not in the disk file: a correction made only in
   `data/profile/candidate-profile.json` is overwritten at the next sync.
+- Before a write that changes `candidate-profile.json`, `candidate-intelligence.json` or `profile-enrichment.json`,
+  the old file is copied to `data/backups/auto/` (last 10 per file); `scored_jobs.json` is copied only before a
+  re-score (last 3). A save that would empty filled-in settings is refused. Restore is one manual `cp`:
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#automatic-backups-and-the-save-guard-2026-11-23).
 - Shapes of every file: [docs/redesign/data-shapes.md](docs/redesign/data-shapes.md).
 
 ## Pipeline
@@ -85,6 +96,12 @@ podman exec holojob npm run pipeline           # discovery -> enrichment -> scor
 podman exec holojob npm run score:jobs         # re-score only
 podman exec holojob npm run tailor:resumes     # tailored CVs and cover letters
 ```
+
+Re-scrape (the Jobs screen button, `scripts/run-rescrape.js`, `python/run_rescrape.py`) is a manual action, independent
+of the automation switch: discovery, role classification of ads without a class, reading of Target / Adjacent ads,
+engine fill (only when Settings allow it), scoring. Every paid step is limited by one run budget (USD and ads), the
+daily and the monthly limit, all set in Settings > AI budget; no limit is in the code. A run stopped by a limit shows
+"Completed, N ads waiting" in Activity. Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (Re-scrape).
 
 Discovery providers in the `serbia` group: LinkedIn (JobSpy), Infostud, Workable, Greenhouse,
 Lever, Ashby. Data flows `data/jobs/discovered_jobs.json` -> `data/jobs/scored_jobs.json`, with
@@ -106,14 +123,18 @@ Browser AI features (copilot, interview coach) keep their own provider settings 
 ## Privacy
 
 - Everything under `data/`, CVs, `.env` and keys are git-ignored and stay on the server.
-- Three steps send candidate data to an AI provider:
-  - **CV analysis** - behind an explicit confirm; name, phones, e-mails and links are redacted first.
-  - **Fit judgement** - behind an explicit confirm; sends a digest that never contains name,
-    contacts, links, salary, locations, raw CV text or questionnaire answers.
-  - **LLM tailoring** (Claude Code CLI) - sends the parsed CV sections (about, experience, skills,
-    education), the intelligence summary and project intelligence; it has no confirm step and no
-    redaction pass yet. This is a known gap against [DECISIONS.md](docs/redesign/DECISIONS.md)
-    principle 14 and is scheduled with the fact gate in Phase 4.
+- Steps that send candidate data to an AI provider, each behind an explicit confirm and a redaction pass that fails
+  closed (name, phones, e-mails and links removed):
+  - **CV analysis** - the CV text, redacted first.
+  - **Fit judgement** - a digest that never contains name, contacts, links, salary, locations, raw CV text or
+    questionnaire answers.
+  - **LLM tailoring** - the parsed CV sections, redacted, behind the fact gate, a server-enforced confirm and a preview.
+  - **Evidence matcher and engine fill** - a redacted evidence index built from the profile; in Re-scrape only when
+    Settings allow engine fill (off by default).
+- Enrichment, role classification and reading of ads send the ad text only, never candidate data.
+- Every provider call goes through the budget gate. The full list of what each step sends:
+  [`.claude/rules/privacy-inventory.md`](.claude/rules/privacy-inventory.md). Known gap: the browser AI features
+  (copilot, interview coach) have no confirm yet.
 - **Sensitive files.** Never commit `data/profile/*.json`, `data/resumes/`, `data/cache/repos/`, `.env` or
   `data/outreach/linkedin_session.json` (no longer read). If one is committed by mistake, rotate the credentials and remove it
   from history before pushing anywhere.
@@ -139,6 +160,7 @@ podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work dock
 podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run test:js
 podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work docker.io/library/node:20-bookworm npm run build
 .venv/bin/python -m pytest tests/python -q
+sh scripts/test-tier.sh fast      # or full: the two pre-push tiers
 ```
 
 `npm test` and `npm run test:python` need Node and the `.venv` on one machine, so they work on neither side on DS9. Details: [CLAUDE.md](CLAUDE.md) (Tests).
@@ -162,7 +184,8 @@ podman run --rm --security-opt label=disable -v /srv/holojob:/work -w /work dock
 
 - [docs/VISION.md](docs/VISION.md) - what Holojob is and is not
 - [docs/GOALS.md](docs/GOALS.md) - goals and how they are measured
-- [docs/ROADMAP.md](docs/ROADMAP.md) - phases and Phase 1 acceptance criteria
+- [docs/ROADMAP.md](docs/ROADMAP.md) - status, open items, phases and Phase 1 acceptance criteria
+- [docs/DECISIONS.md](docs/DECISIONS.md) - what was decided and built since the redesign began (history)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - how the pipeline, scoring, judge and CV features work today
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) - terms used in the docs
 - [docs/redesign/SOURCES_SPEC.md](docs/redesign/SOURCES_SPEC.md) - spec of Settings > Sources (job boards and watched companies as user configuration)

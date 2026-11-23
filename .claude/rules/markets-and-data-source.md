@@ -19,7 +19,7 @@ paths:
   neither, discovery stops. No provider, script or UI has a default country.
 - Target roles drive search terms only; seniority is read from the current role.
 - Europe and the US are search locations only when relocation is `abroad` or `anywhere`;
-  a job needing a visa the candidate lacks is capped by scoring, not removed.
+  a job needing a visa the candidate lacks is shown, with a Blocked verdict only when the ad's own quote settles it (`blocking.py`), never removed or capped.
 - A missing profile, intelligence or scored-jobs file is an empty state; never fill it
   from `data/examples/` outside an explicit demo mode.
 - The server is the master for profile, intelligence, jobs and applications (DECISIONS.md, 2026-10-29); the browser

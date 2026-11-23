@@ -9,7 +9,7 @@ evidence of fit, applying with an honest, well-targeted CV, and arriving prepare
 
 | Goal | Measure |
 |---|---|
-| Rank postings by evidence of fit, not keywords | Fit separates jobs: scores no longer bunch in a narrow band; the top of the list matches the owner's own judgment on a reviewed sample; shadow mode changes no ranking meanwhile ([Phase 1 criterion 2](ROADMAP.md#phase-1-acceptance-criteria---proposed-owner-to-confirm)) |
+| Rank postings by evidence of fit, not keywords | Fit separates jobs: scores no longer bunch in a narrow band; the top of the list matches the owner's own judgment on a reviewed sample; the engine runs in shadow mode (its role class and engine-status ceiling are the only live uses) and the Jobs list shows three coarse fit tiers with no order claim inside a tier (owner decision 2026-11-21) ([Phase 1 criterion 2](ROADMAP.md#phase-1-acceptance-criteria---proposed-owner-to-confirm)) |
 | Every score is explainable | Each Fit shows must-have x/y, preferred x/y, unknowns, blockers, confidence and a per-requirement quote |
 | Stable results | The same posting and profile give the same requirements, statuses and Fit across runs (measured on the fixtures; [Phase 1 criterion 1](ROADMAP.md#phase-1-acceptance-criteria---proposed-owner-to-confirm)) |
 | Honest documents | No tailored CV or cover letter contains a claim or number missing from the CV or confirmed facts (fact gate) |

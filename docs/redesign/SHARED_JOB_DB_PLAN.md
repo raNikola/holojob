@@ -340,7 +340,7 @@ Levels: **full** (store ad text, share with all users), **metadata** (store titl
 
 | Provider | What the repo records | Proposed shared level | To verify |
 |---|---|---|---|
-| LinkedIn (via JobSpy, `li_at`) | Anti-scraping is the central risk. The repo already has an open item "What the LinkedIn terms and account-risk assessment finds" (listed under the browser extension idea in `docs/ROADMAP.md`, not in the Phase 0 audit), and the cookie is one person's account (4.4). | **reference or metadata**; never the description text; **no shared scrape under a personal `li_at`**. Outreach contact scraping stays per-user. | terms text on automated access and copying; the account-ban risk; whether metadata-only changes the position |
+| LinkedIn (via JobSpy, `li_at`) | Anti-scraping is the central risk. The repo already has an open item "What the LinkedIn terms and account-risk assessment finds" (listed under the browser extension idea in `docs/DECISIONS.md`, "Idea: browser extension, parked notes", not in the Phase 0 audit), and the cookie is one person's account (4.4). | **reference or metadata**; never the description text; **no shared scrape under a personal `li_at`**. Outreach contact scraping stays per-user. | terms text on automated access and copying; the account-ban risk; whether metadata-only changes the position |
 | Joberty | `source_definitions.py`: "Undocumented API, terms restrict use", opt-in with recorded consent. | **none** in shared until the terms are read; stays a per-owner opt-in | terms text; whether sharing between users counts as redistribution |
 | Infostud | Public site read category by category, one request per ad with 1 s spacing (Wave 3 entry). No terms recorded in the repo. | **metadata** until verified; full only if the terms allow reuse | terms and robots rules; rate expectations |
 | Greenhouse, Lever, Ashby (company boards) | Public job-board APIs meant for listing. | **full** likely acceptable; verify each vendor's API terms | vendor API terms on caching and redistribution |
@@ -423,5 +423,5 @@ None is scheduled. Each is docs-reviewed, then built with its own tests (offline
 
 - No code, no `data/` change, no AI call, no migration, no scrape.
 - No change to scoring, the budget gate, redaction, the secret store, or the Wave 1 closing rule.
-- No P1/P2 feature: family subscriptions as a product feature, new-ad notifications, canonical company dedupe and source coverage analytics are recorded as notes in [ROADMAP.md](../ROADMAP.md), not in this data plan.
+- No P1/P2 feature: family subscriptions as a product feature, new-ad notifications, canonical company dedupe and source coverage analytics are recorded as notes in [ROADMAP.md](../ROADMAP.md#later-deferred-and-ideas), not in this data plan.
 - It does not edit `STEP5_SERVER_MASTER_PLAN.md`. The conflicts in 0.1 are for the owner to resolve; the proposal is that Step 5 adds the `userId` seam (6.2) and the `jobId` alias rule (C1) when it is next revised.

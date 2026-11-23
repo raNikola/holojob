@@ -24,7 +24,9 @@ data/jobs/discovered_jobs.json
 data/jobs/job_history.json
 ```
 
-The Jobs screen reads `discovered_jobs.json` after scoring.
+`job_history.json` (the ledger) is the single source of truth; a scrape writes staging under `data/jobs/staging/<runId>/`, the importer commits it to the
+ledger and `discovered_jobs.json` is derived from the ledger. The Jobs screen reads `scored_jobs.json` after scoring. Details:
+[docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) and `docs/DECISIONS.md` (S1 to S8).
 
 ## Multi-provider discovery
 

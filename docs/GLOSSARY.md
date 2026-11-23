@@ -65,5 +65,13 @@ delivery, ...). Today's scorer caps a job at 50 when its track is not one the ca
 **Shadow mode** - Running the new Fit next to the current `matchScore` and showing both, while the new one changes no
 ranking, label or priority until the owner has compared them on real runs.
 
+- **Blocked:** a verdict (never a number) for an ad the candidate cannot take: sponsorship refused with a quote, a required language the profile lacks with a quote, a place outside `allowedLocations`, a required security clearance or US status. `blockedFrom` keeps the unblocked verdict. Code: `blocking.py`.
+- **Engine fill:** the paid step that gives an ad its evidence-engine answer (`engine_missing.py`). In Re-scrape it runs only when Settings > AI budget allow it (`allowEngineFill`). An ad without a current answer says "Ceiling not evaluated".
+- **Fit tier:** the three coarse groups of the Jobs list: Strong fit (70+), Possible fit (55-69), Weak fit (below 55 or a Skip verdict). No order claim inside a tier. `src/modules/jobs/fitTier.js`.
+- **Re-scrape:** the manual run that does the whole intake of new ads: discovery, role classification, reading, engine fill, scoring, under one run budget. It does not depend on the automation switch.
+- **Reading:** the enrichment of an ad into `llmFacts`; the sponsorship and language blocks apply only to read ads ("Ad not read" otherwise).
+- **Role class:** the Fit 3 class of an ad's responsibilities: target, adjacent, other, or "not available" (no stored classification). Stamped before scoring; a "target" class is on-track (scoring 1.7).
+- **Run limit:** the one per-run limit (USD and distinct ads) of Re-scrape's paid steps, set in Settings > AI budget. A limit is a stop point: the run is shown "Completed, N ads waiting".
+- **Unconfirmed:** the state of an eligibility fact (work authorization, language, clearance, location) that the ad does not settle with a quote; a flag beside the score, never a block.
 - **Stale:** an ad with no sighting for 30 days and at least 3 proven runs of its source and search since. A flag only: nothing is deleted. It leaves Active unless the owner has worked on it, and stays in All. See `docs/DECISIONS.md` (S5f).
 - **Cancelled run:** a Re-scrape the owner cancelled before its import commit point. It saves only the ads it validly collected and changes nothing else: the list is not rebuilt, no ad is held, absent, closed or Stale, no proven run is recorded, and scoring is skipped. See `docs/DECISIONS.md` (S6).

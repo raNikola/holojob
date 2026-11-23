@@ -11,6 +11,8 @@ All notable changes to Holojob are documented here.
 - Posting fixtures in `tests/fixtures/postings/` for the Phase 1 stability test.
 - `AUTHORS.md`.
 
+- 2026-11: evidence engine in shadow, role class (Fit 3) and scoring 1.5 to 1.7 (eligibility states, Blocked verdicts, ceilings, a target role class is on-track); three fit tiers in the Jobs list; competency memory (fact store v2, version split, batch grouping); Activity screen and Re-scrape lifecycle; profile import (TXT, JSON Resume, DOCX, PDF hardening); application tracker; fact gate, redaction and confirm for tailoring; automatic backups with a save guard; Re-scrape does the whole intake of new ads in one manual run under one budget set in Settings. What was decided and when: `docs/DECISIONS.md`; status: `docs/ROADMAP.md`.
+
 ### Changed
 
 - README rewritten for Holojob; the old README was folded into it (troubleshooting) and removed.

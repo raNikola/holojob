@@ -1,6 +1,6 @@
 # Holojob - Roadmap gap analysis (target: 15 modules, finding a job to accepting an offer)
 
-Status: ANALYSIS, 2026-10-29. Read-only. ROADMAP.md, code and `data/` are unchanged. Not committed.
+Status: ANALYSIS, 2026-10-29. A dated snapshot, not refreshed: the statuses below were true at the commits named here. The current state is in [../ROADMAP.md](../ROADMAP.md).
 
 Inputs:
 - the docs: CLAUDE.md, [../ROADMAP.md](../ROADMAP.md), [DECISIONS.md](DECISIONS.md), [PHASE0_AUDIT.md](PHASE0_AUDIT.md),

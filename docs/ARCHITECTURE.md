@@ -12,12 +12,14 @@ for terms see [GLOSSARY.md](GLOSSARY.md); for the data files see
     run_discovery.py  ->  enrich_jobs.py  ->  run_scoring.py
     data/jobs/discovered_jobs.json  ->  data/jobs/scored_jobs.json
 
-**Discovery** (`python/job_discovery/`). Three providers in the `serbia`
-group: `jobspy` (LinkedIn only — Serbia is unsupported by Indeed and
+**Discovery** (`python/job_discovery/`). Six providers in the `serbia`
+group: `greenhouse`, `lever` and `ashby` (company boards read from `companies/*.json`) and three
+search or board sources: `jobspy` (LinkedIn only — Serbia is unsupported by Indeed and
 Glassdoor, and falling back to the USA silently was a real bug), `infostud`
 (the domestic board; its free-text search is useless, so whole categories
 are pulled and filtered locally), `workable` (remote roles open to Serbia;
-its public JSON carries the full description). HelloWorld and Startuj were
+its public JSON carries the full description). The other groups (`all`, `ats`, `remote`, `startup`) are in
+`source_definitions.py` (`PROVIDER_GROUPS`). HelloWorld and Startuj were
 evaluated and rejected: HelloWorld shares Infostud's inventory and ID space,
 Startuj is entry-level only.
 
@@ -47,8 +49,8 @@ may live, and what the ad says about visa sponsorship. It never scores and
 never sees the
 candidate. It does not read an ad the board already places outside the candidate's
 `allowedLocations` (not remote, and a location naming only countries outside them,
-`work_authorization.outside_allowed_before_enrichment`; an ad whose own words say remote or open to a region is still read): scoring caps it at 40 from the
-same fields, so a model call would only be discarded. `--read-outside-allowed`
+`work_authorization.outside_allowed_before_enrichment`; an ad whose own words say remote or open to a region is still read): the location state is already
+"outside" from the same fields (a Blocked verdict, 1.5), so a model call would add nothing the verdict reads. `--read-outside-allowed`
 turns that off, and an empty `allowedLocations` skips nothing. Results cache on the job under `llmFacts`, keyed by a fingerprint
 of the ad, so reruns are free. `llm_client.py` holds a provider table —
 OpenAI, DeepSeek, OpenRouter, Groq, Ollama, a `custom` endpoint, and the
@@ -77,7 +79,7 @@ rolling 72-hour window, so a LinkedIn job missing from a run is not closed.
 Closed jobs stay in `discovered_jobs.json` for 14 days and are never judged;
 the ledger drops them after 90. They stay in the main job list with their
 badge, but are not candidates for "do something now": bulk tailoring, the
-quality-audit sample, the P1/P2 view, the Apply/P1/P2 counts and the AI
+quality-audit sample, the P1 / P2 priority picks, the tier counts and the AI
 Copilot's top jobs all skip them. A job picked by id is still tailored.
 
 **Scoring** (`python/job_scoring/`). Six weighted dimensions, no AI:
@@ -99,6 +101,15 @@ defaults; every Regenerate Intelligence action goes through
 `regenerateIntelligence()`, which carries the saved weights over, so only a
 first-ever generation uses the defaults. A saved set with a missing or malformed
 key gets that key from the defaults, in the UI and in the scorer.
+
+**Verdict, ceilings and tiers** (`SCORING_VERSION` 1.7, `scorer.py`). Work authorization, language and place are states beside the score, not caps
+(1.5). A confirmed blocker (sponsorship refused, a required language with a quote from the ad, a place outside `allowedLocations`, a required
+security clearance or US status; `blocking.py`) sets the verdict to Blocked and never changes the number. `ceilings.py` lowers a score by role class
+"other" (54) and, for ads with a current engine answer, by unmet requirements (69); an ad without one says "Ceiling not evaluated". The Fit 3 role
+class (target / adjacent / other / not available) is stamped before scoring, and a "target" class is on-track for the engine gate and the
+off-track and unrelated-title caps (1.7). The Jobs list shows three coarse tiers from the score (Strong fit 70+, Possible fit 55-69, Weak fit
+below 55 or a Skip verdict; `src/modules/jobs/fitTier.js`) and claims no order inside a tier. Rules: `.claude/rules/scoring.md`; history:
+[DECISIONS.md](DECISIONS.md).
 
 **Fit judgement** (`llm_enhancer.py`, opt-in: `run_scoring.py --judge`). After
 local scoring, an LLM compares the ad with the candidate and returns a fit
@@ -204,6 +215,38 @@ intelligence file keeps them as long as the profile has them. The same field
 prints a Languages section on the CV, not the cover letter. A profile with no
 languages is not an error: the digest then says "(none stated)" and the CV has
 no such section.
+
+## Re-scrape: the manual intake run
+
+`python/run_rescrape.py` (started by `scripts/run-rescrape.js`; one lock, one Activity record, cancellable) does the whole intake of new
+ads in one manual run. It is a manual action: the gate trigger is `manual` on every step, so it does not depend on `automation.enabled`.
+
+    discovery -> classification (ads with no Fit 3 role class, classify_new.py) -> reading (Target / Adjacent ads not yet read,
+    enrich_jobs.py, llmFacts) -> free scoring pass into a scratch file (scoring-prepare, never scored_jobs.json) -> engine fill
+    (engine_missing.py, only when Settings allow it) -> the real scoring (run_scoring.py)
+
+The scoring pass before engine fill exists because the engine plans from a scored list; it keeps the three `-pre-rescore` backups of
+`scored_jobs.json` unused until the real scoring. The three paid steps run as passes over three priority groups: this run's new ads, then
+existing Strong / Possible ads classified before the run, then the older backlog (`run_rescrape.intake`, `run_budget.in_group`).
+
+**Limits live in Settings > AI budget (`data/ai/settings.json`), none in code:** `runLimitUsd` and `runLimitAds` (distinct ads; one ad
+classified, read and engine-filled counts once), the daily and monthly limits, the call caps, and `allowEngineFill` (default off; turning it on
+is a loosening and needs the confirm). With no run limit set (null or 0) the paid steps send nothing and count what waits ("run limit not set
+in Settings"); engine fill is skipped. The orchestrator reads what the run really spent from the AI ledger (features `fit3-classify`,
+`enrichment`, `evidence-matcher`) and passes each step the remainder; the AI gate still decides every call
+(`python/job_scoring/run_budget.py`, `resolve_limits`; an omitted CLI flag is read from Settings).
+
+**A limit is a stop point, never a silent wait.** A paid step that stops exits 0 and prints one JSON summary line with a fixed stop code
+(`run_usd`, `run_ads`, `daily`, `monthly`, `call_cap`, `failures`, `unset`, `gate`, `engine_not_allowed`, `not_sent`, `no_report`); the next steps still
+run and scoring always runs. The run status is `waiting`, shown as "Completed, N ads waiting"; `partial` is a failed source or a failed paid
+step. Activity shows "Stopped: <limit>, N ads waiting (<step>)" and the `paid` block of the record. Results are cached, so the next run continues
+without repeating a paid call.
+
+**Run Full Pipeline** (`python/run_pipeline.py`) runs classification after discovery and enrichment and before scoring, with the Settings limits. It
+is an automatic AI task for the gate, so with `automation.enabled` false the gate refuses it (counted, ads stay "not available"). **Re-score**
+(`POST /api/scoring/run`) is free and calls no model. Privacy: classification and reading send ad text only; engine fill sends a redacted
+evidence index ([`.claude/rules/privacy-inventory.md`](../.claude/rules/privacy-inventory.md)). Decisions and measured numbers:
+[DECISIONS.md](DECISIONS.md), packages 12-15.
 
 ## Tailoring spec: HOLOJOB_GENERATION_CONTEXT.md
 
@@ -360,7 +403,7 @@ there is no override (save in smaller steps); scripts that write the files direc
 
 ## Role class before scoring (scoring 1.7, 2026-11-23)
 
-`role_class.label(rows)` stamps `roleClass` / `roleName` from `data/cache/fit3.json` before `score_jobs`; `role_class.ceiling(scored)` applies the 1.6 role ceiling after it. The scorer reads the class through `scorer.role_on_track` (engine gate `role_family`, off-track cap 50) and `scorer.role_class_is_target` (unrelated-title cap 40 is skipped for a target class). The class exists only for an ad that has a stored Fit 3 classification; an ad without one is "not available" and takes the old track test. `python/job_scoring/classify_new.py` (package 12) gives new ads their class: ads with text and no `fit3.json` entry at all (an entry whose role did not anchor is counted, never called again), one gated call each, owner-run with `--confirm` and limits from Settings (`runLimitUsd`, `runLimitAds`; an omitted flag is read from Settings, never from code; unset = nothing is sent), stop points when a limit or the AI gate stops it or 3 calls in a row fail (the rest stay "not available", counted in the run record shown in Activity). The pipeline runs it as a step WITH `--confirm` and the Settings limits, and Re-scrape runs it as the first paid step of one shared run budget (package 15: classification, reading of Target / Adjacent ads, a free scoring pass into a scratch file, engine fill when `allowEngineFill` is on, then the real scoring, as ordered passes over three priority groups: this run's new ads, existing Strong / Possible ads, the backlog; `python/run_rescrape.py` reads the real spend from the AI ledger and passes each step the remainder, an ad counts once, a limit stop is counted as "Stopped: <limit>, N ads waiting" and the run is `waiting`; `python/job_scoring/run_budget.py`) (package 14: after discovery and enrichment, before scoring, so the same run scores new ads with their class; inside the pipeline it is an automatic AI task, so the gate's automation switch, limits and allowlist decide, and a refusal, cap or failed call leaves the ads "not available", counted in its Activity record, the pipeline summary and a Re-scrape issue; it never fails the run); plain Re-score never calls a model. `tests/python/test_entry_scripts_clean_interpreter.py` loads every script Node or an orchestrator starts by path in `python -I`.
+`role_class.label(rows)` stamps `roleClass` / `roleName` from `data/cache/fit3.json` before `score_jobs`; `role_class.ceiling(scored)` applies the 1.6 role ceiling after it. The scorer reads the class through `scorer.role_on_track` (engine gate `role_family`, off-track cap 50) and `scorer.role_class_is_target` (unrelated-title cap 40 is skipped for a target class). The class exists only for an ad that has a stored Fit 3 classification; an ad without one is "not available" and takes the old track test. `python/job_scoring/classify_new.py` gives new ads their class: ads with text and no `fit3.json` entry at all (an entry whose role did not anchor is counted, never called again), one gated call each, limits from Settings, never from code; unset means nothing is sent. A limit, the AI gate or 3 failed calls in a row stops it; the rest stay "not available" and the stop is counted in the run record shown in Activity. Who runs it and under which budget: [Re-scrape](#re-scrape-the-manual-intake-run). Plain Re-score never calls a model. `tests/python/test_entry_scripts_clean_interpreter.py` loads every script Node or an orchestrator starts by path in `python -I`.
 
 ## Container gotchas (detail)
 
@@ -471,11 +514,10 @@ from the current role (`candidateNarrativeBuilder.js`), so listing "Head of
 Product" as a target does not relabel the candidate. Europe and the United
 States are added as search locations only when the profile's relocation is
 `abroad` or `anywhere`; a role there that needs a visa the candidate lacks is
-capped by scoring, not removed from the search.
+marked Blocked when the ad's own quote settles it (a verdict beside the score), not removed from the search.
 The same holds after the search: the board providers' country filter lets a job
 through when it lies in a searched place (`in_searched_place`, using
-`geography.py`), so an onsite Berlin or Austin ad reaches scoring and is capped
-there. A candidate who would not relocate has only their home places in the
+`geography.py`), so an onsite Berlin or Austin ad reaches scoring, gets its location state there and is never hidden. A candidate who would not relocate has only their home places in the
 search locations, so nothing changes for them.
 A missing profile, intelligence or scored-jobs file is an empty state: the app
 never fills it from `data/examples/` outside an explicit demo mode. Keep it

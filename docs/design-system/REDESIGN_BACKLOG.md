@@ -6,7 +6,7 @@
 
 **Goal:** replace the custom styling and components with one Design System (shadcn/ui preset `b1a1cZcRs` plus a semantic extension), with no change to behaviour, backend, APIs or routing.
 
-The roadmap entry is [Epic: UI Redesign & Design System](../ROADMAP.md#epic-ui-redesign--design-system---deferred--to-do). Priorities of scoring, matching, discovery and application tracking are not changed by this Epic.
+The roadmap entry is [Epic: UI Redesign & Design System](../ROADMAP.md#later-deferred-and-ideas). Priorities of scoring, matching, discovery and application tracking are not changed by this Epic.
 
 ## Scope
 
