@@ -23,6 +23,7 @@ import { composeJobList, stripDisplayFields } from '../../modules/jobs/allAds'
 import { isClosedAd } from '../../modules/jobs/jobHistory'
 import { tierCounts } from '../../modules/jobs/fitTier'
 import { useAllAds } from '../../modules/jobs/useAllAds'
+import { useActiveWindowDays } from '../../modules/jobs/useActiveWindowDays'
 import { ALL_SEARCH_NOTE, EXPORT_NOTE, OFF_LIST_NOTE, applyAllControls, classOptions, filterComposed, listNotices, selectableIds } from '../../modules/jobs/jobListView'
 import JobDetailDrawer from './JobDetailDrawer'
 import JobEmptyState from './JobEmptyState'
@@ -84,6 +85,7 @@ export default function JobDiscoveryScreen() {
   const [listMode, setListMode] = useState('active')
   const [listClasses, setListClasses] = useState(() => new Set())
   const [seenRecentlyOnly, setSeenRecentlyOnly] = useState(false)
+  const activeWindowDays = useActiveWindowDays()
   const [reference, setReference] = useState(() => Date.now())
   const [addInitial, setAddInitial] = useState(null)
   const [selectedJob, setSelectedJob] = useState(null)
@@ -181,8 +183,8 @@ export default function JobDiscoveryScreen() {
 
   // Display only, recomputed from its inputs and never saved. Until the route has answered, Active is today's list.
   const composed = useMemo(
-    () => (routeEnabled ? composeJobList({ stored: state.jobs, server: allAds.rows, applications, reference }) : null),
-    [routeEnabled, state.jobs, allAds.rows, applications, reference],
+    () => (routeEnabled ? composeJobList({ stored: state.jobs, server: allAds.rows, applications, reference, activeWindowDays }) : null),
+    [routeEnabled, state.jobs, allAds.rows, applications, reference, activeWindowDays],
   )
   const useComposed = routeEnabled && (allAds.rows !== null || listMode === 'all')
   const composedRows = useMemo(() => {
@@ -192,8 +194,8 @@ export default function JobDiscoveryScreen() {
     return rows.map((row) => (row.serverOnly && row.applicationTracking ? { ...row, status: 'applied_manually' } : row))
   }, [useComposed, listMode, composed, applicationStore, applications.settings, jobState.doc])
   const shownRows = useMemo(
-    () => (useComposed && listMode === 'all' ? applyAllControls(composedRows, { classes: listClasses, recent: seenRecentlyOnly, reference }) : composedRows),
-    [useComposed, listMode, composedRows, listClasses, seenRecentlyOnly, reference],
+    () => (useComposed && listMode === 'all' ? applyAllControls(composedRows, { classes: listClasses, recent: seenRecentlyOnly, reference, windowDays: activeWindowDays }) : composedRows),
+    [useComposed, listMode, composedRows, listClasses, seenRecentlyOnly, reference, activeWindowDays],
   )
   const baseRows = composedRows ?? listed
   const sites = useMemo(() => getUniqueSites(baseRows), [baseRows])
@@ -545,6 +547,7 @@ export default function JobDiscoveryScreen() {
                   onClasses={setListClasses}
                   recent={seenRecentlyOnly}
                   onRecent={setSeenRecentlyOnly}
+                  windowDays={activeWindowDays}
                 />
               )}
 

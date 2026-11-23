@@ -25,13 +25,31 @@ async function put(path, payload) {
 }
 
 /** Resolves { ok } | { needsConfirm, increases } | { errors }. Pass confirm: true only after the owner agreed. */
-export const saveGateSettings = (settings, confirm = false) => put('/api/ai/settings', { settings, confirm })
+export const GATE_SETTINGS_SAVED_EVENT = 'holojob:gate-settings-saved'
+
+/** The Settings period of the Jobs screen's Active list, in days, or null when it cannot be read: code supplies no number of its own. */
+export async function loadActiveWindowDays() {
+  try {
+    const days = (await loadGateUsage()).settings?.activeWindowDays
+    return Number.isInteger(days) && days >= 1 && days <= 365 ? days : null
+  } catch {
+    return null
+  }
+}
+
+export async function saveGateSettings(settings, confirm = false) {
+  const result = await put('/api/ai/settings', { settings, confirm })
+  if (result?.ok && typeof window !== 'undefined') window.dispatchEvent(new Event(GATE_SETTINGS_SAVED_EVENT))
+  return result
+}
 export const saveGatePricing = (entries, confirm = false) => put('/api/ai/pricing', { entries, confirm })
 
 /** The form's text fields as the settings object the server validates ('' for a call limit means none). */
 export function settingsFromForm(form) {
   const num = (v) => (v === '' || v == null ? NaN : Number(v))
   const count = (v) => (String(v).trim() === '' ? null : num(v))
+  // A number or NaN: the server refuses NaN with its own message, so an empty field is never saved as something else.
+  const wholeDays = (v) => (String(v).trim() === '' ? NaN : num(v))
   return {
     currency: String(form.currency).trim().toUpperCase(),
     dailyLimit: num(form.dailyLimit),
@@ -41,6 +59,7 @@ export function settingsFromForm(form) {
     runLimitUsd: count(form.runLimitUsd),
     runLimitAds: count(form.runLimitAds),
     allowEngineFill: Boolean(form.allowEngineFill),
+    activeWindowDays: wholeDays(form.activeWindowDays),
     estimatedOutputTokens: num(form.estimatedOutputTokens),
     timezone: String(form.timezone).trim(),
     automation: { enabled: Boolean(form.automationEnabled) },
@@ -65,6 +84,7 @@ export function formFromSettings(s) {
     currency: s.currency, dailyLimit: text(s.dailyLimit), monthlyLimit: text(s.monthlyLimit),
     maxCallsDaily: text(s.maxCallsDaily), maxCallsMonthly: text(s.maxCallsMonthly),
     runLimitUsd: text(s.runLimitUsd), runLimitAds: text(s.runLimitAds), allowEngineFill: Boolean(s.allowEngineFill),
+    activeWindowDays: text(s.activeWindowDays),
     estimatedOutputTokens: text(s.estimatedOutputTokens), timezone: s.timezone,
     automationEnabled: Boolean(s.automation?.enabled),
     subscriptionEnabled: Boolean(s.claudeCodeSubscription?.enabled),

@@ -9,9 +9,9 @@ import JobListControls from '../../src/components/jobs/JobListControls.jsx'
 import JobTable from '../../src/components/jobs/JobTable.jsx'
 import {
   ALL_SEARCH_NOTE, CLASS_FILTERS, EXPORT_NOTE, INCOMPLETE_FILTERED, INCOMPLETE_ROUTE, SAVED_IN_BROWSER, SERVER_ONLY_NOTE,
-  applyAllControls, classBadges, classFilterLabel, classOptions, filterComposed, listNotices, rowKind, selectableIds,
+  applyAllControls as applyAll, classBadges, classFilterLabel, classOptions, filterComposed, listNotices, rowKind, selectableIds,
 } from '../../src/modules/jobs/jobListView.js'
-import { composeJobList } from '../../src/modules/jobs/allAds.js'
+import { composeJobList as compose } from '../../src/modules/jobs/allAds.js'
 import { computeJobStats } from '../../src/modules/jobs/jobStats.js'
 import { historyBadges, isActionable } from '../../src/modules/jobs/jobHistory.js'
 import { getDefaultJobsState, saveJobs, updateFilters } from '../../src/modules/jobs/jobStorage.js'
@@ -20,6 +20,10 @@ vi.mock('../../src/components/jobs/JobTailorActions.jsx', () => ({ default: () =
 afterEach(() => vi.unstubAllGlobals())
 
 const NOW = Date.parse('2026-11-20T12:00:00Z')
+// The period is Settings' (default 14 there); code has no constant of its own, so these tests hand it in, as the screen does.
+const SETTINGS_DAYS = 14
+const composeJobList = (input) => compose({ activeWindowDays: SETTINGS_DAYS, ...input })
+const applyAllControls = (rows, controls) => applyAll(rows, { windowDays: SETTINGS_DAYS, ...controls })
 const DAY = 86400000
 const ago = (ms) => new Date(NOW - ms).toISOString()
 const READY = { status: 'ready', store: { applications: {} } }

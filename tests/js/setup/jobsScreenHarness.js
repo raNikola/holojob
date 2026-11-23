@@ -34,10 +34,12 @@ const SETTINGS = { stages: { work: [{ key: 'applied', label: 'Applied' }, { key:
 const reply = (status, body) => ({ ok: status < 400, status, json: async () => body, text: async () => JSON.stringify(body), headers: { get: () => null } })
 
 /** `route(call)` answers /api/jobs/all; `ledger(jobId)` answers /api/jobs/history; `applications` is the store the server holds. */
-export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {} } = {}) {
+export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {}, windowDays = 14 } = {}) {
   const server = { allCalls: 0, posts: [], applications, jobState: { version: 1, updatedAt: null, jobs: {} }, stateWrites: [] }
   vi.stubGlobal('fetch', async (url, options = {}) => {
     const path = String(url).split('?')[0]
+    // Settings holds the Active period; the screen reads it from the gate's settings.
+    if (path === '/api/ai/usage') return reply(200, { settings: { activeWindowDays: windowDays } })
     if (path === '/api/pipeline/health') return health ? reply(200, { available: true, scoring: {}, discovery: {} }) : reply(503, {})
     if (path === '/api/jobs/all') {
       server.allCalls += 1

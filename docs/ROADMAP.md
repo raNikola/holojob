@@ -68,7 +68,8 @@ One status each: **open** (seen in the code or tests today), **not verified** (c
 - Domain transferability for a structural match outside the fixed table (carrier / shipper vs host / guest): open (`src/data/domainAdjacency.json` has no such edge).
 - The neutral defaults of 58 / 60 in `culture_match.py` and `industry_match.py`: open (58 present in `culture_match.py`; the 60 not re-checked).
 - `MUST_HAVE_SHARE` in `dimensions/skill_match.py`: open (the constant is defined and read nowhere).
-- Ads without owner data can leave `scored_jobs.json` while the ledger keeps them open: open (`run_scoring.py` scores the derived job view, hand-entered jobs and registered kept ads only).
+- Ads without owner data can leave `scored_jobs.json` while the ledger keeps them open: partly built 2026-11-24. An open ad of a search source that the latest search did not return (class `absent`) is scored every run (`job_history.open_search_rows`, marked `notFoundThisRun`, free). The rest (about 3,900 on 2026-11-24: `older_key`, `unclassified`) stays unscored: open, see DECISIONS 2026-11-24 "Search-source ads the latest search did not return".
+- Active period (days an absent ad stays in Active): built, Settings > AI budget > "Jobs: Active list ..." (`activeWindowDays`, default 14, whole days 1 to 365).
 - The owner fills Profile > Work authorization (countries, B2B) and re-scores: not verified (private data).
 
 **Discovery and Infostud**

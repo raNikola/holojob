@@ -166,6 +166,22 @@ describe('Active and All', () => {
     expect(screen.raw()).not.toMatch(/"class"|"serverOnly"|"copyGroup"/)
   })
 
+  it('the Active period is the one in Settings: a longer one keeps an older absent ad, none known keeps no absent ad, and the label names it', async () => {
+    stubServer({ route: good, windowDays: 40 })
+    screen = await mountScreen({ stored: STORED })
+    expect(screen.rows()).toHaveLength(4) // s1, s2, the absent ad seen yesterday and the one seen 30 days ago
+    await screen.click(screen.button(/^All$/))
+    expect(screen.rows()).toHaveLength(7)
+    expect(screen.box(/Seen in the last 40 days/)).toBeTruthy()
+    await screen.unmount()
+
+    stubServer({ route: good, windowDays: null })
+    screen = await mountScreen({ stored: STORED })
+    expect(screen.rows()).toHaveLength(2) // no period known: no absent ad in Active, and no number made up
+    await screen.click(screen.button(/^All$/))
+    expect(screen.rows()).toHaveLength(7)
+  })
+
   it('a change of mode or class resets the selection', async () => {
     stubServer({ route: good })
     screen = await mountScreen({ stored: STORED })

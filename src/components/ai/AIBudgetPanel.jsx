@@ -197,6 +197,7 @@ export default function AIBudgetPanel() {
             <Input label="Max paid calls per month (empty = none)" type="number" min="0" step="1" value={form.maxCallsMonthly} onChange={set('maxCallsMonthly')} />
             <Input label="Re-scrape: spend limit per run (empty = not set, no paid step runs)" type="number" min="0" step="any" value={form.runLimitUsd} onChange={set('runLimitUsd')} />
             <Input label="Re-scrape: ads per run (empty = not set, no paid step runs)" type="number" min="0" step="1" value={form.runLimitAds} onChange={set('runLimitAds')} />
+            <Input label="Jobs: Active list keeps an ad the latest search did not return for (days, 1 to 365)" type="number" min="1" max="365" step="1" value={form.activeWindowDays} onChange={set('activeWindowDays')} />
             <Input label="Estimated output tokens per call" type="number" min="0" step="1" value={form.estimatedOutputTokens} onChange={set('estimatedOutputTokens')} />
             <Input label="Currency" value={form.currency} onChange={set('currency')} />
             <Input label="Timezone (IANA)" value={form.timezone} onChange={set('timezone')} placeholder="Europe/Belgrade" />

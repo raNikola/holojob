@@ -415,6 +415,34 @@ def apply_run(
     return out, stats
 
 
+def open_search_rows(ledger: dict, have: set[str], *, wanted=None, now: datetime | None = None) -> list[dict]:
+    """Open ads of a search-based source that the job list does not hold, as scoring rows (owner decision 2026-11-24).
+
+    A search source (JobSpy returns the last 72 h only) stops returning an ad long before the ad is gone, and absence from a search closes
+    nothing, so such an ad stays open in the ledger. This gives it a row so it is scored like any other ad, with the ledger's own `firstSeen` /
+    `lastSeen` and stored facts. It is marked `notFoundThisRun`, so `row_state` keeps it out of the term-rarity corpus and out of every paid
+    selection (judge, engine, classification, reading): nothing here makes a model call, and no other ad's score moves. Closed ads, snapshot
+    sources (their closing rules are untouched), ads the list holds and ads without a stored snapshot give no row. `wanted(entry)` narrows the
+    choice (None: every open search-source ad). Reads only; the list is not changed.
+
+    The scoring run passes the ads the Active list can show, because a score on the rest is never seen and costs about 27 KB an ad in
+    scored_jobs.json and in the browser (3,900 such ads on 2026-11-24: about 100 MB).
+    """
+    moment = now or datetime.now(timezone.utc)
+    rows = []
+    for job_id, entry in (ledger.get("jobs") or {}).items():
+        job = entry.get("job") if isinstance(entry, dict) else None
+        if not isinstance(job, dict) or job_id in have or entry.get("closedAt") or entry.get("provider") in CLOSURE_PROVIDERS:
+            continue
+        if not entry.get("firstSeen") or not entry.get("lastSeen") or (wanted is not None and not wanted(entry)):
+            continue
+        row = {**_annotate({**job, "jobId": job_id}, entry, now=moment, closed=False), NOT_FOUND_MARK: True}
+        if entry.get("llmFacts"):
+            row["llmFacts"] = entry["llmFacts"]
+        rows.append(row)
+    return rows
+
+
 def facts_for(ledger: dict, job: dict) -> dict | None:
     """The stored facts for this job if its content is unchanged, else None."""
     entry = ledger["jobs"].get(job.get("jobId"))
