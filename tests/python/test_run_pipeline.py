@@ -98,7 +98,7 @@ def test_the_last_run_record_keeps_its_bytes_and_mode(env, monkeypatch):
 def test_a_clean_run_runs_every_step_and_summarises(env, monkeypatch, capsys):
     calls = fake_steps(monkeypatch)
     assert rp.main(["--json"]) == 0
-    assert calls == ["discovery", "enrichment", "scoring"]
+    assert calls == ["discovery", "enrichment", "classification", "scoring"]
 
     record = json.loads(rp.LAST_RUN.read_text())
     assert record["status"] == "ok"
@@ -112,7 +112,7 @@ def test_a_clean_run_runs_every_step_and_summarises(env, monkeypatch, capsys):
 @pytest.mark.parametrize("failing, ran", [
     ("discovery", ["discovery"]),
     ("enrichment", ["discovery", "enrichment"]),
-    ("scoring", ["discovery", "enrichment", "scoring"]),
+    ("scoring", ["discovery", "enrichment", "classification", "scoring"]),
 ])
 def test_a_failed_step_stops_the_run_and_names_it(env, monkeypatch, capsys, failing, ran):
     calls = fake_steps(monkeypatch, fail=failing)
@@ -133,7 +133,7 @@ def test_too_few_enriched_jobs_stops_before_scoring(env, monkeypatch, capsys):
 def test_enrichment_refused_by_the_ai_gate_scores_anyway_and_labels_the_result_reduced(env, monkeypatch, capsys):
     calls = fake_steps(monkeypatch, enriched=0, total=10, refused="paid call openai/m refused: AI budget is 0")
     assert rp.main(["--json"]) == 0
-    assert calls == ["discovery", "enrichment", "scoring"]
+    assert calls == ["discovery", "enrichment", "classification", "scoring"]
     record = json.loads(rp.LAST_RUN.read_text())
     assert record["status"] == "ok"
     assert record["quality"]["reduced"] is True and "AI budget is 0" in record["quality"]["reason"]
@@ -208,7 +208,7 @@ def test_the_pipeline_never_judges(env, monkeypatch):
     monkeypatch.setattr(rp, "run_step", lambda name, cmd, steps: commands.append(cmd) or real(name, cmd, steps))
     assert rp.main(["--tailor"]) == 0
     assert commands and not any("--judge" in part for cmd in commands for part in cmd)
-    assert inner == ["discovery", "enrichment", "scoring", "tailoring"]
+    assert inner == ["discovery", "enrichment", "classification", "scoring", "tailoring"]
 
 
 def test_unwritable_data_dir_is_a_setup_error_before_anything_runs(env, monkeypatch, capsys):

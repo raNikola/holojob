@@ -41,6 +41,7 @@ import run_log  # noqa: E402
 
 DISCOVERY = PY / "job_discovery" / "run_discovery.py"
 SCORING = PY / "job_scoring" / "run_scoring.py"
+CLASSIFY = PY / "job_scoring" / "classify_new.py"  # counts and estimates only (no --confirm): the paid run is the owner's
 RUN_ID = re.compile(r"^[0-9A-Za-z]{1,32}$")
 OUTPUT_TAIL_LINES = 3
 CANCEL_POLL_SECONDS = 0.2
@@ -58,7 +59,7 @@ def step_commands(args) -> list[tuple[str, list[str]]]:
         discovery += ["--country", args.country]
     if getattr(args, "exclude", None):
         discovery += ["--exclude", args.exclude]
-    return [("discovery", discovery), ("scoring", [str(SCORING)])]
+    return [("discovery", discovery), ("classification", [str(CLASSIFY)]), ("scoring", [str(SCORING)])]
 
 
 def _tail(output) -> str:

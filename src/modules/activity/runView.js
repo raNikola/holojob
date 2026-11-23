@@ -65,8 +65,30 @@ export function savedShort(run) {
   return Number.isFinite(added) ? `${saved.toLocaleString()} (${added.toLocaleString()} new)` : saved.toLocaleString()
 }
 
+const STOP_WORDS = {
+  cap: 'the spending cap or the ad limit was reached',
+  gate: 'the AI budget gate refused the next call',
+  failures: 'three calls in a row failed',
+}
+
+/** The Fit 3 classification run in words (Re-score applies the classes). Null for any other run. */
+export function classificationSentence(run) {
+  const c = run.classification
+  if (!c) return null
+  const money = c.spentUsd === null ? '' : ` Spent $${c.spentUsd.toFixed(4)}${c.capUsd === null ? '' : ` of the $${c.capUsd.toFixed(2)} cap`}.`
+  const classified = Number.isFinite(c.classified) ? c.classified : 0
+  const left = Number.isFinite(c.left) ? c.left : 0
+  const stop = c.stopped ? ` Stopped: ${STOP_WORDS[c.stopped]}.` : ''
+  const rest = left > 0 ? ` ${left} ${left === 1 ? 'ad stays' : 'ads stay'} "not available".` : ''
+  const failed = c.failed ? ` ${c.failed} could not be classified and will be tried again.` : ''
+  const refused = c.privacyRefused ? ` ${c.privacyRefused} not sent (privacy scan).` : ''
+  const anchoring = c.anchoringFailed ? ` ${c.anchoringFailed} ads already have an answer whose role could not be confirmed; they are not called again.` : ''
+  return `Role classification: ${classified} of ${show(c.candidates)} new ads classified.${money}${stop}${rest}${failed}${refused}${anchoring}`
+}
+
 /** The sentence under a run's badge when the badge alone does not say enough. Null when it does. */
 export function statusSentence(run) {
+  if (run.classification) return classificationSentence(run)
   switch (run.status) {
     case 'cancelled':
       return cancelledText(run.cancel ? { ...run.cancel, saved: run.cancel.saved ?? run.counts.saved } : undefined)

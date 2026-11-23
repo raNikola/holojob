@@ -96,6 +96,7 @@ describe('server side', () => {
     const result = await pruneKeptRescored(['kept1'], { spawnFn, root })
     expect(result.body.dropped).toEqual(['old'])
     expect(spawnFn.calls[0][1].replace('--prune=', '').split(',').sort()).toEqual(['app1', 'kept1'])
+    expect(spawnFn.calls[0][2]).toBe('--register') // the owner's ads are registered before the prune (backlog item 11)
     expect((await pruneKeptRescored(['bad id!'], { spawnFn: fakeSpawn('') })).status).toBe(422)
   })
 

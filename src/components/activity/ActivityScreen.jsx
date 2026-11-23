@@ -34,12 +34,14 @@ function RunCard({ run, open, onToggle }) {
         <span className={`text-sm ${muted}`}>{run.status === 'running' ? 'In progress' : formatDuration(run.durationSeconds)}</span>
         <span className={`text-sm ${muted}`}>{run.issuesCount === 0 ? 'No issues' : `${run.issuesCount} ${run.issuesCount === 1 ? 'issue' : 'issues'}`}</span>
       </div>
-      <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
-        <Figure label="Returned" value={show(run.counts.returned)} />
-        <Figure label="Collected" value={show(run.counts.collected)} />
-        <Figure label="Saved (new)" value={savedShort(run)} />
-        <Figure label="Filtered out" value={show(run.counts.filteredOut)} />
-      </dl>
+      {!run.classification && (
+        <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
+          <Figure label="Returned" value={show(run.counts.returned)} />
+          <Figure label="Collected" value={show(run.counts.collected)} />
+          <Figure label="Saved (new)" value={savedShort(run)} />
+          <Figure label="Filtered out" value={show(run.counts.filteredOut)} />
+        </dl>
+      )}
       {sentence && <p className="mt-2 text-sm text-stone-700 dark:text-stone-300">{sentence}</p>}
       <button
         type="button"

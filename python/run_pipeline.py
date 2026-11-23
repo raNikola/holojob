@@ -233,6 +233,9 @@ def print_summary(s: dict) -> None:
         print(f"Enrichment: {e.get('enrichedShare', 0):.0%} of jobs have facts"
               + (f" ({e['extracted']} read, {e['cached']} cached, {e['failed']} failed, {e.get('notRead', 0)} outside allowed places not read"
                  f", {e.get('refused', 0)} refused by the AI gate)" if "extracted" in e else ""))
+    c = s.get("classification")
+    if c and c.get("waiting"):
+        print(f"Classify  : {c['waiting']} new ads wait for a Fit 3 role class (classify_new.py --confirm, then Re-score); until then they read 'not available'")
     q = s.get("quality")
     if q:
         print(f"Quality   : REDUCED - {q['reason']}")
@@ -268,6 +271,15 @@ def execute(args: argparse.Namespace, steps: list[dict]) -> dict:
 
     if args.skip_enrich and not reduced:
         reduced = "enrichment skipped (--skip-enrich)"
+    # New ads get a Fit 3 role class before scoring (scoring 1.7). Here the step only counts and estimates: it sends nothing (it runs as an automatic
+    # AI task, and the paid run needs the owner's --confirm and --max-usd). It never stops the pipeline.
+    try:
+        out = run_step("classification", [str(PY / "job_scoring" / "classify_new.py")], steps)
+        waiting = re.search(r"(\d+) new ads wait", out)
+        classification = {"waiting": int(waiting[1]) if waiting else 0}
+    except StepFailed as exc:
+        print(f"classification skipped: {exc.reason}", flush=True)
+        classification = {"waiting": None}
     scoring = [str(PY / "job_scoring" / "run_scoring.py")]
     if reduced:
         # Written into scored_jobs.json meta, where the scores are read.
@@ -279,7 +291,9 @@ def execute(args: argparse.Namespace, steps: list[dict]) -> dict:
     if args.tailor:
         run_step("tailoring", [str(PY / "resume_generator" / "run_tailor.py"), "--apply-only",
                                "--limit", str(args.tailor_limit), *(["--confirm"] if args.tailor_confirm else [])], steps)
-    return summarize(args, steps, enrich_line, share, reduced)
+    summary = summarize(args, steps, enrich_line, share, reduced)
+    summary["classification"] = classification
+    return summary
 
 
 def main(argv=None) -> int:

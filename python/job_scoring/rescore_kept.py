@@ -74,10 +74,13 @@ def main(argv=None) -> int:
     p.add_argument("--kept", type=Path, default=kept_ads.KEPT_PATH)
     p.add_argument("--prune", metavar="ID,ID", default=None,
                    help="instead of scoring: drop every registered id not in this list (the kept ads and the ads with an application)")
+    p.add_argument("--register", action="store_true",
+                   help="with --prune: first register every id of the list that the ledger holds (the owner's ads: kept, with an application), so no run drops their rows")
     args = p.parse_args(argv)
     if args.prune is not None:
         keep = {i for i in args.prune.split(",") if i}
-        print(json.dumps({"ok": True, "dropped": kept_ads.prune(keep, args.kept)}))
+        registered = kept_ads.register_owner_ads(keep, job_history.ledger_path(args.jobs), args.kept) if args.register else None
+        print(json.dumps({"ok": True, "dropped": kept_ads.prune(keep, args.kept), **({"registered": registered} if registered else {})}))
         return 0
     code, body = run(args.job_id, intelligence=args.intelligence, jobs=args.jobs, manual=args.manual, scored=args.scored, kept=args.kept)
     print(json.dumps(body))

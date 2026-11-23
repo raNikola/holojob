@@ -79,7 +79,8 @@ export async function pruneKeptRescored(keptIds, options = {}) {
     return { status: 200, body: { ok: true, dropped: [], skipped: 'applications_unreadable' } }
   }
   const keep = [...new Set([...keptIds, ...withApplication])]
-  const { code, result } = await runPython([`--prune=${keep.join(',')}`], options)
-  if (code === 0 && result.ok) return { status: 200, body: { ok: true, dropped: result.dropped ?? [] } }
+  // Register before pruning (backlog item 11): the owner's ads (kept in the browser, with an application) stay in every scoring run, even after a run no longer lists them.
+  const { code, result } = await runPython([`--prune=${keep.join(',')}`, '--register'], options)
+  if (code === 0 && result.ok) return { status: 200, body: { ok: true, dropped: result.dropped ?? [], registered: result.registered ?? null } }
   return { status: 500, body: { ok: false, error: 'prune_failed' } }
 }

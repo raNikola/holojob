@@ -516,8 +516,9 @@ def test_a_direct_discovery_sweeps_a_dead_record_first(discovery):
 def test_the_steps_are_today_s_no_enrichment_and_no_judge():
     args = SimpleNamespace(run_id=RUN_ID, providers="serbia", country="Serbia")
     steps = run_rescrape.step_commands(args)
-    assert [name for name, _ in steps] == ["discovery", "scoring"]
-    discovery_cmd, scoring_cmd = steps[0][1], steps[1][1]
+    assert [name for name, _ in steps] == ["discovery", "classification", "scoring"]
+    discovery_cmd, classify_cmd, scoring_cmd = steps[0][1], steps[1][1], steps[2][1]
+    assert classify_cmd[0].endswith("job_scoring/classify_new.py") and classify_cmd[1:] == [], "the orchestrator never passes --confirm"
     assert discovery_cmd[0].endswith("job_discovery/run_discovery.py")
     assert discovery_cmd[1:] == ["--providers", "serbia", "--run-id", RUN_ID, "--country", "Serbia"]
     assert scoring_cmd[0].endswith("job_scoring/run_scoring.py") and scoring_cmd[1:] == []
@@ -571,6 +572,7 @@ sys.path.insert(0, {python!r})
 import run_rescrape
 run_rescrape.DISCOVERY = {discovery!r}
 run_rescrape.SCORING = {scoring!r}
+run_rescrape.CLASSIFY = {classify!r}
 sys.exit(run_rescrape.main(sys.argv[1:]))
 """
 
@@ -585,7 +587,9 @@ def fake(tmp_path):
         job_discovery=str(py / "job_discovery"), job_scoring=str(py / "job_scoring"), marks=str(marks)))
     (tmp_path / "fake_scoring.py").write_text(FAKE_SCORING.format(marks=str(marks)))
     (tmp_path / "driver.py").write_text(DRIVER.format(
-        python=str(py), discovery=str(tmp_path / "fake_discovery.py"), scoring=str(tmp_path / "fake_scoring.py")))
+        python=str(py), discovery=str(tmp_path / "fake_discovery.py"), scoring=str(tmp_path / "fake_scoring.py"),
+        classify=str(tmp_path / "fake_classify.py")))
+    (tmp_path / "fake_classify.py").write_text("print(\"classification: nothing to classify\")\n")
     started = []
 
     def start(*, run_id=RUN_ID, stdout=subprocess.DEVNULL, **env):
@@ -617,9 +621,9 @@ def test_a_full_run_ends_ok_with_every_event_and_frees_the_lock(fake):
     assert not (fake.marks / "discovery-no-lock").exists(), "the step used the lock it was handed"
     saved = on_disk(RUN_ID)
     assert saved["status"] == "ok" and saved["finishedAt"] and saved["trigger"] == "manual"
-    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("scoring", "ok")]
+    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("classification", "ok"), ("scoring", "ok")]
     assert [s["name"] for s in saved["sources"]] == ["greenhouse"], "the record the step filled is the one finished"
-    assert [e["type"] for e in events_of(saved)] == ["run_start", "step_start", "step_end", "step_start", "step_end", "run_end"]
+    assert [e["type"] for e in events_of(saved)] == ["run_start", "step_start", "step_end", "step_start", "step_end", "step_start", "step_end", "run_end"]
     assert lock_is_free()
 
 

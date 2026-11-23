@@ -35,7 +35,7 @@ const CODE = /^[a-z][a-z_]{0,39}$/
 const TRIGGERS = ['manual', 'pipeline', 'scheduled']
 const RUN_STATUSES = ['ok', 'partial', 'failed', 'skipped', 'running', 'interrupted', 'cancelled']
 const SOURCE_STATUSES = ['ok', 'partial', 'failed', 'skipped']
-const STEP_NAMES = ['discovery', 'scoring']
+const STEP_NAMES = ['discovery', 'classification', 'scoring']
 const CANCEL_OUTCOMES = ['collected_ads_saved', 'stopped_nothing_imported', 'imported_before_cancel', 'finished_before_cancel']
 const IMPORT_KINDS = ['complete', 'partial', 'nothing', 'refused']
 const MAX_EVENTS = 200
@@ -263,6 +263,26 @@ function projectImport(imported) {
   }
 }
 
+const STOP_CODES = ['cap', 'gate', 'failures']
+
+/** The Fit 3 classification run (python classify_new.py): counts, the cost and a fixed stop code only. Null for any other run. */
+function projectClassification(block) {
+  if (!block || typeof block !== 'object') return null
+  const usd = (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < 1000 ? Math.round(value * 10000) / 10000 : null)
+  return {
+    candidates: count(block.candidates),
+    classified: count(block.classified),
+    failed: count(block.failed),
+    privacyRefused: count(block.privacyRefused),
+    left: count(block.left),
+    anchoringFailed: count(block.anchoringFailed),
+    stopped: pick(block.stopped, STOP_CODES, null),
+    spentUsd: usd(block.spentUsd),
+    capUsd: usd(block.capUsd),
+    maxAds: count(block.maxAds),
+  }
+}
+
 /**
  * One record as the API shows it. `alive` is the answer for a record that says running (true: a run holds the lock; false: nobody
  * does, so the record is a dead run's and is shown as interrupted, with `inferred`; nothing is written either way).
@@ -300,6 +320,7 @@ export function project(record, { alive = true, cancelRequested = false } = {}) 
       status: pick(step?.status, [...RUN_STATUSES, 'running'], 'unknown'),
       exitCode: Number.isInteger(step?.exitCode) && Math.abs(step.exitCode) < 256 ? step.exitCode : null,
     })),
+    classification: projectClassification(record.classification),
     canCancel: record.orchestrator === 'rescrape' && status === 'running',
     cancelRequested: Boolean(cancelRequested) && status === 'running',
     cancel: cancel ? { requestedAt: time(cancel.requestedAt), outcome: pick(cancel.outcome, CANCEL_OUTCOMES, 'unknown'), saved: count(cancel.saved) } : null,

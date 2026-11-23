@@ -50,6 +50,33 @@ def add(job_id: str, path: Path = KEPT_PATH) -> None:
     _save(entries, path)
 
 
+def register_owner_ads(ids, ledger_file: Path, path: Path = KEPT_PATH) -> dict:
+    """Register the owner's own ads (an ad with an application, a kept ad) so every scoring run keeps their rows (backlog item 11).
+
+    Such an ad can stay open in the ledger after a run no longer lists it; the list view then drops it and, before this, its scored row went with
+    it. Only ids the ledger holds are registered (the row is read from there); already registered ids are untouched. Writes nothing when nothing is
+    new. Returns counts: registered, already, notInLedger."""
+    wanted = sorted({i for i in ids or () if isinstance(i, str) and JOB_ID.match(i)})
+    entries = load(path)
+    fresh = [i for i in wanted if i not in entries]
+    out = {"registered": 0, "already": len(wanted) - len(fresh), "notInLedger": 0}
+    if not fresh:
+        return out
+    import job_history  # noqa: PLC0415
+
+    held = (job_history.load(ledger_file, read_only=True).get("jobs") or {})
+    now = datetime.now(timezone.utc).isoformat()
+    for job_id in fresh:
+        if isinstance(held.get(job_id), dict) and isinstance(held[job_id].get("job"), dict):
+            entries[job_id] = {"rescoredAt": now, "owner": True}
+            out["registered"] += 1
+        else:
+            out["notInLedger"] += 1
+    if out["registered"]:
+        _save(entries, path)
+    return out
+
+
 def prune(keep_ids: set[str], path: Path = KEPT_PATH) -> list[str]:
     """Drops the ids that are not in `keep_ids` (the kept ads plus the ads with an application); returns the dropped ones."""
     entries = load(path)

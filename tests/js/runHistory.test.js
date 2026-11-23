@@ -289,7 +289,7 @@ describe('the allow-list', () => {
   it('returns exactly the listed fields at every level, and keeps what is safe in the messages', () => {
     seeded()
     const [run] = list().body.runs
-    expect(Object.keys(run).sort()).toEqual(['canCancel', 'cancel', 'cancelRequested', 'counts', 'durationSeconds', 'finishedAt', 'import', 'incompleteCommit', 'inferred', 'issues', 'issuesCount',
+    expect(Object.keys(run).sort()).toEqual(['canCancel', 'cancel', 'cancelRequested', 'classification', 'counts', 'durationSeconds', 'finishedAt', 'import', 'incompleteCommit', 'inferred', 'issues', 'issuesCount',
       'recorded', 'runId', 'sources', 'staging', 'startedAt', 'status', 'steps', 'trigger'])
     expect(Object.keys(run.sources[0]).sort()).toEqual(['boardsFailed', 'collected', 'completeRead', 'durationSeconds', 'error', 'filterReasons', 'filteredOut', 'finishedAt', 'name', 'new', 'proof', 'readClass', 'returned', 'skipReason', 'startedAt', 'status'])
     expect(Object.keys(run.issues[0]).sort()).toEqual(['level', 'message', 'source'])
@@ -320,6 +320,17 @@ describe('the allow-list', () => {
     expect(run).toMatchObject({ status: 'unknown', trigger: 'unknown', startedAt: null })
     expect(JSON.stringify(run)).not.toMatch(/CANARY/)
     expect(run.sources[0]).toMatchObject({ name: '?', status: 'unknown', returned: null, collected: null, new: null })
+  })
+
+  it('projects a classification run to counts, the cost and a fixed stop code, and nothing else', () => {
+    plant(1, { orchestrator: 'classify', sources: [], status: 'partial', classification: {
+      candidates: 5, classified: 2, failed: 0, left: 3, stopped: 'cap', spentUsd: 0.0123456, capUsd: 0.05, maxAds: 100, privacyRefused: 0, anchoringFailed: 13, CANARY: 'x',
+    } })
+    plant(2, { orchestrator: 'classify', sources: [], classification: { stopped: 'free text from a provider CANARY-STOP', classified: 'CANARY-COUNT' } })
+    const runs = list().body.runs
+    expect(runs[1].classification).toEqual({ candidates: 5, classified: 2, failed: 0, privacyRefused: 0, left: 3, anchoringFailed: 13, stopped: 'cap', spentUsd: 0.0123, capUsd: 0.05, maxAds: 100 })
+    expect(runs[0].classification).toMatchObject({ stopped: null, classified: null })
+    expect(JSON.stringify(runs)).not.toMatch(/CANARY/)
   })
 
   it('project() refuses a record with no valid run id', () => {
