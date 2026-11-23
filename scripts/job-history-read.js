@@ -104,7 +104,7 @@ export async function handleJobHistoryRequest(req, res, url, { root }) {
 //
 // The browser's stored job list may keep a shorter copy of the rows (jobStorage.js, tiers lean and minimal). On start it asks here for the
 // ad text of the rows it stored without one, in one request per 100 ids. Read-only, from the same ledger index as the route above, and
-// answering only the ad text: no contact, no note, no status. An id the ledger does not hold is named in `missing`, never invented.
+// answering only the ad text: no contact, no note, no status. An id the ledger does not hold is named in `missing`, never invented; an id it holds with no text (the job site gave none) is named in `noText`.
 
 const TEXTS_URL = '/api/jobs/texts'
 export const MAX_TEXT_IDS = 100
@@ -138,11 +138,14 @@ export async function handleJobTextsRequest(req, res, url, { root, readBody }) {
   }
   const texts = {}
   const missing = []
+  const noText = []
   for (const id of new Set(ids)) {
-    const description = index?.get(id)?.job?.description
+    const entry = index?.get(id)
+    const description = entry?.job?.description
     if (typeof description === 'string' && description.trim()) texts[id] = description
+    else if (entry) noText.push(id)
     else missing.push(id)
   }
-  send(res, 200, { ok: true, texts, missing })
+  send(res, 200, { ok: true, texts, missing, noText })
   return true
 }

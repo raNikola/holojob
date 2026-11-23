@@ -16,6 +16,9 @@ export const ERROR_NOTICE =
   'Your job list could not be saved in this browser, even in its shortest form. What you change from now on is not saved here and will be lost when you reload this tab. The last saved copy is still in the browser.'
 
 export const MISSING_NOTICE = (count) =>
-  `${count} ${count === 1 ? 'ad' : 'ads'} could not be loaded with ${count === 1 ? 'its' : 'their'} text (your history was not reachable, or holds no text for ${count === 1 ? 'it' : 'them'}). Search, outreach and AI tools cannot read ${count === 1 ? 'that ad' : 'those ads'}' text until you reload. Nothing you wrote is affected.`
+  `${count} ${count === 1 ? 'ad' : 'ads'} could not be loaded with ${count === 1 ? 'its' : 'their'} text (your history was not reachable, or does not hold ${count === 1 ? 'it' : 'them'}). Search, outreach and AI tools cannot read ${count === 1 ? 'that ad' : 'those ads'}' text until you reload. Nothing you wrote is affected.`
 
 export const GATE_TEXT = (count) => `Loading the text of ${count} ${count === 1 ? 'ad' : 'ads'} from your history…`
+
+export const NO_SOURCE_TEXT_NOTICE = (count) =>
+  `${count} ${count === 1 ? 'ad has' : 'ads have'} no text from the source: the job site gave none. Search, outreach and AI tools cannot read ${count === 1 ? 'that ad' : 'those ads'}.`

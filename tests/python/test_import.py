@@ -747,19 +747,78 @@ def test_staging_usage_counts_a_hard_linked_file_once(tmp_path, monkeypatch):
     assert staging.usage(tmp_path / "nowhere") == {"runs": 0, "files": 0, "bytes": 0}
 
 
-def test_a_source_the_owner_skipped_keeps_its_open_ads_as_held_and_closes_nothing(tmp_path):
-    # A search-based source (jobspy) skipped for one run is not in the manifest's providers. Its ads must not drop out of the list
-    # (Re-scrape's steps would see nothing of them) and must not be closed.
+# --- a search-based source that returns none of its older ads (72-hour window) or is skipped -------------------------------------
+
+
+def _world(tmp_path):
+    root = tmp_path / "root"
+    (root / "data/jobs").mkdir(parents=True)
+    return root
+
+
+def _state(root):
+    ledger = json.loads((root / "data/jobs/job_history.json").read_text())
+    view = json.loads((root / "data/jobs/discovered_jobs.json").read_text())
+    return ledger["jobs"], {job["jobId"]: job for job in view["jobs"]}
+
+
+def test_older_ads_of_a_search_source_stay_in_the_list_and_open_while_a_proven_board_still_closes(tmp_path, monkeypatch):
+    root = _world(tmp_path)
+    old = [canon(10, "jobspy"), canon(11, "jobspy")]
+    ats_gone = canon(3)
+    ats = [canon(1), canon(2), ats_gone]
+    run_and_replay(root, monkeypatch, {"greenhouse": Prov(ats, proven=True), "jobspy": Prov(old)})
+    # The search runs and returns none of its older ads (outside the window); the board still lists 1 and 2, no longer 3. Three times over.
+    for _ in range(3):
+        _, dry = run_and_replay(root, monkeypatch, {"greenhouse": Prov(ats[:2], proven=True), "jobspy": Prov([])})
+        assert dry.replay_exact
+        ledger, view = _state(root)
+        for ad in old:
+            entry = ledger[ad["jobId"]]
+            assert not entry.get("closedAt") and not entry.get("absentRuns") and not entry.get("absentSince"), "a missing search ad is no proof"
+            assert ad["jobId"] in view and view[ad["jobId"]].get("notFoundThisRun") and not view[ad["jobId"]].get("isClosed")
+    assert ledger[ats_gone["jobId"]]["closedAt"], "an ad a proven board really dropped closes as before"
+    assert view[ats_gone["jobId"]]["isClosed"]
+
+
+def test_ads_of_a_skipped_search_source_stay_in_the_list_and_open(tmp_path, monkeypatch):
+    root = _world(tmp_path)
+    shown = [canon(10, "jobspy"), canon(11, "jobspy")]
+    run_and_replay(root, monkeypatch, {"greenhouse": Prov([canon(1)], proven=True), "jobspy": Prov(shown)})
+    run_and_replay(root, monkeypatch, {"greenhouse": Prov([canon(1)], proven=True), "jobspy": Prov([canon(12, "jobspy")])})
+    # jobspy is skipped for a run (it is not in the providers at all): the list it left is kept as it is.
+    _, dry = run_and_replay(root, monkeypatch, {"greenhouse": Prov([canon(1)], proven=True)})
+    assert dry.replay_exact
+    ledger, view = _state(root)
+    assert canon(12, "jobspy")["jobId"] in view and not ledger[canon(12, "jobspy")["jobId"]].get("closedAt")
+    assert all(ad["jobId"] in view and not ledger[ad["jobId"]].get("closedAt") for ad in shown), "ads the list showed before stay, held"
+    assert not any(e.get("closedAt") for e in ledger.values())
+
+
+def test_restore_dropped_rows_puts_back_the_ads_a_list_left_out_and_changes_nothing_else(tmp_path):
+    import restore_dropped_rows
+    import view_guard
+
     first = hand_run(tmp_path, "r0", {"greenhouse": ([canon(1)], OK), "jobspy": ([canon(2, "jobspy"), canon(3, "jobspy")], OK)})
     ledger = importer.plan_import(first, job_history.empty_ledger(), None).ledger
-    second = hand_run(tmp_path, "r1", {"greenhouse": ([canon(1)], OK)})
-    manifest = json.loads((second.dir / "run.json").read_text())
-    manifest["skippedProviders"] = ["jobspy"]
-    (second.dir / "run.json").write_text(json.dumps(manifest))
-    result = importer.plan_import(staging.read_run(tmp_path, "r1"), ledger, None)
-    assert result.stats["keptSourceNotRun"] == 2 and result.stats["closed"] == 0
-    held = [e for e in result.ledger["jobs"].values() if e["provider"] == "jobspy"]
-    assert len(held) == 2 and all(e["heldRunId"] == "r1" and not e.get("closedAt") for e in held)
-    hand_run(tmp_path, "r2", {"greenhouse": ([canon(1)], OK)})
-    again = importer.plan_import(staging.read_run(tmp_path, "r2"), ledger, None)
-    assert again.stats["keptSourceNotRun"] == 0, "without the skip the same ads are not held (the old behaviour)"
+    second = importer.plan_import(hand_run(tmp_path, "r1", {"greenhouse": ([canon(1)], OK)}), ledger, None).ledger
+    for entry in second["jobs"].values():  # the list as the run of 2026-11-23 left it: the skipped source's ads neither found nor held
+        if entry["provider"] == "jobspy":
+            entry.pop("heldRunId", None)
+            entry["lastRunId"] = "r0"
+    ids_before = {job["jobId"] for job in view_guard.derive_view(second)["jobs"]}
+    assert ids_before == {canon(1)["jobId"]}
+    snapshot = json.dumps({k: v["job"] for k, v in second["jobs"].items()}, sort_keys=True)
+    assert restore_dropped_rows.restore(second, "jobspy", "r0", apply=False) == sorted_ids(second, "jobspy") and "heldRunId" not in second["jobs"][canon(2, "jobspy")["jobId"]]
+    restored = restore_dropped_rows.restore(second, "jobspy", "r0")
+    assert len(restored) == 2
+    rows = {job["jobId"]: job for job in view_guard.derive_view(second)["jobs"]}
+    assert set(rows) == ids_before | set(restored) and all(rows[i].get("notFoundThisRun") for i in restored)
+    assert snapshot == json.dumps({k: v["job"] for k, v in second["jobs"].items()}, sort_keys=True), "the ads' own data is untouched"
+    assert not any(e.get("closedAt") for e in second["jobs"].values())
+    assert restore_dropped_rows.restore(second, "jobspy", "r0") == [], "a second run restores nothing"
+
+
+def sorted_ids(ledger, provider):
+    return [i for i, e in ledger["jobs"].items() if e["provider"] == provider]
+

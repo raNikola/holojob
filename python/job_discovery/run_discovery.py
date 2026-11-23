@@ -291,7 +291,7 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
     search_key = job_history.search_key(search_terms, locations, country, remote_filters)
     stage_run = staging.StagingRun.begin(
         ROOT, record["runId"], search_key=search_key, terms=search_terms, locations=locations, country=country,
-        remote_filters=remote_filters, providers=provider_names, skipped_providers=[name for name, _ in owner_skipped],
+        remote_filters=remote_filters, providers=provider_names,
         ledger_path=job_history.ledger_path(ROOT / "data" / "jobs" / "discovered_jobs.json"),
         discovered_path=ROOT / "data" / "jobs" / "discovered_jobs.json",
     )

@@ -313,6 +313,7 @@ def apply_run(
     }
     board_evidence = board_evidence or {}
     miss_token = run_id or now
+    previous_list = (ledger.get("lastImport") or {}).get("runId")  # the run whose list is on screen; `lastImport` is rewritten after this
 
     def keep_shown(entry: dict, held_by: str) -> None:
         if run_id is not None:
@@ -348,6 +349,10 @@ def apply_run(
             keep_shown(entry, "keptSourceNotRun")
             continue
         if provider not in CLOSURE_PROVIDERS:  # search-based: absence is no proof
+            # An ad the last list showed stays in this one, marked not found, though this run's search (a 72-hour window, or a skipped source)
+            # did not return it: it is not closed and costs nothing. An ad of an older search stays out, as ever.
+            if run_id is not None and previous_list and previous_list in (entry.get("lastRunId"), entry.get("heldRunId")):
+                keep_shown(entry, "keptUnproven")
             continue
         # An ad of another search stays out of the output, as ever, unless a proven miss has already put it back.
         shown = entry.get("seenUnder") == key or bool(entry.get("absentSince"))

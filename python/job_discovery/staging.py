@@ -367,7 +367,7 @@ class StagingRun:
     @classmethod
     def begin(
         cls, root: Path, run_id: str, *, search_key: str, terms, locations, country, remote_filters, providers,
-        ledger_path: Path | None = None, discovered_path: Path | None = None, skipped_providers=None,
+        ledger_path: Path | None = None, discovered_path: Path | None = None,
     ) -> "StagingRun":
         run = cls(root, run_id)
         try:
@@ -396,8 +396,6 @@ class StagingRun:
             manifest = {
                 **run._header, "providers": list(providers or []), "ledgerBefore": ledger_before,
                 "discoveredBefore": discovered_before,
-                # Sources the owner skipped (switched off, or skipped for this run): not searched, not staged. The importer keeps their open ads as held.
-                "skippedProviders": [str(name) for name in skipped_providers or []],
             }
             _atomic.write_text_atomic(run.dir / MANIFEST, json.dumps(manifest, indent=2), _atomic.PRIVATE_FILE_MODE)
             run.discards = DiscardLog(

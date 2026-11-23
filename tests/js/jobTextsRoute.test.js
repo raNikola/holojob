@@ -32,10 +32,10 @@ beforeEach(async () => {
 afterEach(async () => { await new Promise((r) => server.close(r)); fs.rmSync(root, { recursive: true, force: true }) })
 
 describe('POST /api/jobs/texts', () => {
-  it('returns the ad text of the ids it holds and names the rest as missing, and nothing else', async () => {
+  it('returns the ad text of the ids it holds, names an ad with no text in noText and an unknown id in missing, and nothing else', async () => {
     const { status, body } = await post({ jobIds: [A, B, 'cccccccccccccccc'] })
     expect(status).toBe(200)
-    expect(body).toEqual({ ok: true, texts: { [A]: 'Ad text of A' }, missing: [B, 'cccccccccccccccc'] })
+    expect(body).toEqual({ ok: true, texts: { [A]: 'Ad text of A' }, missing: ['cccccccccccccccc'], noText: [B] })
     const text = JSON.stringify(body)
     expect(text).not.toContain('TITLE-CANARY')
     expect(text).not.toContain('FACTS-CANARY')

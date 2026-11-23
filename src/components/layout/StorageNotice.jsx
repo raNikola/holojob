@@ -3,7 +3,7 @@ import { AlertTriangle, Info } from 'lucide-react'
 import SettingsLink from '../settings/SettingsLink'
 import { Toast, ToastStack } from '../ui/Toast'
 import { useStorageHealth } from '../../hooks/useStorageHealth'
-import { ERROR_NOTICE, LEAN_NOTICE, MINIMAL_NOTICE, MISSING_NOTICE, NEAR_NOTICE } from '../../modules/jobs/storageNoticeText.js'
+import { ERROR_NOTICE, LEAN_NOTICE, MINIMAL_NOTICE, MISSING_NOTICE, NEAR_NOTICE, NO_SOURCE_TEXT_NOTICE } from '../../modules/jobs/storageNoticeText.js'
 
 export const DISMISSED_KEY = 'holojob.storageNotice.dismissed'
 
@@ -30,6 +30,7 @@ export default function StorageNotice() {
   else if (health.level === 'lean') notes.push({ key: 'lean', kind: 'warn', text: LEAN_NOTICE })
   else if (health.level === 'near') notes.push({ key: 'near', kind: 'info', text: NEAR_NOTICE(health.percent) })
   if (health.textsMissing > 0) notes.push({ key: 'missing', kind: 'warn', text: MISSING_NOTICE(health.textsMissing), permanent: true })
+  if (health.textsNoSourceText > 0) notes.push({ key: 'no-source-text', kind: 'info', text: NO_SOURCE_TEXT_NOTICE(health.textsNoSourceText) })
   const shown = notes.filter((note) => note.permanent || note.key === 'error' || !dismissed.includes(note.key))
   const dismiss = (key) => {
     const next = [...new Set([...dismissed, key])]

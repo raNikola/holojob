@@ -9,7 +9,7 @@
 export const STORAGE_QUOTA_CHARS = 5 * 1024 * 1024
 export const NEAR_RATIO = 0.85
 
-const START = { level: 'ok', rows: 0, chars: 0, percent: 0, droppedText: 0, textsMissing: 0 }
+const START = { level: 'ok', rows: 0, chars: 0, percent: 0, droppedText: 0, textsMissing: 0, textsNoSourceText: 0 }
 let state = START
 const listeners = new Set()
 

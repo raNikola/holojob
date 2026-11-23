@@ -46,11 +46,12 @@ export function rowsNeedingText(jobs) {
 /**
  * Asks the server's ledger for the ad text of `jobs`, 100 ids a request. Never throws: what could not be had is returned in `missing`
  * (the history was not reachable, or the ledger holds no text for that id), and the caller says so to the user.
- * @returns {Promise<{ requested: number, loaded: number, missing: string[] }>}
+ * @returns {Promise<{ requested: number, loaded: number, missing: string[], noText: string[] }>}
  */
 export async function hydrateJobTexts(jobs, { fetchFn = globalThis.fetch, timeoutMs = HYDRATE_TIMEOUT_MS } = {}) {
   const wanted = [...new Set(rowsNeedingText(jobs).map((job) => job.jobId))]
   const missing = []
+  const noText = [] // the ledger holds the ad but the job site gave no text: a fact about the ad, not an error
   let loaded = 0
   const deadline = Date.now() + timeoutMs
   for (let at = 0; at < wanted.length; at += TEXT_BATCH) {
@@ -63,12 +64,14 @@ export async function hydrateJobTexts(jobs, { fetchFn = globalThis.fetch, timeou
       const res = await fetchFn('/api/jobs/texts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobIds: ids }), signal: controller?.signal })
       const data = await res.json().catch(() => null)
       if (!res.ok || !data?.ok || typeof data.texts !== 'object' || !data.texts) throw new Error(`status ${res.status}`)
+      const none = new Set(Array.isArray(data.noText) ? data.noText : [])
       for (const id of ids) {
         const text = data.texts[id]
         if (typeof text === 'string' && !isBlank(text)) {
           cache.set(id, text)
           loaded += 1
-        } else missing.push(id)
+        } else if (none.has(id)) noText.push(id)
+        else missing.push(id)
       }
     } catch {
       missing.push(...ids)
@@ -77,7 +80,7 @@ export async function hydrateJobTexts(jobs, { fetchFn = globalThis.fetch, timeou
     }
   }
   while (cache.size > TEXT_CACHE_MAX) cache.delete(cache.keys().next().value)
-  return { requested: wanted.length, loaded, missing }
+  return { requested: wanted.length, loaded, missing, noText }
 }
 
 /** For tests. */

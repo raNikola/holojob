@@ -23,7 +23,7 @@ const reply = (status, body) => ({ ok: status < 400, status, json: async () => b
 let calls
 
 /** A fresh page: new modules, localStorage holding the minimal shape, a server whose ledger holds `ledgerTexts`. */
-async function freshPage({ ledgerTexts = AD, serverDown = false } = {}) {
+async function freshPage({ ledgerTexts = AD, serverDown = false, blankInLedger = [] } = {}) {
   vi.resetModules()
   localStorage.clear()
   calls = []
@@ -47,7 +47,7 @@ async function freshPage({ ledgerTexts = AD, serverDown = false } = {}) {
     if (serverDown) throw new Error('offline')
     const ids = JSON.parse(options.body).jobIds
     const texts = Object.fromEntries(ids.filter((id) => ledgerTexts[id]).map((id) => [id, ledgerTexts[id]]))
-    return reply(200, { ok: true, texts, missing: ids.filter((id) => !texts[id]) })
+    return reply(200, { ok: true, texts, missing: ids.filter((id) => !texts[id] && !blankInLedger.includes(id)), noText: ids.filter((id) => !texts[id] && blankInLedger.includes(id)) })
   })
   return {
     store: await import('../../src/modules/jobs/jobsStore.js'),
@@ -161,6 +161,20 @@ describe('the server cannot give a text', () => {
     await act(async () => { createRoot(host).render(createElement(StorageNotice)) })
     expect(host.textContent).toMatch(/3 ads could not be loaded with their text/)
     expect(host.textContent).toMatch(/Search, outreach and AI tools cannot read those ads/)
+  })
+
+  it('an ad the ledger holds with no text is "no text from the source", not the error notice', async () => {
+    const page = await freshPage({ ledgerTexts: { kept: AD.kept }, blankInLedger: ['listed', 'off'] })
+    await mountGate()
+    const health = page.health.getStorageHealth()
+    expect(health.textsMissing).toBe(0)
+    expect(health.textsNoSourceText).toBe(2)
+    const { default: StorageNotice } = await import('../../src/components/layout/StorageNotice.jsx')
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    await act(async () => { createRoot(host).render(createElement(StorageNotice)) })
+    expect(host.textContent).toMatch(/2 ads have no text from the source/)
+    expect(host.textContent).not.toMatch(/could not be loaded/)
   })
 
   it('a text the ledger lacks is counted as missing, not invented', async () => {

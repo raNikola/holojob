@@ -23,7 +23,7 @@ export default function JobTextGate({ children, fetchFn }) {
     let live = true
     hydrateJobTexts(wanted, { fetchFn }).then((result) => {
       if (!live) return
-      setStorageHealth({ textsMissing: result.missing.length })
+      setStorageHealth({ textsMissing: result.missing.length, textsNoSourceText: result.noText.length })
       invalidateJobs() // the stored list is read again, now with the texts in it
       setReady(true)
     })
