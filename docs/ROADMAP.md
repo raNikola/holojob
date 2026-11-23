@@ -54,6 +54,19 @@ The job list still lives in the browser (`localStorage`) and the screens save th
 
 - The warning "36 ads could not be loaded with their text" (text in `src/modules/jobs/storageNoticeText.js`, raised from `JobTextGate`). The cause is not known; do not assume it.
 
+### 6. Carried over from the earlier roadmap (open when last recorded; not re-verified on 2026-11-23)
+
+- **Scoring and engine:** stable ids phase 4 (gate quotes into extraction, so an ad whose requirements all resolve locally makes zero matcher calls); competency memory M6 (audit of `auto` links) and the prior in production Fit; the Stage B bucket hold and unconfirmed flag in production; domain transferability uses a fixed table of adjacent industries, so a structural match outside it (carrier / shipper vs host / guest) is not covered; the owner fills Profile > Work authorization (countries, B2B) and re-scores.
+- **Ads without owner data can still leave `scored_jobs.json` while the ledger keeps them open** (All Jobs still shows them); decide whether the view keeps `notFoundThisRun` rows (`row_state.py`).
+- **Discovery:** Infostud snapshot switch (`SNAPSHOT_AFTER_PROOF` in `job_history.py`) stays off until several complete runs are seen in Activity; Infostud stays unclassified (not snapshot-based) until its fetch coverage is measured; run record lacks scored, closed, missing and expired counts; the Infostud description repair (`scripts/repair-infostud-descriptions.py`) dry run, `--apply` decision and a Re-score; a run with every source skipped is still held by a caller that does not pass `require_usable`; `scoringBehind` is false after a cancel; `lastImport.meta` is stale after a partial import; the pre-S6 backfill double count.
+- **Browser storage:** no bulk restore of kept-ad text from the ledger beyond the start-up reload.
+- **Import (Wave 7):** real-file check with one resume PDF and one LinkedIn PDF; the Continue / Save wizard flow fix; the score 60/58 neutral defaults fix.
+- **Hand-entered jobs:** Delete exists in Job Details only, not in the list row actions.
+- **Tests:** no test for a bulk tailoring run that aborts outside the draft, nor for `claude_code._call` with empty stdout and a non-zero exit.
+- **Settings and owner steps:** Settings > Usage & cost (what is missing is not recorded); move the OpenAI key to the secret store and remove it from `.env`; run one real backup through `scripts/backup-check.js` (Wave 0); judge a real run against the owner's own sense of the jobs.
+- **Fill from ad (AI step):** was refused because `job-import` is not in `claudeCodeSubscription.features` (checked 2026-11-02, not re-checked).
+- **Graphify adapter:** the build exited non-zero in Wave 4, cause not investigated.
+
 ## Phase 1 acceptance criteria - PROPOSED, owner to confirm
 
 Measured on the ten postings in `tests/fixtures/postings/`; they implement the "Stable results", "Private by default" and "Every score is explainable" measures in [GOALS.md](GOALS.md). Status: criteria 3 and 4 hold at the close-out check (2026-11) and 2 is covered by tests on synthetic jobs; 1 has not been measured on the current code (needs live model calls). No owner confirmation is recorded (not verified).
