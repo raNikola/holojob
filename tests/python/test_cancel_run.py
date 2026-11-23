@@ -598,7 +598,8 @@ def scratch(tmp_path):
     (repo / "data/intelligence/candidate-intelligence.json").write_text(json.dumps({"searchStrategy": {
         "country": "Serbia", "jobSpySearchTerms": ["pm"], "locationFilters": ["Remote"], "remoteFilters": ["remote"]}}))
     (tmp_path / "scoring.py").write_text(TRIVIAL_SCORING)
-    (tmp_path / "driver.py").write_text(SCRATCH_DRIVER.format(python=str(repo / "python"), scoring=str(tmp_path / "scoring.py")))
+    (tmp_path / "fake_classify.py").write_text("print(\"classification: nothing to classify\")\n")
+    (tmp_path / "driver.py").write_text(SCRATCH_DRIVER.format(python=str(repo / "python"), scoring=str(tmp_path / "scoring.py"), classify=str(tmp_path / "fake_classify.py")))
     marks = tmp_path / "slow-marks"
     marks.mkdir()
     procs = []
