@@ -54,18 +54,71 @@ The job list still lives in the browser (`localStorage`) and the screens save th
 
 - The warning "36 ads could not be loaded with their text" (text in `src/modules/jobs/storageNoticeText.js`, raised from `JobTextGate`). The cause is not known; do not assume it.
 
-### 6. Carried over from the earlier roadmap (open when last recorded; not re-verified on 2026-11-23)
+### 6. Carried over from the earlier roadmap, checked 2026-11-23
 
-- **Scoring and engine:** stable ids phase 4 (gate quotes into extraction, so an ad whose requirements all resolve locally makes zero matcher calls); competency memory M6 (audit of `auto` links) and the prior in production Fit; the Stage B bucket hold and unconfirmed flag in production; domain transferability uses a fixed table of adjacent industries, so a structural match outside it (carrier / shipper vs host / guest) is not covered; the owner fills Profile > Work authorization (countries, B2B) and re-scores.
-- **Ads without owner data can still leave `scored_jobs.json` while the ledger keeps them open** (All Jobs still shows them); decide whether the view keeps `notFoundThisRun` rows (`row_state.py`).
-- **Discovery:** Infostud snapshot switch (`SNAPSHOT_AFTER_PROOF` in `job_history.py`) stays off until several complete runs are seen in Activity; Infostud stays unclassified (not snapshot-based) until its fetch coverage is measured; run record lacks scored, closed, missing and expired counts; the Infostud description repair (`scripts/repair-infostud-descriptions.py`) dry run, `--apply` decision and a Re-score; a run with every source skipped is still held by a caller that does not pass `require_usable`; `scoringBehind` is false after a cancel; `lastImport.meta` is stale after a partial import; the pre-S6 backfill double count.
-- **Browser storage:** no bulk restore of kept-ad text from the ledger beyond the start-up reload.
-- **Import (Wave 7):** real-file check with one resume PDF and one LinkedIn PDF; the Continue / Save wizard flow fix; the score 60/58 neutral defaults fix.
-- **Hand-entered jobs:** Delete exists in Job Details only, not in the list row actions.
-- **Tests:** no test for a bulk tailoring run that aborts outside the draft, nor for `claude_code._call` with empty stdout and a non-zero exit.
-- **Settings and owner steps:** Settings > Usage & cost (what is missing is not recorded); move the OpenAI key to the secret store and remove it from `.env`; run one real backup through `scripts/backup-check.js` (Wave 0); judge a real run against the owner's own sense of the jobs.
-- **Fill from ad (AI step):** was refused because `job-import` is not in `claudeCodeSubscription.features` (checked 2026-11-02, not re-checked).
-- **Graphify adapter:** the build exited non-zero in Wave 4, cause not investigated.
+One status each: **open** (seen in the code or tests today), **not verified** (cannot be told from the repo, or needs private data), or **done** (listed last, removed from the open list).
+
+**Scoring and engine**
+
+- Gate quotes into extraction, so an ad whose requirements all resolve locally makes no matcher call: open (gate quotes are still read in the matcher call, `match_engine/matcher.py`).
+- Competency memory M6, audit of `auto` links: open (no code, no commit).
+- The Fit prior in production scoring: open (no prior in `scorer.py` or `fit.py`; prior 0 is a calibration setting only).
+- Stage B bucket hold and unconfirmed flag in production: not verified.
+- Local embeddings as a mapping step (only if the mapping proves noisy): open (`competency_mapping.py` has none; `embed()` is used by the experiment only).
+- Domain transferability for a structural match outside the fixed table (carrier / shipper vs host / guest): open (`src/data/domainAdjacency.json` has no such edge).
+- The neutral defaults of 58 / 60 in `culture_match.py` and `industry_match.py`: open (58 present in `culture_match.py`; the 60 not re-checked).
+- `MUST_HAVE_SHARE` in `dimensions/skill_match.py`: open (the constant is defined and read nowhere).
+- Ads without owner data can leave `scored_jobs.json` while the ledger keeps them open: open (`run_scoring.py` scores the derived job view, hand-entered jobs and registered kept ads only).
+- The owner fills Profile > Work authorization (countries, B2B) and re-scores: not verified (private data).
+
+**Discovery and Infostud**
+
+- Infostud snapshot switch (`SNAPSHOT_AFTER_PROOF` in `job_history.py`): open (False, so Infostud stays "unclassified"; the same fact covers "stays unclassified until its fetch coverage is measured").
+- Run record lacks scored, closed, missing and expired counts: open (`run_log.py` docstring).
+- Infostud description repair: dry run, `--apply` decision, Re-score: not verified (private data).
+- A run with every source skipped is held by a caller that does not pass `require_usable`: open (the default is False in `importer.py`).
+- Hand-edited `appliedRuns` double count: open (strict xfail in `tests/python/test_filtered_ads.py`).
+- Pre-S6 `--backfill-filtered` double count: not verified.
+- Truncated ledger with a matching generation: not verified.
+- No `init` in compose: open (`docker-compose.yml` has none).
+- About 1,934 `older_key` rows stay until the owner runs the prune report and `--apply`: not verified (private data).
+- A throttled `jobspy` source can count as proven; `jobspy_adapter` can report a blocked LinkedIn search as a read of 0 ads: not verified.
+- Ledger growth, about 550 MB a year: open (the description is still stored in each ledger entry, `job_history.py`).
+- Source order and per-source timeout policy: not verified.
+
+**Tracker, jobs list, import**
+
+- Closed panel: open (`stageRegistry.js` names it, no component renders it).
+- Removal of the legacy `applicationTracking` field (tracker S4): open (still read in `ApplicationHome.jsx`, `JobTable.jsx`).
+- Follow-up nudges and the reminders switch UI: open (enums and controller only, no component).
+- CSV import of past applications: open (only a "CSV" origin label exists).
+- Several contacts per application: not verified.
+- Delete in the list row actions (Details only today): not verified.
+- Wave 7: real-file check with one resume PDF and one LinkedIn PDF; the Continue / Save wizard fix: not verified.
+- "Keep this ad" and document generation for a kept ad outside the scored list: not verified end to end (`NOT_IN_SCORED_LIST` still exists; the kept-ads sync now registers kept ads).
+- Text search covers only rows with text in the browser; no bulk restore of kept-ad text; hand-entered jobs have no flag saying whether the server has them: not verified.
+- The 5 MiB `localStorage` limit is an assumption: open (`STORAGE_QUOTA_CHARS = 5 * 1024 * 1024`).
+- The demo loader writes `localStorage` directly: open (`loadDemoData.js`).
+
+**Settings and security**
+
+- Move the OpenAI key to the secret store and remove it from `.env`: not verified (`.env` is private).
+- Settings > Usage & cost: not verified (a section "AI budget, provider and usage" exists; what is missing is not recorded).
+- Sources consent as a modal: open (the inline checkbox is still in `JobBoardsPanel.jsx`).
+- One real backup through `scripts/backup-check.js` (Wave 0): not verified.
+- Fill from ad, AI step: not verified (the default allowlist lacks `job-import`; the owner's setting is private).
+- `chmod 600` of the top-level files in `data/`: not verified.
+
+**Tests and tooling**
+
+- Flaky run-lock test in `tests/js/rescrape.test.js`: open (the test is still there).
+- Bulk tailoring run that aborts outside the draft: open (only the malformed-draft case is tested, `test_llm_tailor.py`).
+- `claude_code._call` with empty stdout and a non-zero exit: open (no such test found).
+- `provenance_auditor.py` company match `cl in k or k in cl`: open (`python/quality_audit/provenance_auditor.py`).
+- Test isolation by per-test data directory: open (the guards detect a change, they do not prevent it).
+- Graphify build exits non-zero (Wave 4): not verified. Run the zero-token cycle on the real repo and file the upstream issue: not verified.
+
+**Verified done, removed from the open list:** `scoringBehind` after a cancel (`scoringIsBehind` in `scripts/run-rescrape.js`); `lastImport.meta` after a partial import (`lastPartial`, `import_meta.py`); backup includes `analytics` (`DATA_DIRS` in `scripts/backup-handler.js`); tests for `run-tailor.js` and `/api/tailor/*` (`tests/js/tailorRoutes.test.js`).
 
 ## Phase 1 acceptance criteria - PROPOSED, owner to confirm
 
@@ -83,12 +136,6 @@ Measured on the ten postings in `tests/fixtures/postings/`; they implement the "
 - **Deferred (owner):** UI redesign epic and design system, planning only, nothing built ([design-system/](design-system/README.md)); Company information standardization (planned, nothing built; the canonical job carries only a `company` string); shared job database for several users (goal only, [redesign/SHARED_JOB_DB_PLAN.md](redesign/SHARED_JOB_DB_PLAN.md); principle 15, single user, stands). Notes only (P1/P2): family subscriptions, new-ad notifications, canonical company dedupe, source coverage analytics.
 - **Dev tool:** the Graphify adapter (`tools/graphify_adapter/`, slices S0-S6) is built; it is not part of the app.
 - **Idea, parked:** HolyJobs browser extension for LinkedIn job and profile import (no tasks, no plan; notes in [DECISIONS.md](DECISIONS.md#idea-browser-extension-parked-notes-2026-11-09)).
-- **Later:** multi-device access with server-side storage as master; scheduled discovery; more role families and prompt variants; sources consent modal; Job Details tabs and AI spend per job; Step 6, a confirm dialog for the browser AI features ([redesign/BROWSER_STORAGE_POLICY.md](redesign/BROWSER_STORAGE_POLICY.md)); the "Urgent only" filter and Greenhouse per-job pay and deadline; source order and per-source timeout policy.
-- **Ledger growth:** `job_history.json` grows about 550 MB a year (about 10 KB per entry, about 150 new ads a day) and every import rewrites it. Deferred; likely fix: descriptions out of the main file.
-- **Jobs list and storage gaps (deferred):** "Keep this ad" does not guarantee document generation for a kept ad outside the scored list (the kept-ads sync now registers kept and applied ads, but document generation end to end is not verified); text search covers only rows with text in the browser; the 5,242,880-character `localStorage` limit is an assumption, not measured per browser; hand-entered jobs have no flag saying whether the server has them; direct `setItem` writers bypass the storage budget.
-- **Discovery edge cases (deferred):** a throttled source can count as proven; about 1,934 `older_key` rows stay until the owner runs the prune report and `--apply`; the hand-edited `appliedRuns` double count; no `init` in compose; a truncated ledger with a matching generation; `jobspy_adapter` can report a blocked LinkedIn search as a successful read of 0 ads.
-- **Test and tooling debt:** a flaky run-lock test in `tests/js/rescrape.test.js` ("a dead running record becomes interrupted ...", still present); test isolation is by fingerprint guards that detect, not prevent, a change to the real `data/` (history: [DECISIONS.md](DECISIONS.md), "Incident 2026-11-09"); no tests for `scripts/run-tailor.js` and the `/api/tailor/*` routes; Graphify adapter: run the zero-token cycle on the real repo and file the upstream issue (owner).
-- **Tailoring audit debt:** `provenance_auditor.py` matches a company name with `cl in k or k in cl`, so a short known name can vouch for a longer one; a failure outside the draft (disk full, render crash) stops `run_tailor.main()` before `scored_jobs.json` is saved, on purpose.
-- **Manual owner step:** `chmod 600` the top-level files of `data/` (`find data -maxdepth 1 -type f -perm /077 -exec chmod 600 {} +`); not verified whether done.
+- **Later:** multi-device access with server-side storage as master; scheduled discovery; more role families and prompt variants; Job Details tabs and AI spend per job; Step 6, a confirm dialog for the browser AI features ([redesign/BROWSER_STORAGE_POLICY.md](redesign/BROWSER_STORAGE_POLICY.md)); the "Urgent only" filter and Greenhouse per-job pay and deadline.
 - **Ideas, not scheduled:** prompt templates for application answers (any run is an AI call: gate, redaction and confirm apply).
 - **Inherited features:** discovery (LinkedIn via JobSpy, Infostud, Workable, Greenhouse, Lever, Ashby), job history ledger, enrichment facts, work-authorization rules, CV library and analysis, tailoring, outreach contact scraping. See [CHANGELOG.md](../CHANGELOG.md).
