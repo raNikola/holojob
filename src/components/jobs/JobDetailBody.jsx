@@ -3,6 +3,7 @@ import Badge from '../ui/Badge'
 import FitScore from './FitScore'
 import KeptRescoreButton from './KeptRescoreButton'
 import { scoreRowChips } from '../../modules/jobs/fitScore'
+import { manyUnknownMustsLabel } from '../../modules/jobs/fitTier'
 import JobTailorActions from './JobTailorActions'
 import ApplicationTrackerPanel from './ApplicationTrackerPanel'
 import JobAIToolsPanel, { AiToolsSection } from '../ai/JobAIToolsPanel'
@@ -137,6 +138,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
             <FitScore score={job.matchScore} label={job.matchLabel} reasons={job.insufficientReasons} size="lg" />
             <RoleClassBadge job={job} />
             {scoreRowChips(job).map((c) => <Badge key={c.kind} variant={c.variant}>{c.text}</Badge>)}
+            {manyUnknownMustsLabel(job) && <Badge variant="default">{manyUnknownMustsLabel(job)}</Badge>}
             <EngineShadowBadge shadow={job.engineShadow} />
           </div>
           <ConfidenceNote job={job} />
@@ -146,7 +148,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
             <SkillChips skills={job.matchedSkills} />
           </div>
           <div>
-            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">Missing skills</h4>
+            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">Not mentioned in this ad</h4>
             <SkillChips skills={job.missingSkills} variant="missing" />
           </div>
           {limits.length > 0 && (

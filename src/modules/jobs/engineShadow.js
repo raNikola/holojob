@@ -66,3 +66,18 @@ export function engineSummary(shadow) {
   if (shadow.caps?.length) parts.push(`capped: ${shadow.caps.join(', ')}`)
   return `New engine (shadow): ${parts.join(' · ')}`
 }
+
+export const QUOTE_NOT_VERIFIED_NOTE = 'Evidence found, quote not verified'
+
+// verify.py apply_proposal writes: "requirement 'ID': PARTIAL lowered to UNKNOWN, evidence quote ... not found in ...". Read-only: the stored answer is not changed.
+const LOWERED_WARNING = /^requirement (?:'([^']*)'|"([^"]*)"): (?:MET|PARTIAL) lowered to (?:PARTIAL|UNKNOWN), evidence quote /
+
+/** The ids of the requirements whose status the quote check lowered, read from the stored answer's warnings. */
+export function quoteLoweredIds(shadow) {
+  const ids = new Set()
+  for (const w of shadow?.warnings || []) {
+    const m = typeof w === 'string' ? LOWERED_WARNING.exec(w) : null
+    if (m) ids.add(m[1] ?? m[2])
+  }
+  return ids
+}

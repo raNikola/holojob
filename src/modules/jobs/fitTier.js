@@ -83,6 +83,29 @@ export const ENGINE_NOT_RUN_NOTE = 'Engine not run: this placement is provisiona
 
 export const isProvisionalTier = (row) => tierOf(row) === TIER_STRONG && row?.engineCoverage?.status === 'not_evaluated'
 
+/**
+ * "Many unknown musts" (owner decision 2026-11-23, display only): among the MUST requirements of a current engine answer, the count with status
+ * UNKNOWN or NOT_EVIDENCED; the label shows at 30% or more of the musts. Preferred requirements and the language gate are not counted.
+ * Tier, score and order never read this. Returns { unknown, total } or null without an engine answer or without musts.
+ */
+export const MANY_UNKNOWN_MUSTS_PERCENT = 30
+
+export function unknownMustCounts(row) {
+  const shadow = row?.engineShadow
+  if (!shadow || shadow.error || !Array.isArray(shadow.requirements)) return null
+  const musts = shadow.requirements.filter((r) => r?.importance === 'must')
+  if (musts.length === 0) return null
+  const unknown = musts.filter((r) => r.status === 'UNKNOWN' || r.status === 'NOT_EVIDENCED').length
+  return { unknown, total: musts.length }
+}
+
+/** The label text ("4 of 9 musts unknown") or null when the row is under the threshold or has no engine answer. */
+export function manyUnknownMustsLabel(row) {
+  const counts = unknownMustCounts(row)
+  if (!counts || counts.unknown * 100 < MANY_UNKNOWN_MUSTS_PERCENT * counts.total) return null
+  return `${counts.unknown} of ${counts.total} musts unknown`
+}
+
 /** How many of `rows` are in each tier (`{ strong, possible, weak }`); `include` leaves rows out, for example closed ads. */
 export function tierCounts(rows, include = () => true) {
   const counts = { strong: 0, possible: 0, weak: 0 }

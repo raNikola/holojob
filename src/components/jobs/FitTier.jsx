@@ -1,5 +1,5 @@
 import Badge from '../ui/Badge'
-import { ENGINE_NOT_RUN_LABEL, ENGINE_NOT_RUN_NOTE, TIER_ORDER_NOTE, TIER_STRONG, TIER_POSSIBLE, isBlockedRow, isProvisionalTier, tierOf, tierLabelOf } from '../../modules/jobs/fitTier'
+import { ENGINE_NOT_RUN_LABEL, ENGINE_NOT_RUN_NOTE, TIER_ORDER_NOTE, TIER_STRONG, TIER_POSSIBLE, isBlockedRow, isProvisionalTier, manyUnknownMustsLabel, tierOf, tierLabelOf } from '../../modules/jobs/fitTier'
 import { INSUFFICIENT_LABEL, NOT_READ_LABEL, isInsufficientData } from '../../modules/jobs/matchScore'
 
 const VARIANT = { [TIER_STRONG]: 'high', [TIER_POSSIBLE]: 'medium' }
@@ -18,10 +18,13 @@ export default function FitTier({ job }) {
   const tier = tierOf(job)
   if (tier === null) return <span className="text-stone-400">Not scored</span>
   const provisional = isProvisionalTier(job)
+  // Informational, next to the Engine not run chip: shown on Strong rows only; the detail page shows it for every tier.
+  const unknownMusts = tier === TIER_STRONG ? manyUnknownMustsLabel(job) : null
   return (
     <span className="inline-flex flex-wrap items-center gap-1" title={provisional ? `${ENGINE_NOT_RUN_NOTE} ${TIER_ORDER_NOTE}.` : `Tier: ${TIER_ORDER_NOTE}`}>
       <Badge variant={VARIANT[tier] || 'low'}>{tierLabelOf(job)}</Badge>
       {provisional && <Badge variant="default">{ENGINE_NOT_RUN_LABEL}</Badge>}
+      {unknownMusts && <Badge variant="default">{unknownMusts}</Badge>}
     </span>
   )
 }

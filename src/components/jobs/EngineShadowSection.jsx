@@ -7,7 +7,9 @@ import {
   STATUS,
   STRENGTH,
   engineSummary,
+  QUOTE_NOT_VERIFIED_NOTE,
   hasEngineResult,
+  quoteLoweredIds,
 } from '../../modules/jobs/engineShadow'
 
 const SHADOW_BOX = 'rounded-lg border border-dashed border-violet-300 bg-violet-50/40 dark:border-violet-700 dark:bg-violet-950/20'
@@ -40,7 +42,7 @@ function Heading({ children }) {
   return <h5 className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">{children}</h5>
 }
 
-function Requirement({ r }) {
+function Requirement({ r, lowered }) {
   const s = STATUS[r.status] || STATUS.UNKNOWN
   return (
     <li className="text-sm">
@@ -54,6 +56,7 @@ function Requirement({ r }) {
       </div>
       <div className="space-y-0.5 pl-5 text-xs text-stone-500">
         <div>Ad: “{r.postingQuote}”</div>
+        {lowered && <div className="text-amber-700 dark:text-amber-400">{QUOTE_NOT_VERIFIED_NOTE}</div>}
         {r.evidenceQuote && (
           <div>
             Evidence{r.evidenceId ? ` (${r.evidenceId})` : ''}: “{r.evidenceQuote}”
@@ -87,6 +90,7 @@ export default function EngineShadowSection({ shadow }) {
   const requirements = [...(shadow.requirements || [])].sort((a, b) =>
     (IMPORTANCE_ORDER[a.importance] ?? 3) - (IMPORTANCE_ORDER[b.importance] ?? 3)
     || (STATUS_ORDER[a.status] ?? 4) - (STATUS_ORDER[b.status] ?? 4))
+  const loweredIds = quoteLoweredIds(shadow)
   const bucket = BUCKET[shadow.bucket] || { label: shadow.bucket, variant: 'default' }
 
   return (
@@ -131,7 +135,7 @@ export default function EngineShadowSection({ shadow }) {
           Requirements ({requirements.length})
         </summary>
         <ul className="mt-2 space-y-2">
-          {requirements.map((r, i) => <Requirement key={`${r.id}-${i}`} r={r} />)}
+          {requirements.map((r, i) => <Requirement key={`${r.id}-${i}`} r={r} lowered={loweredIds.has(r.id)} />)}
         </ul>
       </details>
 
