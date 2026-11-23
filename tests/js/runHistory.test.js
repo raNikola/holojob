@@ -399,6 +399,8 @@ describe('messages', () => {
       'Cancelled. 455 collected ads were saved. Nothing else changed. Scoring was skipped.',
       'Cancelled. No ads were saved. Nothing else changed. Scoring was skipped.',
       'board acme answered with 0 ads; its open ads were kept',
+      'skipped by owner for this run',
+      'skipped by owner (switched off in Settings > Sources)',
       'Ashby board acme: paging field in the answer: nextPage',
       'The run did not finish: it stopped during discovery (killed, or the server restarted). It was not resumed.',
     ]) expect(message(own)).toBe(own)

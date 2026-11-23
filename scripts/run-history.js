@@ -102,6 +102,9 @@ const WHOLE = [
   /^Infostud covers Serbia only, not '[^']{0,60}'$/,
   /^Joberty lists no ads for '[^']{0,60}'$/,
   /^Wellfound is not built yet$/,
+  // python source_settings.SKIP_SWITCH / SKIP_THIS_RUN: fixed texts of the owner's own choice
+  /^skipped by owner for this run$/,
+  /^skipped by owner \(switched off in Settings > Sources\)$/,
 ]
 const PREFIXES = [
   'Staging failed, so this run is not fully saved: ', 'An old commit marker could not be removed: ',

@@ -462,7 +462,8 @@ def plan_import(
     provider_counts: dict[str, int] = {}
     failed_boards: dict[str, set[str] | None] = {}
     empty_boards: dict[str, set[str]] = {}
-    not_run: set[str] = set()
+    # A source the owner skipped is not in `providers` (nothing was searched), but its open ads must stay in the list as held, as for any source that did not run.
+    not_run: set[str] = {p for p in manifest.get("skippedProviders") or [] if isinstance(p, str)}
     evidence: dict[str, dict] = {}
     proven_searches: list[str] = []
     rejected_total = 0

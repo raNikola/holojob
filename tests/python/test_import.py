@@ -745,3 +745,21 @@ def test_staging_usage_counts_a_hard_linked_file_once(tmp_path, monkeypatch):
     used = staging.usage(root)
     assert used["runs"] == 2 and used["files"] > 0 and used["bytes"] > 0
     assert staging.usage(tmp_path / "nowhere") == {"runs": 0, "files": 0, "bytes": 0}
+
+
+def test_a_source_the_owner_skipped_keeps_its_open_ads_as_held_and_closes_nothing(tmp_path):
+    # A search-based source (jobspy) skipped for one run is not in the manifest's providers. Its ads must not drop out of the list
+    # (Re-scrape's steps would see nothing of them) and must not be closed.
+    first = hand_run(tmp_path, "r0", {"greenhouse": ([canon(1)], OK), "jobspy": ([canon(2, "jobspy"), canon(3, "jobspy")], OK)})
+    ledger = importer.plan_import(first, job_history.empty_ledger(), None).ledger
+    second = hand_run(tmp_path, "r1", {"greenhouse": ([canon(1)], OK)})
+    manifest = json.loads((second.dir / "run.json").read_text())
+    manifest["skippedProviders"] = ["jobspy"]
+    (second.dir / "run.json").write_text(json.dumps(manifest))
+    result = importer.plan_import(staging.read_run(tmp_path, "r1"), ledger, None)
+    assert result.stats["keptSourceNotRun"] == 2 and result.stats["closed"] == 0
+    held = [e for e in result.ledger["jobs"].values() if e["provider"] == "jobspy"]
+    assert len(held) == 2 and all(e["heldRunId"] == "r1" and not e.get("closedAt") for e in held)
+    hand_run(tmp_path, "r2", {"greenhouse": ([canon(1)], OK)})
+    again = importer.plan_import(staging.read_run(tmp_path, "r2"), ledger, None)
+    assert again.stats["keptSourceNotRun"] == 0, "without the skip the same ads are not held (the old behaviour)"
