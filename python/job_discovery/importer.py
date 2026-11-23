@@ -579,6 +579,7 @@ def plan_import(
         result.ledger, deduped, now=moment, providers_returned=provider_counts, key=manifest.get("searchKey") or "",
         role_key=_crosspost_key, previous_facts=previous_facts, seen_before=seen_before, failed_boards=failed_boards,
         empty_boards=empty_boards, sources_not_run=not_run, run_id=run.run_id, prune=False, board_evidence=evidence,
+        skipped_sources={p for p in manifest.get("skippedProviders") or [] if isinstance(p, str)},
     )
     result.stats = stats
     report["provenRuns"] = _record_stale_evidence(result.ledger, run, moment, manifest.get("searchKey") or "", proven_searches, evidence)

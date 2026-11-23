@@ -265,6 +265,7 @@ def apply_run(
     run_id: str | None = None,
     prune: bool = True,
     board_evidence: dict[str, dict[str, dict]] | None = None,
+    skipped_sources: set[str] | None = None,
 ) -> tuple[list[dict], dict]:
     """Record one discovery run; return the jobs to write and what changed.
 
@@ -306,6 +307,7 @@ def apply_run(
     failed_boards = failed_boards or {}
     empty_boards = empty_boards or {}
     sources_not_run = sources_not_run or set()
+    skipped_sources = skipped_sources or set()
     stats = {
         "new": 0, "known": 0, "reopened": 0, "changed": 0, "carriedFacts": 0, "closed": 0,
         "keptFullerDescription": 0, "keptFailedBoard": 0, "keptEmptyBoard": 0, "keptSourceNotRun": 0,
@@ -348,11 +350,13 @@ def apply_run(
         if provider in sources_not_run:
             keep_shown(entry, "keptSourceNotRun")
             continue
-        if provider not in CLOSURE_PROVIDERS:  # search-based: absence is no proof
-            # An ad the last list showed stays in this one, marked not found, though this run's search (a 72-hour window, or a skipped source)
-            # did not return it: it is not closed and costs nothing. An ad of an older search stays out, as ever.
+        if provider in skipped_sources:
+            # The owner skipped this source: nothing was searched, so the ads the LAST list showed stay in this one, marked not found. Ads of an
+            # older search stay out of it, as ever. Without this the list would lose every ad of the skipped source (390 on 2026-11-23).
             if run_id is not None and previous_list and previous_list in (entry.get("lastRunId"), entry.get("heldRunId")):
-                keep_shown(entry, "keptUnproven")
+                keep_shown(entry, "keptSourceNotRun")
+            continue
+        if provider not in CLOSURE_PROVIDERS:  # search-based: absence is no proof
             continue
         # An ad of another search stays out of the output, as ever, unless a proven miss has already put it back.
         shown = entry.get("seenUnder") == key or bool(entry.get("absentSince"))
