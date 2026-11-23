@@ -85,8 +85,33 @@ def resolve_limits(max_usd: float | None, max_ads: int | None, settings: dict | 
     return Limits(float(usd), int(ads))
 
 
+# The priority groups of Re-scrape (owner decision 2026-11-23), worked as ordered passes over the same steps so a small limit is spent on them in this order:
+#   new       the ads this run found: classify, read, engine fill
+#   existing  ads classified before this run, Strong or Possible, still unread or without an engine answer: read, then engine fill
+#   backlog   everything older: classify the unclassified, then read and engine-fill those that turn out Target / Adjacent, with what budget remains
+GROUPS = ("new", "existing", "backlog")
+
+
+def in_group(job: dict, group: str | None, prior: dict[str, dict], run_start: str | None) -> bool:
+    """Is this ad part of the pass `group`? No group means every ad (a standalone run). `prior` is the last scored view (jobId -> fields), which gives the tier.
+
+    A pass of `existing` runs before the backlog is classified, so every Strong or Possible ad it can see was classified before this run: the group
+    needs no snapshot. `backlog` is every ad of an older run, whatever its tier (Strong first, Weak last by the order)."""
+    if group is None:
+        return True
+    is_new = first_seen_after(job, run_start)
+    if group == "new":
+        return is_new
+    if is_new:
+        return False
+    if group == "existing":
+        return tier_rank(prior.get(str(job.get("jobId")))) in (0, 1)
+    return True
+
+
 def add_args(ap) -> None:
     """The flags every paid step shares when it runs inside Re-scrape."""
+    ap.add_argument("--group", choices=GROUPS, default=None, help="only the ads of this priority group (Re-scrape works new, existing, backlog in that order)")
     ap.add_argument("--run-start", default=None, help="ISO time the run began: ads first seen after it are processed first")
     ap.add_argument("--counted-ids", type=Path, default=None, help="a JSON list of ad ids this run already counted; they do not use the ads limit again")
 

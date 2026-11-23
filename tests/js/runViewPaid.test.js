@@ -7,10 +7,11 @@ const run = (extra = {}) => ({
   status: 'waiting', steps: [], counts: {}, classification: null, cancel: null,
   paid: {
     limits: { usd: 1, ads: 50 }, spentUsd: 0.4321, ads: 20, waiting: 14,
-    steps: {
-      classification: { candidates: 30, done: 18, failed: 1, waiting: 12, stopped: 'run_usd', spentUsd: 0.2, ads: 18 },
-      reading: { candidates: 4, done: 2, failed: 0, waiting: 2, stopped: 'run_ads', spentUsd: 0.2321, ads: 2 },
-      engine: { candidates: 0, done: 0, failed: 0, waiting: null, stopped: 'engine_not_allowed', spentUsd: 0, ads: 0 },
+    groups: {
+      new: { classification: { candidates: 3, done: 3, failed: 0, waiting: 0, stopped: null, spentUsd: 0.1, ads: 3 }, reading: { candidates: 3, done: 3, failed: 0, waiting: 0, stopped: null, spentUsd: 0.1, ads: 3 } },
+      existing: { reading: { candidates: 4, done: 2, failed: 0, waiting: 2, stopped: 'run_ads', spentUsd: 0.2321, ads: 2 } },
+      backlog: { classification: { candidates: 30, done: 15, failed: 1, waiting: 12, stopped: 'run_usd', spentUsd: 0.2, ads: 15 } },
+      all: { engine: { candidates: 0, done: 0, failed: 0, waiting: null, stopped: 'engine_not_allowed', spentUsd: 0, ads: 0 } },
     },
   },
   ...extra,
@@ -24,18 +25,20 @@ describe('a run that stopped on a limit with ads left', () => {
     expect(statusSentence(run())).toMatch(/limit stopped some work/)
   })
 
-  it('says which limit stopped each step and how many ads wait', () => {
+  it('says which group waits, which limit stopped it and how many ads wait, in the order the passes ran', () => {
     const summary = paidSummary(run())
     expect(summary.headline).toBe('Run limit: $1.00 and 50 ads. Spent $0.4321 on 20 ads.')
     expect(summary.lines).toEqual([
-      'Classification: 18 classified, 1 failed (tried again next run), $0.2000 spent. Stopped: the run spend limit in Settings was reached, 12 ads waiting.',
-      'Reading: 2 read, $0.2321 spent. Stopped: the ads-per-run limit in Settings was reached, 2 ads waiting.',
+      'New ads: Classification: 3 classified.',
+      'New ads: Reading: 3 read.',
+      'Existing Strong/Possible ads: Reading: 2 read. Stopped: the ads-per-run limit in Settings was reached, 2 ads waiting.',
+      'Backlog: Classification: 15 classified, 1 failed (tried again next run). Stopped: the run spend limit in Settings was reached, 12 ads waiting.',
       'Engine fill: 0 filled. Stopped: engine fill not allowed in Settings.',
     ])
   })
 
   it('says "run limit not set in Settings" when there is no limit, and nothing for a run without paid steps', () => {
-    expect(paidSummary(run({ paid: { limits: null, spentUsd: 0, ads: 0, waiting: 0, steps: { classification: null, reading: null, engine: null } } })).headline)
+    expect(paidSummary(run({ paid: { limits: null, spentUsd: 0, ads: 0, waiting: 0, groups: {} } })).headline)
       .toMatch(/^Run limit not set in Settings: the paid steps spent nothing\./)
     expect(paidSummary({ status: 'ok' })).toBeNull()
   })

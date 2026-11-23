@@ -3,7 +3,8 @@
 
 Order (owner decision 2026-11-23): discovery; classification of every ad with no role class; reading (llmFacts) of the Target / Adjacent ads not yet
 read; a free scoring pass into a scratch file; engine fill for the ads that pass the gates and have no current engine answer (only when Settings allow it);
-the real scoring. The three paid steps share ONE run budget set in Settings (runLimitUsd, runLimitAds); the orchestrator reads the real spend from the
+the real scoring. The paid steps run as ordered passes over three priority groups (new ads; existing Strong / Possible ads; the backlog), so a small
+limit is spent in that order. The three paid steps share ONE run budget set in Settings (runLimitUsd, runLimitAds); the orchestrator reads the real spend from the
 AI ledger and passes each step the remainder. A limit stop is a stop point that is counted ("Stopped: <limit>, N ads waiting"), never a failure and
 never a silent wait. Re-scrape is manual: independent of `automation.enabled`. No judge.
 
@@ -231,6 +232,16 @@ def run_step(record: dict, name: str, cmd: list[str], lock: pipeline_lock.Lock) 
 
 
 # --- the paid steps and their one budget ------------------------------------------------------------------------------------------------------------
+# The priority across steps (owner decision 2026-11-23): the same shared budget is spent on three groups in this order, as ordered passes over the same steps.
+GROUP_PASSES = (
+    ("new", ("classification", "reading", "engine")),  # this run's new ads
+    ("existing", ("reading", "engine")),  # ads classified before this run, Strong or Possible, still unread or without an engine answer
+    ("backlog", ("classification", "reading", "engine")),  # the rest: classify the old unclassified ads, then read and engine-fill what is Target / Adjacent
+)
+GROUP_WORDS = {"new": "new ads", "existing": "existing Strong/Possible ads", "backlog": "backlog"}
+SKIP_GROUP = "all"  # a step skipped for every group at once (no limit set, engine fill not allowed)
+
+
 class PaidBudget:
     """The run's one budget for classification, reading and engine fill. Settings hold the limits; the AI ledger holds what was spent.
 
@@ -252,22 +263,29 @@ class PaidBudget:
         self.run_start = record["startedAt"]
         self.started = datetime.fromisoformat(self.run_start)
         self.counted = scratch / "counted-ads.json"
-        self.steps: dict[str, dict] = {}
+        self.groups: dict[str, dict[str, dict]] = {}
 
-    def flags(self) -> list[str]:
-        """The remainder of the run's budget as the flags of the next step. Unset limits pass no flag: the step then finds them unset itself."""
+    def usd_left(self) -> float | None:
+        """What the run may still spend, or None when no limit is set."""
         if self.limits is None:
-            return []
+            return None
+        return max(0.0, self.limits[0] - self.rb.usage_since(self.started)[0])
+
+    def flags(self, group: str) -> list[str]:
+        """The remainder of the run's budget and the priority group as the flags of the next step. Unset limits pass no limit flag: the step then finds
+        them unset itself and only counts."""
+        if self.limits is None:
+            return ["--group", group]
         usd, ads = self.rb.usage_since(self.started)
         self.counted.write_text(json.dumps(sorted(ads)), encoding="utf-8")
         os.chmod(self.counted, 0o600)
         return ["--max-usd", f"{max(0.0, self.limits[0] - usd):.6f}", "--max-ads", str(max(0, self.limits[1] - len(ads))),
-                "--run-start", self.run_start, "--counted-ids", str(self.counted)]
+                "--run-start", self.run_start, "--counted-ids", str(self.counted), "--group", group]
 
-    def note(self, name: str, summary: dict | None) -> None:
-        """What one step did: counts, its spend and the distinct ads it handled (from the ledger), and a fixed stop code."""
+    def note(self, name: str, group: str, summary: dict | None) -> int:
+        """What one step did for one group: counts, its spend and the distinct ads it handled (from the ledger), and a fixed stop code. Returns what it did."""
         if summary is None:
-            return
+            return 0
         usd, ads = self.rb.usage_since(self.started, features=(PAID_STEPS[name][2],))
 
         def count(key):
@@ -276,79 +294,94 @@ class PaidBudget:
 
         stopped = summary.get("stopped")
         waiting = None if summary.get("waiting") is None else count("waiting")  # null: the step could not tell how many wait
-        self.steps[name] = {"candidates": count("candidates"), "done": count(self.DONE_KEY[name]), "failed": count("failed"), "waiting": waiting,
-                            "stopped": stopped if stopped in self.rb.STOP_CODES else None, "spentUsd": round(usd, 4), "ads": len(ads)}
+        done = count(self.DONE_KEY[name])
+        # `spentUsd` and `ads` are the step's feature totals for the whole run so far (the ledger has no group); the counts are this pass's
+        self.groups.setdefault(group, {})[name] = {"candidates": count("candidates"), "done": done, "failed": count("failed"), "waiting": waiting,
+                                                   "stopped": stopped if stopped in self.rb.STOP_CODES else None, "spentUsd": round(usd, 4), "ads": len(ads)}
+        return done
 
-    def no_report(self, name: str) -> None:
+    def skipped(self, name: str, code: str, group: str = SKIP_GROUP) -> None:
+        self.groups.setdefault(group, {})[name] = {"candidates": 0, "done": 0, "failed": 0, "waiting": None, "stopped": code, "spentUsd": 0.0, "ads": 0}
+
+    def no_report(self, name: str, group: str) -> None:
         """A paid step ended well but printed no summary: never a silent step."""
-        self.skipped(name, self.rb.STOP_NO_REPORT)
-
-    def skipped(self, name: str, code: str) -> None:
-        self.steps[name] = {"candidates": 0, "done": 0, "failed": 0, "waiting": None, "stopped": code, "spentUsd": 0.0, "ads": 0}
+        self.skipped(name, self.rb.STOP_NO_REPORT, group)
 
     def finish(self, record: dict) -> int:
-        """Write the run's one paid block and one issue per stopped step. Returns how many ads wait."""
+        """Write the run's one paid block and one issue per stopped step and group. Returns how many ads wait."""
         usd, ads = self.rb.usage_since(self.started)
-        waiting = sum(s["waiting"] or 0 for s in self.steps.values())
-        # A step that could not say how many wait (it could not send, or reported nothing) still leaves work undone; a step skipped for an unset limit or
-        # a switched-off engine fill is a known state of Settings, not a limit that stopped work.
-        unknown = any(s["stopped"] in (self.rb.STOP_NOT_SENT, self.rb.STOP_NO_REPORT) and s["waiting"] is None for s in self.steps.values())
+        steps = [(group, name, step) for group, named in self.groups.items() for name, step in named.items()]
+        waiting = sum(step["waiting"] or 0 for _, _, step in steps)
+        # A step that could not say how many wait (it could not send, reported nothing, or had no budget left to count with) still leaves work undone; a step
+        # skipped for an unset limit or a switched-off engine fill is a known state of Settings, not a limit that stopped work.
+        unknown = any(step["waiting"] is None and step["stopped"] in (self.rb.STOP_NOT_SENT, self.rb.STOP_NO_REPORT, self.rb.STOP_RUN_USD, self.rb.STOP_RUN_ADS)
+                      for _, _, step in steps)
         record["paid"] = {"limits": None if self.limits is None else {"usd": self.limits[0], "ads": self.limits[1]},
-                          "spentUsd": round(usd, 4), "ads": len(ads), "waiting": waiting, "unknownWaiting": unknown, "steps": self.steps}
-        for name, step in self.steps.items():
+                          "spentUsd": round(usd, 4), "ads": len(ads), "waiting": waiting, "unknownWaiting": unknown, "groups": self.groups}
+        for group, name, step in steps:
             if not step["stopped"]:
                 continue
-            count = step["waiting"]
-            tail = f", {count} ads waiting" if count is not None else ""
-            run_log.add_issue(record, "warning", f"Stopped: {LIMIT_WORDS[step['stopped']]}{tail} ({STEP_WORDS[name]})")
+            tail = f", {step['waiting']} ads waiting" if step["waiting"] is not None else ""
+            where = f", {GROUP_WORDS[group]}" if group in GROUP_WORDS else ""
+            run_log.add_issue(record, "warning", f"Stopped: {LIMIT_WORDS[step['stopped']]}{tail} ({STEP_WORDS[name]}{where})")
         return waiting
 
 
 def intake(record: dict, lock: pipeline_lock.Lock) -> tuple[dict, bool, bool]:
-    """After a good discovery: classification, reading, a free scoring pass for the engine to read, engine fill, then the real scoring.
-    Returns (the record, the final scoring succeeded, a paid step failed).
+    """After a good discovery: the paid steps as ordered passes over three priority groups (new ads, existing Strong / Possible ads, the backlog), a free
+    scoring pass for the engine to read, and the real scoring. Returns (the record, the final scoring succeeded, a paid step failed).
 
-    A limit stop is not a failure: the step ends, the ads left are counted, and the next step still runs. A paid step that fails adds an issue and the run
-    goes on to scoring. The engine plans from a scored list (its score, requirements and gates), so it reads a scratch scoring written beside the real one,
-    never `scored_jobs.json`: the pre-re-score backups are not used up and the list the owner sees changes only once, at the end.
+    The one budget is spent in the order of the groups: a small limit goes to this run's new ads, then to Strong and Possible ads already classified, and only
+    then to classifying the old backlog. A limit stop is not a failure: the pass ends, the ads of that group left are counted (so the record says which group
+    waits), and the next pass still runs with what is left, which may be nothing. A paid step that fails adds an issue and the run goes on to scoring. The engine
+    plans from a scored list (its score, requirements and gates), so it reads a scratch scoring written beside the real one, never `scored_jobs.json`: the
+    pre-re-score backups are not used up and the list the owner sees changes only once, at the end. The scratch scoring is redone only when a step changed
+    what scoring reads (an ad classified or read) since the last one.
     """
     paid_failed = False
     with tempfile.TemporaryDirectory(prefix="holojob-rescrape-") as scratch:
         budget = PaidBudget(record, Path(scratch))
         scored_view = Path(scratch) / "scored-for-engine.json"
         view_ready = False
-        succeeded = True
-        engine_wanted = budget.limits is not None and budget.engine_allowed
-        for name in ("classification", "reading", "scoring-prepare", "engine", "scoring"):
-            if name == "scoring-prepare" and not engine_wanted:
-                continue
-            if run_log.cancel_requested(record):
-                run_log.event(record, "step_skipped", step=name, reason="cancelled")
-                continue
-            if name in PAID_STEPS:
-                if name == "engine" and budget.limits is None:  # classification and reading still run: they count what waits and send nothing
-                    budget.skipped(name, budget.rb.STOP_UNSET)
-                    run_log.event(record, "step_skipped", step=name, reason="run_limit_not_set")
+        stale = True  # the view must be (re)made before the next engine pass
+        for group, names in GROUP_PASSES:
+            for name in names:
+                if run_log.cancel_requested(record):
+                    run_log.event(record, "step_skipped", step=name, reason="cancelled")
                     continue
-                if name == "engine" and not budget.engine_allowed:
-                    budget.skipped(name, budget.rb.STOP_ENGINE_NOT_ALLOWED)
-                    run_log.event(record, "step_skipped", step=name, reason="engine_not_allowed")
-                    continue
-                if name == "engine" and not view_ready:
-                    run_log.event(record, "step_skipped", step=name, reason="no_scored_view")
-                    continue
+                if name == "engine":
+                    code = (budget.rb.STOP_UNSET if budget.limits is None else None if budget.engine_allowed else budget.rb.STOP_ENGINE_NOT_ALLOWED)
+                    if code:  # the same for every group: recorded once
+                        if name not in budget.groups.get(SKIP_GROUP, {}):
+                            budget.skipped(name, code)
+                            run_log.event(record, "step_skipped", step=name, reason="run_limit_not_set" if code == budget.rb.STOP_UNSET else "engine_not_allowed")
+                        continue
+                    if budget.usd_left() <= 0:  # nothing is left to spend: the pass cannot even plan without a scoring pass, which is not worth running
+                        budget.skipped(name, budget.rb.STOP_RUN_USD, group)
+                        run_log.event(record, "step_skipped", step=name, reason="budget_used_up")
+                        continue
+                    if stale or not view_ready:
+                        record, view_ready, _ = run_step(record, "scoring-prepare", [str(SCORING), "--output", str(scored_view)], lock)
+                        stale = not view_ready
+                        paid_failed = paid_failed or (not view_ready and not run_log.cancel_requested(record))
+                    if not view_ready:
+                        run_log.event(record, "step_skipped", step=name, reason="no_scored_view")
+                        continue
                 script, fixed, _ = PAID_STEPS[name]
-                cmd = [str(globals()[script]), *fixed, *budget.flags()]
+                cmd = [str(globals()[script]), *fixed, *budget.flags(group)]
                 if name == "engine":
                     cmd += ["--jobs", str(scored_view)]
                 record, ok, summary = run_step(record, name, cmd, lock)
-                budget.note(name, summary) if summary is not None or not ok else budget.no_report(name)
+                if summary is None and ok:
+                    budget.no_report(name, group)
+                elif budget.note(name, group, summary) and name != "engine":
+                    stale = True  # an ad was classified or read: scoring reads that
                 paid_failed = paid_failed or (not ok and not run_log.cancel_requested(record))
-            elif name == "scoring-prepare":
-                record, view_ready, _ = run_step(record, name, [str(SCORING), "--output", str(scored_view)], lock)
-                paid_failed = paid_failed or (not view_ready and not run_log.cancel_requested(record))
-            else:
-                record, succeeded, _ = run_step(record, name, [str(SCORING)], lock)
+        succeeded = True
+        if not run_log.cancel_requested(record):
+            record, succeeded, _ = run_step(record, "scoring", [str(SCORING)], lock)
+        else:
+            run_log.event(record, "step_skipped", step="scoring", reason="cancelled")
         budget.finish(record)
     return record, succeeded, paid_failed
 

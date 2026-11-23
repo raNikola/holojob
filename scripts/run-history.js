@@ -87,7 +87,7 @@ const WHOLE = [
   /^No source gave a usable result, so nothing was imported and the job list was not changed\.$/,
   /^(?:discovery|classification|reading|scoring-prepare|engine|scoring) failed with exit code -?\d+/, // a step's output tail follows the colon and is cut (see `message`)
   // A limit stopped a paid step: "Stopped: run spend limit, 12 ads waiting (reading)". The words are python run_rescrape.LIMIT_WORDS.
-  /^Stopped: (?:run spend limit|ads-per-run limit|daily AI budget|monthly AI budget|paid call limit|3 calls in a row failed|AI gate refused the next call|run limit not set in Settings|engine fill not allowed in Settings|nothing could be sent|the step did not report)(?:, \d+ ads? waiting)? \((?:classification|reading|engine fill)\)$/,
+  /^Stopped: (?:run spend limit|ads-per-run limit|daily AI budget|monthly AI budget|paid call limit|3 calls in a row failed|AI gate refused the next call|run limit not set in Settings|engine fill not allowed in Settings|nothing could be sent|the step did not report)(?:, \d+ ads? waiting)? \((?:classification|reading|engine fill)(?:, (?:new ads|existing Strong\/Possible ads|backlog))?\)$/,
   /^Run \w+ left an incomplete save of the job files\. Written: [^.]*\. Not written: [^.]*\. They may not match each other\. Nothing was repaired\.$/,
   /^A save of the job files did not finish \(its marker is unreadable\); they may not match each other\. Nothing was repaired\.$/,
   /^The run did not finish: it stopped(?: during \w+)? \(killed, or the server restarted\)\. It was not resumed\.$/,
@@ -277,21 +277,23 @@ function projectImport(imported) {
 // The fixed stop codes of a paid step (python run_budget.STOP_CODES); `cap` is the code of an older record.
 const STOP_CODES = ['run_usd', 'run_ads', 'daily', 'monthly', 'call_cap', 'failures', 'unset', 'gate', 'engine_not_allowed', 'not_sent', 'no_report', 'cap']
 const PAID_STEP_KEYS = ['classification', 'reading', 'engine']
+// The priority groups of a Re-scrape's paid passes (python run_rescrape.GROUP_PASSES); `all` holds a step skipped for every group at once.
+const PAID_GROUP_KEYS = ['new', 'existing', 'backlog', 'all']
 const usd = (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < 1000 ? Math.round(value * 10000) / 10000 : null)
 
 /** The Re-scrape's paid steps (python run_rescrape.PaidBudget): the run's limit, what was spent, and per step counts, spend, ads waiting, a fixed stop code. */
 function projectPaid(block) {
   if (!block || typeof block !== 'object') return null
   const limits = block.limits && typeof block.limits === 'object' ? { usd: usd(block.limits.usd), ads: count(block.limits.ads) } : null
-  const steps = Object.fromEntries(PAID_STEP_KEYS.map((key) => {
-    const one = block.steps?.[key]
+  const groups = Object.fromEntries(PAID_GROUP_KEYS.map((group) => [group, Object.fromEntries(PAID_STEP_KEYS.map((key) => {
+    const one = block.groups?.[group]?.[key]
     if (!one || typeof one !== 'object') return [key, null]
     return [key, {
       candidates: count(one.candidates), done: count(one.done), failed: count(one.failed), waiting: count(one.waiting),
       stopped: pick(one.stopped, STOP_CODES, null), spentUsd: usd(one.spentUsd), ads: count(one.ads),
     }]
-  }))
-  return { limits, spentUsd: usd(block.spentUsd), ads: count(block.ads), waiting: count(block.waiting), steps }
+  }))]))
+  return { limits, spentUsd: usd(block.spentUsd), ads: count(block.ads), waiting: count(block.waiting), groups }
 }
 
 /** The Fit 3 classification run (python classify_new.py): counts, the cost and a fixed stop code only. Null for any other run. */
@@ -343,7 +345,7 @@ export function project(record, { alive = true, cancelRequested = false } = {}) 
     startedAt,
     finishedAt,
     durationSeconds: status === 'running' ? null : seconds(startedAt, finishedAt),
-    steps: (Array.isArray(record.steps) ? record.steps : []).slice(0, 8).map((step) => ({
+    steps: (Array.isArray(record.steps) ? record.steps : []).slice(0, 24).map((step) => ({
       name: pick(step?.name, STEP_NAMES, '?'),
       status: pick(step?.status, [...RUN_STATUSES, 'running'], 'unknown'),
       exitCode: Number.isInteger(step?.exitCode) && Math.abs(step.exitCode) < 256 ? step.exitCode : null,

@@ -35,9 +35,9 @@ nobody saw it end and finishedAt stays null. It is reported, never resumed. A Re
 
 waiting (package 15): a Re-scrape that finished, but a limit (the run limit in Settings, the daily or monthly AI budget, a call cap, 3 failures in a row)
 stopped a paid step and ads are left. Its record adds `"paid": {"limits": {"usd", "ads"} | null, "spentUsd", "ads", "waiting", "steps":
-{"classification" | "reading" | "engine": {"candidates", "done", "failed", "waiting" | null, "stopped": <fixed code> | null, "spentUsd", "ads"}}}`.
-`limits` null = not set in Settings (the paid steps spent nothing); `ads` is the number of DISTINCT ads the paid steps handled. Its steps are
-discovery, classification, reading, scoring-prepare (a free scoring pass into a scratch file), engine, scoring. `partial` stays for a failed source or a failed paid step.
+"groups": {"new" | "existing" | "backlog" | "all": {"classification" | "reading" | "engine": {"candidates", "done", "failed", "waiting" | null, "stopped": <fixed code> | null, "spentUsd", "ads"}}}}`.
+`limits` null = not set in Settings (the paid steps spent nothing); `ads` is the number of DISTINCT ads the paid steps handled. The paid steps run as ordered passes over three priority groups (new ads, existing Strong / Possible ads, backlog), so a step name repeats in `steps`; `all` holds a step skipped for
+every group at once (no limit set, engine fill not allowed). Its steps are discovery, then classification / reading / engine per group, scoring-prepare (a free scoring pass into a scratch file), scoring. `partial` stays for a failed source or a failed paid step.
 
 cancelled (S6): the owner cancelled a Re-scrape before its import commit point. The scrape stopped and scoring was skipped. The ads it
 had validly collected were SAVED and nothing else changed: no ad became held, absent, closed or Stale, the list was not rebuilt, no

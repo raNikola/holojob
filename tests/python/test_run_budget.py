@@ -172,6 +172,68 @@ def test_classification_that_cannot_send_still_reports_what_waits(monkeypatch, t
     assert summary["step"] == "classification" and summary["stopped"] == "not_sent" and summary["waiting"] == 2
 
 
+RUN_START = "2026-11-23T10:00:00+00:00"
+OLD, NEW = "2026-11-01T00:00:00+00:00", "2026-11-23T10:30:00+00:00"
+PRIOR = {"s": {"matchScore": 80}, "p": {"matchScore": 60}, "w": {"matchScore": 20}}
+
+
+def test_the_three_priority_groups_split_every_ad_exactly_once():
+    ads = [{"jobId": "n", "firstSeen": NEW}, {"jobId": "s", "firstSeen": OLD}, {"jobId": "p", "firstSeen": OLD}, {"jobId": "w", "firstSeen": OLD}, {"jobId": "u", "firstSeen": OLD}]
+    groups = {g: [a["jobId"] for a in ads if run_budget.in_group(a, g, PRIOR, RUN_START)] for g in run_budget.GROUPS}
+    assert groups["new"] == ["n"]
+    assert groups["existing"] == ["s", "p"], "already classified Strong and Possible ads of earlier runs"
+    assert groups["backlog"] == ["s", "p", "w", "u"], "everything older, so what the existing pass could not afford is still reached; Weak and unscored last by the order"
+    assert [a["jobId"] for a in ads if run_budget.in_group(a, None, PRIOR, RUN_START)] == ["n", "s", "p", "w", "u"], "no group: a standalone run sees all"
+
+
+def test_reading_passes_take_their_own_group_only(monkeypatch, tmp_path):
+    import role_class
+
+    monkeypatch.setattr(role_class, "label", lambda rows, path=None: [r.update(roleClass="target") for r in rows])
+    scored = tmp_path / "scored.json"
+    scored.write_text(json.dumps({"jobs": [{"jobId": k, **v} for k, v in PRIOR.items()]}))
+    pending = [(1, {"jobId": "n", "firstSeen": NEW}), (2, {"jobId": "s", "firstSeen": OLD}), (3, {"jobId": "p", "firstSeen": OLD}), (4, {"jobId": "w", "firstSeen": OLD})]
+
+    def planned(group):
+        args = type("A", (), {"max_usd": 1.0, "max_ads": 9, "scored": scored, "run_start": RUN_START, "counted_ids": None, "group": group})()
+        chosen, candidates, *_ = enrich_jobs._plan_rescrape(args, pending)
+        return [j["jobId"] for _, j in chosen], candidates
+
+    assert planned("new") == (["n"], 1)
+    assert planned("existing") == (["s", "p"], 2), "Strong before Possible; the Weak ad is not read in this pass"
+    assert planned("backlog") == (["s", "p", "w"], 3), "the backlog pass reaches Weak last"
+
+
+def test_classification_passes_take_their_own_group_only(monkeypatch, tmp_path, capsys):
+    import pipeline_lock
+    import role_class
+    from test_classify_new import PROFILE, row
+    from test_classify_new_pipeline import FakeLock
+
+    path = tmp_path / "profile.json"
+    path.write_text(json.dumps(PROFILE))
+    monkeypatch.setattr(pipeline_lock, "acquire", lambda: FakeLock())
+    monkeypatch.setattr(role_class, "store_path", lambda: tmp_path / "fit3.json")
+    new_ad, old_ad = row("n1", description="the new ad text"), row("o1", description="the old ad text")
+    new_ad["firstSeen"], old_ad["firstSeen"] = NEW, OLD
+    monkeypatch.setattr(classify_new, "scoring_rows", lambda *a: [old_ad, new_ad])
+    seen = []
+    budget = {"dailyLimit": 1, "monthlyLimit": 1, "dailySpent": 0, "monthlySpent": 0}
+
+    def fake_estimate(todo, *a):
+        seen.append([r["jobId"] for _, r in todo])
+        return {"send": [], "privacyRefused": [], "beyondAdLimit": 0, "provider": "p", "model": "m", "priceKnown": False, "inputOnlyUsd": None,
+                "worstCaseUsd": None, "maxUsd": 1, "budget": budget}
+
+    monkeypatch.setattr(classify_new, "estimate", fake_estimate)
+    for group in ("new", "backlog"):
+        assert classify_new.main(["--profile", str(path), "--scored", str(tmp_path / "s.json"), "--confirm", "--rescrape", "--max-usd", "1", "--max-ads", "5",
+                                  "--run-start", RUN_START, "--group", group]) == 0
+        summary = json.loads(next(l for l in reversed(capsys.readouterr().out.splitlines()) if l.startswith("{")))
+        assert summary["candidates"] == 1 and summary["waiting"] == 1, "each pass counts only its own group"
+    assert seen == [["n1"], ["o1"]]
+
+
 def test_an_unset_limit_reads_nothing_but_counts_what_waits(monkeypatch, tmp_path):
     import role_class
 

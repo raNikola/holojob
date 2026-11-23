@@ -686,6 +686,8 @@ def _plan_rescrape(args: argparse.Namespace, pending: list[tuple[int, dict]]):
         if row.get("roleClass") not in ("target", "adjacent") or settled_block:
             skipped += 1
             continue
+        if not run_budget.in_group(job, getattr(args, "group", None), prior, args.run_start):
+            continue  # another priority pass of Re-scrape reads it (counted there)
         keep.append((index, job))
     keep.sort(key=lambda item: run_budget.order_key(item[1], prior, args.run_start))
     candidates = len(keep)

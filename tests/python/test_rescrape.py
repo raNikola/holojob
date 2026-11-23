@@ -571,12 +571,13 @@ from pathlib import Path
 marks = Path({marks!r})
 argv = sys.argv[1:]
 step = "reading" if "--manual" in argv else "engine" if "--jobs" in argv else "classification"
+group = argv[argv.index("--group") + 1] if "--group" in argv else None
 counted = json.loads(Path(argv[argv.index("--counted-ids") + 1]).read_text()) if "--counted-ids" in argv else None
 with (marks / "paid-args.jsonl").open("a") as out:
-    out.write(json.dumps({{"step": step, "argv": argv, "trigger": os.environ.get("HOLOJOB_AI_TRIGGER"), "counted": counted}}) + "\\n")
+    out.write(json.dumps({{"step": step, "group": group, "argv": argv, "trigger": os.environ.get("HOLOJOB_AI_TRIGGER"), "counted": counted}}) + "\\n")
 if os.environ.get("FAKE_PAID_SILENT"):
     sys.exit(0)
-spec = json.loads(os.environ.get("FAKE_PAID", "{{}}")).get(step, {{}})
+spec = json.loads(os.environ.get("FAKE_PAID", "{{}}")).get(step + ":" + str(group), {{}})
 ledger = Path(os.environ["HOLOJOB_AI_DIR"]) / "usage-ledger.jsonl"
 ledger.parent.mkdir(parents=True, exist_ok=True)
 feature = {{"classification": "fit3-classify", "reading": "enrichment", "engine": "evidence-matcher"}}[step]
@@ -647,9 +648,9 @@ def test_a_full_run_ends_ok_with_every_event_and_frees_the_lock(fake):
     assert not (fake.marks / "discovery-no-lock").exists(), "the step used the lock it was handed"
     saved = on_disk(RUN_ID)
     assert saved["status"] == "ok" and saved["finishedAt"] and saved["trigger"] == "manual"
-    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("classification", "ok"), ("reading", "ok"), ("scoring", "ok")]
+    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("classification", "ok"), ("reading", "ok"), ("reading", "ok"), ("classification", "ok"), ("reading", "ok"), ("scoring", "ok")]
     assert [s["name"] for s in saved["sources"]] == ["greenhouse"], "the record the step filled is the one finished"
-    assert [e["type"] for e in events_of(saved)] == ["run_start", "step_start", "step_end", "step_start", "step_end", "step_start", "step_end", "step_skipped", "step_start", "step_end", "run_end"]
+    assert [e["type"] for e in events_of(saved)] == ["run_start", "step_start", "step_end"] + ["step_start", "step_end"] * 2 + ["step_skipped"] + ["step_start", "step_end"] * 4 + ["run_end"]
     assert lock_is_free()
 
 
@@ -775,57 +776,109 @@ def paid_calls(fake):
     return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
 
-def flag(call, name):
-    return call["argv"][call["argv"].index(name) + 1]
+def order(fake):
+    return [(c["step"], c["group"]) for c in paid_calls(fake)]
 
 
-def test_an_unset_run_limit_sends_nothing_but_the_steps_still_count_what_waits(fake, tmp_path):
-    plan = {"classification": {"waiting": 7, "stopped": "unset"}, "reading": {"waiting": 4, "stopped": "unset"}}
+def call(fake, step, group):
+    return next(c for c in paid_calls(fake) if c["step"] == step and c["group"] == group)
+
+
+def flag(c, name):
+    return c["argv"][c["argv"].index(name) + 1]
+
+
+PASSES = [("classification", "new"), ("reading", "new"), ("reading", "existing"), ("classification", "backlog"), ("reading", "backlog")]
+
+
+def test_an_unset_run_limit_sends_nothing_but_the_steps_still_count_what_waits_per_group(fake, tmp_path):
+    plan = {"classification:new": {"waiting": 7, "stopped": "unset"}, "reading:new": {"waiting": 4, "stopped": "unset"},
+            "reading:existing": {"waiting": 2, "stopped": "unset"}, "classification:backlog": {"waiting": 200, "stopped": "unset"}}
     assert fake.start(FAKE_PAID=json.dumps(plan)).wait(30) == 0
     calls = paid_calls(fake)
-    assert [c["step"] for c in calls] == ["classification", "reading"], "both only count; engine fill is not started"
+    assert order(fake) == PASSES, "counting passes only; engine fill is not started"
     assert not any("--max-usd" in c["argv"] for c in calls), "no limit is passed: the step reads Settings and finds it unset"
     saved = on_disk(RUN_ID)
-    assert saved["paid"]["limits"] is None and saved["paid"]["steps"]["engine"]["stopped"] == "unset" and saved["paid"]["waiting"] == 11
+    assert saved["paid"]["limits"] is None and saved["paid"]["groups"]["all"]["engine"]["stopped"] == "unset" and saved["paid"]["waiting"] == 213
     messages = [i["message"] for i in saved["issues"]]
-    assert "Stopped: run limit not set in Settings, 7 ads waiting (classification)" in messages and "Stopped: run limit not set in Settings, 4 ads waiting (reading)" in messages
+    assert "Stopped: run limit not set in Settings, 7 ads waiting (classification, new ads)" in messages
+    assert "Stopped: run limit not set in Settings, 2 ads waiting (reading, existing Strong/Possible ads)" in messages
+    assert "Stopped: run limit not set in Settings, 200 ads waiting (classification, backlog)" in messages
     assert (fake.marks / "scoring-done").exists() and saved["status"] == "waiting", "scoring still ran; ads wait, so it is not shown as plainly finished"
 
 
 def test_a_step_that_ends_without_its_summary_is_never_a_silent_step(fake, tmp_path):
     assert fake.start(FAKE_PAID_SILENT="1").wait(30) == 0
     saved = on_disk(RUN_ID)
-    assert saved["paid"]["steps"]["classification"]["stopped"] == "no_report"
-    assert "Stopped: the step did not report (classification)" in [i["message"] for i in saved["issues"]]
+    assert saved["paid"]["groups"]["new"]["classification"]["stopped"] == "no_report"
+    assert "Stopped: the step did not report (classification, new ads)" in [i["message"] for i in saved["issues"]]
     assert saved["status"] == "waiting" and (fake.marks / "scoring-done").exists()
 
 
 def test_the_steps_share_one_budget_and_each_gets_the_remainder(fake, tmp_path):
     set_settings(tmp_path, runLimitUsd=1.0, runLimitAds=10, allowEngineFill=False)
-    plan = {"classification": {"ids": ["a", "b", "c"], "each": 0.1}, "reading": {"ids": ["b", "c", "d"], "each": 0.2}}
+    plan = {"classification:new": {"ids": ["a", "b", "c"], "each": 0.1}, "reading:new": {"ids": ["b", "c", "d"], "each": 0.2}}
     assert fake.start(FAKE_PAID=json.dumps(plan)).wait(30) == 0
-    calls = {c["step"]: c for c in paid_calls(fake)}
-    assert [flag(calls["classification"], f) for f in ("--max-usd", "--max-ads")] == ["1.000000", "10"]
+    assert [flag(call(fake, "classification", "new"), f) for f in ("--max-usd", "--max-ads")] == ["1.000000", "10"]
     # 0.3 USD and the distinct ads a, b, c are used: reading may spend 0.7 and take 7 NEW ads; b and c do not count twice
-    assert [flag(calls["reading"], f) for f in ("--max-usd", "--max-ads")] == ["0.700000", "7"]
-    assert calls["reading"]["counted"] == ["a", "b", "c"], "the ads already counted are handed on, so they do not use the ads limit again"
-    assert all(c["trigger"] == "manual" for c in calls.values()), "Re-scrape is manual, whatever automation says"
+    reading = call(fake, "reading", "new")
+    assert [flag(reading, f) for f in ("--max-usd", "--max-ads")] == ["0.700000", "7"]
+    assert reading["counted"] == ["a", "b", "c"], "the ads already counted are handed on, so they do not use the ads limit again"
+    assert all(c["trigger"] == "manual" for c in paid_calls(fake)), "Re-scrape is manual, whatever automation says"
     saved = on_disk(RUN_ID)
     assert round(saved["paid"]["spentUsd"], 4) == 0.9 and saved["paid"]["ads"] == 4, "the total is measured from the ledger, and an ad counts once"
     assert saved["paid"]["spentUsd"] <= saved["paid"]["limits"]["usd"]
-    assert saved["paid"]["steps"]["engine"]["stopped"] == "engine_not_allowed" and "engine" not in calls, "engine fill is off in Settings"
+    assert saved["paid"]["groups"]["all"]["engine"]["stopped"] == "engine_not_allowed" and not any(s == "engine" for s, _ in order(fake)), "engine fill is off in Settings"
 
 
 def test_a_limit_stop_still_scores_and_the_run_is_not_shown_as_plainly_finished(fake, tmp_path):
     set_settings(tmp_path, runLimitUsd=1.0, runLimitAds=2)
-    plan = {"classification": {"ids": ["a", "b"], "each": 0.05, "waiting": 5, "stopped": "run_ads"}}
+    plan = {"classification:new": {"ids": ["a", "b"], "each": 0.05, "waiting": 5, "stopped": "run_ads"}}
     assert fake.start(FAKE_PAID=json.dumps(plan)).wait(30) == 0
     saved = on_disk(RUN_ID)
     assert (fake.marks / "scoring-done").exists()
     assert saved["status"] == "waiting" and saved["paid"]["waiting"] == 5
-    assert "Stopped: ads-per-run limit, 5 ads waiting (classification)" in [i["message"] for i in saved["issues"]]
-    calls = {c["step"]: c for c in paid_calls(fake)}
-    assert flag(calls["reading"], "--max-ads") == "0", "the ads limit is used up: reading is told so and sends nothing"
+    assert "Stopped: ads-per-run limit, 5 ads waiting (classification, new ads)" in [i["message"] for i in saved["issues"]]
+    assert flag(call(fake, "reading", "new"), "--max-ads") == "0", "the ads limit is used up: reading is told so and sends nothing"
+
+
+def test_existing_strong_and_possible_ads_are_read_before_any_backlog_classification_call(fake, tmp_path):
+    """The priority holds across the steps: with a limit just enough for a few reads, the unread ads classified before this run are read first and
+    the backlog (246 unclassified ads) is classified only with what is left, which is nothing. The total never passes the limit."""
+    set_settings(tmp_path, runLimitUsd=0.5, runLimitAds=20)
+    plan = {
+        "classification:new": {"ids": ["n1"], "each": 0.025},
+        "reading:new": {"ids": ["n1"], "each": 0.025},
+        "reading:existing": {"ids": ["e1", "e2", "e3"], "each": 0.15, "waiting": 12, "stopped": "run_usd"},  # uses the last of the budget
+        "classification:backlog": {"waiting": 246, "stopped": "run_usd"},
+    }
+    assert fake.start(FAKE_PAID=json.dumps(plan)).wait(30) == 0
+    names = order(fake)
+    assert names.index(("reading", "existing")) < names.index(("classification", "backlog")), "unread Strong / Possible ads are read before any backlog classification call"
+    backlog = call(fake, "classification", "backlog")
+    assert flag(backlog, "--max-usd") == "0.000000", "the backlog gets only what the earlier groups left"
+    saved = on_disk(RUN_ID)
+    assert saved["paid"]["spentUsd"] <= 0.5 + 1e-9, "the total never passes the run limit"
+    assert saved["paid"]["groups"]["existing"]["reading"]["waiting"] == 12 and saved["paid"]["groups"]["backlog"]["classification"]["waiting"] == 246
+    messages = [i["message"] for i in saved["issues"]]
+    assert "Stopped: run spend limit, 12 ads waiting (reading, existing Strong/Possible ads)" in messages
+    assert "Stopped: run spend limit, 246 ads waiting (classification, backlog)" in messages, "the record says which group waits"
+    assert saved["status"] == "waiting" and saved["paid"]["waiting"] >= 258
+
+
+def test_engine_fill_follows_each_group_and_the_scratch_scoring_is_made_only_when_something_changed(fake, tmp_path):
+    set_settings(tmp_path, runLimitUsd=5.0, runLimitAds=50, allowEngineFill=True)
+    plan = {"classification:new": {"ids": ["n1"], "each": 0.01}, "reading:new": {"ids": ["n1"], "each": 0.01}}
+    assert fake.start(FAKE_PAID=json.dumps(plan)).wait(30) == 0
+    assert order(fake) == [("classification", "new"), ("reading", "new"), ("engine", "new"), ("reading", "existing"), ("engine", "existing"),
+                           ("classification", "backlog"), ("reading", "backlog"), ("engine", "backlog")]
+    saved = on_disk(RUN_ID)
+    names = [s["name"] for s in saved["steps"]]
+    assert names.count("scoring-prepare") == 1, "one scratch scoring: reading the new ad changed what scoring reads, nothing after it did"
+    assert names.index("scoring-prepare") < names.index("scoring") and names[-1] == "scoring"
+    engine = call(fake, "engine", "existing")
+    assert "--jobs" in engine["argv"] and "scored_jobs.json" not in flag(engine, "--jobs"), "the engine reads the scratch scoring, never scored_jobs.json"
+    assert saved["status"] == "ok"
 
 
 def test_a_failing_paid_step_makes_the_run_partial_and_scoring_still_runs(fake, tmp_path):

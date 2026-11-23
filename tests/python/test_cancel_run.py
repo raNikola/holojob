@@ -18,6 +18,8 @@ from types import SimpleNamespace
 import pytest
 
 # A paid step of Re-scrape that does nothing and says so (one summary line); every paid step is stubbed so that no test reads or writes real data.
+# With no run limit the paid steps only count: new (classify, read), existing (read), backlog (classify, read); engine fill is not started.
+PAID_PASSES = ["classification", "reading", "reading", "classification", "reading"]
 FAKE_PAID_STEP = (
     "import json, sys\n"
     "step = 'reading' if '--manual' in sys.argv else 'engine' if '--jobs' in sys.argv else 'classification'\n"
@@ -240,7 +242,7 @@ def test_cancel_during_scoring_stops_scoring_and_keeps_the_import(fake):
     assert run_rescrape.cancel(RUN_ID)["result"] == "cancel_requested"
     assert proc.wait(30) == 0
     saved = on_disk(RUN_ID)
-    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), ("classification", "ok"), ("reading", "ok"), ("scoring", "cancelled")]
+    assert [(s["name"], s["status"]) for s in saved["steps"]] == [("discovery", "ok"), *[(n, "ok") for n in PAID_PASSES], ("scoring", "cancelled")]
     assert saved["status"] == "ok" and saved["cancel"]["outcome"] == "imported_before_cancel", "the scrape was imported and counts"
     assert not (fake.marks / "scoring-done").exists() and lock_is_free()
 
@@ -304,7 +306,7 @@ def test_a_request_for_one_run_never_reaches_the_next(fake):
     proc = fake.start(run_id="second0000002")
     assert proc.wait(30) == 0
     saved = on_disk("second0000002")
-    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok", "ok", "ok", "ok"]
+    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok"] * 7
 
 
 def test_the_run_after_a_cancelled_one_starts_at_once_and_finishes(fake):
@@ -742,6 +744,6 @@ def test_the_real_run_cancelled_mid_scrape_commit_point_and_hard_kill(scratch):
     # E: the next run starts at once and runs to its end, scoring included, whatever was requested before.
     assert scratch.start("runE00000005").wait(60) == 0
     saved = on_disk("runE00000005")
-    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok", "ok", "ok", "ok"]
+    assert saved["status"] == "ok" and "cancel" not in saved and [s["status"] for s in saved["steps"]] == ["ok"] * 7
     assert ledger()["generation"] == 4 and counted_runs()[-1] == "runE00000005" and applied_runs()[-1] == "runE00000005"
     assert view_lock_free(jobs) and lock_is_free()

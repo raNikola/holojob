@@ -258,7 +258,9 @@ describe.skipIf(!hasPython)('a real run over fake steps', () => {
     expect(fs.existsSync(path.join(dir, 'scored'))).toBe(true)
     expect(after.run.status).toBe('ok')
     expect(after.events.map((e) => e.type)).toEqual([
-      'run_start', 'step_start', 'source_start', 'source_end', 'step_end', 'step_start', 'step_end', 'step_start', 'step_end', 'step_skipped', 'step_start', 'step_end', 'run_end',
+      'run_start', 'step_start', 'source_start', 'source_end', 'step_end',
+      // the paid passes (new: classify, read; existing: read; backlog: classify, read), then the scoring
+      'step_start', 'step_end', 'step_start', 'step_end', 'step_skipped', 'step_start', 'step_end', 'step_start', 'step_end', 'step_start', 'step_end', 'step_start', 'step_end', 'run_end',
     ])
     expect((await startRescrape(body, opts)).status).toBe(202)
     await until(async () => !(await rescrapeStatus(0, opts)).body.active)

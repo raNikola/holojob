@@ -313,6 +313,9 @@ def _main(args) -> int:
             roles, comps = fit3.load_roles(), fit3.closed_competencies("product")
             groups = plan(scoring_rows(args.jobs, args.manual, args.kept), entries, roles, comps)
             limits = run_budget.resolve_limits(args.max_usd, args.max_ads)
+            prior = run_budget.prior_view(args.scored)
+            if args.group:  # one priority pass of Re-scrape: only its ads are candidates, and only they are counted as waiting
+                groups["todo"] = [item for item in groups["todo"] if run_budget.in_group(item[1], args.group, prior, args.run_start)]
             if not groups["todo"]:
                 print("\n".join(describe(groups, None, limits.ads)))
                 print("classification: nothing to classify")
@@ -320,7 +323,6 @@ def _main(args) -> int:
                                               anchoringFailed=len(groups["anchoringFailed"]), spentUsd=0.0))
                 return 0
             # This run's ads first, then the backlog; strongest first inside each (a stable sort keeps the file order among equals).
-            prior = run_budget.prior_view(args.scored)
             groups["todo"].sort(key=lambda item: run_budget.order_key(item[1], prior, args.run_start))
             profile = json.loads(args.profile.read_text(encoding="utf-8")) if args.profile.exists() else None
             if not profile:

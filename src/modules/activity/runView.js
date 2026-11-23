@@ -85,6 +85,9 @@ const STOP_WORDS = {
   no_report: 'the step ended without reporting what it did',
   cap: 'the spending cap or the ad limit was reached',
 }
+// The priority groups, in the order the passes run: the same one budget is spent on them in this order.
+const GROUP_ORDER = ['new', 'existing', 'backlog', 'all']
+const GROUP_TITLES = { new: 'New ads', existing: 'Existing Strong/Possible ads', backlog: 'Backlog' }
 const STEP_TITLES = { classification: 'Classification', reading: 'Reading', engine: 'Engine fill' }
 const DONE_WORDS = { classification: 'classified', reading: 'read', engine: 'filled' }
 const adWord = (n) => `${n.toLocaleString()} ${n === 1 ? 'ad' : 'ads'}`
@@ -100,14 +103,13 @@ export function paidSummary(run) {
     ? `Run limit: $${paid.limits.usd?.toFixed(2) ?? '?'} and ${paid.limits.ads ?? '?'} ads.`
     : 'Run limit not set in Settings: the paid steps spent nothing.'
   const spent = paid.spentUsd === null ? '' : ` Spent $${paid.spentUsd.toFixed(4)} on ${adWord(paid.ads ?? 0)}.`
-  const lines = Object.entries(paid.steps).flatMap(([key, step]) => {
+  const lines = GROUP_ORDER.flatMap((group) => Object.entries(paid.groups?.[group] ?? {}).flatMap(([key, step]) => {
     if (!step) return []
     const parts = [`${Number.isFinite(step.done) ? step.done : 0} ${DONE_WORDS[key]}`]
     if (step.failed) parts.push(`${step.failed} failed (tried again next run)`)
-    if (step.spentUsd) parts.push(`$${step.spentUsd.toFixed(4)} spent`)
     const stop = step.stopped ? ` Stopped: ${STOP_WORDS[step.stopped] ?? step.stopped}${Number.isFinite(step.waiting) ? `, ${adWord(step.waiting)} waiting` : ''}.` : ''
-    return [`${STEP_TITLES[key]}: ${parts.join(', ')}.${stop}`]
-  })
+    return [`${GROUP_TITLES[group] ? `${GROUP_TITLES[group]}: ` : ''}${STEP_TITLES[key]}: ${parts.join(', ')}.${stop}`]
+  }))
   return { headline: `${limit}${spent}`, lines }
 }
 

@@ -47,7 +47,7 @@ class Captured(LlmUnavailable):
     """Raised by the dry-run `complete` after it has kept the prompt: nothing is sent."""
 
 
-def build(jobs_path: Path, max_ads: int | None, first_ids: set | None = None, *, rescrape: bool = False, run_start: str | None = None):
+def build(jobs_path: Path, max_ads: int | None, first_ids: set | None = None, *, rescrape: bool = False, run_start: str | None = None, group: str | None = None):
     """(engine, jobs, send ids): the production shadow engine in judge mode, over the scored rows, with the plan of what it would send.
 
     rescrape: only Strong and Possible rows are planned (Weak and Blocked are skipped), this run's ads first (`first`), then by the engine's own order."""
@@ -63,6 +63,8 @@ def build(jobs_path: Path, max_ads: int | None, first_ids: set | None = None, *,
     jobs = json.loads(jobs_path.read_text(encoding="utf-8"))["jobs"]
     if rescrape:
         jobs = [j for j in jobs if run_budget.tier_rank(j) in (0, 1)]
+        own = {str(j.get("jobId")): j for j in jobs}  # the rows are scored rows: they carry their own tier
+        jobs = [j for j in jobs if run_budget.in_group(j, group, own, run_start)]
         engine.first = {str(j.get("jobId")) for j in jobs if run_budget.first_seen_after(j, run_start)}
     else:
         jobs = jobs + ledger_rows(jobs_path, {str(j.get("jobId")) for j in jobs}, first_ids)
@@ -207,7 +209,7 @@ def rescrape_main(args) -> int:
         return pipeline_lock.EXIT_LOCKED
     try:
         try:
-            engine, jobs, send, profile, selection = build(args.jobs, None, None, rescrape=True, run_start=args.run_start)
+            engine, jobs, send, profile, selection = build(args.jobs, None, None, rescrape=True, run_start=args.run_start, group=args.group)
         except SystemExit as exc:
             print(f"engine: skipped, {exc}")
             print(_summary(0, 0, 0, None, run_budget.STOP_NOT_SENT))

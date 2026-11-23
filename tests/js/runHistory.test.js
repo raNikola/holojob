@@ -113,30 +113,35 @@ describe('what a run shows', () => {
       status: 'waiting',
       steps: ['discovery', 'classification', 'reading', 'scoring-prepare', 'engine', 'scoring'].map((name) => ({ name, status: 'ok', exitCode: 0 })),
       issues: [
-        { level: 'warning', source: null, message: 'Stopped: run spend limit, 12 ads waiting (classification)' },
+        { level: 'warning', source: null, message: 'Stopped: run spend limit, 12 ads waiting (classification, backlog)' },
         { level: 'warning', source: null, message: 'Stopped: engine fill not allowed in Settings (engine fill)' },
-        { level: 'warning', source: null, message: 'Stopped: run limit not set in Settings, 3 ads waiting (reading)' },
+        { level: 'warning', source: null, message: 'Stopped: ads-per-run limit, 3 ads waiting (reading, existing Strong/Possible ads)' },
         { level: 'error', source: null, message: 'reading failed with exit code 3: Traceback CANARY-TITLE' },
-        { level: 'warning', source: null, message: 'Stopped: CANARY-TITLE, 2 ads waiting (reading)' },
+        { level: 'warning', source: null, message: 'Stopped: CANARY-TITLE, 2 ads waiting (reading, new ads)' },
       ],
       paid: {
         limits: { usd: 1, ads: 50, extra: 'x' }, spentUsd: 0.4321, ads: 20, waiting: 14, secret: 'CANARY-TITLE',
-        steps: { classification: { candidates: 30, done: 18, failed: 1, waiting: 12, stopped: 'run_usd', spentUsd: 0.2, ads: 18, note: 'CANARY-TITLE' },
-          reading: { candidates: 2, done: 0, failed: 0, waiting: 2, stopped: 'CANARY-TITLE', spentUsd: 0, ads: 0 }, engine: { stopped: 'engine_not_allowed', waiting: null }, other: { done: 1 } },
+        groups: {
+          new: { reading: { candidates: 2, done: 0, failed: 0, waiting: 2, stopped: 'CANARY-TITLE', spentUsd: 0, ads: 0 }, other: { done: 1 } },
+          backlog: { classification: { candidates: 30, done: 18, failed: 1, waiting: 12, stopped: 'run_usd', spentUsd: 0.2, ads: 18, note: 'CANARY-TITLE' } },
+          all: { engine: { stopped: 'engine_not_allowed', waiting: null } },
+          elsewhere: { reading: { done: 5 } },
+        },
       },
     })
     const [run] = list().body.runs
     expect(run.status).toBe('waiting')
     expect(run.steps.map((s) => s.name)).toEqual(['discovery', 'classification', 'reading', 'scoring-prepare', 'engine', 'scoring'])
     expect(run.paid.limits).toEqual({ usd: 1, ads: 50 })
-    expect(run.paid.steps.classification).toEqual({ candidates: 30, done: 18, failed: 1, waiting: 12, stopped: 'run_usd', spentUsd: 0.2, ads: 18 })
-    expect(run.paid.steps.reading.stopped).toBeNull()
-    expect(run.paid.steps.engine).toMatchObject({ stopped: 'engine_not_allowed', waiting: null })
-    expect(Object.keys(run.paid.steps)).toEqual(['classification', 'reading', 'engine'])
+    expect(run.paid.groups.backlog.classification).toEqual({ candidates: 30, done: 18, failed: 1, waiting: 12, stopped: 'run_usd', spentUsd: 0.2, ads: 18 })
+    expect(run.paid.groups.new.reading.stopped).toBeNull()
+    expect(run.paid.groups.all.engine).toMatchObject({ stopped: 'engine_not_allowed', waiting: null })
+    expect(Object.keys(run.paid.groups)).toEqual(['new', 'existing', 'backlog', 'all'])
+    expect(Object.keys(run.paid.groups.new)).toEqual(['classification', 'reading', 'engine'])
     expect(JSON.stringify(run)).not.toContain('CANARY')
     expect(run.issues.map((i) => i.message).slice(0, 3)).toEqual([
-      'Stopped: run spend limit, 12 ads waiting (classification)', 'Stopped: engine fill not allowed in Settings (engine fill)',
-      'Stopped: run limit not set in Settings, 3 ads waiting (reading)',
+      'Stopped: run spend limit, 12 ads waiting (classification, backlog)', 'Stopped: engine fill not allowed in Settings (engine fill)',
+      'Stopped: ads-per-run limit, 3 ads waiting (reading, existing Strong/Possible ads)',
     ])
     expect(run.issues[3].message).toBe('reading failed with exit code 3')
     expect(run.issues[4].message).toMatch(/^Message details withheld/)
