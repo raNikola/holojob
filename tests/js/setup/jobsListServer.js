@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
+import { handleApplicationsRequest } from '../../../scripts/application-store.js'
 import { clearListIndex, handleJobsListRequest } from '../../../scripts/job-list.js'
 
 export const NOW = Date.parse('2026-11-20T12:00:00Z')
@@ -26,8 +27,8 @@ export const routeRow = (row, cls = 'found') => ({
 })
 export const ROUTE_ROWS = [...SCORED.map((row, i) => routeRow(row, i % 4 === 3 ? 'absent' : 'found')), { ...routeRow(scoredRow(90)), jobId: 'ledger-only-1', title: 'Only in the ledger' }]
 
-/** @returns {Promise<{ base: string, root: string, fetchFn: Function, spawnCalls: unknown[], writeScored: Function, close: Function }>} */
-export async function startListServer({ scored = SCORED, routeRows = ROUTE_ROWS, pageSize = 4 } = {}) {
+/** `withApplications` also serves /api/applications over the same temp dir (the tracker's own handler). @returns {Promise<{ base: string, root: string, fetchFn: Function, spawnCalls: unknown[], writeScored: Function, close: Function }>} */
+export async function startListServer({ scored = SCORED, routeRows = ROUTE_ROWS, pageSize = 4, withApplications = false } = {}) {
   clearListIndex()
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'jobs-list-http-'))
   const writeScored = (rows) => {
@@ -45,6 +46,10 @@ export async function startListServer({ scored = SCORED, routeRows = ROUTE_ROWS,
   }
   const server = http.createServer((req, res) => {
     const url = req.url.split('?')[0]
+    if (withApplications && (url === '/api/applications' || url.startsWith('/api/applications/'))) {
+      handleApplicationsRequest(req, res, url, { root }).catch(() => { res.statusCode = 500; res.end('{}') })
+      return
+    }
     handleJobsListRequest(req, res, url, { root, spawnFn, ensureView: async () => {}, readPageSize: async () => pageSize, now: () => NOW })
       .then((done) => { if (!done) { res.statusCode = 404; res.end('{}') } }, () => { res.statusCode = 500; res.end('{}') })
   })
