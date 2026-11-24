@@ -8,6 +8,28 @@ import { buildRedactionHints } from './redactionHints.js'
 import { getApplicationsState } from '../applications/applicationsClient.js'
 import { applicationOnlyJobs, overlayTracking, trackerStats } from '../applications/trackingView.js'
 import { onListJobs } from '../jobs/jobFilters.js'
+import { fetchJobContext, fetchListCounts, listRows } from '../jobs/jobListClient.js'
+import { isServerListActive } from '../jobs/serverListSwitch.js'
+import { isApiAvailable } from '../../utils/apiAvailability.js'
+
+// What the AI context reads of the WHOLE list. With the server's list the browser holds only the ads the owner worked on, so the totals, the best-scored ads and
+// the missing skills come from the server (`prefetchJobContext`, asked before a context is built); without it they are worked out from the browser's own rows.
+let serverContext = null
+
+/** Asks the server for what the context reads of the whole list. Resolves to it, or to null (the server's list is off, or the server cannot say). Reads only. */
+export async function prefetchJobContext({ fetchFn } = {}) {
+  serverContext = null
+  if (!isServerListActive() || !isApiAvailable()) return null
+  const stored = loadJobs().jobs
+  const [counts, context] = await Promise.all([fetchListCounts({ stored, fetchFn }), fetchJobContext(fetchFn)])
+  serverContext = counts.ok && context.ok ? { stats: counts.counts.stats, topJobs: context.topJobs, skillGap: context.skillGap } : null
+  return serverContext
+}
+
+/** For the tests: forget what was fetched. */
+export function clearJobContext() {
+  serverContext = null
+}
 
 function truncate(str, max = 4000) {
   if (!str) return ''
@@ -63,7 +85,7 @@ function summarizeJob(job) {
 }
 
 export function buildSkillGapContext() {
-  const jobs = onListJobs(loadJobs().jobs)
+  const jobs = serverContext?.skillGap ?? onListJobs(loadJobs().jobs)
     .filter((j) => typeof j.matchScore === 'number')
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, 100)
@@ -106,7 +128,7 @@ export function buildAiContext({ featureId, job, message, extra } = {}) {
   const intelligence = loadIntelligence()
   const jobState = loadJobs()
   const cache = getApplicationsState()
-  const stats = { ...computeJobStats(jobState.jobs), ...trackerStats(cache.status === 'ready' ? cache.store : null, cache.settings) }
+  const stats = serverContext?.stats ?? { ...computeJobStats(jobState.jobs), ...trackerStats(cache.status === 'ready' ? cache.store : null, cache.settings) }
   const memory = loadAiMemory()
 
   // `extra` is the caller's own object (it can carry a whole job.outreach with its contacts): never spread it as is.
@@ -133,10 +155,10 @@ export function buildAiContext({ featureId, job, message, extra } = {}) {
   if (featureId === 'skillGap') base.skillGap = buildSkillGapContext()
   if (featureId === 'applicationStrategy') base.applications = buildApplicationContext()
   if (featureId === 'careerStrategy') {
-    base.topJobs = onListJobs(jobState.jobs)
+    base.topJobs = (serverContext ? listRows(serverContext.topJobs, jobState.jobs) : onListJobs(jobState.jobs)
       .filter((j) => typeof j.matchScore === 'number' && isActionable(j))
       .sort((a, b) => b.matchScore - a.matchScore)
-      .slice(0, 10)
+      .slice(0, 10))
       .map(summarizeJob)
     base.applications = buildApplicationContext()
   }

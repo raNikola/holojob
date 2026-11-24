@@ -43,10 +43,15 @@ const OWNER_ONLY = ['status', 'keptByUser', 'tailoredAssets', 'aiInsights', 'out
  * The server's list for the screen tests (POST /api/jobs/list), made by the route's own `listAnswer` over what this stub server holds: the rows of the browser's stored
  * list that the server would hold (everything but the browser-only rows, without the owner's work), the route's rows from `route`, the job state and the applications.
  */
-function answerList(server, rawBody, allBody, pageSize) {
+function serverStoredRows(scoredRows) {
+  if (scoredRows) return scoredRows // the scored list the test gave the server: it may hold far more than the browser does
   let local = []
   try { local = JSON.parse(localStorage.getItem(JOBS_STORAGE_KEY))?.jobs ?? [] } catch { /* nothing stored */ }
-  const stored = local.filter((job) => !job.offList && !job.manualEntry).map((job) => Object.fromEntries(Object.entries(job).filter(([key]) => !OWNER_ONLY.includes(key))))
+  return local.filter((job) => !job.offList && !job.manualEntry).map((job) => Object.fromEntries(Object.entries(job).filter(([key]) => !OWNER_ONLY.includes(key))))
+}
+
+function answerList(server, rawBody, allBody, pageSize, scoredRows) {
+  const stored = serverStoredRows(scoredRows)
   const revision = `r${server.stateWrites.length}.${server.posts.length}`
   const request = parseListBody(rawBody)
   if (request.revision && request.revision !== revision) return { ok: true, changed: true, revision }
@@ -55,7 +60,7 @@ function answerList(server, rawBody, allBody, pageSize) {
 }
 
 /** `route(call)` answers /api/jobs/all (and, with `listServer`, the rows under /api/jobs/list); `ledger(jobId)` answers /api/jobs/history; `applications` is the store the server holds. */
-export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {}, listServer = false, pageSize = 100 } = {}) {
+export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {}, listServer = false, pageSize = 100, scoredRows = null } = {}) {
   const server = { allCalls: 0, posts: [], applications, jobState: { version: 1, updatedAt: null, jobs: {} }, stateWrites: [], listCalls: [] }
   vi.stubGlobal('fetch', async (url, options = {}) => {
     const path = String(url).split('?')[0]
@@ -68,7 +73,12 @@ export function stubServer({ route = () => routeAnswer([]), health = true, score
       if (String(options.body).length > MAX_JSON_BODY_BYTES) return reply(413, { ok: false, limitBytes: MAX_JSON_BODY_BYTES, error: "The browser's own ads are too many to send with one list request. Nothing was cut: no list was made." })
       const body = JSON.parse(options.body)
       server.listCalls.push(body)
-      try { return reply(200, await answerList(server, body, answer.body, pageSize)) } catch (error) { return reply(400, { ok: false, error: error.message }) }
+      try { return reply(200, await answerList(server, body, answer.body, pageSize, scoredRows)) } catch (error) { return reply(400, { ok: false, error: error.message }) }
+    }
+    if (path === '/api/jobs/list/ad' && listServer) {
+      const jobId = new URLSearchParams(String(url).split('?')[1]).get('jobId')
+      const row = serverStoredRows(scoredRows).find((job) => job.jobId === jobId)
+      return row ? reply(200, { ok: true, revision: 'r', row }) : reply(404, { ok: false, error: 'This ad has no scored row.' })
     }
     if (path === '/api/pipeline/health') return health ? reply(200, { available: true, scoring: {}, discovery: {} }) : reply(503, {})
     if (path === '/api/jobs/all') {

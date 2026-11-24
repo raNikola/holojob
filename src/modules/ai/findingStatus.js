@@ -1,4 +1,4 @@
-import { buildAiContext, buildAiRedactionHints } from './aiContextBuilder.js'
+import { buildAiContext, buildAiRedactionHints, prefetchJobContext } from './aiContextBuilder.js'
 
 const NOT_FRESH = { fresh: false, at: null, model: null }
 
@@ -8,6 +8,7 @@ const NOT_FRESH = { fresh: false, at: null, model: null }
  */
 export async function fetchFindingStatus(featureId, { job } = {}) {
   try {
+    await prefetchJobContext()
     const context = { ...buildAiContext({ featureId, job }), redactionHints: buildAiRedactionHints({ job }) }
     const res = await fetch('/api/ai/findings/check', {
       method: 'POST',

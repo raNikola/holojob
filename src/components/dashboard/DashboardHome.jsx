@@ -12,6 +12,8 @@ import { trackerStats } from '../../modules/applications/trackingView'
 import { useApplications } from '../../hooks/useApplications'
 import { probePipelineApi } from '../../modules/jobs/pipelineRunner'
 import { isApiAvailable } from '../../utils/apiAvailability'
+import { isServerListActive } from '../../modules/jobs/serverListSwitch'
+import { useServerStats } from '../../modules/jobs/useServerStats'
 import { JOBS_TAB_STORAGE_KEY, VIEWS } from '../../modules/appNavigation'
 
 export default function DashboardHome({ onNavigate }) {
@@ -23,11 +25,14 @@ export default function DashboardHome({ onNavigate }) {
   const jobState = useMemo(() => loadJobs(), [])
   const applications = useApplications()
   const storeReady = applications.status === 'ready'
-  const stats = useMemo(
+  const localStats = useMemo(
     // The tracker cards count applications from the store, whether or not their ad still has a row.
     () => ({ ...computeJobStats(jobState.jobs), ...trackerStats(storeReady ? applications.store : null, applications.settings) }),
     [jobState.jobs, storeReady, applications.store, applications.settings],
   )
+  // With the server's list the browser holds only the ads the owner worked on: the numbers of the whole list are the server's.
+  const serverStats = useServerStats({ enabled: apiStatus === 'connected' && isServerListActive(), stored: jobState.jobs })
+  const stats = serverStats ?? localStats
   const trackerLoading = applications.status === 'idle' || applications.status === 'loading'
   const outreachMetrics = useMemo(() => computeOutreachMetrics(jobState.jobs), [jobState.jobs])
 

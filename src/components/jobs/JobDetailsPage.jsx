@@ -7,10 +7,13 @@ import Alert from '../ui/Alert'
 import JobDetailBody from './JobDetailBody'
 import ApplicationTrackerPanel from './ApplicationTrackerPanel'
 import { autoLoadJobs } from '../../modules/jobs/autoLoadJobs'
+import { fetchServerAd } from '../../modules/jobs/jobListClient'
+import { isServerListActive } from '../../modules/jobs/serverListSwitch'
+import { ensureApiAvailable } from '../../utils/apiAvailability'
 import { FILE_FIELDS, loadJobs } from '../../modules/jobs/jobStorage'
 import { addJobIfAbsent } from '../../modules/jobs/jobsStore'
 import { findRoutedJob, closeJobPage } from '../../modules/jobs/jobRoute'
-import { loadJobSources, resolveJob } from '../../modules/jobs/jobResolve'
+import { loadJobSources, loadJobSourcesFromServer, resolveJob } from '../../modules/jobs/jobResolve'
 import { formatSeen } from '../../modules/jobs/jobHistory'
 import { loadJobHistory, loadLatestDiscoveredJobs, probePipelineApi } from '../../modules/jobs/pipelineRunner'
 import { applicationsForJob } from '../../modules/applications/trackingView'
@@ -46,7 +49,11 @@ export default function JobDetailsPage({ jobId }) {
 
   useEffect(() => {
     let cancelled = false
-    loadJobSources(jobId, loadJobs(), { autoLoad: autoLoadJobs, loadDiscovered: loadLatestDiscoveredJobs, loadHistory: loadJobHistory }).then((found) => {
+    // With the server's list the browser holds only the ads the owner worked on: the scored row is the server's, and opening an ad adds nothing to the browser's list.
+    const load = isServerListActive()
+      ? ensureApiAvailable().then((apiAvailable) => loadJobSourcesFromServer(jobId, loadJobs(), { fetchAd: fetchServerAd, loadHistory: loadJobHistory, apiAvailable }))
+      : loadJobSources(jobId, loadJobs(), { autoLoad: autoLoadJobs, loadDiscovered: loadLatestDiscoveredJobs, loadHistory: loadJobHistory })
+    load.then((found) => {
       if (cancelled) return
       // a job the file knows and this browser does not: add it, never replace a stored record. A fallback is not added.
       if (found.addable) addJobIfAbsent(found.addable)
@@ -98,7 +105,7 @@ export default function JobDetailsPage({ jobId }) {
         </div>
       </div>
       {resolved.notInLatest && <NotInLatestRun resolved={resolved} />}
-      {resolved.source === 'ledger' && (
+      {(resolved.source === 'ledger' || resolved.source === 'file') && ( // an ad only the server holds (its ledger copy, or its scored row from the server's list) is read-only until Keep
         <div className="space-y-2">
           <p className="text-sm text-stone-600 dark:text-stone-400">{KEEP_FIRST_NOTE}</p>
           <KeepAdButton row={job} />

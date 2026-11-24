@@ -14,13 +14,14 @@ import { DEFAULT_SORT } from './jobTableModel.js'
 
 export const LIST_URL = '/api/jobs/list'
 export const AD_URL = '/api/jobs/list/ad'
+export const CONTEXT_URL = '/api/jobs/list/context'
 
 /**
  * The body of a list request. `extraRows` is the browser's own rows, as the allowlist lets them out (`selectExtraRows`). `sort` is the table's sort state:
  * the default sort (told by identity, as the table does) is sent as no sort. `today` is the browser's day for the deadline column. The page size is not a
  * parameter: it is the Settings field `jobsPageSize`, and the server answers with the one it used.
  */
-export function buildListBody({ stored, mode, offset = 0, filters = {}, classes = [], recent = false, sort = null, today = null, revision = null, ids = false }) {
+export function buildListBody({ stored, mode, offset = 0, filters = {}, classes = [], recent = false, sort = null, today = null, revision = null, ids = false, countsOnly = false }) {
   return {
     mode,
     offset,
@@ -31,6 +32,7 @@ export function buildListBody({ stored, mode, offset = 0, filters = {}, classes 
     ...(today === null ? {} : { today }),
     ...(revision ? { revision } : {}),
     ...(ids ? { ids: true } : {}),
+    ...(countsOnly ? { countsOnly: true } : {}),
     // The ad's text is most of a row's bytes and only a text search reads it: it goes only while a search is on.
     extraRows: selectExtraRows(stored, { withText: Boolean(String(filters?.searchText ?? '').trim()) }),
   }
@@ -98,12 +100,37 @@ export const shownRows = (page, stored) => listRows(page.rows, stored)
 export async function openAd({ jobId, stored, fetchFn = globalThis.fetch }) {
   const local = (stored ?? []).find((job) => job.jobId === jobId)
   if (local) return { source: 'local', row: local, readOnly: false }
+  const ad = await fetchServerAd(jobId, fetchFn)
+  return ad.ok ? { source: 'server', row: ad.row, readOnly: true, revision: ad.revision } : { source: 'none', status: ad.status, message: ad.message }
+}
+
+/** The server's full row of one scored ad (`GET /api/jobs/list/ad`), whether or not the browser holds it. Reads only. */
+export async function fetchServerAd(jobId, fetchFn = globalThis.fetch) {
   try {
     const res = await fetchFn(`${AD_URL}?jobId=${encodeURIComponent(jobId)}`)
     const json = await res.json().catch(() => null)
-    if (res.ok && json?.ok === true) return { source: 'server', row: json.row, readOnly: true, revision: json.revision }
-    return { source: 'none', status: res.status, message: json?.error ?? null }
+    if (res.ok && json?.ok === true) return { ok: true, row: json.row, revision: json.revision }
+    return { ok: false, status: res.status, message: json?.error ?? null }
   } catch (error) {
-    return { source: 'none', status: 0, message: error.message }
+    return { ok: false, status: 0, message: error.message }
+  }
+}
+
+/** The numbers of the whole list with no rows (the Dashboard's cards, the AI context's totals): `{ ok: true, counts, total }` or `{ ok: false, message }`. */
+export async function fetchListCounts({ stored, mode = 'active', fetchFn = globalThis.fetch }) {
+  const answer = await fetchListPage(buildListBody({ stored, mode, countsOnly: true }), fetchFn)
+  if (!answer.ok) return answer
+  return answer.changed ? { ok: false, message: 'The list changed while its numbers were read.' } : { ok: true, counts: answer.page.counts, total: answer.page.total }
+}
+
+/** What the AI context reads of the whole list: `{ ok: true, topJobs, skillGap }` or `{ ok: false, message }`. */
+export async function fetchJobContext(fetchFn = globalThis.fetch) {
+  try {
+    const res = await fetchFn(CONTEXT_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    const json = await res.json().catch(() => null)
+    if (res.ok && json?.ok === true) return { ok: true, topJobs: json.topJobs, skillGap: json.skillGap }
+    return { ok: false, message: json?.message || json?.error || `The job context could not be loaded (${res.status}).` }
+  } catch (error) {
+    return { ok: false, message: error.message }
   }
 }

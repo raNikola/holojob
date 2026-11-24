@@ -97,3 +97,20 @@ export async function loadJobSources(jobId, state, { autoLoad, loadDiscovered, l
   const ledger = !inFile || blank(text) || mayBeTeaser ? await loadHistory(jobId) : null
   return { fileChecked, inFile, row, fileJob, addable, ledger }
 }
+
+/**
+ * The same sources as `loadJobSources`, when the server's list is on: the browser holds only the ads the owner worked on, so the scored row comes from the server's
+ * `GET /api/jobs/list/ad` (not from a whole scored file) and is never added to the browser's list: `addable` is always null. An ad with no stored row opens read-only
+ * from this row, as the ledger's ads always did, until the owner presses Keep. Reads only.
+ */
+export async function loadJobSourcesFromServer(jobId, state, { fetchAd, loadHistory, apiAvailable = true }) {
+  const stored = (state?.jobs ?? []).find((job) => job.jobId === jobId) ?? null
+  const ad = apiAvailable ? await fetchAd(jobId) : { ok: false }
+  const fileJob = ad.ok ? ad.row : null
+  const inFile = Boolean(fileJob)
+  const text = (fileJob ?? stored)?.description
+  const mayBeTeaser = (fileJob ?? stored)?.source === 'infostud' && (fileJob ?? stored)?.descriptionStatus !== 'complete'
+  const ledger = !inFile || blank(text) || mayBeTeaser ? await loadHistory(jobId) : null
+  // `row` is where the page reads the file's own fields (the text, the facts, the engine's answer): the server's full row.
+  return { fileChecked: apiAvailable, inFile, row: fileJob, fileJob, addable: null, ledger }
+}

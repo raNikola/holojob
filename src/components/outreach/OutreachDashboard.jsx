@@ -15,7 +15,7 @@ import {
   updateJobOutreach,
   updateJobRecord,
 } from '../../modules/jobs/jobStorage'
-import { overlayTracking } from '../../modules/applications/trackingView'
+import { applicationOnlyJobs, overlayTracking } from '../../modules/applications/trackingView'
 import { scheduleFollowUp } from '../../modules/applications/trackerController'
 import { useApplications } from '../../hooks/useApplications'
 import { computeOutreachMetrics, aggregateAllContacts } from '../../modules/outreach/outreachMetrics'
@@ -53,9 +53,13 @@ export default function OutreachDashboard() {
   const metrics = useMemo(() => computeOutreachMetrics(viewJobs), [viewJobs])
   const contacts = useMemo(() => aggregateAllContacts(viewJobs), [viewJobs])
 
+  // An ad with an application and no stored row (the browser holds only the ads the owner worked on) is an applied job too.
   const appliedJobs = useMemo(
-    () => viewJobs.filter((j) => j.status === 'applied_manually' || j.applicationTracking?.applied),
-    [viewJobs],
+    () => [
+      ...viewJobs.filter((j) => j.status === 'applied_manually' || j.applicationTracking?.applied),
+      ...applicationOnlyJobs(state.jobs, applications.status === 'ready' ? applications.store : null, applications.settings),
+    ],
+    [viewJobs, state.jobs, applications.status, applications.store, applications.settings],
   )
 
   const handleJobUpdated = useCallback((updatedJob) => {

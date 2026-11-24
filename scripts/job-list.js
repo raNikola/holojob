@@ -300,7 +300,12 @@ function rowsAnswer(index, jobIds) {
   if (new Set(jobIds).size !== jobIds.length) throw new HttpError(400, 'jobIds repeats an id')
   const byId = new Map(index.stored.map((row) => [row.jobId, row]))
   // The ad's text stays (a stored row of a kept or off-list ad has no other copy but the ledger's); the facts and the engine's answer, which are large, do not.
-  const forStorage = (row) => { const { llmFacts: _facts, engineShadow: _shadow, ...rest } = row; return rest }
+  const forStorage = (row) => {
+    const rest = { ...row }
+    delete rest.llmFacts
+    delete rest.engineShadow
+    return rest
+  }
   return {
     ok: true, revision: index.revision, meta: index.scoredMeta ?? null,
     rows: jobIds.filter((id) => byId.has(id)).map((id) => forStorage(byId.get(id))),

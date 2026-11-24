@@ -3,7 +3,7 @@ import { ensureApiAvailable, isApiAvailable } from '../../utils/apiAvailability.
 import { fetchAiSelection } from './aiSelectionClient.js'
 import { getFeature, isFeatureEnabled } from './aiFeatureRegistry.js'
 import { buildMessages, parseAiResponse } from './aiPromptLibrary.js'
-import { buildAiContext, buildAiRedactionHints } from './aiContextBuilder.js'
+import { buildAiContext, buildAiRedactionHints, prefetchJobContext } from './aiContextBuilder.js'
 import { buildCacheKey, getCachedResponse, setCachedResponse } from './aiResponseCache.js'
 import { trackAiUsage } from './aiUsageTracker.js'
 import { mergeFeatureIntoMemory } from './aiMemory.js'
@@ -24,6 +24,7 @@ export async function runAiFeature(featureId, { job, message, extra, skipCache =
     throw new Error(`AI feature "${feature.label}" is disabled in Settings`)
   }
 
+  await prefetchJobContext() // what the context reads of the whole list, from the server when its list is on
   const context = buildAiContext({ featureId, job, message, extra })
   const messages = buildMessages(featureId, context)
   const cacheKey = buildCacheKey({
