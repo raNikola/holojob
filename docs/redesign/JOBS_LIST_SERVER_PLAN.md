@@ -27,11 +27,11 @@ The browser holds only the ads currently shown on the Jobs list plus the owner's
 | P1 | Shared default sort-key function, parity harness, Settings page-size field. No route | M | done (commit in the Log); full tier green |
 | P2 | Index in Node, `GET /api/jobs/list` (filters, search, sort, offset/limit, revision, counts, ids mode), full ad on open | L | done (commit in the Log); route not used by any screen yet |
 | P2b | Browser-only worked ads in the paged list (binding requirement 8): `extraRows` bridge (removed in P5), allowlist, POST route, parity test, opening a browser-only ad | M | done (commit in the Log); the screen does not call it until P3 |
-| P3 | The Jobs screen reads pages; the import stops loading the whole file; `JOB_PAGE_SIZE` and the lean/minimal storage tiers go | L | todo (needs P2b) |
-| P4 | Other screens (Board, Statistics, Outreach, Resume library, Dashboard, AI context) stop depending on the full list; server stats route | M-L | todo (needs P2b) |
+| P3 | The Jobs screen reads pages; the import stops loading the whole file; `JOB_PAGE_SIZE` goes (the lean/minimal storage tiers stay, dormant: see Open items) | L | done (commits in the Log); the server list is ON |
+| P4 | Other screens (Board, Statistics, Outreach, Resume library, Dashboard, AI context) stop depending on the full list; server stats route | M-L | done (commits in the Log) |
 | P5 | Step 5's owner overlay for notes, outreach, tailored assets and AI insights. **Removes the `extraRows` bridge** (`extraRows.js`, the POST body field, `selectExtraRows` / `mergeLocalRow` and their tests) | L | todo, can wait |
 
-P3 and P4 ship together. Nothing is deployed before P4.
+P3 and P4 ship together. Nothing is deployed before P4. **P3 and P4 are done on this branch; nothing has been built or deployed (the owner's step).**
 
 ## P0 result (2026-11-24, read-only copy of the real data; nothing under `data/` was modified)
 
@@ -114,7 +114,7 @@ The server-mode list is built beside the local pipeline and stays off until ever
 | S3 | The Jobs screen in server mode: stats and notices from the server's counts, status on a server-only ad via job-state, the harness answers `/api/jobs/list` | done (the switch is still off) |
 | S4 | Server: counts-only and rows-by-ids answers for the other screens | done |
 | S5 | Other screens (Dashboard, Outreach, Resume library, Application home, AI context, Job Details) off the full list | done (the switch is still off) |
-| S6 | The import stops loading the whole file; `JOB_PAGE_SIZE` and the lean/minimal storage tiers go; the switch is turned on; full tier | todo |
+| S6 | The import stops loading the whole file; `JOB_PAGE_SIZE` goes; the switch is turned on; full tier | done (S6a, S6b); the tiers and the local "API on" path stay, see Open items |
 
 **S1 (loader).** `createServerListLoader` holds `status`, `rows`, `total`, `nextOffset`, `revision`, `counts`, `error`, `notice`. `setRequest` starts a new list when the query changes (old rows dropped at once), reloads in place when only the browser's own rows changed (rows stay on screen, the same number is loaded again), and does nothing when neither changed. `more()` asks for the next page with the revision; a `changed` answer loads the list again from the first page and says so in `notice`. A read of several pages that moves in the middle starts again from page one. A refused request (a too-large body) keeps any rows already shown, and with none it is `status: 'error'` with the row count and the words; a late answer to an old request is ignored. `useServerList` is the thin hook. 16 tests against the real route over HTTP.
 
@@ -144,24 +144,29 @@ The server-mode list is built beside the local pipeline and stays off until ever
 
 **S6a (the whole-file import is replaced; the switch is still off).** With the server's list on, nothing loads the whole scored list into the browser: on load, after a Re-score or a Re-scrape, on the auto-refresh and on "load scored jobs" the browser brings the rows it HOLDS up to date from the server (`refreshWorkedRows`, one request naming those ads) and reads the list again; the ads the owner has just made theirs (tailored documents, a job imported by its address) are taken into the browser's list (`adoptRows`), and nothing else is. The toast's numbers ("Re-scored N jobs, M Strong fit") come from the server's counts. The import the owner chooses (the Pipeline tab's file import, Settings' import) is unchanged. Tests: the screen runs a 300-row scored list against a one-row browser (the scored file is never fetched, the browser keeps one row with the server's score and the owner's work) and a new scoring (a held ad follows it, one that left the list is off the list, not lost).
 
+**S6b (activation).** The switch (`serverListSwitch.js`) is ON by default. `JOB_PAGE_SIZE`, `pageLimit`, `showMore` and `selectedNotShown` are gone: the table shows the rows it is given (the server's page size is the Settings field `jobsPageSize`; the list without a server is the demo data or the few ads the owner worked on). The long-list screen tests now run on the server's list. Requirement 8 is met (below). Full tier green (lint, 192 Vitest files, pytest incl. slow, build).
+
+**Requirement 8 (browser-only worked ads) is met.** An `offList` row and a hand-entered job the server was never given are in the server's list, in its order, its counts and its pages, because every list request carries them as `extraRows` (allowlist, slim: no text unless a search is on, a visible error with the count if it is ever over the cap); they open from the browser's own row and an action on them is saved in the browser; Mark Applied on them is kept and shows on the Board; an ad that is only a server row is never written to the browser's list. Tests: `jobListParity` (the browser's own rows, mutation-checked), `extraRows`, `jobsListExtraRows`, `browserOnlyAds`, `markAppliedBrowserOnly`, and the screen tests (a row only this browser has is in the list, an action on it persists). The bridge is removed in P5.
+
 ## Open items
 
-- **Binding requirement 8 (browser-only worked ads) stays open until done.** The mechanism is built and tested (P2b: allowlist, POST route, parity test with the browser's rows, the opening rule), but no screen calls it yet. It is done when P3/P4 use `buildListBody`, `shownRows` and `openAd` and the screen shows an `offList` row and an unsynced hand-entered job after the switch; it must not be activated before that.
-- **The bridge is removed in P5** (decision 10): `extraRows.js`, the POST `extraRows` field, `selectExtraRows`, `mergeLocalRow` and their tests go when the owner overlay holds those rows on the server.
-- **Size limit of the bridge:** one request carries about 780 slim browser-only rows (1 MB); with a text search on, about 95. Past that the owner sees the error with the row count. Syncing hand-entered jobs to the server (option A) would shrink the set; not built. **There is no way to remove an off-list row from the browser today** (only to delete a hand-entered job): to be decided with P5 or sooner if the cap is ever reached.
-- **Legacy tracking:** a row's legacy `applicationTracking` reaches the server as three values only; the notes, recruiter and links in it stay in the browser. If the owner's rows carry more that a count or filter reads, the parity test will show it when a field is added.
-- The page size is 1 to 1000, default 100 (owner, 2026-11-24). `JOB_PAGE_SIZE` stays in the screen until P3.
-- `activeWindowDays` exists only on `keep-search-ads` (`eacec8b`). Merging it with this branch needs a small conflict resolution in `python/llm/ai_gate.py`, `src/modules/ai/gateClient.js`, `src/components/ai/AIBudgetPanel.jsx` and `tests/js/aiSettingsHandler.test.js`; the owner has decided this is done when `keep-search-ads` is merged (after P3).
-- **The screen still runs its own pipeline** until P3 (only `JobTable`'s sort calls the shared `orderRows`); the parity test holds the two together meanwhile.
+- **The lean/minimal storage tiers were NOT removed (the plan said they go).** They are `saveJobs`' fallbacks when the browser's storage is near its limit, with `jobTexts`, `JobTextGate` and the storage-health notice. With the browser holding only the owner's worked ads they never trigger, so they are dormant, not wrong; removing them is a separate cleanup with its own test churn (about 600 lines and the tests that pin the tiers). Owner decides whether to remove them.
+- **The list the browser works out itself (API on, switch off) and the switch that selects it are still in the code,** used only by the tests that run both lists. In production the server's list is used whenever the API is up and it is not demo data; demo data and "no API" use the browser's own rows (the old path of `filterJobs` over the stored rows). Removing the dead "API on, switch off" path (`useAllAds` in the Jobs screen, `composeJobList` there, the screen tests' local variant) is a cleanup listed here; nothing depends on it.
+- **Export** on the Jobs screen ("JSON, saved rows" / "CSV, saved rows") exports what the browser holds: the owner's worked ads. The whole list is on the server (a full export would be a server route: not built).
+- **There is no way to remove an off-list row from the browser** (only to delete a hand-entered job). If the bridge's 1 MB cap is ever reached the message says so.
+- **The Pipeline tab's file import and Settings' import** still put a whole JSON file into the browser's list when the owner chooses to; the stored list then holds those rows (they are the owner's choice).
+- **Select-all and bulk actions** reach the ads the browser holds only; an ad that is only a server row needs Keep first (as before for server-only rows). A status on one is written to the server's job state, no Keep needed.
+- **Bulk status** (`handleBulkStatus`) still changes the browser's rows only, as before; it never wrote to the server's job state.
+- `activeWindowDays` exists only on `keep-search-ads` (`eacec8b`). Merging it with this branch needs a small conflict resolution in `python/llm/ai_gate.py`, `src/modules/ai/gateClient.js`, `src/components/ai/AIBudgetPanel.jsx`, `tests/js/aiSettingsHandler.test.js` and, now, `JobDiscoveryScreen.jsx`, `jobListView.js`, `allAds.js` and the screen tests (the Active period replaces the 14-day constant); the owner decided this is done when `keep-search-ads` is merged.
 - **Not yet in the query or route:** the filter panel's distinct location list, memoizing the composed list per revision and day.
-- **Scale:** the index holds the full stored rows (the text search reads descriptions). With `keep-search-ads` merged and a run that includes JobSpy, about 3,100 scored rows (47 MB file in the simulation) would be held, which fits (the P0 ledger parse already holds 115 MB); the paged answer is what keeps the browser small.
+- **Scale:** the index holds the full stored rows (the text search reads descriptions). With `keep-search-ads` merged and a run that includes JobSpy, about 3,100 scored rows would be held; the real-data checks (`/api/jobs/list` 0.1 to 0.4 s, 183 MB; the new answers 0.1 s) leave room.
 - Settings home for the page size: the AI-budget settings file for now (same store as the run limits); a dedicated Jobs section is the alternative.
-- The offline case (API down): worked ads only, with a notice (own proposal, P3). Demo mode: the route answers 404; P3 decides what the demo shows.
-- The real-data numbers above come from a one-off, read-only run, not from a test: the tests use a fake Python step, as `/api/jobs/all`'s do.
+- The real-data numbers in this file come from one-off, read-only runs, not from tests: the tests use a fake Python step, as `/api/jobs/all`'s do. **Nothing was run in a browser:** the screens are tested in jsdom with real clicks, the routes over real HTTP.
+- **Rollback.** Nothing is deployed. If the server list misbehaves after a deploy, `serverListSwitch.js` has the one line (`let active = true`); with it false the screens work as they did, from the whole stored list, except that the whole-file import stays off only while the switch is on.
 
 ## Waiting
 
-- `keep-search-ads` (`eacec8b`): open ads of a search source the latest search did not return stay scored and in Active, with the Active period in Settings. Unmerged until P3 is done.
+- `keep-search-ads` (`eacec8b`): open ads of a search source the latest search did not return stay scored and in Active, with the Active period in Settings. **It may be merged now that P3 is done** (the owner's step); the conflicts are in Open items.
 - `rescrape-fixes` is the same commit as `main` (`b4bc763`); nothing waits there.
 
 ## Log

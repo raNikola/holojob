@@ -60,7 +60,7 @@ function answerList(server, rawBody, allBody, pageSize, scoredRows) {
 }
 
 /** `route(call)` answers /api/jobs/all (and, with `listServer`, the rows under /api/jobs/list); `ledger(jobId)` answers /api/jobs/history; `applications` is the store the server holds. */
-export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {}, listServer = false, pageSize = 100, scoredRows = null } = {}) {
+export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {}, listServer = true, pageSize = 100, scoredRows = null } = {}) {
   const server = { allCalls: 0, posts: [], applications, jobState: { version: 1, updatedAt: null, jobs: {} }, stateWrites: [], listCalls: [], paths: [] }
   vi.stubGlobal('fetch', async (url, options = {}) => {
     const path = String(url).split('?')[0]
@@ -130,10 +130,10 @@ export const settle = () => act(async () => { await new Promise((resolve) => set
 
 /** A fresh mount of `file`'s default export under the profile provider, with `stored` in the browser. Modules are new each time, as after a page load. */
 // showNotOnBoard is on by default here: these tests use absent and closed rows as ordinary rows; the default-off behaviour has its own tests.
-export async function mountScreen({ stored = [], file = '../../../src/components/jobs/JobDiscoveryScreen.jsx', props = {}, keepStorage = false, filters = {}, server = false } = {}) {
+export async function mountScreen({ stored = [], file = '../../../src/components/jobs/JobDiscoveryScreen.jsx', props = {}, keepStorage = false, filters = {}, server = true } = {}) {
   vi.resetModules()
-  // the server's list is off by default; a test turns it on (the module is new after the reset, so it is turned on after it)
-  if (server) (await import('../../../src/modules/jobs/serverListSwitch.js')).setServerListActive(true)
+  // the server's list is on; a test of the list the browser works out itself turns it off (the module is new after the reset, so it is set after it)
+  ;(await import('../../../src/modules/jobs/serverListSwitch.js')).setServerListActive(server)
   const storage = await import('../../../src/modules/jobs/jobStorage.js')
   if (!keepStorage) {
     localStorage.clear()

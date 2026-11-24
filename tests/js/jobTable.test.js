@@ -8,7 +8,7 @@ import FitScore from '../../src/components/jobs/FitScore.jsx'
 import FitTier from '../../src/components/jobs/FitTier.jsx'
 import JobTable from '../../src/components/jobs/JobTable.jsx'
 import {
-  JOB_PAGE_SIZE, closedLast, defaultOrder, everySelected, pageLimit, selectedNotShown, selectionFor, showMore, toggleAllSelected, toggleSelected,
+  closedLast, defaultOrder, everySelected, selectionFor, toggleAllSelected, toggleSelected,
 } from '../../src/modules/jobs/jobTableModel.js'
 import { getDefaultJobsState, saveJobs, updateFilters } from '../../src/modules/jobs/jobStorage.js'
 
@@ -68,48 +68,29 @@ describe('paging: the whole list is sorted, then a batch is taken', () => {
     expect(html.indexOf('The best ad')).toBeLessThan(html.indexOf('Ad 0<'))
   })
 
-  it('a row that sorts last is not, though it is first in the list', () => {
+  it('a row that sorts last is shown too: the table cuts nothing itself (the server pages its own list)', () => {
     viewport(true)
     const jobs = list(500)
     jobs[0] = job(0, { blockedBy: [{ kind: 'language', text: 'needs German' }], title: 'The worst ad' })
-    expect(render(jobs)).not.toContain('The worst ad')
+    expect(render(jobs)).toContain('The worst ad')
   })
 
-  it('shows one batch, N of M and the button', () => {
+  it('shows every row it is given and N of N, with no button: the list without a server is small', () => {
     viewport(true)
-    const html = render(list(3500))
-    expect(JOB_PAGE_SIZE).toBe(100)
-    expect(count(html, '<tr')).toBe(102) // the header, one group heading, one batch
-    expect(html).toContain('Showing 100 of 3500')
-    expect(html).toContain('Show 100 more')
+    const html = render(list(350))
+    expect(count(html, '<tr')).toBe(352) // the header, one group heading, every ad
+    expect(html).toContain('Showing 350 of 350')
+    expect(html).not.toContain('more</button>')
   })
 
-  it('the Provider column is judged on the whole list, not the batch', () => {
+  it('the Provider column is judged on the whole list', () => {
     viewport(true)
     const jobs = list(150).map((j) => ({ ...j, provider: '', site: '' }))
     jobs[149] = { ...jobs[149], blockedBy: [{ kind: 'language', text: 'needs German' }], provider: 'greenhouse', title: 'Last in the sort' }
     const html = render(jobs)
-    expect(html).not.toContain('Last in the sort')
+    expect(html).toContain('Last in the sort')
     expect(html).toContain('Provider')
   })
-})
-
-describe('the paging state', () => {
-  it('starts at one batch and grows by one', () => {
-    expect(pageLimit(null, 'k')).toBe(100)
-    const once = showMore(null, 'k')
-    expect(once).toEqual({ key: 'k', limit: 200 })
-    expect(showMore(once, 'k').limit).toBe(300)
-  })
-
-  it('a new key, a filter or a sort, is back to one batch', () => {
-    const paged = showMore(showMore(null, 'filters|score|desc'), 'filters|score|desc')
-    expect(pageLimit(paged, 'filters|score|desc')).toBe(300)
-    expect(pageLimit(paged, 'filters|title|asc')).toBe(100)
-    expect(pageLimit(paged, 'other filters|score|desc')).toBe(100)
-    expect(showMore(paged, 'filters|title|asc').limit).toBe(200)
-  })
-
 })
 
 describe('selection', () => {
@@ -137,16 +118,9 @@ describe('selection', () => {
     const checked = (html) => count(html, 'checked=""')
     expect(checked(render(list(150), { selectedJobIds: selected }))).toBe(1)
     const later = new Set(['j149'])
-    expect(checked(render(list(150), { selectedJobIds: later }))).toBe(0)
+    expect(checked(render(list(150), { selectedJobIds: later }))).toBe(1) // every row is shown, wherever it sorts
   })
 
-  it('counts the selected rows that are not on screen', () => {
-    const jobs = list(300)
-    expect(selectedNotShown(new Set(['j5', 'j150', 'j299']), jobs, 100)).toBe(2)
-    expect(selectedNotShown(new Set(['j5']), jobs, 100)).toBe(0)
-    expect(selectedNotShown(new Set(), jobs, 100)).toBe(0)
-    expect(selectedNotShown(new Set(['j0']), jobs, 0)).toBe(1)
-  })
 })
 
 describe('select all means every filtered row', () => {
@@ -216,12 +190,11 @@ describe('storage', () => {
     for (const word of ['localStorage', 'sessionStorage', 'saveJobs', 'patchJob', 'addJobIfAbsent']) expect(code).not.toContain(word)
   })
 
-  it('rendering and paging and selecting touch no storage', () => {
+  it('rendering and selecting touch no storage', () => {
     const touch = vi.fn(() => { throw new Error('storage was touched') })
     vi.stubGlobal('localStorage', { getItem: touch, setItem: touch, removeItem: touch })
     viewport(true)
     render(list(150), { selectedJobIds: new Set(['j1']) })
-    showMore(null, 'k')
     toggleAllSelected(toggleSelected(null, 'k', 'a'), 'k', ['a', 'b'])
     expect(touch).not.toHaveBeenCalled()
   })

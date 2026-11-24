@@ -35,9 +35,10 @@ beforeEach(() => { serverMode = on })
 
 const many = (count) => Array.from({ length: count }, (_, i) => storedJob(`j${String(i).padStart(4, '0')}`, { title: `Job ${i}`, matchScore: 50 }))
 
-describe('the table on a long list', () => {
+// The table pages a long list through the server (the list without a server has no page size: it is the demo data or the few ads the owner worked on).
+;(on ? describe : describe.skip)('the table on a long list', () => {
   it('sorts the whole list, then shows a batch', async () => {
-    stubList({ health: false })
+    stubList({ route: () => routeAnswer([]) })
     const jobs = many(350)
     jobs[349] = { ...jobs[349], matchScore: 80, title: 'The best ad' } // the only Strong fit: the first tier comes first whatever its place in the list
     screen = await mountList({ stored: jobs })
@@ -49,7 +50,7 @@ describe('the table on a long list', () => {
   })
 
   it('selection survives Show more and a re-sort, and neither writes storage', async () => {
-    stubList({ health: false })
+    stubList({ route: () => routeAnswer([]) })
     screen = await mountList({ stored: many(350) })
     const raw = screen.raw()
     const writes = countWrites(screen.key)
@@ -66,7 +67,7 @@ describe('the table on a long list', () => {
   })
 
   it('a filter change resets the selection and the batch, keeps its persistence, and the stored jobs stay byte-identical', async () => {
-    stubList({ health: false })
+    stubList({ route: () => routeAnswer([]) })
     screen = await mountList({ stored: many(150) })
     const before = JSON.stringify(screen.storedJobs())
     await screen.click(screen.rows()[0].querySelector('input[type=checkbox]'))
@@ -112,7 +113,7 @@ describe('the table on a long list', () => {
   })
 
   it('bulk status acts on the selected stored rows', async () => {
-    stubList({ health: false })
+    stubList({ route: () => routeAnswer([]) })
     screen = await mountList({ stored: many(3) })
     await screen.click(screen.rows()[0].querySelector('input[type=checkbox]'))
     await screen.click(screen.button(/^Mark saved$/))
@@ -121,7 +122,7 @@ describe('the table on a long list', () => {
   })
 
   it('the keyboard keeps its place when the last Show more button goes', async () => {
-    stubList({ health: false })
+    stubList({ route: () => routeAnswer([]) })
     screen = await mountList({ stored: many(150) })
     const button = screen.button(/Show 50 more/)
     button.focus()
@@ -130,7 +131,7 @@ describe('the table on a long list', () => {
   })
 
   it('the Fit tier column is judged on the whole list, also after a re-sort moves the only score out of the batch', async () => {
-    stubList({ health: false })
+    stubList({ route: () => routeAnswer([]) })
     const jobs = many(150).map((j, i) => ({ ...j, matchScore: i === 0 ? 5 : undefined, title: i === 0 ? 'ZZZ last by title' : j.title }))
     screen = await mountList({ stored: jobs })
     await screen.click([...screen.container.querySelectorAll('th button')].find((b) => /title/i.test(b.textContent)))

@@ -691,7 +691,6 @@ export default function JobDiscoveryScreen() {
                 apiAvailable={pipelineApiAvailable}
                 onJobUpdated={handleJobUpdated}
                 selectedJobIds={selectedJobIds}
-                filterKey={filterKey}
                 classView={useComposed}
                 reference={reference}
                 onAddFromRow={handleAddFromRow}

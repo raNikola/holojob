@@ -11,7 +11,6 @@ import { getJobProvider } from './jobFilters.js'
 import { deadlineSortValue } from './jobDeadline.js'
 import { sortRows } from '../tableSort.js'
 
-export const JOB_PAGE_SIZE = 100
 const NOTHING = new Set()
 
 const byId = (a, b) => (a.jobId === b.jobId ? 0 : String(a.jobId) < String(b.jobId) ? -1 : 1)
@@ -132,16 +131,6 @@ export function blockedLast(rows) {
   return [...rows.filter((row) => !blocked(row)), ...rows.filter(blocked)]
 }
 
-/** How many rows are shown under `key`: paging is `{ key, limit }`, and the key holds the filters and the sort. */
-export function pageLimit(paging, key) {
-  return paging?.key === key ? paging.limit : JOB_PAGE_SIZE
-}
-
-/** The paging after "Show more". */
-export function showMore(paging, key) {
-  return { key, limit: pageLimit(paging, key) + JOB_PAGE_SIZE }
-}
-
 /** The ids selected under `key`, the filters: selection is `{ key, ids }`. Sorting and Show more do not change the key. */
 export function selectionFor(selection, key) {
   return selection?.key === key ? selection.ids : NOTHING
@@ -161,11 +150,4 @@ export function everySelected(selected, jobIds) {
 /** Select all means every filtered row, shown or not; with all of them selected already, it clears. */
 export function toggleAllSelected(selection, key, jobIds) {
   return { key, ids: everySelected(selectionFor(selection, key), jobIds) ? new Set() : new Set(jobIds) }
-}
-
-/** How many selected rows are in `allJobs` but not among the rows on screen. */
-export function selectedNotShown(selected, allJobs, shownCount) {
-  let count = 0
-  for (let i = shownCount; i < allJobs.length; i += 1) if (selected.has(allJobs[i].jobId)) count += 1
-  return count
 }

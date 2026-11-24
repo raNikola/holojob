@@ -3,7 +3,7 @@ import { Bookmark, CircleDot, ExternalLink, SquareCheckBig, X } from 'lucide-rea
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { DEFAULT_SORT, JOB_PAGE_SIZE, SORT_COLUMNS, everySelected, orderRows, pageLimit, selectedNotShown, showMore } from '../../modules/jobs/jobTableModel'
+import { DEFAULT_SORT, SORT_COLUMNS, everySelected, orderRows } from '../../modules/jobs/jobTableModel'
 import { SERVER_ONLY_NOTE, classBadges, rowKind, selectableIds } from '../../modules/jobs/jobListView'
 import KeepAdButton from './KeepAdButton'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
@@ -237,7 +237,6 @@ export default function JobTable({
   onToggleSelect,
   onToggleSelectAll,
   onJobSelect,
-  filterKey = '',
   classView = false,
   onAddFromRow,
   reference,
@@ -252,7 +251,6 @@ export default function JobTable({
   const triage = Boolean(server) // the server list is on: a status on a row only the server holds goes to the server
   const [openedAt] = useState(() => Date.now())
   const today = dayOf(reference ?? openedAt)
-  const [paging, setPaging] = useState(null)
   const pagerRef = useRef(null)
   const isDesktop = useMediaQuery(DESKTOP, true)
   // The whole list is sorted first; only then is a batch taken from it. The list's other uses read the whole list too.
@@ -260,18 +258,16 @@ export default function JobTable({
     if (server) return unsortedJobs // already in the server's order
     return orderRows(unsortedJobs, sort, today) // the default sort is told by identity: any click replaces it, even back to the same column
   }, [unsortedJobs, sort, today, server])
-  const pageKey = `${filterKey}|${sort.key}|${sort.dir}`
-  const limit = server ? jobs.length : pageLimit(paging, pageKey)
-  const visibleJobs = useMemo(() => (server ? jobs : jobs.slice(0, limit)), [jobs, limit, server])
+  const visibleJobs = jobs // every row it is given: with the server's list the server pages, without it (demo data, no API) the list is small
   const headingAt = (index) => (sort === DEFAULT_SORT ? groupHeading(visibleJobs, index) : null)
   const showScores = server ? server.hasScores : hasMatchScores(jobs)
   const showProvider = server ? server.hasProvider : jobs.some((j) => getJobProvider(j))
   const selectable = useMemo(() => selectableIds(jobs), [jobs])
   const allSelected = useMemo(() => everySelected(selectedJobIds, selectable), [selectedJobIds, selectable])
-  const notShown = useMemo(
-    () => (server ? [...selectedJobIds].filter((id) => !jobs.some((job) => job.jobId === id)).length : selectedNotShown(selectedJobIds, jobs, limit)),
-    [selectedJobIds, jobs, limit, server],
-  )
+  const notShown = useMemo(() => {
+    const shown = new Set(jobs.map((job) => job.jobId))
+    return [...selectedJobIds].filter((id) => !shown.has(id)).length
+  }, [selectedJobIds, jobs])
   // Only stored rows can be selected: bulk actions act on those.
   const unsaved = jobs.length - selectable.length
   const total = server ? server.total : jobs.length
@@ -287,11 +283,10 @@ export default function JobTable({
     )
   }
 
-  const remaining = total - visibleJobs.length
-  const step = server ? server.pageSize : JOB_PAGE_SIZE
+  const remaining = total - visibleJobs.length // only the server's list has rows it has not sent yet
+  const step = server?.pageSize ?? 0
   const handleShowMore = () => {
-    if (server) server.onShowMore()
-    else setPaging(showMore(paging, pageKey))
+    server?.onShowMore()
     if (remaining <= step) pagerRef.current?.focus() // the button is about to go: keep the keyboard's place
   }
 
