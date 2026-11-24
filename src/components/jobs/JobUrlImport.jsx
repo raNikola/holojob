@@ -21,7 +21,7 @@ export default function JobUrlImport({ onImported }) {
     try {
       const data = await importJobsByUrl({ urls, tailor, profile })
       setResult(data)
-      if (data.payload) onImported(data.payload)
+      if (data.payload) onImported(data.payload, data.imported)
       if (data.imported?.length) setInput('')
     } catch (e) {
       setError(e.message)

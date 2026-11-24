@@ -405,7 +405,9 @@ describe('the server\'s list on the screen', () => {
     await screen.click(screen.button(/Show 100 more/))
     await settle()
     expect(screen.rows()).toHaveLength(200)
-    expect(server.listCalls.map((call) => call.offset)).toEqual([0, 100])
+    // (the rows the browser holds are brought up to date when the screen opens, which reads the list once more from the first page)
+    expect(server.listCalls.map((call) => call.offset).slice(-2)).toEqual([0, 100])
+    expect(server.listCalls.every((call) => call.offset === 0 || call.offset === 100)).toBe(true)
   })
 
   it2('select all reaches the ads of every page, not only the ones shown', async () => {
@@ -437,6 +439,35 @@ describe('the server\'s list on the screen', () => {
     expect(screen.text()).toContain('120 ads')
     expect(screen.text()).toContain('Nothing was cut and no list was made')
     expect(screen.text()).toMatch(/delete hand-entered jobs/i)
+  })
+
+  it2('the whole scored list is never loaded into the browser: on load, after a Re-score, and the browser keeps only the rows it holds', async () => {
+    const wide = Array.from({ length: 300 }, (_, i) => storedJob(`wide${String(i).padStart(3, '0')}`, { title: `Wide ${i}`, matchScore: 50 + (i % 40) }))
+    const mineRow = storedJob('wide007', { title: 'Old title', status: 'saved', matchScore: 1, notes: 'private' })
+    const server = stubList({ route: () => routeAnswer([]), scoredRows: wide, scored: () => ({ meta: {}, jobs: wide }) })
+    screen = await mountList({ stored: [mineRow] })
+    await settle()
+    expect(server.paths).not.toContain('/api/scoring/jobs') // the scored file is not fetched
+    expect(screen.storedJobs().map((j) => j.jobId)).toEqual(['wide007']) // 300 rows on the server, one in the browser
+    expect(screen.storedJobs()[0]).toMatchObject({ title: 'Wide 7', matchScore: 57, status: 'saved', notes: 'private' }) // its score is the server's, the owner's work is kept
+    await screen.click(screen.button(/^Re-score$/))
+    await settle()
+    expect(server.paths).not.toContain('/api/scoring/jobs')
+    expect(screen.storedJobs().map((j) => j.jobId)).toEqual(['wide007'])
+  })
+
+  it2('the rows the browser holds follow a new scoring; an ad that left the list is off the list, not lost', async () => {
+    const before = [storedJob('a1', { title: 'Before' }), storedJob('a2', { title: 'Will go' })]
+    const after = [storedJob('a1', { title: 'After', matchScore: 90 })]
+    let scored = before
+    stubList({ route: () => routeAnswer([]), scoredRows: null, scored: () => ({ meta: {}, jobs: scored }) })
+    screen = await mountList({ stored: [{ ...before[0], status: 'saved' }, { ...before[1], status: 'saved' }] })
+    scored = after // a new scoring
+    await screen.click(screen.button(/^Re-score$/))
+    await settle()
+    const kept = Object.fromEntries(screen.storedJobs().map((j) => [j.jobId, j]))
+    expect(kept.a1).toMatchObject({ title: 'After', matchScore: 90, status: 'saved' })
+    expect(kept.a2).toMatchObject({ offList: true, status: 'saved' }) // worked on, no longer in the scored list
   })
 
   it2('a row only this browser has is in the list, and an action on it is saved in the browser', async () => {

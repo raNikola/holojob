@@ -72,7 +72,7 @@ function ManualFallback({ providers, country, tailorMode }) {
   )
 }
 
-export default function PipelineOrchestrator({ state, onImport, onHealthChange }) {
+export default function PipelineOrchestrator({ state, onImport, onHealthChange, onRefresh = null }) {
   const { profile } = useProfile()
   const [apiAvailable, setApiAvailable] = useState(false)
   const [checking, setChecking] = useState(true)
@@ -108,9 +108,14 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
   }, [profile])
 
   const importPayload = useCallback((payload) => {
+    // With the server's list the scored list is not loaded into the browser: the screen brings the rows the browser holds up to date and reads the list again.
+    if (onRefresh) {
+      onRefresh(payload)
+      return
+    }
     const next = importJobsFromFile(payload, state)
     onImport({ ...next, meta: payload.meta || next.meta })
-  }, [state, onImport])
+  }, [state, onImport, onRefresh])
 
   const runTailorStep = useCallback(async () => {
     // Rule-based documents: this step runs unattended inside a longer run and sends nothing. The AI drafts are made from the
@@ -227,14 +232,14 @@ export default function PipelineOrchestrator({ state, onImport, onHealthChange }
     setError(null)
     setRunning('load')
     try {
-      const payload = await loadLatestScoredJobs()
-      importPayload(payload)
+      if (onRefresh) onRefresh(null)
+      else importPayload(await loadLatestScoredJobs())
     } catch (e) {
       setError(e.message)
     } finally {
       setRunning('')
     }
-  }, [importPayload])
+  }, [importPayload, onRefresh])
 
   if (checking) {
     return (

@@ -24,7 +24,9 @@ import { isClosedAd } from '../../modules/jobs/jobHistory'
 import { tierCounts } from '../../modules/jobs/fitTier'
 import { useAllAds } from '../../modules/jobs/useAllAds'
 import { useServerList } from '../../modules/jobs/useServerList'
-import { listRows } from '../../modules/jobs/jobListClient'
+import { fetchListCounts, listRows } from '../../modules/jobs/jobListClient'
+import { adoptRows, applyWorkedRows, fetchWorkedRows, refreshWorkedRows } from '../../modules/jobs/workedRows'
+import { ensureApiAvailable } from '../../utils/apiAvailability'
 import { isServerListActive } from '../../modules/jobs/serverListSwitch'
 import { dayOf } from '../../modules/jobs/jobDeadline'
 import { useTableSort } from '../ui/SortableTh'
@@ -88,6 +90,37 @@ function serverNotices({ list, mode, unlisted, hasServerOnly }) {
   return notices
 }
 
+// What the screen does after a scoring run, and when it loads. With the server's list the whole scored list is NOT loaded into the browser: the rows the browser
+// holds are brought up to date from the server (`workedRows.js`), `adopt` are rows the owner has just made theirs (tailored documents, a job imported by its
+// address), and the numbers for the toast come from the server. Without it (demo data, no API) the scored file is imported, as ever.
+async function importLatestRun({ serverList, setState, adopt = [] }) {
+  if (!serverList) {
+    const jobs = await loadLatestScoredJobs()
+    setState((prev) => importJobsFromFile(jobs, prev))
+    return { total: jobs.jobs?.length || 0, strong: tierCounts(jobs.jobs, (j) => !isClosedAd(j)).strong }
+  }
+  const stored = loadJobs().jobs
+  const ids = [...new Set([...stored.map((job) => job.jobId), ...adopt.map((row) => row.jobId)])]
+  const got = ids.length ? await fetchWorkedRows(ids) : { ok: true, answer: { rows: [], missing: [] } }
+  if (!got.ok) throw new Error(got.error)
+  setState((prev) => applyWorkedRows({ ...prev, jobs: adoptRows(prev.jobs, adopt) }, got.answer))
+  const counts = await fetchListCounts({ stored: adoptRows(stored, adopt) })
+  if (!counts.ok) throw new Error(counts.message)
+  return { total: counts.counts.stats.total, strong: counts.counts.stats.strong }
+}
+
+/** On load with the server's list: the rows the browser holds are brought up to date from the server. Nothing else is loaded. */
+async function refreshStoredRowsOnLoad(existing) {
+  if (!(await ensureApiAvailable())) return { state: existing, source: 'local' }
+  const probe = await probePipelineApi()
+  if (!probe.available) return { state: existing, source: 'local' }
+  const refreshed = await refreshWorkedRows(existing)
+  return refreshed.error || !refreshed.changed ? { state: existing, source: 'local' } : { state: refreshed.state, source: 'refreshed' }
+}
+
+/** The rows of a scoring run's file that carry the owner's tailored documents: those ads are the owner's work now. */
+const tailoredRows = (payload) => (payload?.jobs ?? []).filter((job) => Object.keys(job?.tailoredAssets ?? {}).length > 0)
+
 const JOB_TABS = [
   { id: 'jobs', label: 'Jobs' },
   { id: 'pipeline', label: 'Pipeline' },
@@ -97,6 +130,7 @@ const JOB_TABS = [
 
 export default function JobDiscoveryScreen() {
   const { profile } = useProfile()
+  const { demoMode } = useDemoBootstrapContext()
   const [state, setState] = useState(() => loadJobs())
   const [activeTab, setActiveTab] = useState(loadJobsTab)
   const [autoLoadNote, setAutoLoadNote] = useState(null)
@@ -134,11 +168,12 @@ export default function JobDiscoveryScreen() {
 
   useEffect(() => {
     let cancelled = false
-    autoLoadJobs(loadJobs()).then(({ state: next, source }) => {
+    const load = isServerListActive() && !demoMode ? refreshStoredRowsOnLoad(loadJobs()) : autoLoadJobs(loadJobs())
+    load.then(({ state: next, source }) => {
       if (cancelled) return
       if (source !== 'local') {
         setState(next)
-        setAutoLoadNote(`Loaded ${onListJobs(next.jobs).length} jobs from ${source} file`)
+        if (source !== 'refreshed') setAutoLoadNote(`Loaded ${onListJobs(next.jobs).length} jobs from ${source} file`)
       }
     })
     probePipelineApi().then((probe) => {
@@ -150,7 +185,7 @@ export default function JobDiscoveryScreen() {
       }
     })
     return () => { cancelled = true }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- read once, when the screen opens (demo mode is settled by then)
 
   // Auto-load and later imports replace the jobs after the probe has answered; counts taken from the jobs follow them.
   useEffect(() => {
@@ -159,29 +194,14 @@ export default function JobDiscoveryScreen() {
     if (next) setPipelineState(next)
   }, [health, state.jobs])
 
-  usePipelineAutoRefresh({
-    enabled: pipelineApiAvailable,
-    state,
-    onImport: setState,
-  })
 
-  const { demoMode } = useDemoBootstrapContext()
   const routeEnabled = pipelineApiAvailable && !demoMode
   // The server's list (docs/redesign/JOBS_LIST_SERVER_PLAN.md): the server filters, orders, pages and counts, and the browser holds the pages in memory. Demo data and no
   // API have no server list, and keep working from the browser's own rows as before.
   const serverOn = routeEnabled && isServerListActive()
   const allAds = useAllAds({ enabled: routeEnabled && !serverOn })
   const refetchAllAds = allAds.refetch
-  // Set below, once the list it refreshes exists: a new import means a new list, whichever list it is.
-  const listRefreshRef = useRef(() => {})
 
-  // A new import means a new ledger: Re-scrape, Re-score, auto-refresh and the URL import all set `importedAt`.
-  const lastImportedAt = useRef(state.importedAt)
-  useEffect(() => {
-    if (lastImportedAt.current === state.importedAt) return
-    lastImportedAt.current = state.importedAt
-    if (routeEnabled) listRefreshRef.current()
-  }, [state.importedAt, routeEnabled])
 
   // The 14 days run to the current date, and the screen can stay open past midnight.
   useEffect(() => {
@@ -225,7 +245,21 @@ export default function JobDiscoveryScreen() {
   const facets = serverShown ? serverList.counts?.facets ?? null : null
   const stats = serverShown && serverList.counts ? serverList.counts.stats : localStats
   const refreshList = useCallback(() => (serverOn ? serverList.refresh() : refetchAllAds()), [serverOn, serverList.refresh, refetchAllAds]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { listRefreshRef.current = serverOn ? serverList.reload : refetchAllAds })
+
+  // A new import means a new ledger: Re-scrape, Re-score, auto-refresh and the URL import all set `importedAt`.
+  const lastImportedAt = useRef(state.importedAt)
+  useEffect(() => {
+    if (lastImportedAt.current === state.importedAt) return
+    lastImportedAt.current = state.importedAt
+    if (routeEnabled) refreshList()
+  }, [state.importedAt, routeEnabled, refreshList])
+
+  usePipelineAutoRefresh({
+    enabled: pipelineApiAvailable,
+    state,
+    onImport: setState,
+    refreshRows: isServerListActive() && !demoMode ? async () => { await importLatestRun({ serverList: true, setState }); refreshList() } : null,
+  })
 
   // Display only, recomputed from its inputs and never saved. Until the route has answered, Active is today's list.
   const composed = useMemo(
@@ -286,17 +320,16 @@ export default function JobDiscoveryScreen() {
       return
     }
     try {
-      const jobs = await loadLatestScoredJobs()
-      setState((prev) => importJobsFromFile(jobs, prev))
-      const strong = tierCounts(jobs.jobs, (j) => !isClosedAd(j)).strong
+      const { total, strong } = await importLatestRun({ serverList: serverOn, setState })
+      if (serverOn) refreshList()
       const waiting = run.status === 'waiting' ? run.paid?.waiting : null
       setRunToast(waiting !== null && waiting !== undefined
-        ? { kind: 'warn', text: `Re-scrape finished, but ${waiting} ${waiting === 1 ? 'ad is' : 'ads are'} still waiting: a limit stopped the paid steps (${jobs.jobs?.length || 0} jobs, ${strong} Strong fit). The next Re-scrape continues; Activity says which limit.` }
-        : { kind: 'success', text: `Re-scrape done: ${jobs.jobs?.length || 0} jobs, ${strong} Strong fit.` })
+        ? { kind: 'warn', text: `Re-scrape finished, but ${waiting} ${waiting === 1 ? 'ad is' : 'ads are'} still waiting: a limit stopped the paid steps (${total} jobs, ${strong} Strong fit). The next Re-scrape continues; Activity says which limit.` }
+        : { kind: 'success', text: `Re-scrape done: ${total} jobs, ${strong} Strong fit.` })
     } catch (e) {
       setRunToast({ kind: 'error', text: `Re-scrape finished, but the new jobs could not be loaded: ${e.message}` })
     }
-  }, [routeEnabled, refreshList])
+  }, [routeEnabled, serverOn, refreshList])
 
   const [skipJobspyOnce, setSkipJobspyOnce] = useState(false)
   const rescrape = useRescrapeRun({ enabled: pipelineApiAvailable, onFinished: handleRescrapeFinished })
@@ -329,11 +362,9 @@ export default function JobDiscoveryScreen() {
     setRunToast(null)
     try {
       const run = await runScoring()
-      const jobs = await loadLatestScoredJobs()
-      setState((prev) => importJobsFromFile(jobs, prev))
+      const { total, strong } = await importLatestRun({ serverList: serverOn, setState })
       refreshList()
-      const strong = tierCounts(jobs.jobs, (j) => !isClosedAd(j)).strong
-      const text = `Re-scored ${jobs.jobs?.length || 0} jobs, ${strong} Strong fit.`
+      const text = `Re-scored ${total} jobs, ${strong} Strong fit.`
       setRunToast(run?.keptSynced === false
         ? { kind: 'warn', text: `${text} Your kept and applied ads could not be registered for scoring, so some may be missing from this run. Check the server, then Re-score again.` }
         : { kind: 'success', text })
@@ -345,7 +376,7 @@ export default function JobDiscoveryScreen() {
       // A finished scoring run settles "scoring behind"; without this the banner stays after a cancelled Re-scrape.
       rescrape.refresh()
     }
-  }, [rescrape, refreshList])
+  }, [rescrape, serverOn, refreshList])
 
   const scrapeRunning = rescrape.view.active || (rerunning && busyAction === 'scrape')
   const scoreRunning = rerunning && busyAction === 'score'
@@ -355,6 +386,16 @@ export default function JobDiscoveryScreen() {
     setActiveTab(tab)
     persistJobsTab(tab)
   }
+
+  // A finished pipeline run (or "load scored jobs") with the server's list: the browser's rows are brought up to date and the list is read again.
+  const handleRefreshFromRun = useCallback(async (payload) => {
+    try {
+      await importLatestRun({ serverList: true, setState, adopt: tailoredRows(payload) })
+      refreshList()
+    } catch (e) {
+      setRunToast({ kind: 'error', text: `The new jobs could not be loaded: ${e.message}` })
+    }
+  }, [refreshList])
 
   const handleImport = useCallback((next) => {
     setState(next)
@@ -382,12 +423,18 @@ export default function JobDiscoveryScreen() {
       : { text: result.message, jobId, retry: result.reason !== 'duplicate' })
   }, [])
 
-  const handleUrlImported = useCallback((payload) => {
+  const handleUrlImported = useCallback((payload, imported) => {
+    if (serverOn) {
+      // The ads the owner imported by address are theirs now; the rest of the scored list stays on the server.
+      const ids = new Set((imported ?? []).map((job) => job.jobId))
+      setState((prev) => ({ ...prev, jobs: adoptRows(prev.jobs, (payload?.jobs ?? []).filter((job) => ids.has(job.jobId))), meta: payload?.meta || prev.meta, importedAt: new Date().toISOString() }))
+      return
+    }
     setState((prev) => {
       const next = importJobsFromFile(payload, prev)
       return { ...next, meta: payload.meta || next.meta }
     })
-  }, [])
+  }, [serverOn])
 
   const handleHealthChange = useCallback((h) => {
     setHealth(h)
@@ -460,7 +507,10 @@ export default function JobDiscoveryScreen() {
     setBulkRunning(true)
     try {
       const result = await runTailor({ ...opts, profile, ...mode })
-      if (result.payload) {
+      if (result.payload && serverOn) {
+        // The documents just made are the owner's work: those ads are taken into the browser's list, the rest of the scored list stays on the server.
+        setState((prev) => ({ ...prev, jobs: adoptRows(prev.jobs, tailoredRows(result.payload)), meta: result.payload.meta || prev.meta, importedAt: new Date().toISOString() }))
+      } else if (result.payload) {
         setState((prev) => {
           const next = importJobsFromFile(result.payload, prev)
           return { ...next, meta: result.payload.meta || next.meta }
@@ -469,7 +519,7 @@ export default function JobDiscoveryScreen() {
     } finally {
       setBulkRunning(false)
     }
-  }, [profile])
+  }, [profile, serverOn])
 
   const handleBulkStatus = useCallback((status) => {
     setState((prev) => ({
@@ -668,7 +718,7 @@ export default function JobDiscoveryScreen() {
       {activeTab === 'pipeline' && (
         <div className="space-y-6">
           <PipelineHealthPanel health={health} pipelineState={pipelineState} />
-          <PipelineOrchestrator state={state} onImport={handleImport} onHealthChange={handleHealthChange} />
+          <PipelineOrchestrator state={state} onImport={handleImport} onHealthChange={handleHealthChange} onRefresh={serverOn ? handleRefreshFromRun : null} />
           <JobImportPanel state={state} onImport={handleImport} />
           {pipelineApiAvailable && <JobUrlImport onImported={handleUrlImported} />}
         </div>

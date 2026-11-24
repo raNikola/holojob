@@ -1,7 +1,7 @@
 // Bringing the rows the browser holds up to date with the last scoring, without loading the whole scored list (src/modules/jobs/workedRows.js; P3 S6 / P4).
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SCORED, startListServer } from './setup/jobsListServer.js'
-import { applyRowsRefresh, refreshWorkedRows } from '../../src/modules/jobs/workedRows.js'
+import { adoptRows, applyRowsRefresh, refreshWorkedRows } from '../../src/modules/jobs/workedRows.js'
 
 const mine = (extra = {}) => ({ jobId: 'j01', title: 'Old title', company: 'Co 1', jobUrl: 'https://x.example/1', matchScore: 10, matchLabel: 'Weak', status: 'new', ...extra })
 const fresh = (extra = {}) => ({ jobId: 'j01', title: 'New title', company: 'Co 1', jobUrl: 'https://x.example/1', matchScore: 85, matchLabel: 'Strong', description: 'New text', ...extra })
@@ -43,6 +43,24 @@ describe('applyRowsRefresh', () => {
     const out = applyRowsRefresh(Object.freeze([Object.freeze(other), Object.freeze(mine())]), { rows: [fresh()], missing: [] })
     expect(out[0]).toBe(other)
     expect(JSON.stringify([other, mine()])).toBe(before)
+  })
+})
+
+describe('adoptRows', () => {
+  it('adds the ads the owner just made theirs, brings a held one up to date, and touches no other row', () => {
+    const held = mine({ status: 'saved', notes: 'private' })
+    const other = mine({ jobId: 'other', jobUrl: 'https://x.example/other', status: 'saved' })
+    const out = adoptRows([held, other], [fresh(), fresh({ jobId: 'new1', jobUrl: 'https://x.example/new1', title: 'Brand new' })])
+    expect(out.map((job) => job.jobId)).toEqual(['j01', 'other', 'new1'])
+    expect(out[0]).toMatchObject({ title: 'New title', matchScore: 85, status: 'saved', notes: 'private' })
+    expect(out[1]).toBe(other)
+    expect(out[2]).toMatchObject({ title: 'Brand new', status: 'new' })
+  })
+
+  it('no rows is the list itself, and nothing is marked off the list', () => {
+    const jobs = [mine({ status: 'saved' })]
+    expect(adoptRows(jobs, [])).toBe(jobs)
+    expect(adoptRows(jobs, [fresh({ jobId: 'zz', jobUrl: 'https://x.example/zz' })]).every((job) => job.offList === undefined)).toBe(true)
   })
 })
 

@@ -61,9 +61,10 @@ function answerList(server, rawBody, allBody, pageSize, scoredRows) {
 
 /** `route(call)` answers /api/jobs/all (and, with `listServer`, the rows under /api/jobs/list); `ledger(jobId)` answers /api/jobs/history; `applications` is the store the server holds. */
 export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {}, listServer = false, pageSize = 100, scoredRows = null } = {}) {
-  const server = { allCalls: 0, posts: [], applications, jobState: { version: 1, updatedAt: null, jobs: {} }, stateWrites: [], listCalls: [] }
+  const server = { allCalls: 0, posts: [], applications, jobState: { version: 1, updatedAt: null, jobs: {} }, stateWrites: [], listCalls: [], paths: [] }
   vi.stubGlobal('fetch', async (url, options = {}) => {
     const path = String(url).split('?')[0]
+    server.paths.push(path)
     if (path === '/api/jobs/list' && options.method === 'POST') {
       if (!listServer) return reply(404, {})
       server.allCalls += 1
@@ -74,6 +75,12 @@ export function stubServer({ route = () => routeAnswer([]), health = true, score
       const body = JSON.parse(options.body)
       server.listCalls.push(body)
       try { return reply(200, await answerList(server, body, answer.body, pageSize, scoredRows)) } catch (error) { return reply(400, { ok: false, error: error.message }) }
+    }
+    if (path === '/api/jobs/list/rows' && options.method === 'POST' && listServer) {
+      // the scored rows of the ads named: from the scored list the test gave the server (`scored`, else `scoredRows`, else what the browser holds)
+      const { jobIds } = JSON.parse(options.body)
+      const held = new Map((scoredRows ?? (scored ? scored().jobs : serverStoredRows(null))).map((row) => [row.jobId, row]))
+      return reply(200, { ok: true, revision: 'r', meta: scored ? scored().meta : null, rows: jobIds.filter((id) => held.has(id)).map((id) => held.get(id)), missing: jobIds.filter((id) => !held.has(id)) })
     }
     if (path === '/api/jobs/list/ad' && listServer) {
       const jobId = new URLSearchParams(String(url).split('?')[1]).get('jobId')

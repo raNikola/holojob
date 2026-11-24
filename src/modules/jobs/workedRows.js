@@ -35,6 +35,23 @@ export function applyRowsRefresh(jobs, { rows = [], missing = [] }) {
   return out.filter((job) => named.has(job.jobId) || jobs.some((before) => before.jobId === job.jobId))
 }
 
+/** The server's answer for these ads: `{ ok: true, answer }` or `{ ok: false, error }`. Reads only. */
+export async function fetchWorkedRows(jobIds, fetchFn = globalThis.fetch) {
+  try {
+    const res = await fetchFn(ROWS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobIds }) })
+    const answer = await res.json().catch(() => null)
+    if (!res.ok || answer?.ok !== true) return { ok: false, error: answer?.message || answer?.error || `The scored rows could not be loaded (${res.status}).` }
+    return { ok: true, answer }
+  } catch (error) {
+    return { ok: false, error: `The scored rows could not be loaded: ${error.message}` }
+  }
+}
+
+/** The stored state with the server's answer laid over it, `importedAt` stamped so a screen reads its list again. Pure. */
+export function applyWorkedRows(state, answer) {
+  return { ...state, jobs: applyRowsRefresh(state.jobs, answer), meta: answer.meta ?? state.meta, importedAt: new Date().toISOString() }
+}
+
 /**
  * Asks the server for the rows of the ads in `state.jobs` and returns `{ state, changed }`, or `{ error }` (the stored list is then left exactly as it is: a failed
  * refresh changes nothing). `state.importedAt` is stamped so a screen reads its list again.
@@ -42,14 +59,20 @@ export function applyRowsRefresh(jobs, { rows = [], missing = [] }) {
 export async function refreshWorkedRows(state, fetchFn = globalThis.fetch) {
   const jobIds = [...new Set((state.jobs ?? []).map((job) => job.jobId).filter(Boolean))]
   if (!jobIds.length) return { state, changed: false }
-  try {
-    const res = await fetchFn(ROWS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobIds }) })
-    const answer = await res.json().catch(() => null)
-    if (!res.ok || answer?.ok !== true) return { error: answer?.message || answer?.error || `The scored rows could not be loaded (${res.status}).` }
-    const jobs = applyRowsRefresh(state.jobs, answer)
-    const changed = JSON.stringify(jobs) !== JSON.stringify(state.jobs)
-    return { state: { ...state, jobs, meta: answer.meta ?? state.meta, importedAt: new Date().toISOString() }, changed }
-  } catch (error) {
-    return { error: `The scored rows could not be loaded: ${error.message}` }
-  }
+  const got = await fetchWorkedRows(jobIds, fetchFn)
+  if (!got.ok) return { error: got.error }
+  const next = applyWorkedRows(state, got.answer)
+  return { state: next, changed: JSON.stringify(next.jobs) !== JSON.stringify(state.jobs) }
+}
+
+/**
+ * Takes rows into the stored list: an ad the owner has just made theirs (tailored documents for it, a job imported by its address). A row already held is brought up
+ * to date with the import's rules; a row not held is added; no other row is touched (nothing is marked off the list). Pure.
+ */
+export function adoptRows(jobs, rows) {
+  if (!rows.length) return jobs
+  const ids = new Set(rows.map((row) => row.jobId))
+  const refreshed = new Map(mergeStatusOnImport(jobs.filter((job) => ids.has(job.jobId)), rows).map((row) => [row.jobId, row]))
+  const held = new Set(jobs.map((job) => job.jobId))
+  return [...jobs.map((job) => refreshed.get(job.jobId) ?? job), ...rows.filter((row) => !held.has(row.jobId)).map((row) => refreshed.get(row.jobId) ?? mergeStatusOnImport([], [row])[0])]
 }
