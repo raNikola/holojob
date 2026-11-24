@@ -23,13 +23,18 @@ import { composeJobList, stripDisplayFields } from '../../modules/jobs/allAds'
 import { isClosedAd } from '../../modules/jobs/jobHistory'
 import { tierCounts } from '../../modules/jobs/fitTier'
 import { useAllAds } from '../../modules/jobs/useAllAds'
+import { useServerList } from '../../modules/jobs/useServerList'
+import { listRows } from '../../modules/jobs/jobListClient'
+import { isServerListActive } from '../../modules/jobs/serverListSwitch'
+import { dayOf } from '../../modules/jobs/jobDeadline'
+import { useTableSort } from '../ui/SortableTh'
 import { ALL_SEARCH_NOTE, EXPORT_NOTE, OFF_LIST_NOTE, applyAllControls, classOptions, filterComposed, listNotices, selectableIds } from '../../modules/jobs/jobListView'
 import JobDetailDrawer from './JobDetailDrawer'
 import JobEmptyState from './JobEmptyState'
 import { appliedJobIds } from '../../modules/applications/appliedFilter'
 import { filterJobs, getUniqueProviders, getUniqueSites, hiddenAsNotOnBoard, listedJobs, onListJobs } from '../../modules/jobs/jobFilters'
 import { computeJobStats } from '../../modules/jobs/jobStats'
-import { selectionFor, toggleAllSelected, toggleSelected } from '../../modules/jobs/jobTableModel'
+import { DEFAULT_SORT, SORT_COLUMNS, selectionFor, toggleAllSelected, toggleSelected } from '../../modules/jobs/jobTableModel'
 import { probePipelineApi, runTailor } from '../../modules/jobs/pipelineRunner'
 import TailorConfirmDialog from './TailorConfirmDialog'
 import { searchCountry } from '../../utils/searchCountry'
@@ -62,6 +67,26 @@ import { loadIntelligence } from '../../modules/intelligence/intelligenceExport'
 import { useProfile } from '../../context/ProfileContext'
 import { HeaderPortal } from '../layout/HeaderSlot'
 import { TOAST_AUTO_HIDE_MS, Toast, ToastStack } from '../ui/Toast'
+
+/**
+ * The notices above the server's list. A refusal is shown with its own words (a request that is too large says how many ads and what to do), a list that changed
+ * says so, and the rest are the local list's notices on the server's counts.
+ */
+function serverNotices({ list, mode, unlisted, hasServerOnly }) {
+  const notices = []
+  if (list.error?.tooLarge) {
+    notices.push({ kind: 'error', text: list.error.message }) // its own words: how many ads, what was not done, what to do
+  } else if (list.error) {
+    // The same words as the route's list has: what failed, and that what is saved in this browser is shown and nothing was changed.
+    notices.push(...listNotices({ mode, status: 'error', error: list.error.message, meta: null, rows: list.rows.length ? list.rows : null, copies: null, hasServerOnly, unlisted }))
+  }
+  if (list.notice) notices.push({ kind: 'info', text: list.notice })
+  if (!list.error) {
+    const loaded = list.status === 'ready' ? list.rows : null
+    notices.push(...listNotices({ mode, status: 'ready', error: null, meta: list.meta, rows: loaded, copies: list.counts?.copies, hasServerOnly, unlisted }))
+  }
+  return notices
+}
 
 const JOB_TABS = [
   { id: 'jobs', label: 'Jobs' },
@@ -142,16 +167,21 @@ export default function JobDiscoveryScreen() {
 
   const { demoMode } = useDemoBootstrapContext()
   const routeEnabled = pipelineApiAvailable && !demoMode
-  const allAds = useAllAds({ enabled: routeEnabled })
+  // The server's list (docs/redesign/JOBS_LIST_SERVER_PLAN.md): the server filters, orders, pages and counts, and the browser holds the pages in memory. Demo data and no
+  // API have no server list, and keep working from the browser's own rows as before.
+  const serverOn = routeEnabled && isServerListActive()
+  const allAds = useAllAds({ enabled: routeEnabled && !serverOn })
   const refetchAllAds = allAds.refetch
+  // Set below, once the list it refreshes exists: a new import means a new list, whichever list it is.
+  const listRefreshRef = useRef(() => {})
 
   // A new import means a new ledger: Re-scrape, Re-score, auto-refresh and the URL import all set `importedAt`.
   const lastImportedAt = useRef(state.importedAt)
   useEffect(() => {
     if (lastImportedAt.current === state.importedAt) return
     lastImportedAt.current = state.importedAt
-    if (routeEnabled) refetchAllAds()
-  }, [state.importedAt, routeEnabled, refetchAllAds])
+    if (routeEnabled) listRefreshRef.current()
+  }, [state.importedAt, routeEnabled])
 
   // The 14 days run to the current date, and the screen can stay open past midnight.
   useEffect(() => {
@@ -169,7 +199,7 @@ export default function JobDiscoveryScreen() {
   )
   // Browser rows the server does not hold yet stay visible here, and this says so until they are imported (Settings).
   const pending = useMemo(() => pendingRows(state.jobs, jobState.doc).length, [state.jobs, jobState.doc])
-  const stats = useMemo(
+  const localStats = useMemo(
     // The tracker cards count applications from the store, whether or not their ad still has a row.
     () => ({ ...computeJobStats(viewJobs), ...trackerStats(applications.status === 'ready' ? applications.store : null, applications.settings) }),
     [viewJobs, applications.status, applications.store, applications.settings],
@@ -179,40 +209,62 @@ export default function JobDiscoveryScreen() {
   // What is stored, as ever: Export and the numbers elsewhere keep reading it.
   const listed = useMemo(() => listedJobs(state.jobs, state.filters), [state.jobs, state.filters])
 
+  const effectiveFilters = useMemo(() => withProfileSalaryDefaults(state.filters, profile?.basicProfile), [state.filters, profile?.basicProfile])
+
+  // The server's list: one request for the query and the browser's own rows (the allowlist in extraRows.js), pages kept in memory only, the sort asked of the server.
+  const [tableSort, onTableSort] = useTableSort(DEFAULT_SORT, SORT_COLUMNS)
+  const listRequest = useMemo(
+    () => ({ stored: state.jobs, mode: listMode, filters: effectiveFilters, classes: [...listClasses], recent: seenRecentlyOnly, sort: tableSort, today: dayOf(reference) }),
+    [state.jobs, listMode, effectiveFilters, listClasses, seenRecentlyOnly, tableSort, reference],
+  )
+  const serverList = useServerList({ enabled: serverOn, request: listRequest })
+  // The server's list is shown from its first answer on (empty while it loads a new query). Until then, and when it cannot be made at all, the rows saved in this
+  // browser are shown with the notice and a way to try again, as the route's list always did: a list that failed is never an empty one.
+  const serverShown = serverOn && (serverList.status === 'ready' || serverList.status === 'loading')
+  const serverRows = useMemo(() => (serverShown ? listRows(serverList.rows, state.jobs) : null), [serverShown, serverList.rows, state.jobs])
+  const facets = serverShown ? serverList.counts?.facets ?? null : null
+  const stats = serverShown && serverList.counts ? serverList.counts.stats : localStats
+  const refreshList = useCallback(() => (serverOn ? serverList.refresh() : refetchAllAds()), [serverOn, serverList.refresh, refetchAllAds]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { listRefreshRef.current = serverOn ? serverList.reload : refetchAllAds })
+
   // Display only, recomputed from its inputs and never saved. Until the route has answered, Active is today's list.
   const composed = useMemo(
-    () => (routeEnabled ? composeJobList({ stored: state.jobs, server: allAds.rows, applications, reference }) : null),
-    [routeEnabled, state.jobs, allAds.rows, applications, reference],
+    () => (routeEnabled && !serverOn ? composeJobList({ stored: state.jobs, server: allAds.rows, applications, reference }) : null),
+    [routeEnabled, serverOn, state.jobs, allAds.rows, applications, reference],
   )
-  const useComposed = routeEnabled && (allAds.rows !== null || listMode === 'all')
+  const useComposed = serverShown || (!serverOn && routeEnabled && (allAds.rows !== null || listMode === 'all'))
   const composedRows = useMemo(() => {
-    if (!useComposed) return null
+    if (!useComposed || serverOn) return null
     const rows = overlayTracking(withServerState(listMode === 'all' ? composed.all : composed.active, jobState.doc), applicationStore, applications.settings)
     // An application needs no stored row: the row says Applied as Job Details does, for display only.
     return rows.map((row) => (row.serverOnly && row.applicationTracking ? { ...row, status: 'applied_manually' } : row))
-  }, [useComposed, listMode, composed, applicationStore, applications.settings, jobState.doc])
+  }, [useComposed, serverOn, listMode, composed, applicationStore, applications.settings, jobState.doc])
   const shownRows = useMemo(
-    () => (useComposed && listMode === 'all' ? applyAllControls(composedRows, { classes: listClasses, recent: seenRecentlyOnly, reference }) : composedRows),
-    [useComposed, listMode, composedRows, listClasses, seenRecentlyOnly, reference],
+    () => (useComposed && !serverOn && listMode === 'all' ? applyAllControls(composedRows, { classes: listClasses, recent: seenRecentlyOnly, reference }) : composedRows),
+    [useComposed, serverOn, listMode, composedRows, listClasses, seenRecentlyOnly, reference],
   )
-  const baseRows = composedRows ?? listed
-  const sites = useMemo(() => getUniqueSites(baseRows), [baseRows])
-  const providers = useMemo(() => getUniqueProviders(baseRows), [baseRows])
-  const effectiveFilters = useMemo(() => withProfileSalaryDefaults(state.filters, profile?.basicProfile), [state.filters, profile?.basicProfile])
+
+  const baseRows = useMemo(() => (serverShown ? (serverRows ?? []) : (composedRows ?? listed)), [serverShown, serverRows, composedRows, listed])
+  const sites = useMemo(() => (serverShown ? facets?.sites ?? [] : getUniqueSites(baseRows)), [serverShown, facets, baseRows])
+  const providers = useMemo(() => (serverShown ? facets?.providers ?? [] : getUniqueProviders(baseRows)), [serverShown, facets, baseRows])
   const filteredJobs = useMemo(() => {
+    if (serverShown) return serverRows ?? [] // the server has filtered and ordered them
     // All is the full list (its class filters find the ads the board no longer lists); only Active leaves them out by default.
     if (useComposed) return filterComposed(shownRows, listMode === 'all' ? { ...effectiveFilters, showNotOnBoard: true } : effectiveFilters, { appliedJobIds: appliedIds })
     // Until the route answers, Active still leaves closed ads out. Demo mode and no API have no All list to find them in.
     return filterJobs(routeEnabled ? viewJobs.filter((job) => !isClosedAd(job)) : viewJobs, effectiveFilters, { appliedJobIds: appliedIds })
-  }, [useComposed, listMode, shownRows, viewJobs, effectiveFilters, appliedIds, routeEnabled])
+  }, [serverShown, serverRows, useComposed, listMode, shownRows, viewJobs, effectiveFilters, appliedIds, routeEnabled])
   // Ads the default list leaves out because the board no longer lists them (the notice says how many, and where to find them).
-  const notOnBoardHidden = useMemo(() => (useComposed && listMode === 'active' ? shownRows.filter((job) => hiddenAsNotOnBoard(job, effectiveFilters)).length : 0), [useComposed, listMode, shownRows, effectiveFilters])
+  const notOnBoardHidden = useMemo(
+    () => (serverShown ? serverList.counts?.notOnBoardHidden ?? 0 : (useComposed && listMode === 'active' ? shownRows.filter((job) => hiddenAsNotOnBoard(job, effectiveFilters)).length : 0)),
+    [serverShown, serverList.counts, useComposed, listMode, shownRows, effectiveFilters],
+  )
   // Changing a filter starts the selection and the paging again; a sort, Show more or a row's new status do not.
   const filterKey = useMemo(
     () => JSON.stringify([effectiveFilters, listMode, [...listClasses].sort(), seenRecentlyOnly]),
     [effectiveFilters, listMode, listClasses, seenRecentlyOnly],
   )
-  const notices = routeEnabled ? listNotices({
+  const notices = serverOn ? serverNotices({ list: serverList, mode: listMode, unlisted: notOnBoardHidden, hasServerOnly: Boolean(serverRows?.some((row) => row.serverOnly)) }) : routeEnabled ? listNotices({
     mode: listMode, status: allAds.status, error: allAds.error, meta: allAds.meta, rows: allAds.rows, copies: composed?.copies,
     hasServerOnly: Boolean(composedRows?.some((row) => row.serverOnly)), unlisted: notOnBoardHidden,
   }) : []
@@ -220,7 +272,7 @@ export default function JobDiscoveryScreen() {
   const selectedJobIds = selectionFor(selection, filterKey)
 
   const handleRescrapeFinished = useCallback(async (run) => {
-    if (routeEnabled) refetchAllAds() // the ledger may have moved even if the scored file below cannot be read
+    if (routeEnabled) refreshList() // the ledger may have moved even if the scored file below cannot be read
     if (run?.status === 'cancelled') {
       setRunToast({ kind: 'warn', text: cancelledText(run.cancel).replace('The last run was cancelled.', 'Re-scrape was cancelled.') })
       return
@@ -244,7 +296,7 @@ export default function JobDiscoveryScreen() {
     } catch (e) {
       setRunToast({ kind: 'error', text: `Re-scrape finished, but the new jobs could not be loaded: ${e.message}` })
     }
-  }, [routeEnabled, refetchAllAds])
+  }, [routeEnabled, refreshList])
 
   const [skipJobspyOnce, setSkipJobspyOnce] = useState(false)
   const rescrape = useRescrapeRun({ enabled: pipelineApiAvailable, onFinished: handleRescrapeFinished })
@@ -279,6 +331,7 @@ export default function JobDiscoveryScreen() {
       const run = await runScoring()
       const jobs = await loadLatestScoredJobs()
       setState((prev) => importJobsFromFile(jobs, prev))
+      refreshList()
       const strong = tierCounts(jobs.jobs, (j) => !isClosedAd(j)).strong
       const text = `Re-scored ${jobs.jobs?.length || 0} jobs, ${strong} Strong fit.`
       setRunToast(run?.keptSynced === false
@@ -292,7 +345,7 @@ export default function JobDiscoveryScreen() {
       // A finished scoring run settles "scoring behind"; without this the banner stays after a cancelled Re-scrape.
       rescrape.refresh()
     }
-  }, [rescrape])
+  }, [rescrape, refreshList])
 
   const scrapeRunning = rescrape.view.active || (rerunning && busyAction === 'scrape')
   const scoreRunning = rerunning && busyAction === 'score'
@@ -347,7 +400,8 @@ export default function JobDiscoveryScreen() {
 
   // The server is written first. A failed write (unreachable or refused) changes nothing, here or in the browser's list.
   const handleStatusChange = useCallback(async (jobId, status) => {
-    const job = state.jobs.find((j) => j.jobId === jobId)
+    const stored = state.jobs.find((j) => j.jobId === jobId)
+    const job = stored ?? (serverShown ? serverRows?.find((row) => row.jobId === jobId) : null)
     if (!job) return
     try {
       await writeJobState(job, { status })
@@ -357,12 +411,17 @@ export default function JobDiscoveryScreen() {
       setStatusError(`The status was not saved: ${e.message}`)
       return
     }
-    setState((prev) => ({
-      ...prev,
-      jobs: updateJobStatus(prev.jobs, jobId, status),
-    }))
+    // A row only the server holds has no stored copy to change: the server's job state is the record, and the list is read again where it stands.
+    if (stored) {
+      setState((prev) => ({
+        ...prev,
+        jobs: updateJobStatus(prev.jobs, jobId, status),
+      }))
+    } else {
+      refreshList()
+    }
     setSelectedJob((prev) => (prev?.jobId === jobId ? { ...prev, status } : prev))
-  }, [state.jobs])
+  }, [state.jobs, serverShown, serverRows, refreshList])
 
   const handleJobUpdated = useCallback((updatedJob) => {
     setState((prev) => ({
@@ -376,9 +435,21 @@ export default function JobDiscoveryScreen() {
     setSelection((prev) => toggleSelected(prev, filterKey, jobId))
   }, [filterKey])
 
-  const handleToggleSelectAll = useCallback(() => {
-    setSelection((prev) => toggleAllSelected(prev, filterKey, selectableIds(filteredJobs)))
-  }, [filteredJobs, filterKey])
+  const handleToggleSelectAll = useCallback(async () => {
+    if (!serverShown) {
+      setSelection((prev) => toggleAllSelected(prev, filterKey, selectableIds(filteredJobs)))
+      return
+    }
+    // The ads of every page, not only the ones loaded: the server names them.
+    const everyone = await serverList.ids()
+    if (everyone.error) {
+      setStatusError(`Select all did not work: ${everyone.error}`)
+      return
+    }
+    // Only an ad the browser holds can be acted on in bulk.
+    const mine = new Set(state.jobs.map((job) => job.jobId))
+    setSelection((prev) => toggleAllSelected(prev, filterKey, everyone.selectableIds.filter((id) => mine.has(id))))
+  }, [serverShown, serverList.ids, filteredJobs, filterKey, state.jobs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The bulk buttons only open the confirm dialog; `runBulkTailor` runs when its own button is pressed.
   const [tailorAsk, setTailorAsk] = useState(null)
@@ -423,7 +494,9 @@ export default function JobDiscoveryScreen() {
     setExportOpen(false)
   }
 
-  const hasJobs = state.jobs.length > 0 || Boolean(allAds.rows?.length && routeEnabled)
+  const hasJobs = serverOn
+    ? state.jobs.length > 0 || serverList.status === 'loading' || serverList.total > 0 || (serverList.counts?.baseTotal ?? 0) > 0
+    : state.jobs.length > 0 || Boolean(allAds.rows?.length && routeEnabled)
 
   return (
     <div className="space-y-6">
@@ -494,7 +567,7 @@ export default function JobDiscoveryScreen() {
                 onDismiss={() => closeNotice(notice.text)}
               >
                 <span>{notice.text}</span>
-                {notice.retry && <Button variant="secondary" className="ml-2 !min-h-0 !py-1 !text-xs" disabled={allAds.status === 'loading'} onClick={refetchAllAds}>Try again</Button>}
+                {notice.retry && <Button variant="secondary" className="ml-2 !min-h-0 !py-1 !text-xs" disabled={serverOn ? serverList.status === 'loading' : allAds.status === 'loading'} onClick={serverOn ? serverList.reload : refetchAllAds}>Try again</Button>}
               </Toast>
             ))}
       </ToastStack>
@@ -532,7 +605,7 @@ export default function JobDiscoveryScreen() {
           ) : (
             <div className="space-y-6 animate-fade-in">
               <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-stone-600 dark:text-stone-400">
-                <span>{filteredJobs.length} of {baseRows.length} jobs shown</span>
+                <span>{serverShown ? `${serverList.total} of ${serverList.counts?.baseTotal ?? serverList.total}` : `${filteredJobs.length} of ${baseRows.length}`} jobs shown</span>
                 {autoLoadNote && <span className="text-xs text-teal-700 dark:text-teal-300">{autoLoadNote}</span>}
               </p>
 
@@ -540,7 +613,7 @@ export default function JobDiscoveryScreen() {
                 <JobListControls
                   mode={listMode}
                   onMode={setListMode}
-                  options={listMode === 'all' && composedRows ? classOptions(composedRows) : []}
+                  options={serverShown ? serverList.counts?.classOptions ?? [] : (listMode === 'all' && composedRows ? classOptions(composedRows) : [])}
                   classes={listClasses}
                   onClasses={setListClasses}
                   recent={seenRecentlyOnly}
@@ -548,7 +621,7 @@ export default function JobDiscoveryScreen() {
                 />
               )}
 
-              <JobFilters filters={filtersShown} searchNote={useComposed && listMode === 'all' ? ALL_SEARCH_NOTE : null} offListDisabledNote={useComposed ? OFF_LIST_NOTE : null} sites={sites} providers={providers} jobs={baseRows} applicationStore={applicationStore} basicProfile={profile?.basicProfile} onChange={handleFilterChange} />
+              <JobFilters filters={filtersShown} searchNote={useComposed && listMode === 'all' ? ALL_SEARCH_NOTE : null} offListDisabledNote={useComposed ? OFF_LIST_NOTE : null} sites={sites} providers={providers} jobs={baseRows} facets={facets} applicationStore={applicationStore} basicProfile={profile?.basicProfile} onChange={handleFilterChange} />
               <BulkActionsBar
                 selectedCount={selectedJobIds.size}
                 running={bulkRunning}
@@ -575,6 +648,17 @@ export default function JobDiscoveryScreen() {
                 onToggleSelect={handleToggleSelect}
                 onToggleSelectAll={handleToggleSelectAll}
                 onJobSelect={setSelectedJob}
+                server={serverShown ? {
+                  loading: serverList.status === 'loading',
+                  total: serverList.total,
+                  pageSize: serverList.limit ?? serverList.rows.length,
+                  loadingMore: serverList.loadingMore,
+                  sort: tableSort,
+                  onSort: onTableSort,
+                  onShowMore: serverList.more,
+                  hasScores: Boolean(facets?.hasScores),
+                  hasProvider: (facets?.providers?.length ?? 0) > 0,
+                } : null}
               />
             </div>
           )}

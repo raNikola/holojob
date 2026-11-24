@@ -77,6 +77,7 @@ export function queryJobList({
     limit,
     ...(withIds ? { ids: ordered.map((row) => row.jobId), selectableIds: selectableIds(ordered) } : {}),
     counts: !withCounts ? null : {
+      baseTotal: base.length, // the rows of this list before the controls and filters: the "of" in "N of M jobs shown"
       stats: { ...computeJobStats(overlayTracking(withServerState(stored, jobStateDoc), store, settings)), ...trackerStats(store, settings) },
       tiers: tierCounts(filtered),
       classOptions: mode === 'all' ? classOptions(base) : [],

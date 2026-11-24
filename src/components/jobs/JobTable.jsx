@@ -119,8 +119,9 @@ const ACTION_ICON = {
   applied_manually: { Icon: SquareCheckBig, label: 'Mark as applied' },
 }
 
-function JobActions({ job, onStatusChange, onApply }) {
-  const serverRow = rowKind(job) === 'server'
+// `triage`: a status on a row only the server holds is written to the server's job state, so it is allowed (the server list is on). Without it such a row is read-only until Keep.
+function JobActions({ job, onStatusChange, onApply, triage = false }) {
+  const serverRow = rowKind(job) === 'server' && !triage
   const others = JOB_STATUSES.filter((s) => s !== job.status)
   return (
     <div className="flex gap-0.5" onClick={(e) => e.stopPropagation()}>
@@ -154,6 +155,7 @@ function JobCard({
   apiAvailable,
   onJobUpdated,
   showScores,
+  triage = false,
   selected,
   onToggleSelect,
   onJobSelect,
@@ -188,7 +190,7 @@ function JobCard({
           <div className="flex flex-col items-end gap-1">
             {showScores && <FitTier job={job} />}
             {showScores && <RoleClassBadge job={job} />}
-            <StatusBadge status={job.status} historyOnly={rowKind(job) === 'server'} />
+            <StatusBadge status={job.status} historyOnly={rowKind(job) === 'server' && !triage} />
             <HistoryBadges job={job} classView={classView} />
             <FollowUpBadge job={job} />
           </div>
@@ -209,7 +211,7 @@ function JobCard({
               </a>
             ) : <span />}
             <div className="flex flex-col items-end gap-1">
-              <JobActions job={job} onStatusChange={onStatusChange} onApply={onApply} />
+              <JobActions job={job} onStatusChange={onStatusChange} onApply={onApply} triage={triage} />
               {kind === 'server' && <KeepAdButton row={job} />}
             </div>
           </>
@@ -247,6 +249,7 @@ export default function JobTable({
   const [ownSort, ownOnSort] = useTableSort(DEFAULT_SORT, SORT_COLUMNS)
   const sort = server ? (server.sort ?? DEFAULT_SORT) : ownSort
   const onSort = server ? server.onSort : ownOnSort
+  const triage = Boolean(server) // the server list is on: a status on a row only the server holds goes to the server
   const [openedAt] = useState(() => Date.now())
   const today = dayOf(reference ?? openedAt)
   const [paging, setPaging] = useState(null)
@@ -279,7 +282,7 @@ export default function JobTable({
   if (!jobs.length) {
     return (
       <p className="rounded-xl border border-dashed border-stone-300 px-4 py-8 text-center text-sm text-stone-500 dark:border-stone-700">
-        No jobs match the current filters.
+        {server?.loading ? 'Loading the list…' : 'No jobs match the current filters.'}
       </p>
     )
   }
@@ -356,9 +359,9 @@ export default function JobTable({
                 <td className="max-w-[11rem] px-3 py-2 align-top text-stone-600 dark:text-stone-400"><SalaryText job={job} /></td>
                 <td className="whitespace-nowrap px-3 py-2 align-top text-stone-600 dark:text-stone-400"><ApplyBy job={job} today={today} /></td>
                 {showProvider && <td className="px-3 py-2 align-top"><ProviderBadge job={job} /></td>}
-                <td className="px-3 py-2 align-top"><StatusBadge status={job.status} historyOnly={rowKind(job) === 'server'} /></td>
+                <td className="px-3 py-2 align-top"><StatusBadge status={job.status} historyOnly={rowKind(job) === 'server' && !triage} /></td>
                 <td className="px-3 py-2 align-top" onClick={(e) => e.stopPropagation()}>
-                  {rowKind(job) === 'filtered' ? <FilteredRowActions job={job} onAddFromRow={onAddFromRow} /> : <JobActions job={job} onStatusChange={onStatusChange} onApply={onApply} />}
+                  {rowKind(job) === 'filtered' ? <FilteredRowActions job={job} onAddFromRow={onAddFromRow} /> : <JobActions job={job} onStatusChange={onStatusChange} onApply={onApply} triage={triage} />}
                   {rowKind(job) === 'server' && <div className="mt-1"><KeepAdButton row={job} /></div>}
                 </td>
               </tr>
@@ -378,6 +381,7 @@ export default function JobTable({
             job={job}
             onStatusChange={onStatusChange}
             onApply={onApply}
+            triage={triage}
             apiAvailable={apiAvailable}
             onJobUpdated={onJobUpdated}
             showScores={showScores}

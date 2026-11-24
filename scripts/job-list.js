@@ -40,7 +40,8 @@ import { overlayTracking } from '../src/modules/applications/trackingView.js'
 import { withServerState } from '../src/modules/jobs/jobStateClient.js'
 import { ExtraRowsError, applyExtraRows, checkExtraRows } from '../src/modules/jobs/extraRows.js'
 import { LIST_MODES, queryJobList } from '../src/modules/jobs/jobListQuery.js'
-import { DEFAULT_FILTERS, importJobsFromFile, slimJob } from '../src/modules/jobs/jobStorage.js'
+import { FILTER_TYPES, filterValueOk } from '../src/modules/jobs/listFilters.js'
+import { importJobsFromFile, slimJob } from '../src/modules/jobs/jobStorage.js'
 import { SORT_COLUMNS } from '../src/modules/jobs/jobTableModel.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -49,13 +50,6 @@ export const AD_ROUTE = '/api/jobs/list/ad'
 const JOB_ID = /^[A-Za-z0-9_-]{1,64}$/
 const MAX_FILTERS_CHARS = 4000
 const MAX_CLASSES = 40
-
-/** Filter keys the request may carry and the type each must have: the Jobs screen's own filters (DEFAULT_FILTERS) and the salary range keys. */
-const FILTER_TYPES = {
-  ...Object.fromEntries(Object.entries(DEFAULT_FILTERS).map(([key, value]) => [key, Array.isArray(value) ? 'strings' : typeof value])),
-  minScore: 'numberOrString', salaryFrom: 'numberOrString', salaryTo: 'numberOrString',
-  minSalary: 'numberOrNull', desiredSalaryMin: 'numberOrNull', desiredSalaryMax: 'numberOrNull',
-}
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -85,11 +79,7 @@ function checkFilters(filters) {
   if (!filters || typeof filters !== 'object' || Array.isArray(filters)) throw new HttpError(400, 'filters must be an object')
   for (const [key, value] of Object.entries(filters)) {
     const kind = FILTER_TYPES[key]
-    const ok = kind === 'strings' ? Array.isArray(value) && value.every((v) => typeof v === 'string')
-      : kind === 'numberOrString' ? typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))
-        : kind === 'numberOrNull' ? value === null || (typeof value === 'number' && Number.isFinite(value))
-          : kind !== undefined && typeof value === kind
-    if (!ok) throw new HttpError(400, kind === undefined ? `unknown filter: ${key}` : `filter ${key} has the wrong type`)
+    if (!Object.hasOwn(FILTER_TYPES, key) || !filterValueOk(kind, value)) throw new HttpError(400, kind === undefined ? `unknown filter: ${key}` : `filter ${key} has the wrong type`)
   }
   return filters
 }
@@ -261,7 +251,8 @@ async function readBody(req, res) {
 
 // --- the routes ----------------------------------------------------------------------------------------------------------------------------------
 
-async function listAnswer(index, request, limit, now) {
+/** The answer to a checked request over an index (the route, and the screen tests' stand-in server, use this one function). */
+export async function listAnswer(index, request, limit, now) {
   const held = new Set(index.stored.map((row) => row.jobId))
   const result = queryJobList({
     stored: applyExtraRows(index.stored, request.extraRows), server: index.server, applications: index.applications, jobStateDoc: index.jobStateDoc,

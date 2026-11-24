@@ -31,10 +31,18 @@ const keep = async (where) => { await screen.click(screen.button(/Keep this ad/,
 const kept = () => screen.storedJobs().find((j) => j.jobId === 'abs')
 const absentRow = () => screen.row('The absent ad') ?? screen.row('Ledger abs')
 
+// The same tests run on both lists (docs/redesign/JOBS_LIST_SERVER_PLAN.md): the one the browser works out from its own rows, and the one the server pages.
+let serverMode = false
+const stubList = (options = {}) => stubServer({ ...options, listServer: serverMode })
+const mountList = (options = {}) => mountScreen({ ...options, server: serverMode })
+
+describe.each([['local', false], ['server', true]])('the %s list', (_name, on) => {
+beforeEach(() => { serverMode = on })
+
 describe('Keep this ad', () => {
   it('from the table: stores the ledger\'s ad, marked, and no display field', async () => {
-    stubServer({ route: good, ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: good, ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED })
     expect(kept()).toBeUndefined()
     await keep(absentRow())
     const job = kept()
@@ -49,9 +57,10 @@ describe('Keep this ad', () => {
   })
 
   it('the row then works as a stored one: actions on, no Keep button, Save persists', async () => {
-    stubServer({ route: good, ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
-    expect(absentRow().querySelector('button[aria-label^="Save"]').disabled).toBe(true)
+    stubList({ route: good, ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED })
+    // On the local list a row only the server holds is read-only until Keep; on the server's list a status goes to the server's job state, so it is allowed at once.
+    expect(absentRow().querySelector('button[aria-label^="Save"]').disabled).toBe(!on)
     await keep(absentRow())
     expect(absentRow().querySelector('button[aria-label="Save"]').disabled).toBe(false)
     expect(screen.button(/Keep this ad/, absentRow())).toBeUndefined()
@@ -61,18 +70,31 @@ describe('Keep this ad', () => {
     expect(kept().status).toBe('saved')
   })
 
+  ;(on ? it : it.skip)('a status on a row only the server holds is saved on the server and shown, and the browser\'s list is not written', async () => {
+    const server = stubList({ route: good, ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED })
+    const writes = countWrites(screen.key)
+    await screen.click(absentRow().querySelector('button[aria-label="Save"]'))
+    await settle()
+    expect(server.stateWrites).toHaveLength(1)
+    expect(server.stateWrites[0].patch).toEqual({ status: 'saved' })
+    expect(writes()).toBe(0) // no ad that is only a server row is put into the browser's list
+    expect(screen.storedJobs().map((j) => j.jobId)).toEqual(['s1'])
+    expect(absentRow().textContent).toContain('saved') // the list was read again, and the server's state is in it
+  })
+
   it('from a card', async () => {
     viewport(false)
-    stubServer({ route: good, ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: good, ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED })
     await screen.click(screen.button(/Keep this ad/))
     await settle()
     expect(kept().keptByUser).toBe(true)
   })
 
   it('from the drawer, and clicking it there does not close or reopen anything', async () => {
-    stubServer({ route: good, ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: good, ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED })
     await screen.click(absentRow())
     await settle()
     expect(screen.text()).toContain('AI tools, outreach, document generation and status changes need it saved')
@@ -84,8 +106,8 @@ describe('Keep this ad', () => {
   })
 
   it('from Job Details', async () => {
-    stubServer({ ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED, file: PAGE, props: { jobId: 'abs' } })
+    stubList({ ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED, file: PAGE, props: { jobId: 'abs' } })
     expect(screen.text()).toContain('THE LEDGER AD TEXT')
     await screen.click(screen.button(/Keep this ad/))
     await settle()
@@ -94,16 +116,16 @@ describe('Keep this ad', () => {
   })
 
   it('Keep does not open the drawer of the row it is on', async () => {
-    stubServer({ route: good, ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: good, ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED })
     await keep(absentRow())
     expect(screen.container.querySelector('aside')).toBeNull()
   })
 
   it('a ledger that cannot answer stores nothing and says so, and another try works', async () => {
     let answer = () => null
-    stubServer({ route: good, ledger: (jobId) => answer(jobId) })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: good, ledger: (jobId) => answer(jobId) })
+    screen = await mountList({ stored: STORED })
     const raw = screen.raw()
     await keep(absentRow())
     expect(screen.text()).toContain('The ad could not be read from the job history, so nothing was kept')
@@ -115,16 +137,16 @@ describe('Keep this ad', () => {
 
   it('if keeping fails in any other way it says so too', async () => {
     vi.doMock('../../src/modules/jobs/keepAd', async (original) => ({ ...(await original()), keepAd: async () => { throw new Error('odd') } }))
-    stubServer({ route: good, ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: good, ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED })
     await keep(absentRow())
     expect(screen.text()).toContain('so nothing was kept')
     vi.doUnmock('../../src/modules/jobs/keepAd')
   })
 
   it('a record stored meanwhile, say from another tab, keeps its data and gets the mark', async () => {
-    stubServer({ health: false })
-    screen = await mountScreen({ stored: [storedJob('abs', { status: 'saved', notes: 'mine' })] })
+    stubList({ health: false })
+    screen = await mountList({ stored: [storedJob('abs', { status: 'saved', notes: 'mine' })] })
     const { promoteRow } = await import('../../src/modules/jobs/jobsStore.js')
     await act(async () => { promoteRow({ ...ABSENT, serverOnly: true }, { jobId: 'abs', title: 'Ledger', description: 'text' }) })
     expect(kept()).toMatchObject({ status: 'saved', notes: 'mine', keptByUser: true })
@@ -132,8 +154,8 @@ describe('Keep this ad', () => {
   })
 
   it.each([[''], ['   '], [null]])('a ledger with no ad text (%j): stored, marked incomplete, and it says so', async (description) => {
-    stubServer({ route: good, ledger: ledgerRow(description) })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: good, ledger: ledgerRow(description) })
+    screen = await mountList({ stored: STORED })
     await keep(absentRow())
     expect(kept().descriptionIncomplete).toBe(true)
     await screen.click(absentRow())
@@ -142,8 +164,8 @@ describe('Keep this ad', () => {
   })
 
   it('a filtered row has no Keep button', async () => {
-    stubServer({ route: good, ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: good, ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED })
     await screen.click(screen.button(/^All$/))
     expect(screen.button(/Keep this ad/, screen.row('Filtered Chef'))).toBeUndefined()
   })
@@ -153,15 +175,15 @@ describe('a kept row lasts', () => {
   const scored = () => ({ meta: {}, jobs: [storedJob('s1')] })
 
   async function keepThenReload(server) {
-    screen = await mountScreen({ stored: STORED })
+    screen = await mountList({ stored: STORED })
     await keep(absentRow())
     await screen.unmount()
     server?.()
-    screen = await mountScreen({ keepStorage: true })
+    screen = await mountList({ keepStorage: true })
   }
 
   it('through a refresh with no other work on it, in Active', async () => {
-    stubServer({ route: good, ledger: ledgerRow() })
+    stubList({ route: good, ledger: ledgerRow() })
     await keepThenReload()
     expect(kept().keptByUser).toBe(true)
     expect(absentRow()).toBeTruthy()
@@ -169,7 +191,7 @@ describe('a kept row lasts', () => {
   })
 
   it('through a re-import that does not hold it: off the list, still kept, still in Active', async () => {
-    stubServer({ route: good, ledger: ledgerRow(), scored })
+    stubList({ route: good, ledger: ledgerRow(), scored })
     await keepThenReload()
     expect(kept().offList).toBe(true)
     expect(kept().keptByUser).toBe(true)
@@ -178,22 +200,22 @@ describe('a kept row lasts', () => {
   })
 
   it('past the 14 days and under a class Active leaves out', async () => {
-    stubServer({ route: good, ledger: ledgerRow(), scored })
-    await keepThenReload(() => stubServer({ route: () => routeAnswer([routeRow('s1'), routeRow('abs', 'stale', { title: 'The absent ad', lastSeen: ago(90) })]), scored }))
+    stubList({ route: good, ledger: ledgerRow(), scored })
+    await keepThenReload(() => stubList({ route: () => routeAnswer([routeRow('s1'), routeRow('abs', 'stale', { title: 'The absent ad', lastSeen: ago(90) })]), scored }))
     expect(absentRow()).toBeTruthy()
     expect(screen.text()).toContain('Stale')
   })
 
   it('in today\'s list too, when the route fails', async () => {
-    stubServer({ route: good, ledger: ledgerRow(), scored })
-    await keepThenReload(() => stubServer({ route: () => ({ status: 503, body: { ok: false, message: 'no' } }), scored }))
+    stubList({ route: good, ledger: ledgerRow(), scored })
+    await keepThenReload(() => stubList({ route: () => ({ status: 503, body: { ok: false, message: 'no' } }), scored }))
     expect(screen.text()).toContain('The full list could not be loaded')
     expect(absentRow()).toBeTruthy()
   })
 
   it('with a status and notes, which persist as on any stored row', async () => {
-    stubServer({ route: good, ledger: ledgerRow(), scored })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: good, ledger: ledgerRow(), scored })
+    screen = await mountList({ stored: STORED })
     await keep(absentRow())
     await screen.click(absentRow().querySelector('button[aria-label="Reject"]'))
     await settle()
@@ -201,7 +223,7 @@ describe('a kept row lasts', () => {
     await act(async () => { patchJob('abs', { notes: 'My note' }) })
     await settle()
     await screen.unmount()
-    screen = await mountScreen({ keepStorage: true })
+    screen = await mountList({ keepStorage: true })
     expect(kept().status).toBe('rejected')
     expect(kept().notes).toBe('My note')
     expect(kept().keptByUser).toBe(true)
@@ -239,8 +261,8 @@ describe('a kept row lasts', () => {
 
 describe('only Keep this ad changes the saved list', () => {
   it('browsing, filtering, selecting, opening and paging leave the payload byte-identical', async () => {
-    stubServer({ route: good, ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: good, ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED })
     const raw = screen.raw()
     const writes = countWrites(screen.key)
     await screen.click(screen.button(/^All$/))
@@ -263,8 +285,8 @@ describe('only Keep this ad changes the saved list', () => {
   it('tailoring on a stored row in a composed list writes no display field', async () => {
     viewport(false)
     vi.doMock('../../src/components/jobs/JobTailorActions.jsx', () => ({ default: ({ job, onJobUpdated }) => createElement('button', { type: 'button', onClick: () => onJobUpdated({ ...job, tailoredAssets: { resumeMd: 'x' } }) }, 'Fake tailor') }))
-    stubServer({ route: () => routeAnswer([routeRow('s1', 'absent', { copyGroup: 'g' })]), ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: () => routeAnswer([routeRow('s1', 'absent', { copyGroup: 'g' })]), ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED })
     await screen.click(screen.button(/Fake tailor/))
     await settle()
     const [job] = screen.storedJobs()
@@ -275,8 +297,8 @@ describe('only Keep this ad changes the saved list', () => {
 
 describe('what needs a stored ad waits for Keep, and says why', () => {
   it('Job Details hides AI tools and contacts until Keep, and then offers them', async () => {
-    stubServer({ ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED, file: PAGE, props: { jobId: 'abs' } })
+    stubList({ ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED, file: PAGE, props: { jobId: 'abs' } })
     expect(screen.text()).toContain('AI tools, outreach, document generation and status changes need it saved: press Keep this ad first')
     expect(screen.text()).not.toContain(AI_PANEL_TEXT)
     expect(screen.text()).not.toMatch(/Related contacts/i)
@@ -291,8 +313,8 @@ describe('what needs a stored ad waits for Keep, and says why', () => {
 
 describe('Mark Applied, the same in the drawer and on Job Details', () => {
   async function applyFromDrawer() {
-    const server = stubServer({ route: good, ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED })
+    const server = stubList({ route: good, ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED })
     await screen.click(absentRow())
     await settle()
     await screen.click(screen.button(/^Mark Applied$/))
@@ -300,8 +322,8 @@ describe('Mark Applied, the same in the drawer and on Job Details', () => {
     return server
   }
   async function applyFromPage() {
-    const server = stubServer({ ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED, file: PAGE, props: { jobId: 'abs' } })
+    const server = stubList({ ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED, file: PAGE, props: { jobId: 'abs' } })
     await screen.click(screen.button(/^Mark as applied$/))
     await settle()
     return server
@@ -330,14 +352,14 @@ describe('Mark Applied, the same in the drawer and on Job Details', () => {
   it('the application stays after a refresh and a re-import, with the ad still not stored, and keeps the row in Active', async () => {
     const applications = { a1: makeApplication('a1', 'abs') }
     const answer = () => routeAnswer([routeRow('s1'), routeRow('abs', 'older_key', { title: 'The absent ad', lastSeen: ago(90) })])
-    stubServer({ route: answer, ledger: ledgerRow(), applications, scored: () => ({ meta: {}, jobs: [storedJob('s1')] }) })
-    screen = await mountScreen({ stored: STORED })
+    stubList({ route: answer, ledger: ledgerRow(), applications, scored: () => ({ meta: {}, jobs: [storedJob('s1')] }) })
+    screen = await mountList({ stored: STORED })
     await settle()
     expect(absentRow()).toBeTruthy()
     expect(kept()).toBeUndefined()
     expect(screen.text()).toContain('applied manually')
     await screen.unmount()
-    screen = await mountScreen({ keepStorage: true })
+    screen = await mountList({ keepStorage: true })
     await settle()
     expect(absentRow()).toBeTruthy()
     expect(kept()).toBeUndefined()
@@ -368,8 +390,9 @@ describe('Keep this ad is the only write path', () => {
   })
 
   it('opening Job Details of a ledger-only row stores nothing', async () => {
-    stubServer({ ledger: ledgerRow() })
-    screen = await mountScreen({ stored: STORED, file: PAGE, props: { jobId: 'abs' } })
+    stubList({ ledger: ledgerRow() })
+    screen = await mountList({ stored: STORED, file: PAGE, props: { jobId: 'abs' } })
     expect(screen.storedJobs().map((j) => j.jobId)).toEqual(['s1'])
   })
+})
 })

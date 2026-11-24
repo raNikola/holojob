@@ -47,10 +47,14 @@ describe('a browser-only ad in the paged list', () => {
     expect(manual.title).toBe('My own job')
     const gone = rows.find((r) => r.jobId === 'off1')
     expect(gone).toMatchObject({ notes: SECRET, title: 'Gone Ad', class: 'older_key' }) // the browser's copy, with the server's word on where it stands
-    // the server's rows are the server's: no browser copy laid over a row the server holds
+    // a row the server holds is the server's (its title, score and tier), with the owner's own fields from the browser's copy laid over it
     const held = rows.find((r) => r.jobId === 'j01')
-    expect(held).toBe(answer.page.rows.find((r) => r.jobId === 'j01'))
-    expect(held).not.toHaveProperty('outreach')
+    expect(held.title).toBe(answer.page.rows.find((r) => r.jobId === 'j01').title)
+    expect(held.title).not.toBe(WORKED.title)
+    expect(held.outreach).toEqual(WORKED.outreach)
+    expect(held.serverOnly).toBeUndefined()
+    // an ad only the server holds is marked: read-only until Keep
+    expect(rows.find((r) => r.jobId === 'j05').serverOnly).toBe(true)
   })
 
   it('goes to the server without a word of its notes, links, source address or outreach', async () => {

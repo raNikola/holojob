@@ -3,6 +3,9 @@
 import { createElement, act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { vi } from 'vitest'
+import { listAnswer, parseListBody } from '../../../scripts/job-list.js'
+import { MAX_JSON_BODY_BYTES } from '../../../scripts/read-body.js'
+import { JOBS_STORAGE_KEY } from '../../../src/modules/jobs/jobStorage.js'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -33,11 +36,40 @@ const SETTINGS = { stages: { work: [{ key: 'applied', label: 'Applied' }, { key:
 
 const reply = (status, body) => ({ ok: status < 400, status, json: async () => body, text: async () => JSON.stringify(body), headers: { get: () => null } })
 
-/** `route(call)` answers /api/jobs/all; `ledger(jobId)` answers /api/jobs/history; `applications` is the store the server holds. */
-export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {} } = {}) {
-  const server = { allCalls: 0, posts: [], applications, jobState: { version: 1, updatedAt: null, jobs: {} }, stateWrites: [] }
+// What the real scored file would not hold: the owner's own work, which only the browser has.
+const OWNER_ONLY = ['status', 'keptByUser', 'tailoredAssets', 'aiInsights', 'outreach', 'notes', 'extraLinks', 'sourceUrl', 'sourceChoice', 'applicationTracking', 'keptRescoredAt', 'offList', 'manualEntry']
+
+/**
+ * The server's list for the screen tests (POST /api/jobs/list), made by the route's own `listAnswer` over what this stub server holds: the rows of the browser's stored
+ * list that the server would hold (everything but the browser-only rows, without the owner's work), the route's rows from `route`, the job state and the applications.
+ */
+function answerList(server, rawBody, allBody, pageSize) {
+  let local = []
+  try { local = JSON.parse(localStorage.getItem(JOBS_STORAGE_KEY))?.jobs ?? [] } catch { /* nothing stored */ }
+  const stored = local.filter((job) => !job.offList && !job.manualEntry).map((job) => Object.fromEntries(Object.entries(job).filter(([key]) => !OWNER_ONLY.includes(key))))
+  const revision = `r${server.stateWrites.length}.${server.posts.length}`
+  const request = parseListBody(rawBody)
+  if (request.revision && request.revision !== revision) return { ok: true, changed: true, revision }
+  const index = { revision, stored, server: allBody.rows, meta: allBody.meta ?? null, jobStateDoc: server.jobState, applications: { status: 'ready', store: { applications: server.applications }, settings: SETTINGS } }
+  return listAnswer(index, request, pageSize, Date.now())
+}
+
+/** `route(call)` answers /api/jobs/all (and, with `listServer`, the rows under /api/jobs/list); `ledger(jobId)` answers /api/jobs/history; `applications` is the store the server holds. */
+export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {}, listServer = false, pageSize = 100 } = {}) {
+  const server = { allCalls: 0, posts: [], applications, jobState: { version: 1, updatedAt: null, jobs: {} }, stateWrites: [], listCalls: [] }
   vi.stubGlobal('fetch', async (url, options = {}) => {
     const path = String(url).split('?')[0]
+    if (path === '/api/jobs/list' && options.method === 'POST') {
+      if (!listServer) return reply(404, {})
+      server.allCalls += 1
+      const answer = route(server.allCalls)
+      if (answer.status !== 200) return reply(answer.status, answer.body)
+      // as the real route: a body over the cap is a 413 in words, before anything is read
+      if (String(options.body).length > MAX_JSON_BODY_BYTES) return reply(413, { ok: false, limitBytes: MAX_JSON_BODY_BYTES, error: "The browser's own ads are too many to send with one list request. Nothing was cut: no list was made." })
+      const body = JSON.parse(options.body)
+      server.listCalls.push(body)
+      try { return reply(200, await answerList(server, body, answer.body, pageSize)) } catch (error) { return reply(400, { ok: false, error: error.message }) }
+    }
     if (path === '/api/pipeline/health') return health ? reply(200, { available: true, scoring: {}, discovery: {} }) : reply(503, {})
     if (path === '/api/jobs/all') {
       server.allCalls += 1
@@ -81,8 +113,10 @@ export const settle = () => act(async () => { await new Promise((resolve) => set
 
 /** A fresh mount of `file`'s default export under the profile provider, with `stored` in the browser. Modules are new each time, as after a page load. */
 // showNotOnBoard is on by default here: these tests use absent and closed rows as ordinary rows; the default-off behaviour has its own tests.
-export async function mountScreen({ stored = [], file = '../../../src/components/jobs/JobDiscoveryScreen.jsx', props = {}, keepStorage = false, filters = {} } = {}) {
+export async function mountScreen({ stored = [], file = '../../../src/components/jobs/JobDiscoveryScreen.jsx', props = {}, keepStorage = false, filters = {}, server = false } = {}) {
   vi.resetModules()
+  // the server's list is off by default; a test turns it on (the module is new after the reset, so it is turned on after it)
+  if (server) (await import('../../../src/modules/jobs/serverListSwitch.js')).setServerListActive(true)
   const storage = await import('../../../src/modules/jobs/jobStorage.js')
   if (!keepStorage) {
     localStorage.clear()

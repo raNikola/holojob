@@ -2,7 +2,7 @@
 //
 // A loader, like `useAllAds`'s: plain state, `subscribe`, no React, so it is tested alone. The screen gives it the query (mode, filters, classes, recent, sort)
 // and the browser's stored rows; it asks the server for the first page, pulls the next one on `more()`, and holds the pages in MEMORY ONLY. Nothing is written to
-// `localStorage` and no ad that is only a server row is ever put into the browser's list.
+// browser storage and no ad that is only a server row is ever put into the browser's list.
 //
 // Rules it keeps:
 //  - The page size is the server's (Settings `jobsPageSize`); this file has no number.
@@ -14,15 +14,16 @@
 //  - A late answer to an old request is ignored.
 import { selectExtraRows } from './extraRows.js'
 import { buildListBody, fetchListPage } from './jobListClient.js'
+import { pickFilters } from './listFilters.js'
 
 const IDLE = {
   status: 'idle', // idle | loading | ready | error
-  rows: [], total: 0, nextOffset: null, revision: null, counts: null, meta: null, extra: null,
+  rows: [], total: 0, limit: null, nextOffset: null, revision: null, counts: null, meta: null, extra: null,
   loadingMore: false, refreshing: false, error: null, notice: null,
 }
 
 /** What makes two requests the same list: the query, not the browser's own rows. */
-export const queryKey = (request) => JSON.stringify([request.mode, request.filters ?? {}, [...(request.classes ?? [])].sort(), Boolean(request.recent), request.sort?.key ?? null, request.sort?.dir ?? null])
+export const queryKey = (request) => JSON.stringify([request.mode, pickFilters(request.filters), [...(request.classes ?? [])].sort(), Boolean(request.recent), request.sort?.key ?? null, request.sort?.dir ?? null])
 
 /** What makes the browser's own rows the same: what would be sent for them. */
 export const extraKey = (request) => JSON.stringify(selectExtraRows(request.stored ?? [], { withText: Boolean(String(request.filters?.searchText ?? '').trim()) }))
@@ -70,7 +71,7 @@ export function createServerListLoader({ fetchFn } = {}) {
       offset = answer.page.nextOffset ?? null
       if (offset === null || rows.length >= through) {
         set({
-          status: 'ready', rows, total: first.total, nextOffset: offset, revision, counts: first.counts, meta: first.meta ?? null, extra: first.extra ?? null,
+          status: 'ready', rows, total: first.total, limit: first.limit, nextOffset: offset, revision, counts: first.counts, meta: first.meta ?? null, extra: first.extra ?? null,
           loadingMore: false, refreshing: false, error: null, notice: state.notice,
         })
         return
@@ -113,6 +114,12 @@ export function createServerListLoader({ fetchFn } = {}) {
       }
       const rows = state.rows.concat(answer.page.rows)
       set({ ...state, rows, total: answer.page.total, nextOffset: answer.page.nextOffset, loadingMore: false, error: null })
+    },
+
+    /** The same list made again where it stands: the rows stay on screen and the same number is loaded again (after something that changed the server's data). */
+    refresh() {
+      if (!request) return Promise.resolve()
+      return state.status === 'ready' ? load({ through: state.rows.length, keep: true }) : load()
     },
 
     /** Loads the list again from the first page, as it is now. */

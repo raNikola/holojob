@@ -8,7 +8,7 @@
 // What may be sent is an ALLOWLIST. A field not in it is never sent and is refused by the server; `notes`, `extraLinks`, `sourceUrl`, outreach, tailored assets,
 // AI insights and a tracking object's notes and contacts are not in it, and no rule here lists what to leave out. Owner work is sent as one flag, `ownerWork`
 // (what `hasUserData` says), and legacy tracking as the three values the counts read. The Jobs list shows a browser-only row from the browser's own copy
-// (`mergeLocalRow`), so the server needs only what filters, orders and counts read.
+// (`listRows`, jobListClient.js), so the server needs only what filters, orders and counts read.
 //
 // Pure: plain data in, plain data out, nothing is written. The server and the browser import this one file.
 import { hasUserData, jobMatchKey } from './jobStorage.js'
@@ -124,12 +124,3 @@ export function applyExtraRows(stored, extraRows) {
 
 /** True for a row the browser alone can show in full: the server was sent its filter fields, never its notes or links. */
 export const isBrowserOnly = (job) => job?.offList === true || job?.manualEntry === true
-
-/**
- * A page row as the Jobs list shows it. A browser-only row is the browser's own copy with the server's class and reason laid over it; every other row
- * is the server's (a server-only ad is read-only, and is never written to the browser's list).
- */
-export function mergeLocalRow(pageRow, storedJobs, mergeRow) {
-  const local = (storedJobs ?? []).find((job) => job.jobId === pageRow.jobId)
-  return local && isBrowserOnly(local) ? mergeRow(local, pageRow) : pageRow
-}

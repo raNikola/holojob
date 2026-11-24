@@ -1,6 +1,6 @@
 // The Jobs list's side of the server list (docs/redesign/JOBS_LIST_SERVER_PLAN.md, P2b). The screen calls these in P3; until then they are tested on their own.
 //
-// Nothing here writes: no `saveJobs`, no `localStorage`, no job store. A page of the server's list is held in memory by the caller, and an ad that is only a
+// Nothing here writes: no `saveJobs`, no browser storage, no job store. A page of the server's list is held in memory by the caller, and an ad that is only a
 // server row is never put into the browser's list (a stored row would count as an active job in stats, exports and AI contexts: see `jobResolve.js`).
 //
 // Opening an ad (the rule, owner decision 2026-11-24): the browser's own row comes first, as `resolveJob` has always done. A browser-only ad (an `offList` row, a
@@ -8,7 +8,8 @@
 // it: it opens from the browser's local data, and its actions (status, notes, outreach, Mark Applied, tailoring) are the same code on the same stored row as before.
 // An ad with no stored row opens from the server, read-only, until the owner presses Keep.
 import { mergeRow } from './allAds.js'
-import { mergeLocalRow, selectExtraRows } from './extraRows.js'
+import { isBrowserOnly, selectExtraRows } from './extraRows.js'
+import { pickFilters } from './listFilters.js'
 import { DEFAULT_SORT } from './jobTableModel.js'
 
 export const LIST_URL = '/api/jobs/list'
@@ -23,7 +24,7 @@ export function buildListBody({ stored, mode, offset = 0, filters = {}, classes 
   return {
     mode,
     offset,
-    filters,
+    filters: pickFilters(filters),
     classes: [...classes],
     recent,
     sort: sort && sort !== DEFAULT_SORT ? { key: sort.key, dir: sort.dir } : null,
@@ -59,14 +60,35 @@ export async function fetchListPage(body, fetchFn = globalThis.fetch) {
     const json = await res.json().catch(() => null)
     if (res.ok && json?.ok === true) return json.changed ? { ok: true, changed: true, revision: json.revision } : { ok: true, page: json }
     if (res.status === 413) return { ok: false, status: 413, tooLarge: true, rowCount: (body.extraRows ?? []).length, message: tooLargeMessage(body.extraRows, json?.limitBytes) }
-    return { ok: false, status: res.status, message: json?.error || `The list could not be loaded (${res.status}).` }
+    return { ok: false, status: res.status, message: json?.message || json?.error || `The list could not be loaded (${res.status}).` }
   } catch (error) {
     return { ok: false, status: 0, message: `The list could not be loaded: ${error.message}` }
   }
 }
 
-/** The rows of a page as the list shows them: a browser-only row is the browser's own copy with the server's class and reason laid over it. */
-export const shownRows = (page, stored) => page.rows.map((row) => mergeLocalRow(row, stored, mergeRow))
+/** What only the owner's own copy of a row holds (the server's list has none of it): laid over the server's row when the browser has the ad. */
+const OWNER_ROW_FIELDS = ['tailoredAssets', 'aiInsights', 'outreach', 'notes', 'extraLinks', 'sourceUrl', 'sourceChoice', 'keptRescoredAt']
+
+/**
+ * The rows of a page as the list shows them.
+ *  - A browser-only row (`offList`, hand-entered) is the browser's own copy with the server's class and reason laid over it.
+ *  - A row the browser also holds is the server's row (its ad fields, score and tier are the server's, so a stale browser copy cannot show an old score) with the
+ *    owner's own fields from the browser's copy laid over it (assets, insights, outreach, notes).
+ *  - A row only the server holds is the server's row, marked `serverOnly`: read-only until the owner presses Keep (status and Mark Applied work on it).
+ * Nothing here is written anywhere.
+ */
+export function listRows(rows, stored) {
+  const local = new Map((stored ?? []).map((job) => [job.jobId, job]))
+  return rows.map((row) => {
+    const mine = local.get(row.jobId)
+    if (!mine) return row.serverOnly ? row : { ...row, serverOnly: true }
+    if (isBrowserOnly(mine)) return mergeRow(mine, row)
+    const { serverOnly: _serverOnly, ...held } = row
+    return { ...held, ...Object.fromEntries(OWNER_ROW_FIELDS.filter((field) => mine[field] !== undefined).map((field) => [field, mine[field]])) }
+  })
+}
+
+export const shownRows = (page, stored) => listRows(page.rows, stored)
 
 /**
  * Where an ad opens from. The stored row first, whatever it is (a browser-only ad, or one the owner has worked on): `source: 'local'`, nothing fetched, and
