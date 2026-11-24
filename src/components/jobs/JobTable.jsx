@@ -239,8 +239,14 @@ export default function JobTable({
   classView = false,
   onAddFromRow,
   reference,
+  server = null,
 }) {
-  const [sort, onSort] = useTableSort(DEFAULT_SORT, SORT_COLUMNS)
+  // `server` is the list as the server pages it (src/modules/jobs/serverList.js): the rows arrive in the server's order, the sort and Show more are asked of the
+  // server, and the table sorts, cuts and counts nothing itself. Without it (demo data, no API) the table works from the whole list it is given, as ever.
+  // server = { total, pageSize, loadingMore, sort, onSort, onShowMore, hasScores, hasProvider }
+  const [ownSort, ownOnSort] = useTableSort(DEFAULT_SORT, SORT_COLUMNS)
+  const sort = server ? (server.sort ?? DEFAULT_SORT) : ownSort
+  const onSort = server ? server.onSort : ownOnSort
   const [openedAt] = useState(() => Date.now())
   const today = dayOf(reference ?? openedAt)
   const [paging, setPaging] = useState(null)
@@ -248,20 +254,27 @@ export default function JobTable({
   const isDesktop = useMediaQuery(DESKTOP, true)
   // The whole list is sorted first; only then is a batch taken from it. The list's other uses read the whole list too.
   const jobs = useMemo(() => {
+    if (server) return unsortedJobs // already in the server's order
     return orderRows(unsortedJobs, sort, today) // the default sort is told by identity: any click replaces it, even back to the same column
-  }, [unsortedJobs, sort, today])
+  }, [unsortedJobs, sort, today, server])
   const pageKey = `${filterKey}|${sort.key}|${sort.dir}`
-  const limit = pageLimit(paging, pageKey)
-  const visibleJobs = useMemo(() => jobs.slice(0, limit), [jobs, limit])
+  const limit = server ? jobs.length : pageLimit(paging, pageKey)
+  const visibleJobs = useMemo(() => (server ? jobs : jobs.slice(0, limit)), [jobs, limit, server])
   const headingAt = (index) => (sort === DEFAULT_SORT ? groupHeading(visibleJobs, index) : null)
-  const showScores = hasMatchScores(jobs)
-  const showProvider = jobs.some((j) => getJobProvider(j))
+  const showScores = server ? server.hasScores : hasMatchScores(jobs)
+  const showProvider = server ? server.hasProvider : jobs.some((j) => getJobProvider(j))
   const selectable = useMemo(() => selectableIds(jobs), [jobs])
   const allSelected = useMemo(() => everySelected(selectedJobIds, selectable), [selectedJobIds, selectable])
-  const notShown = useMemo(() => selectedNotShown(selectedJobIds, jobs, limit), [selectedJobIds, jobs, limit])
+  const notShown = useMemo(
+    () => (server ? [...selectedJobIds].filter((id) => !jobs.some((job) => job.jobId === id)).length : selectedNotShown(selectedJobIds, jobs, limit)),
+    [selectedJobIds, jobs, limit, server],
+  )
   // Only stored rows can be selected: bulk actions act on those.
   const unsaved = jobs.length - selectable.length
-  const selectAllLabel = `Select all ${selectable.length} filtered jobs${unsaved ? ' saved in this browser' : ''}, not only the ${visibleJobs.length} shown`
+  const total = server ? server.total : jobs.length
+  const selectAllLabel = server
+    ? `Select all filtered jobs saved in this browser, not only the ${visibleJobs.length} shown`
+    : `Select all ${selectable.length} filtered jobs${unsaved ? ' saved in this browser' : ''}, not only the ${visibleJobs.length} shown`
 
   if (!jobs.length) {
     return (
@@ -271,10 +284,12 @@ export default function JobTable({
     )
   }
 
-  const remaining = jobs.length - visibleJobs.length
+  const remaining = total - visibleJobs.length
+  const step = server ? server.pageSize : JOB_PAGE_SIZE
   const handleShowMore = () => {
-    setPaging(showMore(paging, pageKey))
-    if (remaining <= JOB_PAGE_SIZE) pagerRef.current?.focus() // the button is about to go: keep the keyboard's place
+    if (server) server.onShowMore()
+    else setPaging(showMore(paging, pageKey))
+    if (remaining <= step) pagerRef.current?.focus() // the button is about to go: keep the keyboard's place
   }
 
   return (
@@ -379,11 +394,11 @@ export default function JobTable({
       )}
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <span ref={pagerRef} tabIndex={-1} role="status" className="text-sm text-stone-600 focus:outline-none dark:text-stone-400">
-          Showing {visibleJobs.length} of {jobs.length}
+          Showing {visibleJobs.length} of {total}
         </span>
         {remaining > 0 && (
-          <Button variant="secondary" onClick={handleShowMore}>
-            Show {Math.min(remaining, JOB_PAGE_SIZE)} more
+          <Button variant="secondary" onClick={handleShowMore} disabled={Boolean(server?.loadingMore)}>
+            {server?.loadingMore ? 'Loading…' : `Show ${Math.min(remaining, step)} more`}
           </Button>
         )}
       </div>

@@ -46,8 +46,10 @@ function Checkbox({ label, help, checked, onChange, className = 'self-end pb-2.5
   )
 }
 
-export default function JobFilters({ filters, sites, providers, jobs, applicationStore = null, basicProfile = null, onChange, searchNote = null, offListDisabledNote = null }) {
-  const showScoreFilters = hasMatchScores(jobs)
+// `facets` is the server list's answer (`counts.facets` of /api/jobs/list): the filter panel's option lists and counts, worked out where the whole list is. Without it
+// they are worked out from `jobs`, as ever (the local list: demo data, no API).
+export default function JobFilters({ filters, sites, providers, jobs, facets = null, applicationStore = null, basicProfile = null, onChange, searchNote = null, offListDisabledNote = null }) {
+  const showScoreFilters = facets ? facets.hasScores : hasMatchScores(jobs)
   const [moreOpen, setMoreOpen] = useState(false)
   // Until the open animation ends the extras clip their content; afterwards dropdowns may extend past the box.
   const [settled, setSettled] = useState(false)
@@ -70,11 +72,11 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
   // Chips of filters that are not rendered (score filters without scores) are not counted in the toggle.
   const moreCount = moreFiltersCount(chips.filter((c) => showScoreFilters || ['provider', 'company', 'hideNoLongerListed', 'showNotOnBoard', 'showOffList'].includes(c.key)))
   const priorityOptions = useMemo(
-    () => countByValue(jobs, 'priority', SHOWN_PRIORITIES).map(({ value, count }) => ({ value, label: `${value} (${count})` })),
-    [jobs],
+    () => (facets ? facets.priorityCounts : countByValue(jobs, 'priority', SHOWN_PRIORITIES)).map(({ value, count }) => ({ value, label: `${value} (${count})` })),
+    [jobs, facets],
   )
 
-  const companyOptions = useMemo(() => getCompanyOptions(jobs), [jobs])
+  const companyOptions = useMemo(() => (facets ? facets.companyOptions : getCompanyOptions(jobs)), [jobs, facets])
 
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm dark:border-stone-800 dark:bg-stone-900">
@@ -121,7 +123,7 @@ export default function JobFilters({ filters, sites, providers, jobs, applicatio
               title="Status"
               value={filters.status}
               onChange={(v) => onChange({ status: v })}
-              options={statusFilterOptions(JOB_STATUSES, jobs, applicationStore)}
+              options={facets ? facets.statusOptions : statusFilterOptions(JOB_STATUSES, jobs, applicationStore)}
               placeholder="All statuses"
             />
           </div>

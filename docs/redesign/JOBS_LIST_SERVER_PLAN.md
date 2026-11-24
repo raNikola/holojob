@@ -110,13 +110,15 @@ The server-mode list is built beside the local pipeline and stays off until ever
 | Sub-step | What | Status |
 |---|---|---|
 | S1 | The loader: pages in memory, a new list for a new query, an in-place reload for the owner's own changes, `changed` restarts, refusals shown, late answers ignored (`serverList.js`, `useServerList.js`) | done |
-| S2 | `JobTable` shows the server's order (controlled sort, Show more from the server, select-all by ids); `JobFilters` takes the server's facets | todo |
+| S2 | `JobTable` shows the server's order (controlled sort, Show more from the server, select-all by ids); `JobFilters` takes the server's facets | done |
 | S3 | The Jobs screen in server mode: stats and notices from the server's counts, status on a server-only ad via job-state, the harness answers `/api/jobs/list` | todo |
 | S4 | Server: counts-only and rows-by-ids answers for the other screens | todo |
 | S5 | Other screens (Dashboard, Outreach, Resume library, Application home, AI context, Job Details) off the full list | todo |
 | S6 | The import stops loading the whole file; `JOB_PAGE_SIZE` and the lean/minimal storage tiers go; the switch is turned on; full tier | todo |
 
 **S1 (loader).** `createServerListLoader` holds `status`, `rows`, `total`, `nextOffset`, `revision`, `counts`, `error`, `notice`. `setRequest` starts a new list when the query changes (old rows dropped at once), reloads in place when only the browser's own rows changed (rows stay on screen, the same number is loaded again), and does nothing when neither changed. `more()` asks for the next page with the revision; a `changed` answer loads the list again from the first page and says so in `notice`. A read of several pages that moves in the middle starts again from page one. A refused request (a too-large body) keeps any rows already shown, and with none it is `status: 'error'` with the row count and the words; a late answer to an old request is ignored. `useServerList` is the thin hook. 16 tests against the real route over HTTP.
+
+**S2 (table and filters).** `JobTable` takes an optional `server` prop (`total`, `pageSize`, `loadingMore`, `sort`, `onSort`, `onShowMore`, `hasScores`, `hasProvider`). With it the rows are shown in the order given, with no sort, no cut at a page size of its own and no count of its own; the sort header and Show more call the screen; the Show more label uses the server's page size (`JOB_PAGE_SIZE` is used only without `server`, and goes in S6); the score columns follow the server's facets, not the rows loaded so far; a selection reaching rows not loaded yet is said. `JobFilters` takes `facets` (the answer's `counts.facets`) instead of reading rows. Without `server` / `facets` both work as before (demo data, no API). 9 tests (`tests/js/jobTableServer.test.js`).
 
 ## Open items
 
