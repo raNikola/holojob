@@ -29,13 +29,14 @@ export function postedTimeOf(row) {
  * (`isRemoteFeasible`, eligibility, owner decision 2026-11-18), then newest first (`datePosted`, else `firstSeen`; no readable date after
  * dated ones), then jobId. The Fit Score takes no part in it: no ordering inside a tier is proven (experiment B, docs/DECISIONS.md).
  */
-export const neutralCompare = (a, b) => {
-  const desc = (x, y) => (x === y ? 0 : x === null ? 1 : y === null ? -1 : y - x)
-  return Number(isRemoteFeasible(b)) - Number(isRemoteFeasible(a)) || desc(postedTimeOf(a), postedTimeOf(b)) || byId(a, b)
-}
+const descTime = (x, y) => (x === y ? 0 : x === null ? 1 : y === null ? -1 : y - x)
+export const neutralCompare = (a, b) => Number(isRemoteFeasible(b)) - Number(isRemoteFeasible(a)) || descTime(postedTimeOf(a), postedTimeOf(b)) || byId(a, b)
 
 /** Rows in the neutral order alone, for sorts whose ties would otherwise follow the arrival order. */
-export const neutralOrder = (rows) => [...rows].sort(neutralCompare)
+export const neutralOrder = (rows) => rows
+  .map((row) => ({ row, feasible: Number(isRemoteFeasible(row)), posted: postedTimeOf(row) })) // once per row, as `orderDefault` does
+  .sort((a, b) => b.feasible - a.feasible || descTime(a.posted, b.posted) || byId(a.row, b.row))
+  .map((entry) => entry.row)
 
 /**
  * The default order (owner decision 2026-11-21, replaces 2026-11-18): by tier (`fitTier.js`: Strong, Possible, Weak fit), then the neutral
@@ -73,17 +74,22 @@ export function defaultSortKey(row) {
 }
 
 /** The order of two rows under `defaultSortKey`. Zero only for the same jobId. */
-export function compareDefault(a, b) {
-  const ka = defaultSortKey(a)
-  const kb = defaultSortKey(b)
+export const compareDefault = (a, b) => compareDefaultKeys(defaultSortKey(a), defaultSortKey(b))
+
+/** The order of two keys made by `defaultSortKey`. */
+function compareDefaultKeys(ka, kb) {
   for (let i = 0; i < 4; i += 1) if (ka[i] !== kb[i]) return ka[i] - kb[i]
   if (ka[4] !== kb[4]) return ka[4] - kb[4]
   if (ka[5] !== kb[5]) return ka[5] === null ? 1 : kb[5] === null ? -1 : kb[5] - ka[5] // newest first, no date after dated ones
   return ka[6] === kb[6] ? 0 : String(ka[6]) < String(kb[6]) ? -1 : 1
 }
 
-/** Rows in the default order. */
-export const orderDefault = (rows) => [...rows].sort(compareDefault)
+/**
+ * Rows in the default order. A key takes the tier, the eligibility and the dates of a row (tens of microseconds), and a sort compares each row many times, so the key is
+ * made ONCE per row and the rows are sorted by their keys: the same order, and on a list of thousands of ads (a server list with the absent search-source ads scored) 4 s
+ * became a few tens of milliseconds.
+ */
+export const orderDefault = (rows) => rows.map((row) => ({ row, key: defaultSortKey(row) })).sort((a, b) => compareDefaultKeys(a.key, b.key)).map((entry) => entry.row)
 
 /** The columns a picked sort can use (the table's headers). `deadline` needs the day: see `orderRows`. */
 export const SORT_COLUMNS = {

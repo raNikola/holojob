@@ -258,6 +258,34 @@ function checkParity(input, frozenOrFor, seed, rounds = 120) {
   expect(nonEmpty).toBeGreaterThan(40) // the draw is not all empty answers
 }
 
+describe('the default order makes a row\'s key once, not once per comparison', () => {
+  // A list of thousands of ads took 4 s a request when each comparison made both keys again (found on a simulated JobSpy run). This is not about time: it counts how often
+  // a row is read, which is the same on any machine.
+  const rowsReadCounting = (count) => {
+    let reads = 0
+    const rows = Array.from({ length: count }, (_, i) => ({
+      jobId: `r${String(i).padStart(5, '0')}`, title: `Ad ${i}`, dataStatus: 'ok', datePosted: new Date(NOW - (i % 40) * DAY).toISOString(),
+      get matchScore() { reads += 1; return 20 + (i % 70) },
+    }))
+    return { rows, reads: () => reads }
+  }
+
+  it('the default order reads each row a bounded number of times, however long the list', () => {
+    const small = rowsReadCounting(200)
+    orderDefault(small.rows)
+    const large = rowsReadCounting(3000)
+    orderDefault(large.rows)
+    expect(large.reads() / 3000).toBeLessThan(8) // per row; a comparison-by-comparison key was about log2(n) times that
+    expect(large.reads() / 3000).toBeLessThanOrEqual(small.reads() / 200 + 1) // and it does not grow with the length of the list
+  })
+
+  it('and gives the same order as before', () => {
+    const { rows } = rowsReadCounting(300)
+    const shuffled = rows.map((row) => ({ row, k: Math.sin(Number(row.jobId.slice(1)) * 12.9898) })).sort((a, b) => a.k - b.k).map((x) => x.row)
+    expect(orderDefault(shuffled).map((r) => r.jobId)).toEqual(refDefaultOrder(shuffled).map((r) => r.jobId))
+  })
+})
+
 describe('the server\'s query gives what the screen works out, on every page', () => {
   it.each([11, 22, 33, 44])('seed %i: ids, order, pages and counts agree for 120 random queries', (seed) => {
     const input = fixture(seed)
