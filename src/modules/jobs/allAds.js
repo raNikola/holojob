@@ -8,8 +8,12 @@ import { hasUserData, jobMatchKey } from './jobStorage.js'
 import { isClosedAd } from './jobHistory.js'
 import { identityJobUrl } from './manualJob.js'
 
-/** How long an absent row stays in Active after it was last seen. A visibility rule, not proof the ad is still open. */
-export const ACTIVE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** A usable period from Settings: whole days, 1 to 365. Anything else (not loaded yet, a hand-edited file) is no period, and no number is made up. */
+export function validWindowDays(value) {
+  return Number.isInteger(value) && value >= 1 && value <= 365 ? value : null
+}
 
 /** From the route whatever it says, null included. Display only: never stored on a job. */
 export const ROUTE_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'firstSeen', 'lastSeen', 'closedAt', 'absentSince']
@@ -67,10 +71,12 @@ function toTime(value) {
   return Number.isFinite(time) ? time : null
 }
 
-/** Seen within the window of `now`, the end included. A row with no usable date is not: nothing says it was seen. */
-export function seenRecently(lastSeen, now) {
+/** Seen within `windowDays` of `now` (the Settings period), the end included. A row with no usable date is not: nothing says it was seen.
+ *  With no valid period nothing counts as recent: the period is Settings' to give, and code supplies none. */
+export function seenRecently(lastSeen, now, windowDays) {
+  const days = validWindowDays(windowDays)
   const seen = toTime(lastSeen)
-  return seen !== null && now - seen <= ACTIVE_WINDOW_MS
+  return days !== null && seen !== null && now - seen <= days * DAY_MS
 }
 
 function storeState(applications) {
@@ -113,11 +119,11 @@ function pairRows(stored, server) {
   ]
 }
 
-function isEligible({ row, local }, now) {
+function isEligible({ row, local }, now, windowDays) {
   if (row.manualEntry) return true
   if (!row.class) return !local?.offList && !isClosedAd(row) // the route says nothing about this stored row
   if (row.class === 'found' || row.class === 'held') return true
-  return row.class === 'absent' && seenRecently(row.lastSeen, now)
+  return row.class === 'absent' && seenRecently(row.lastSeen, now, windowDays)
 }
 
 function betterCopy(a, b) {
@@ -140,14 +146,14 @@ function copiesToShow(copies) {
 /**
  * The two lists of the Jobs screen. `stored`: the browser's rows. `server`: the route's rows, or null with no answer. `applications`:
  * `{ status, store }`, as `useApplications` gives it. `reference`: the current time, a parameter so the list can be worked out again as
- * the date moves, with no new import.
+ * the date moves, with no new import. `activeWindowDays`: the Settings period an absent row stays in Active (null until Settings has answered: then no absent row is in Active).
  *
- * `all` is every row. `active` is found, held, hand-entered and absent seen within the window, plus any row with the owner's work
+ * `all` is every row. `active` is found, held, hand-entered and absent seen within the Settings period, plus any row with the owner's work
  * on it unless the ad is closed (a closed ad stays in All and in the Application Tracker, work or no work), with one row per ad. While the application store is loading, or if it failed, its work is not known, so
  * copies are not collapsed (`copies.state` says which). A stored row is in the result whatever the route answers.
  * @returns {{ active: object[], all: object[], copies: { state: 'collapsed'|'waiting'|'failed', hidden: number } }}
  */
-export function composeJobList({ stored = [], server = null, applications = null, reference }) {
+export function composeJobList({ stored = [], server = null, applications = null, reference, activeWindowDays = null }) {
   const now = toTime(reference)
   if (now === null) throw new TypeError('composeJobList needs the current time as `reference`')
   const state = storeState(applications)
@@ -157,7 +163,7 @@ export function composeJobList({ stored = [], server = null, applications = null
     const entry = { local, row: mergeRow(local, route) }
     entry.applied = applied.has(entry.row.jobId) || applied.has(route?.jobId)
     entry.worked = hasUserData(local) || entry.applied
-    entry.eligible = isEligible(entry, now)
+    entry.eligible = isEligible(entry, now, activeWindowDays)
     return entry
   })
 

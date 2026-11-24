@@ -69,7 +69,7 @@ function call(query = '', { method = 'GET', path: urlPath = '/api/jobs/list', ..
       end(text) { resolve({ status: this.statusCode, json: JSON.parse(text), headers: this.headers, spawned }) },
     }
     handleJobsListRequest({ method, url: `${urlPath}${query ? `?${query}` : ''}` }, res, urlPath, {
-      root, spawnFn: spawned.spawnFn, ensureView: async () => {}, readPageSize: async () => 4, now: () => NOW, ...options,
+      root, spawnFn: spawned.spawnFn, ensureView: async () => {}, readPageSize: async () => 4, readWindowDays: async () => 14, now: () => NOW, ...options,
     }).then((done) => { if (!done) resolve({ handled: false }) }, reject)
   })
 }
@@ -79,7 +79,7 @@ const q = (params) => new URLSearchParams(params).toString()
 function direct(extra = {}) {
   return queryJobList({
     stored: importJobsFromFile({ meta: {}, jobs: SCORED }, null).jobs, server: ROUTE_ROWS, applications: { status: 'ready', store: { applications: {} }, settings: undefined },
-    jobStateDoc: { version: 1, jobs: {} }, reference: NOW, mode: 'all', filters: {}, offset: 0, limit: 1000, ...extra,
+    jobStateDoc: { version: 1, jobs: {} }, reference: NOW, mode: 'all', filters: {}, offset: 0, limit: 1000, activeWindowDays: 14, ...extra,
   })
 }
 

@@ -30,9 +30,9 @@ export function classOptions(rows) {
   return CLASS_FILTERS.map((value) => ({ value, label: classFilterLabel(value), count: counts.get(value) ?? 0 }))
 }
 
-/** All's own filters. `classes` empty means every class. `recent` keeps rows seen in the 14 days before `reference`; hand-entered rows have no sighting. */
-export function applyAllControls(rows, { classes = new Set(), recent = false, reference }) {
-  return rows.filter((row) => (!classes.size || classes.has(displayClass(row))) && (!recent || seenRecently(row.lastSeen, reference)))
+/** All's own filters. `classes` empty means every class. `recent` keeps rows seen in the `windowDays` (the Settings period) before `reference`; hand-entered rows have no sighting. */
+export function applyAllControls(rows, { classes = new Set(), recent = false, reference, windowDays = null }) {
+  return rows.filter((row) => (!classes.size || classes.has(displayClass(row))) && (!recent || seenRecently(row.lastSeen, reference, windowDays)))
 }
 
 /**

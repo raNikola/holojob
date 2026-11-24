@@ -18,7 +18,7 @@ import { pickFilters } from './listFilters.js'
 
 const IDLE = {
   status: 'idle', // idle | loading | ready | error
-  rows: [], total: 0, limit: null, nextOffset: null, revision: null, counts: null, meta: null, extra: null,
+  rows: [], total: 0, limit: null, activeWindowDays: null, nextOffset: null, revision: null, counts: null, meta: null, extra: null,
   loadingMore: false, refreshing: false, error: null, notice: null,
 }
 
@@ -71,7 +71,7 @@ export function createServerListLoader({ fetchFn } = {}) {
       offset = answer.page.nextOffset ?? null
       if (offset === null || rows.length >= through) {
         set({
-          status: 'ready', rows, total: first.total, limit: first.limit, nextOffset: offset, revision, counts: first.counts, meta: first.meta ?? null, extra: first.extra ?? null,
+          status: 'ready', rows, total: first.total, limit: first.limit, activeWindowDays: first.activeWindowDays ?? null, nextOffset: offset, revision, counts: first.counts, meta: first.meta ?? null, extra: first.extra ?? null,
           loadingMore: false, refreshing: false, error: null, notice: state.notice,
         })
         return

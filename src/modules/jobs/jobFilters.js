@@ -66,12 +66,15 @@ export function isNoLongerListed(job) {
 }
 
 /**
- * An ad the company's board does not list in the latest complete check: the route's class `absent` or `closed`, or on a stored row `isAbsent` / `isClosed`
- * (python/job_scoring/job_history.py). Owner decision 2026-11-18: the default list and its order leave these out; the filter `showNotOnBoard` brings them back
- * (All holds them either way). An ad the owner has worked on (saved, applied, or with an application) stays.
+ * An ad the company's board does not list in the latest complete check: the route's class `closed`, or `absent` WITH the mark of a complete check (`absentSince`),
+ * or on a stored row `isAbsent` / `isClosed` (python/job_scoring/job_history.py). Owner decision 2026-11-18: the default list and its order leave these out; the filter
+ * `showNotOnBoard` brings them back (All holds them either way). An ad the owner has worked on (saved, applied, or with an application) stays.
+ *
+ * An `absent` ad with no `absentSince` is one a SEARCH (JobSpy, Infostud) ran and did not return: a search proves nothing about the ad, so it is not "not on the
+ * board" and is not left out here. It stays in Active within the Settings period (owner decision 2026-11-24; `allAds.js`), "Not in latest search", never closed.
  */
 export function isNotOnBoard(job) {
-  const gone = job?.class ? job.class === 'absent' || job.class === 'closed' : job?.isClosed === true || job?.isAbsent === true
+  const gone = job?.class ? job.class === 'closed' || (job.class === 'absent' && Boolean(job.absentSince)) : job?.isClosed === true || job?.isAbsent === true
   if (!gone) return false
   const worked = job?.status === 'saved' || job?.status === 'applied_manually' || Boolean(job?.applicationTracking)
   return !worked

@@ -25,7 +25,23 @@ async function put(path, payload) {
 }
 
 /** Resolves { ok } | { needsConfirm, increases } | { errors }. Pass confirm: true only after the owner agreed. */
-export const saveGateSettings = (settings, confirm = false) => put('/api/ai/settings', { settings, confirm })
+export const GATE_SETTINGS_SAVED_EVENT = 'holojob:gate-settings-saved'
+
+/** The Settings period of the Jobs screen's Active list, in days, or null when it cannot be read: code supplies no number of its own. */
+export async function loadActiveWindowDays() {
+  try {
+    const days = (await loadGateUsage()).settings?.activeWindowDays
+    return Number.isInteger(days) && days >= 1 && days <= 365 ? days : null
+  } catch {
+    return null
+  }
+}
+
+export async function saveGateSettings(settings, confirm = false) {
+  const result = await put('/api/ai/settings', { settings, confirm })
+  if (result?.ok && typeof window !== 'undefined') window.dispatchEvent(new Event(GATE_SETTINGS_SAVED_EVENT))
+  return result
+}
 export const saveGatePricing = (entries, confirm = false) => put('/api/ai/pricing', { entries, confirm })
 
 /** The form's text fields as the settings object the server validates ('' for a call limit means none). */
@@ -44,6 +60,7 @@ export function settingsFromForm(form) {
     runLimitAds: count(form.runLimitAds),
     allowEngineFill: Boolean(form.allowEngineFill),
     jobsPageSize: required(form.jobsPageSize),
+    activeWindowDays: required(form.activeWindowDays),
     estimatedOutputTokens: num(form.estimatedOutputTokens),
     timezone: String(form.timezone).trim(),
     automation: { enabled: Boolean(form.automationEnabled) },
@@ -69,6 +86,7 @@ export function formFromSettings(s) {
     maxCallsDaily: text(s.maxCallsDaily), maxCallsMonthly: text(s.maxCallsMonthly),
     runLimitUsd: text(s.runLimitUsd), runLimitAds: text(s.runLimitAds), allowEngineFill: Boolean(s.allowEngineFill),
     jobsPageSize: text(s.jobsPageSize),
+    activeWindowDays: text(s.activeWindowDays),
     estimatedOutputTokens: text(s.estimatedOutputTokens), timezone: s.timezone,
     automationEnabled: Boolean(s.automation?.enabled),
     subscriptionEnabled: Boolean(s.claudeCodeSubscription?.enabled),

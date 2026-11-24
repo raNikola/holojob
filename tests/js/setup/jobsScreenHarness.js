@@ -50,21 +50,23 @@ function serverStoredRows(scoredRows) {
   return local.filter((job) => !job.offList && !job.manualEntry).map((job) => Object.fromEntries(Object.entries(job).filter(([key]) => !OWNER_ONLY.includes(key))))
 }
 
-function answerList(server, rawBody, allBody, pageSize, scoredRows) {
+function answerList(server, rawBody, allBody, pageSize, scoredRows, windowDays) {
   const stored = serverStoredRows(scoredRows)
   const revision = `r${server.stateWrites.length}.${server.posts.length}`
   const request = parseListBody(rawBody)
   if (request.revision && request.revision !== revision) return { ok: true, changed: true, revision }
   const index = { revision, stored, server: allBody.rows, meta: allBody.meta ?? null, jobStateDoc: server.jobState, applications: { status: 'ready', store: { applications: server.applications }, settings: SETTINGS } }
-  return listAnswer(index, request, pageSize, Date.now())
+  return listAnswer(index, request, pageSize, Date.now(), windowDays)
 }
 
 /** `route(call)` answers /api/jobs/all (and, with `listServer`, the rows under /api/jobs/list); `ledger(jobId)` answers /api/jobs/history; `applications` is the store the server holds. */
-export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {}, listServer = true, pageSize = 100, scoredRows = null } = {}) {
+export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {}, listServer = true, pageSize = 100, scoredRows = null, windowDays = 14 } = {}) {
   const server = { allCalls: 0, posts: [], applications, jobState: { version: 1, updatedAt: null, jobs: {} }, stateWrites: [], listCalls: [], paths: [] }
   vi.stubGlobal('fetch', async (url, options = {}) => {
     const path = String(url).split('?')[0]
     server.paths.push(path)
+    // Settings holds the Active period; the screen's own list reads it from the gate's settings.
+    if (path === '/api/ai/usage') return reply(200, { settings: { activeWindowDays: windowDays } })
     if (path === '/api/jobs/list' && options.method === 'POST') {
       if (!listServer) return reply(404, {})
       server.allCalls += 1
@@ -74,7 +76,7 @@ export function stubServer({ route = () => routeAnswer([]), health = true, score
       if (String(options.body).length > MAX_JSON_BODY_BYTES) return reply(413, { ok: false, limitBytes: MAX_JSON_BODY_BYTES, error: "The browser's own ads are too many to send with one list request. Nothing was cut: no list was made." })
       const body = JSON.parse(options.body)
       server.listCalls.push(body)
-      try { return reply(200, await answerList(server, body, answer.body, pageSize, scoredRows)) } catch (error) { return reply(400, { ok: false, error: error.message }) }
+      try { return reply(200, await answerList(server, body, answer.body, pageSize, scoredRows, windowDays)) } catch (error) { return reply(400, { ok: false, error: error.message }) }
     }
     if (path === '/api/jobs/list/rows' && options.method === 'POST' && listServer) {
       // the scored rows of the ads named: from the scored list the test gave the server (`scored`, else `scoredRows`, else what the browser holds)

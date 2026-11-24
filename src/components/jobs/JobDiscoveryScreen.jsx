@@ -30,6 +30,8 @@ import { ensureApiAvailable } from '../../utils/apiAvailability'
 import { isServerListActive } from '../../modules/jobs/serverListSwitch'
 import { dayOf } from '../../modules/jobs/jobDeadline'
 import { useTableSort } from '../ui/SortableTh'
+import { useActiveWindowDays } from '../../modules/jobs/useActiveWindowDays'
+import { GATE_SETTINGS_SAVED_EVENT } from '../../modules/ai/gateClient'
 import { ALL_SEARCH_NOTE, EXPORT_NOTE, OFF_LIST_NOTE, applyAllControls, classOptions, filterComposed, listNotices, selectableIds } from '../../modules/jobs/jobListView'
 import JobDetailDrawer from './JobDetailDrawer'
 import JobEmptyState from './JobEmptyState'
@@ -199,6 +201,8 @@ export default function JobDiscoveryScreen() {
   // The server's list (docs/redesign/JOBS_LIST_SERVER_PLAN.md): the server filters, orders, pages and counts, and the browser holds the pages in memory. Demo data and no
   // API have no server list, and keep working from the browser's own rows as before.
   const serverOn = routeEnabled && isServerListActive()
+  // The Active period is a Settings field. The server's list reads it on the server and says which it used; only the list the browser works out itself needs it here.
+  const activeWindowDays = useActiveWindowDays({ enabled: !serverOn })
   const allAds = useAllAds({ enabled: routeEnabled && !serverOn })
   const refetchAllAds = allAds.refetch
 
@@ -246,6 +250,13 @@ export default function JobDiscoveryScreen() {
   const stats = serverShown && serverList.counts ? serverList.counts.stats : localStats
   const refreshList = useCallback(() => (serverOn ? serverList.refresh() : refetchAllAds()), [serverOn, serverList.refresh, refetchAllAds]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The page size and the Active period are Settings: saving them changes the list, so it is read again where it stands.
+  useEffect(() => {
+    if (!serverOn) return undefined
+    window.addEventListener(GATE_SETTINGS_SAVED_EVENT, refreshList)
+    return () => window.removeEventListener(GATE_SETTINGS_SAVED_EVENT, refreshList)
+  }, [serverOn, refreshList])
+
   // A new import means a new ledger: Re-scrape, Re-score, auto-refresh and the URL import all set `importedAt`.
   const lastImportedAt = useRef(state.importedAt)
   useEffect(() => {
@@ -263,8 +274,8 @@ export default function JobDiscoveryScreen() {
 
   // Display only, recomputed from its inputs and never saved. Until the route has answered, Active is today's list.
   const composed = useMemo(
-    () => (routeEnabled && !serverOn ? composeJobList({ stored: state.jobs, server: allAds.rows, applications, reference }) : null),
-    [routeEnabled, serverOn, state.jobs, allAds.rows, applications, reference],
+    () => (routeEnabled && !serverOn ? composeJobList({ stored: state.jobs, server: allAds.rows, applications, reference, activeWindowDays }) : null),
+    [routeEnabled, serverOn, state.jobs, allAds.rows, applications, reference, activeWindowDays],
   )
   const useComposed = serverShown || (!serverOn && routeEnabled && (allAds.rows !== null || listMode === 'all'))
   const composedRows = useMemo(() => {
@@ -274,8 +285,8 @@ export default function JobDiscoveryScreen() {
     return rows.map((row) => (row.serverOnly && row.applicationTracking ? { ...row, status: 'applied_manually' } : row))
   }, [useComposed, serverOn, listMode, composed, applicationStore, applications.settings, jobState.doc])
   const shownRows = useMemo(
-    () => (useComposed && !serverOn && listMode === 'all' ? applyAllControls(composedRows, { classes: listClasses, recent: seenRecentlyOnly, reference }) : composedRows),
-    [useComposed, serverOn, listMode, composedRows, listClasses, seenRecentlyOnly, reference],
+    () => (useComposed && !serverOn && listMode === 'all' ? applyAllControls(composedRows, { classes: listClasses, recent: seenRecentlyOnly, reference, windowDays: activeWindowDays }) : composedRows),
+    [useComposed, serverOn, listMode, composedRows, listClasses, seenRecentlyOnly, reference, activeWindowDays],
   )
 
   const baseRows = useMemo(() => (serverShown ? (serverRows ?? []) : (composedRows ?? listed)), [serverShown, serverRows, composedRows, listed])
@@ -668,6 +679,7 @@ export default function JobDiscoveryScreen() {
                   onClasses={setListClasses}
                   recent={seenRecentlyOnly}
                   onRecent={setSeenRecentlyOnly}
+                  windowDays={serverShown ? serverList.activeWindowDays : activeWindowDays}
                 />
               )}
 

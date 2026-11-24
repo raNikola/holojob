@@ -119,6 +119,14 @@ def classify(entry: dict, run_id: str | None, key: str | None, providers: set | 
     return "absent"
 
 
+def absent_test(ledger: dict):
+    """`entry -> bool`: the entry is `absent` in the list of all ads right now (the search ran and did not return it). One definition, so the
+    scoring input and the list agree on which ads the Active list can show without the latest search having found them."""
+    run_id = (ledger.get("lastImport") or {}).get("runId") or None
+    key, providers, source_runs = current_key(ledger), run_providers(ledger), ledger.get(stale_rule.FIELD)
+    return lambda entry: classify(entry, run_id, key, providers, source_runs) == "absent"
+
+
 def classify_filtered(record: dict) -> str | None:
     """`filtered`, `filtered_incomplete`, or None for a record with no title or no web address, which is not shown."""
     title, url = record.get("title"), record.get("url")

@@ -5,7 +5,7 @@ import { ago, countWrites, mountScreen, routeAnswer, routeRow, settle, storedJob
 
 const STORED = [storedJob('s1', { status: 'saved', matchScore: 80, matchLabel: 'Strong', outreach: { contacts: [{ name: 'x' }] } }), storedJob('s2')]
 const ROUTE = [
-  routeRow('s1'), routeRow('s2'), routeRow('abs', 'absent'), routeRow('old', 'absent', { lastSeen: ago(30) }), routeRow('key', 'older_key'), routeRow('cl', 'closed'),
+  routeRow('s1'), routeRow('s2'), routeRow('abs', 'absent', { absentSince: ago(2) }), routeRow('old', 'absent', { lastSeen: ago(30), absentSince: ago(20) }), routeRow('key', 'older_key'), routeRow('cl', 'closed'),
   routeRow('fil', 'filtered', { from: 'filtered', title: 'Filtered Chef', reason: "Filtered out: Title didn't match" }),
 ]
 const good = () => routeAnswer(ROUTE)
@@ -174,6 +174,27 @@ describe('Active and All', () => {
     expect(writes()).toBe(0)
     expect(screen.raw()).toBe(raw)
     expect(screen.raw()).not.toMatch(/"class"|"serverOnly"|"copyGroup"/)
+  })
+
+  it('the Active period is the one in Settings: a longer one keeps an older absent ad, none known keeps no absent ad, and the label names it', async () => {
+    stubServer({ route: good, windowDays: 40 })
+    screen = await mountScreen({ stored: STORED })
+    expect(screen.rows()).toHaveLength(4) // s1, s2, the absent ad seen yesterday and the one seen 30 days ago
+    await screen.click(screen.button(/^All$/))
+    await settle()
+    expect(screen.rows()).toHaveLength(7)
+    expect(screen.box(/Seen in the last 40 days/)).toBeTruthy()
+    await screen.unmount()
+
+    // No period known: the server's list is not made (the Active period is Settings', and no number is made up). The saved rows are shown, with the reason.
+    stubServer({ route: good, windowDays: null })
+    screen = await mountScreen({ stored: STORED })
+    await settle()
+    expect(screen.rows()).toHaveLength(2)
+    expect(screen.text()).toContain('activeWindowDays')
+    await screen.click(screen.button(/^All$/))
+    await settle()
+    expect(screen.rows()).toHaveLength(2)
   })
 
   it('a change of mode or class resets the selection', async () => {

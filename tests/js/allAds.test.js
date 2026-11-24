@@ -3,11 +3,15 @@ import fs from 'node:fs'
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ACTIVE_WINDOW_MS, AD_FIELDS, ROUTE_FIELDS, classLabel, composeJobList, mergeRow } from '../../src/modules/jobs/allAds.js'
+import * as allAds from '../../src/modules/jobs/allAds.js'
+import { AD_FIELDS, ROUTE_FIELDS, classLabel, mergeRow, seenRecently, validWindowDays } from '../../src/modules/jobs/allAds.js'
 import { createAllAdsLoader, fetchAllAds, useAllAds } from '../../src/modules/jobs/useAllAds.js'
 
 const NOW = Date.parse('2026-11-20T12:00:00.000Z')
 const DAY = 24 * 60 * 60 * 1000
+// The period is Settings' (default 14 there); code has no constant of its own, so these tests hand it in, as the screen does.
+const SETTINGS_DAYS = 14
+const composeJobList = (input) => allAds.composeJobList({ activeWindowDays: SETTINGS_DAYS, ...input })
 const ago = (ms) => new Date(NOW - ms).toISOString()
 const READY = { status: 'ready', store: { applications: {} } }
 const withApplications = (...jobIds) => ({
@@ -201,11 +205,28 @@ describe('Active: each class', () => {
   })
 })
 
-describe('the 14-day window: a visibility rule on lastSeen, against the time passed in', () => {
+describe('the Settings period: a visibility rule on lastSeen, against the time passed in (here Settings says 14 days)', () => {
   const absent = (lastSeen) => route('a', 'absent', { lastSeen })
   const inActive = (lastSeen, reference = NOW) => compose({ server: [absent(lastSeen)], reference }).active.length === 1
 
-  it('is 14 days', () => expect(ACTIVE_WINDOW_MS).toBe(14 * DAY))
+  it('has no built-in period: code reads only Settings', () => expect('ACTIVE_WINDOW_MS' in allAds).toBe(false))
+  it('the period is whatever Settings gives', () => {
+    const at = (days, lastSeen) => allAds.composeJobList({ stored: [], server: [absent(lastSeen)], applications: READY, reference: NOW, activeWindowDays: days }).active.length === 1
+    expect(at(7, ago(7 * DAY))).toBe(true)
+    expect(at(7, ago(7 * DAY + 1000))).toBe(false)
+    expect(at(365, ago(300 * DAY))).toBe(true)
+    expect(at(1, ago(DAY))).toBe(true)
+  })
+  it.each([null, undefined, 0, -3, 1.5, 366, '14', NaN])('no valid period (%s): no absent row in Active, all of them in All', (days) => {
+    const out = allAds.composeJobList({ stored: [], server: [absent(ago(DAY)), route('f', 'found')], applications: READY, reference: NOW, activeWindowDays: days })
+    expect(ids(out.active)).toEqual(['f'])
+    expect(out.all).toHaveLength(2)
+    expect(seenRecently(ago(DAY), NOW, days)).toBe(false)
+  })
+  it('a valid period is a whole number of days from 1 to 365', () => {
+    expect([1, 14, 365].map(validWindowDays)).toEqual([1, 14, 365])
+    expect([0, 366, 2.5, '7', null].map(validWindowDays)).toEqual([null, null, null, null, null])
+  })
   it('exactly 14 days is in', () => expect(inActive(ago(14 * DAY))).toBe(true))
   it('14 days + 1 second is out', () => expect(inActive(ago(14 * DAY + 1000))).toBe(false))
   it('14 days - 1 second is in', () => expect(inActive(ago(14 * DAY - 1000))).toBe(true))

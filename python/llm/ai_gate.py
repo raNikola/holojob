@@ -86,6 +86,7 @@ def tier_from_api(value) -> str | None:
     return _FROM_API_TIER.get(str(value).lower()) if isinstance(value, str) else None
 
 MAX_JOBS_PAGE_SIZE = 1000
+MAX_ACTIVE_WINDOW_DAYS = 365
 
 # A missing settings file means: no paid call, no automatic AI task.
 DEFAULT_SETTINGS = {
@@ -103,6 +104,9 @@ DEFAULT_SETTINGS = {
     # How many ads the Jobs list loads at a time ("Show more" loads the next ones; whole number, 1..MAX_JOBS_PAGE_SIZE; owner decision 2026-11-24, the server
     # pages the list). Not a spend loosening, so saving it needs no confirm. The one place the default is written.
     "jobsPageSize": 100,
+    # The Jobs screen's Active list shows an ad the latest search did not return only while it was seen within this many days (whole days, 1..365;
+    # owner decision 2026-11-24). A visibility rule, never proof an ad is closed; All keeps every ad. The one place the default is written.
+    "activeWindowDays": 14,
     # Reserved per call for the answer before its size is known.
     "estimatedOutputTokens": 1000,
     # Day and month boundaries of the limits (IANA name).
@@ -863,6 +867,9 @@ def validate_settings(candidate) -> tuple[dict, list[str]]:
     if "jobsPageSize" in candidate and not (
             _integer(candidate["jobsPageSize"]) and 1 <= candidate["jobsPageSize"] <= MAX_JOBS_PAGE_SIZE):
         errors.append(f"jobsPageSize must be a whole number of ads from 1 to {MAX_JOBS_PAGE_SIZE}")
+    if "activeWindowDays" in candidate and not (
+            _integer(candidate["activeWindowDays"]) and 1 <= candidate["activeWindowDays"] <= MAX_ACTIVE_WINDOW_DAYS):
+        errors.append(f"activeWindowDays must be a whole number of days from 1 to {MAX_ACTIVE_WINDOW_DAYS}")
     if "allowEngineFill" in candidate and not isinstance(candidate["allowEngineFill"], bool):
         errors.append("allowEngineFill must be true or false")
     if "estimatedOutputTokens" in candidate and not (

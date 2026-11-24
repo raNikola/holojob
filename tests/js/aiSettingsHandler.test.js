@@ -126,6 +126,17 @@ describe('form conversion', () => {
     // NaN leaves as null in JSON, which the server refuses with its own message.
     expect(JSON.parse(JSON.stringify(settingsFromForm({ ...form, jobsPageSize: '' }))).jobsPageSize).toBeNull()
   })
+
+  it('the Active period round-trips as a number, and an empty or fractional field is never saved as something else', () => {
+    const base = { currency: 'USD', dailyLimit: 0, monthlyLimit: 0, estimatedOutputTokens: 1000, timezone: 'UTC', automation: { enabled: false } }
+    const form = formFromSettings({ ...base, activeWindowDays: 30 })
+    expect(form.activeWindowDays).toBe('30')
+    expect(settingsFromForm(form).activeWindowDays).toBe(30)
+    expect(settingsFromForm({ ...form, activeWindowDays: '7' }).activeWindowDays).toBe(7)
+    // NaN leaves as null in JSON, which the server refuses with its own message.
+    expect(JSON.parse(JSON.stringify(settingsFromForm({ ...form, activeWindowDays: '' }))).activeWindowDays).toBeNull()
+    expect(settingsFromForm({ ...form, activeWindowDays: '1.5' }).activeWindowDays).toBe(1.5)
+  })
 })
 
 describe('badge source', () => {

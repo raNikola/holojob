@@ -38,6 +38,7 @@ import view_guard  # noqa: E402
 import job_history  # noqa: E402
 from scorer import SCORING_VERSION, resolve_weights, score_jobs  # noqa: E402
 from match_engine import fit3 as fit3_levels, fit3_industry, shadow  # noqa: E402
+from job_discovery import all_ads  # noqa: E402
 from redact import identity_of  # noqa: E402 (on the path through llm_enhancer)
 
 INTELLIGENCE_PATH = ROOT / "data" / "intelligence" / "candidate-intelligence.json"
@@ -181,11 +182,18 @@ def _score(args: argparse.Namespace) -> int:
     if not isinstance(jobs, list):
         print("Invalid discovered jobs format", file=sys.stderr)
         return 1
-    # A hand-entered job is scored with every run and wins over a discovered row with the same URL.
+    # Open ads of a search source that the latest search did not return (class `absent`, the ones the Active list can show) are scored too, marked
+    # not found: free, outside term rarity and every paid step. Added before the hand-entered jobs, so one of those wins over such an ad with the
+    # same id or URL.
+    ledger_file = job_history.ledger_path(args.jobs)
+    if ledger_file.exists():
+        ledger = job_history.load(ledger_file, read_only=True)
+        jobs = [*jobs, *job_history.open_search_rows(ledger, {j.get("jobId") for j in jobs}, wanted=all_ads.absent_test(ledger))]
     discovered_rows = len(jobs)
+    # A hand-entered job is scored with every run and wins over a discovered row with the same URL.
     jobs = manual_jobs.with_manual(jobs, manual)
     # Kept ads the owner re-scored by hand stay in the scoring set while they are kept (kept_ads.prune drops the rest).
-    jobs = kept_ads.with_kept(jobs, job_history.ledger_path(args.jobs), args.kept)
+    jobs = kept_ads.with_kept(jobs, ledger_file, args.kept)
     replaced_rows = discovered_rows + len(manual) - len(jobs)
     if manual:
         # Counts only: nothing of a job's text is printed.

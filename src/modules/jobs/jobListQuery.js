@@ -12,7 +12,7 @@
 //   5. the rows are put in order (`orderRows`: the default order or a picked column, ties in the neutral order);
 //   6. the page is `offset` and `limit` of that order.
 // The counts come from the same rows, so they cannot disagree with the page.
-import { composeJobList } from './allAds.js'
+import { composeJobList, validWindowDays } from './allAds.js'
 import { applyAllControls, classOptions, filterComposed, selectableIds } from './jobListView.js'
 import { countByValue, getCompanyOptions, getUniqueProviders, getUniqueSites, hiddenAsNotOnBoard } from './jobFilters.js'
 import { computeJobStats } from './jobStats.js'
@@ -49,23 +49,26 @@ function shownRow(row) {
  * @param {number} input.limit             rows to take (a whole number, 1 or more): from Settings, never a default here
  * @param {number} [input.today]           the day the deadline column and sort read (`dayOf`, the local midnight). The caller passes the CLIENT's day: a server
  *                                         in another time zone would otherwise sort the deadline column differently near midnight. Default: `dayOf(reference)`.
+ * @param {number} input.activeWindowDays the Settings period: how many days an ad the latest search did not return stays in Active after it was last seen (whole days, 1 to 365).
+ *                                         Never a default here: the caller reads it from Settings, and without a valid one there is no list.
  * @param {boolean} [input.withCounts] default true. False leaves `counts` null and works none out: a "Show more" page needs the rows only, the first page's counts stand
  * @param {boolean} [input.withIds]        also return `ids` (every matching ad, in order) and `selectableIds` (those a bulk action can reach), for select-all across pages
  * @returns {{ rows: object[], total: number, offset: number, limit: number, counts: object, ids?: string[], selectableIds?: string[] }}
  */
 export function queryJobList({
-  stored = [], server = null, applications = null, jobStateDoc = null, reference, mode, filters = {}, classes = [], recent = false, sort = null, offset, limit, today, withIds = false, withCounts = true,
+  stored = [], server = null, applications = null, jobStateDoc = null, reference, mode, filters = {}, classes = [], recent = false, sort = null, offset, limit, today, withIds = false, withCounts = true, activeWindowDays,
 }) {
   if (!LIST_MODES.includes(mode)) throw new TypeError(`queryJobList: mode must be one of ${LIST_MODES.join(', ')}`)
   if (!Number.isInteger(offset) || offset < 0) throw new TypeError('queryJobList: offset must be a whole number, 0 or more')
+  if (validWindowDays(activeWindowDays) === null) throw new TypeError('queryJobList: activeWindowDays must be a whole number of days, 1 to 365 (the Settings field)')
   if (!Number.isInteger(limit) || limit < 1) throw new TypeError('queryJobList: limit must be a whole number, 1 or more (the page size is a Settings field)')
 
   const store = applications?.status === 'ready' ? applications.store : null
   const settings = applications?.settings
 
-  const composed = composeJobList({ stored, server, applications, reference })
+  const composed = composeJobList({ stored, server, applications, reference, activeWindowDays })
   const base = overlayTracking(withServerState(mode === 'all' ? composed.all : composed.active, jobStateDoc), store, settings).map(shownRow)
-  const shown = mode === 'all' ? applyAllControls(base, { classes: new Set(classes), recent, reference }) : base
+  const shown = mode === 'all' ? applyAllControls(base, { classes: new Set(classes), recent, reference, windowDays: activeWindowDays }) : base
   const effective = mode === 'all' ? { ...filters, showNotOnBoard: true } : filters
   const filtered = filterComposed(shown, effective, { appliedJobIds: appliedJobIds(store) })
   const ordered = orderRows(filtered, sort, today ?? dayOf(new Date(reference).getTime()))
@@ -75,6 +78,7 @@ export function queryJobList({
     total: ordered.length,
     offset,
     limit,
+    activeWindowDays,
     ...(withIds ? { ids: ordered.map((row) => row.jobId), selectableIds: selectableIds(ordered) } : {}),
     counts: !withCounts ? null : {
       baseTotal: base.length, // the rows of this list before the controls and filters: the "of" in "N of M jobs shown"

@@ -22,7 +22,8 @@
  * builds the input from the server's files, checks the request and slims the rows. Nothing is written by any route here (the one thing that can write is
  * the check every job route makes first, `ensureViewCurrent`, which rebuilds a view that is behind the ledger).
  *
- * Page size: the Settings field `jobsPageSize` (the AI budget settings file, read through the gate), never a number here and never a request parameter.
+ * Page size and Active period: the Settings fields `jobsPageSize` and `activeWindowDays` (the AI budget settings file, read through the gate), never a number here and
+ * never a request parameter. The period decides which ads the latest search did not return stay in Active; each answer says which period it used.
  * Offset and limit with a revision check, not a cursor (owner decision 2026-11-24): the revision names the files the list was made from, so a page of a list
  * that has since changed is refused instead of showing a row twice or skipping one.
  *
@@ -42,6 +43,7 @@ import { loadState, statePaths } from './job-state-store.js'
 import { BodyTooLargeError, MAX_JSON_BODY_BYTES, readJsonBody } from './read-body.js'
 import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
 import { overlayTracking } from '../src/modules/applications/trackingView.js'
+import { validWindowDays } from '../src/modules/jobs/allAds.js'
 import { withServerState } from '../src/modules/jobs/jobStateClient.js'
 import { ExtraRowsError, applyExtraRows, checkExtraRows } from '../src/modules/jobs/extraRows.js'
 import { LIST_MODES, queryJobList } from '../src/modules/jobs/jobListQuery.js'
@@ -117,6 +119,7 @@ const wholeNumber = (text, name) => {
 /** The checked parameters of a list request. */
 export function parseListRequest(params) {
   if (params.has('limit')) throw new HttpError(400, 'limit is not a parameter: the page size is the Settings field jobsPageSize')
+  if (params.has('activeWindowDays')) throw new HttpError(400, 'activeWindowDays is not a parameter: the Active period is the Settings field activeWindowDays')
   const mode = params.get('mode')
   if (!LIST_MODES.includes(mode)) throw new HttpError(400, `mode must be one of ${LIST_MODES.join(', ')}`)
   const classes = (params.get('classes') ?? '').split(',').filter(Boolean)
@@ -139,6 +142,7 @@ export function parseListRequest(params) {
 export function parseListBody(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'the request body must be an object')
   if (Object.hasOwn(body, 'limit')) throw new HttpError(400, 'limit is not a parameter: the page size is the Settings field jobsPageSize')
+  if (Object.hasOwn(body, 'activeWindowDays')) throw new HttpError(400, 'activeWindowDays is not a parameter: the Active period is the Settings field activeWindowDays')
   if (!LIST_MODES.includes(body.mode)) throw new HttpError(400, `mode must be one of ${LIST_MODES.join(', ')}`)
   const whole = (value, name) => {
     if (!Number.isInteger(value) || value < 0) throw new HttpError(400, `${name} must be a whole number, 0 or more`)
@@ -169,7 +173,8 @@ export function parseListBody(body) {
 function sourceFiles(root) {
   const jobs = (name) => path.join(root, 'data/jobs', name)
   const apps = storePaths(root)
-  return [jobs('scored_jobs.json'), jobs('job_history.json'), jobs('discovered_jobs.json'), jobs('filtered_ads.json'), statePaths(root).file, apps.store, apps.settings]
+  // `data/ai/settings.json` is here because the page size and the Active period are Settings: a change to either makes a different list, so it is a new revision
+  return [jobs('scored_jobs.json'), jobs('job_history.json'), jobs('discovered_jobs.json'), jobs('filtered_ads.json'), statePaths(root).file, apps.store, apps.settings, path.join(root, 'data/ai/settings.json')]
 }
 
 /** A name for the data as it stands now. Reads no file: only the size and the modification time of each. */
@@ -237,10 +242,19 @@ export function clearListIndex() {
 }
 
 /** The page size, from Settings through the gate. Refuses to guess when it is not a whole number of ads. */
-async function settingsPageSize() {
-  const size = (await readAiUsage())?.settings?.jobsPageSize
+const gateSettings = async () => (await readAiUsage())?.settings
+
+function pageSizeOf(settings) {
+  const size = settings?.jobsPageSize
   if (!Number.isInteger(size) || size < 1) throw new HttpError(500, 'The Settings field jobsPageSize is not a whole number of ads, so the list has no page size.')
   return size
+}
+
+/** The Active period, from Settings. Refuses to guess when it is not a whole number of days (1 to 365). */
+function windowDaysOf(settings) {
+  const days = validWindowDays(settings?.activeWindowDays)
+  if (days === null) throw new HttpError(500, 'The Settings field activeWindowDays is not a whole number of days from 1 to 365, so the Active list has no period.')
+  return days
 }
 
 /** The body of a POST. Over the limit it answers 413 itself, in words, and returns null: a list that would be cut short is never made. */
@@ -264,20 +278,21 @@ async function readBody(req, res) {
 // --- the routes ----------------------------------------------------------------------------------------------------------------------------------
 
 /** The answer to a checked request over an index (the route, and the screen tests' stand-in server, use this one function). */
-export async function listAnswer(index, request, limit, now) {
+export async function listAnswer(index, request, limit, now, activeWindowDays) {
   const held = new Set(index.stored.map((row) => row.jobId))
   const result = queryJobList({
     stored: applyExtraRows(index.stored, request.extraRows), server: index.server, applications: index.applications, jobStateDoc: index.jobStateDoc,
     reference: now, mode: request.mode, filters: request.filters, classes: request.classes, recent: request.recent, sort: request.sort,
     offset: request.ids || request.countsOnly ? 0 : request.offset, limit: request.ids || request.countsOnly ? 1 : limit, today: request.today ?? undefined, withIds: request.ids,
     withCounts: request.ids || request.countsOnly || request.offset === 0, // a "Show more" page (offset above 0) is rows only: the first page's counts stand
+    activeWindowDays,
   })
   const extra = request.extraRows.length ? { extra: { sent: request.extraRows.length, notOnServer: request.extraRows.filter((row) => !held.has(row.jobId)).length } } : {}
-  if (request.countsOnly) return { ok: true, revision: index.revision, mode: request.mode, total: result.total, counts: result.counts, ...extra }
-  if (request.ids) return { ok: true, revision: index.revision, mode: request.mode, total: result.total, ids: result.ids, selectableIds: result.selectableIds, ...extra }
+  if (request.countsOnly) return { ok: true, revision: index.revision, mode: request.mode, total: result.total, counts: result.counts, activeWindowDays, ...extra }
+  if (request.ids) return { ok: true, revision: index.revision, mode: request.mode, total: result.total, ids: result.ids, selectableIds: result.selectableIds, activeWindowDays, ...extra }
   const next = request.offset + result.rows.length
   return {
-    ok: true, revision: index.revision, mode: request.mode, offset: request.offset, limit, total: result.total,
+    ok: true, revision: index.revision, mode: request.mode, offset: request.offset, limit, activeWindowDays, total: result.total,
     rows: result.rows.map(slimJob), nextOffset: next < result.total ? next : null, counts: result.counts, meta: index.meta, ...extra,
   }
 }
@@ -325,7 +340,7 @@ function contextAnswer(index) {
 }
 
 export async function handleJobsListRequest(req, res, url, {
-  root = ROOT, python = path.join(root, '.venv/bin/python'), spawnFn = spawn, ensureView = ensureViewCurrent, readPageSize = settingsPageSize,
+  root = ROOT, python = path.join(root, '.venv/bin/python'), spawnFn = spawn, ensureView = ensureViewCurrent, readPageSize = null, readWindowDays = null,
   now = Date.now, demoMode = () => false,
 } = {}) {
   if (![LIST_ROUTE, AD_ROUTE, ROWS_ROUTE, CONTEXT_ROUTE].includes(url)) return false
@@ -357,13 +372,17 @@ export async function handleJobsListRequest(req, res, url, {
     } else {
       request = { ...parseListRequest(params), extraRows: [] }
     }
-    const limit = request.ids || request.countsOnly ? null : await readPageSize()
+    // The gate's settings are read once for a request: the page size and the Active period are Settings, and the tests give either by hand.
+    let gate = null
+    const settings = async () => { gate ??= await gateSettings(); return gate }
+    const limit = request.ids || request.countsOnly ? null : readPageSize ? await readPageSize() : pageSizeOf(await settings())
+    const windowDays = readWindowDays ? await readWindowDays() : windowDaysOf(await settings())
     const index = await indexFor({ root, python, spawnFn, ensureView })
     if (request.revision !== null && request.revision !== index.revision) {
       send(res, 200, { ok: true, changed: true, revision: index.revision })
       return true
     }
-    send(res, 200, await listAnswer(index, request, limit, now()))
+    send(res, 200, await listAnswer(index, request, limit, now(), windowDays))
   } catch (error) {
     if (error instanceof ViewUnrecoverable) send(res, 503, viewUnrecoverableAnswer(error))
     else if (error instanceof HttpError) send(res, error.status, { ok: false, error: error.message })

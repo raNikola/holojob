@@ -25,6 +25,7 @@ import { appliedJobIds, statusFilterOptions } from '../../src/modules/applicatio
 import { queryJobList } from '../../src/modules/jobs/jobListQuery.js'
 
 const NOW = Date.parse('2026-11-20T12:00:00Z')
+const WINDOW = 14 // the Settings default; a query below draws others
 const DAY = 86400000
 const iso = (offsetMs) => new Date(NOW - offsetMs).toISOString()
 
@@ -131,10 +132,10 @@ function screenFiltered(input, query) {
   const { stored, server, jobStateDoc, applications } = input
   const store = applications.status === 'ready' ? applications.store : null
   const settings = applications.settings
-  const composed = composeJobList({ stored, server, applications, reference: NOW })
+  const composed = composeJobList({ stored, server, applications, reference: NOW, activeWindowDays: query.windowDays })
   const rows = overlayTracking(withServerState(query.mode === 'all' ? composed.all : composed.active, jobStateDoc), store, settings)
     .map((row) => (row.serverOnly && row.applicationTracking ? { ...row, status: 'applied_manually' } : row))
-  const shown = query.mode === 'all' ? applyAllControls(rows, { classes: new Set(query.classes), recent: query.recent, reference: NOW }) : rows
+  const shown = query.mode === 'all' ? applyAllControls(rows, { classes: new Set(query.classes), recent: query.recent, reference: NOW, windowDays: query.windowDays }) : rows
   const effective = query.mode === 'all' ? { ...query.filters, showNotOnBoard: true } : query.filters
   const filtered = filterComposed(shown, effective, { appliedJobIds: appliedJobIds(store) })
   return { composed, rows, shown, effective, filtered, store, settings }
@@ -165,6 +166,7 @@ function randomQuery(p) {
   return {
     mode, filters, sort, classes: mode === 'all' && p.chance(0.5) ? p.some(CLASSES, 0.4) : [], recent: mode === 'all' && p.chance(0.3),
     limit: p.one([1, 3, 10, 25, 100]),
+    windowDays: p.one([1, 7, 14, 30, 365]), // the Settings period: an absent ad is in Active only within it
   }
 }
 
@@ -198,7 +200,7 @@ function checkParity(input, frozenOrFor, seed, rounds = 120) {
     let offset = 0
     let first = null
     for (;;) {
-      const page = queryJobList({ ...frozen, reference: NOW, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset, limit: query.limit, today })
+      const page = queryJobList({ ...frozen, reference: NOW, activeWindowDays: query.windowDays, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset, limit: query.limit, today })
       first ??= page
       expect(page.total).toBe(ref.filtered.length)
       expect(page.rows.length).toBeLessThanOrEqual(query.limit)
@@ -212,10 +214,10 @@ function checkParity(input, frozenOrFor, seed, rounds = 120) {
     if (ids.length) nonEmpty += 1
 
     // select-all across pages: the ids of every matching ad, in the same order; and a rows-only page is the same rows with no counts
-    const everyId = queryJobList({ ...frozen, reference: NOW, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: 1, today, withIds: true })
+    const everyId = queryJobList({ ...frozen, reference: NOW, activeWindowDays: query.windowDays, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: 1, today, withIds: true })
     expect(everyId.ids).toEqual(ids)
     expect(everyId.selectableIds).toEqual(full.filter((row) => !row.serverOnly).map((row) => row.jobId))
-    const rowsOnly = queryJobList({ ...frozen, reference: NOW, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: query.limit, today, withCounts: false })
+    const rowsOnly = queryJobList({ ...frozen, reference: NOW, activeWindowDays: query.windowDays, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: query.limit, today, withCounts: false })
     expect(rowsOnly.counts).toBeNull()
     expect(rowsOnly.rows.map((r) => r.jobId)).toEqual(first.rows.map((r) => r.jobId))
 
@@ -265,23 +267,25 @@ describe('the server\'s query gives what the screen works out, on every page', (
   it('the default order of a page never depends on the order the rows arrive in', () => {
     const input = fixture(5)
     const shuffled = { ...input, stored: [...input.stored].reverse(), server: [...input.server].reverse() }
-    const ask = (i) => queryJobList({ ...i, reference: NOW, mode: 'all', filters: {}, offset: 0, limit: 500 }).rows.map((r) => r.jobId)
+    const ask = (i) => queryJobList({ ...i, reference: NOW, activeWindowDays: WINDOW, mode: 'all', filters: {}, offset: 0, limit: 500 }).rows.map((r) => r.jobId)
     expect(ask(shuffled)).toEqual(ask(input))
   })
 
   it('refuses a missing page size, a bad offset and an unknown mode instead of guessing', () => {
-    const base = { ...fixture(6), reference: NOW, mode: 'active', filters: {}, offset: 0, limit: 10 }
+    const base = { ...fixture(6), reference: NOW, activeWindowDays: WINDOW, mode: 'active', filters: {}, offset: 0, limit: 10 }
     expect(() => queryJobList({ ...base, limit: undefined })).toThrow(TypeError)
     expect(() => queryJobList({ ...base, limit: 0 })).toThrow(TypeError)
     expect(() => queryJobList({ ...base, offset: -1 })).toThrow(TypeError)
     expect(() => queryJobList({ ...base, offset: 1.5 })).toThrow(TypeError)
     expect(() => queryJobList({ ...base, mode: 'every' })).toThrow(TypeError)
+    // the Active period is Settings': none, or one that is not whole days from 1 to 365, is no list
+    for (const bad of [undefined, null, 0, -1, 1.5, 366, '14']) expect(() => queryJobList({ ...base, activeWindowDays: bad })).toThrow(TypeError)
   })
 
   it('a page past the end is empty, and the total stays', () => {
     const input = fixture(7)
-    const all = queryJobList({ ...input, reference: NOW, mode: 'all', filters: {}, offset: 0, limit: 1000 })
-    const past = queryJobList({ ...input, reference: NOW, mode: 'all', filters: {}, offset: all.total + 5, limit: 10 })
+    const all = queryJobList({ ...input, reference: NOW, activeWindowDays: WINDOW, mode: 'all', filters: {}, offset: 0, limit: 1000 })
+    const past = queryJobList({ ...input, reference: NOW, activeWindowDays: WINDOW, mode: 'all', filters: {}, offset: all.total + 5, limit: 10 })
     expect(past.rows).toEqual([])
     expect(past.total).toBe(all.total)
   })
@@ -290,7 +294,7 @@ describe('the server\'s query gives what the screen works out, on every page', (
 describe('a picked column only changes the order of equal values, so the same ads come in the same order on a server and a browser', () => {
   it('the tier column in its default direction is the default order inside each tier', () => {
     const input = fixture(9)
-    const ids = (sort) => queryJobList({ ...input, reference: NOW, mode: 'all', filters: {}, sort, offset: 0, limit: 1000 }).rows
+    const ids = (sort) => queryJobList({ ...input, reference: NOW, activeWindowDays: WINDOW, mode: 'all', filters: {}, sort, offset: 0, limit: 1000 }).rows
     const tier = ids({ key: 'tier', dir: 'desc' })
     const index = (row) => tierIndexOf(row)
     // rows of one tier come in the neutral order
@@ -379,7 +383,7 @@ describe('the browser\'s own rows reach the server through the allowlist, and th
     // the same search over the slim rows finds fewer of the browser's own ads: that is why the text is sent while a search is on
     const search = { mode: 'all', filters: { searchText: 'private-browser-ad' }, offset: 0, limit: 1000, reference: NOW }
     const stored = (rows) => applyExtraRows(importJobsFromFile({ jobs: [] }, null).jobs, rows)
-    const found = (rows) => queryJobList({ stored: stored(rows), server: null, applications: browser.applications, jobStateDoc: browser.jobStateDoc, ...search }).total
+    const found = (rows) => queryJobList({ stored: stored(rows), server: null, activeWindowDays: WINDOW, applications: browser.applications, jobStateDoc: browser.jobStateDoc, ...search }).total
     expect(found(withText)).toBeGreaterThan(found(extraRows))
   })
 

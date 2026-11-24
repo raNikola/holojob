@@ -2,7 +2,7 @@
 const MODES = [{ id: 'active', label: 'Active' }, { id: 'all', label: 'All' }]
 
 /** The Active/All toggle, All's own filters. All of it is held by the screen in memory: nothing here is saved. */
-export default function JobListControls({ mode, onMode, options = [], classes, onClasses, recent, onRecent }) {
+export default function JobListControls({ mode, onMode, options = [], classes, onClasses, recent, onRecent, windowDays = null }) {
   const toggleClass = (value) => {
     const next = new Set(classes)
     if (!next.delete(value)) next.add(value)
@@ -27,7 +27,7 @@ export default function JobListControls({ mode, onMode, options = [], classes, o
         {mode === 'all' && (
           <label className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
             <input type="checkbox" checked={recent} onChange={(e) => onRecent(e.target.checked)} className="rounded border-stone-300 text-teal-600" />
-            Seen in the last 14 days
+            {windowDays ? `Seen in the last ${windowDays} ${windowDays === 1 ? 'day' : 'days'}` : 'Seen recently (period not loaded)'}
           </label>
         )}
       </div>

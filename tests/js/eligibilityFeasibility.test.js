@@ -122,9 +122,17 @@ describe('the default list leaves out ads that are not on the board in the lates
   const ids = (rows, filters = {}) => filterJobs(rows, filters).map((r) => r.jobId)
 
   it('absent and closed ads (route class) are hidden by default and shown by the filter', () => {
-    const rows = [ad('f', { class: 'found' }), ad('h', { class: 'held' }), ad('a', { class: 'absent' }), ad('c', { class: 'closed' }), ad('s', { class: 'stale' })]
+    // `absentSince` is the mark of a complete check of the company's board: only an ad with it is "not on the board"
+    const rows = [ad('f', { class: 'found' }), ad('h', { class: 'held' }), ad('a', { class: 'absent', absentSince: '2026-11-18T10:00:00.000Z' }), ad('c', { class: 'closed' }), ad('s', { class: 'stale' })]
     expect(ids(rows)).toEqual(['f', 'h', 's'])
     expect(ids(rows, { showNotOnBoard: true })).toEqual(['f', 'h', 'a', 'c', 's'])
+  })
+
+  it('an absent ad with no board check is one a search did not return: it says nothing about the ad, so it is not left out (it is in Active within the Settings period)', () => {
+    const rows = [ad('spy', { class: 'absent', absentSince: null }), ad('board', { class: 'absent', absentSince: '2026-11-18T10:00:00.000Z' })]
+    expect(ids(rows)).toEqual(['spy'])
+    expect(hiddenAsNotOnBoard(rows[0], {})).toBe(false)
+    expect(hiddenAsNotOnBoard(rows[1], {})).toBe(true)
   })
 
   it('a stored row with isAbsent or isClosed and no class is hidden the same way; the route class wins over a stale stored flag', () => {
@@ -133,7 +141,7 @@ describe('the default list leaves out ads that are not on the board in the lates
   })
 
   it('an ad the owner saved, applied to, or tracks stays in the list', () => {
-    const rows = [ad('saved', { class: 'absent', status: 'saved' }), ad('applied', { class: 'closed', status: 'applied_manually' }), ad('tracked', { class: 'absent', applicationTracking: { stage: 'x' } }), ad('new', { class: 'absent' })]
+    const rows = [ad('saved', { class: 'absent', absentSince: '2026-11-18T10:00:00.000Z', status: 'saved' }), ad('applied', { class: 'closed', status: 'applied_manually' }), ad('tracked', { class: 'absent', absentSince: '2026-11-18T10:00:00.000Z', applicationTracking: { stage: 'x' } }), ad('new', { class: 'absent', absentSince: '2026-11-18T10:00:00.000Z' })]
     expect(ids(rows)).toEqual(['saved', 'applied', 'tracked'])
   })
 
@@ -146,8 +154,8 @@ describe('the default list leaves out ads that are not on the board in the lates
   })
 
   it('hiddenAsNotOnBoard counts what the notice reports', () => {
-    expect(hiddenAsNotOnBoard(ad('a', { class: 'absent' }), {})).toBe(true)
-    expect(hiddenAsNotOnBoard(ad('a', { class: 'absent' }), { showNotOnBoard: true })).toBe(false)
+    expect(hiddenAsNotOnBoard(ad('a', { class: 'absent', absentSince: '2026-11-18T10:00:00.000Z' }), {})).toBe(true)
+    expect(hiddenAsNotOnBoard(ad('a', { class: 'absent', absentSince: '2026-11-18T10:00:00.000Z' }), { showNotOnBoard: true })).toBe(false)
     expect(hiddenAsNotOnBoard(ad('f', { class: 'found' }), {})).toBe(false)
   })
 

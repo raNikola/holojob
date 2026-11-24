@@ -28,7 +28,7 @@ export const routeRow = (row, cls = 'found') => ({
 export const ROUTE_ROWS = [...SCORED.map((row, i) => routeRow(row, i % 4 === 3 ? 'absent' : 'found')), { ...routeRow(scoredRow(90)), jobId: 'ledger-only-1', title: 'Only in the ledger' }]
 
 /** `withApplications` also serves /api/applications over the same temp dir (the tracker's own handler). @returns {Promise<{ base: string, root: string, fetchFn: Function, spawnCalls: unknown[], writeScored: Function, close: Function }>} */
-export async function startListServer({ scored = SCORED, routeRows = ROUTE_ROWS, pageSize = 4, withApplications = false } = {}) {
+export async function startListServer({ scored = SCORED, routeRows = ROUTE_ROWS, pageSize = 4, withApplications = false, windowDays = 14 } = {}) {
   clearListIndex()
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'jobs-list-http-'))
   const writeScored = (rows) => {
@@ -50,13 +50,13 @@ export async function startListServer({ scored = SCORED, routeRows = ROUTE_ROWS,
       handleApplicationsRequest(req, res, url, { root }).catch(() => { res.statusCode = 500; res.end('{}') })
       return
     }
-    handleJobsListRequest(req, res, url, { root, spawnFn, ensureView: async () => {}, readPageSize: async () => pageSize, now: () => NOW })
+    handleJobsListRequest(req, res, url, { root, spawnFn, ensureView: async () => {}, readPageSize: async () => pageSize, readWindowDays: async () => windowDays, now: () => NOW })
       .then((done) => { if (!done) { res.statusCode = 404; res.end('{}') } }, () => { res.statusCode = 500; res.end('{}') })
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${server.address().port}`
   return {
-    base, root, spawnCalls, writeScored,
+    base, root, spawnCalls, spawnFn, writeScored,
     fetchFn: (url, options) => fetch(`${base}${url}`, options),
     close: async () => {
       await new Promise((resolve) => server.close(resolve))
