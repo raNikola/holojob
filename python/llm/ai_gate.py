@@ -85,6 +85,8 @@ def tier_from_api(value) -> str | None:
     """Our tier name for the service_tier a response reports; None when it is one we do not price."""
     return _FROM_API_TIER.get(str(value).lower()) if isinstance(value, str) else None
 
+MAX_JOBS_PAGE_SIZE = 1000
+
 # A missing settings file means: no paid call, no automatic AI task.
 DEFAULT_SETTINGS = {
     "currency": "USD",
@@ -98,6 +100,9 @@ DEFAULT_SETTINGS = {
     "runLimitAds": None,
     # Re-scrape's engine fill sends a redacted evidence index (candidate data): off until the owner turns it on (a loosening, so it needs the confirm).
     "allowEngineFill": False,
+    # How many ads the Jobs list loads at a time ("Show more" loads the next ones; whole number, 1..MAX_JOBS_PAGE_SIZE; owner decision 2026-11-24, the server
+    # pages the list). Not a spend loosening, so saving it needs no confirm. The one place the default is written.
+    "jobsPageSize": 100,
     # Reserved per call for the answer before its size is known.
     "estimatedOutputTokens": 1000,
     # Day and month boundaries of the limits (IANA name).
@@ -855,6 +860,9 @@ def validate_settings(candidate) -> tuple[dict, list[str]]:
     if "runLimitAds" in candidate and candidate["runLimitAds"] is not None and not (
             _integer(candidate["runLimitAds"]) and 0 <= candidate["runLimitAds"] <= MAX_COUNT):
         errors.append(f"runLimitAds must be a whole number from 0 to {MAX_COUNT}, or empty for not set")
+    if "jobsPageSize" in candidate and not (
+            _integer(candidate["jobsPageSize"]) and 1 <= candidate["jobsPageSize"] <= MAX_JOBS_PAGE_SIZE):
+        errors.append(f"jobsPageSize must be a whole number of ads from 1 to {MAX_JOBS_PAGE_SIZE}")
     if "allowEngineFill" in candidate and not isinstance(candidate["allowEngineFill"], bool):
         errors.append("allowEngineFill must be true or false")
     if "estimatedOutputTokens" in candidate and not (

@@ -32,6 +32,8 @@ export const saveGatePricing = (entries, confirm = false) => put('/api/ai/pricin
 export function settingsFromForm(form) {
   const num = (v) => (v === '' || v == null ? NaN : Number(v))
   const count = (v) => (String(v).trim() === '' ? null : num(v))
+  // A number, or NaN for an empty field: the server refuses it with its own message, so an empty field is never saved as something else.
+  const required = (v) => (String(v).trim() === '' ? NaN : num(v))
   return {
     currency: String(form.currency).trim().toUpperCase(),
     dailyLimit: num(form.dailyLimit),
@@ -41,6 +43,7 @@ export function settingsFromForm(form) {
     runLimitUsd: count(form.runLimitUsd),
     runLimitAds: count(form.runLimitAds),
     allowEngineFill: Boolean(form.allowEngineFill),
+    jobsPageSize: required(form.jobsPageSize),
     estimatedOutputTokens: num(form.estimatedOutputTokens),
     timezone: String(form.timezone).trim(),
     automation: { enabled: Boolean(form.automationEnabled) },
@@ -65,6 +68,7 @@ export function formFromSettings(s) {
     currency: s.currency, dailyLimit: text(s.dailyLimit), monthlyLimit: text(s.monthlyLimit),
     maxCallsDaily: text(s.maxCallsDaily), maxCallsMonthly: text(s.maxCallsMonthly),
     runLimitUsd: text(s.runLimitUsd), runLimitAds: text(s.runLimitAds), allowEngineFill: Boolean(s.allowEngineFill),
+    jobsPageSize: text(s.jobsPageSize),
     estimatedOutputTokens: text(s.estimatedOutputTokens), timezone: s.timezone,
     automationEnabled: Boolean(s.automation?.enabled),
     subscriptionEnabled: Boolean(s.claudeCodeSubscription?.enabled),

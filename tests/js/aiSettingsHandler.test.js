@@ -116,6 +116,16 @@ describe('form conversion', () => {
     const empty = settingsFromForm({ ...form, dailyLimit: '' })
     expect(JSON.parse(JSON.stringify(empty)).dailyLimit).toBeNull()
   })
+
+  it('the Jobs page size round-trips as a number, and an empty field is never saved as something else', () => {
+    const base = { currency: 'USD', dailyLimit: 0, monthlyLimit: 0, estimatedOutputTokens: 1000, timezone: 'UTC', automation: { enabled: false } }
+    const form = formFromSettings({ ...base, jobsPageSize: 50 })
+    expect(form.jobsPageSize).toBe('50')
+    expect(settingsFromForm(form).jobsPageSize).toBe(50)
+    expect(settingsFromForm({ ...form, jobsPageSize: '25' }).jobsPageSize).toBe(25)
+    // NaN leaves as null in JSON, which the server refuses with its own message.
+    expect(JSON.parse(JSON.stringify(settingsFromForm({ ...form, jobsPageSize: '' }))).jobsPageSize).toBeNull()
+  })
 })
 
 describe('badge source', () => {

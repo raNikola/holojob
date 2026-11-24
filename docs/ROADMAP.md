@@ -41,7 +41,7 @@ As of 2026-11-23. The deployed image is built from `4a64657` (tag `release-20261
 
 ### 3. Step 5, server master of the job list (not blocking)
 
-The job list still lives in the browser (`localStorage`) and the screens save the whole list; `job-state.json` v1 (Saved, Rejected, Keep) is built. Not built: the server as master of the list. Plan: [redesign/STEP5_SERVER_MASTER_PLAN.md](redesign/STEP5_SERVER_MASTER_PLAN.md). `offList` rows migrate as orphans.
+The job list still lives in the browser (`localStorage`) and the screens save the whole list; `job-state.json` v1 (Saved, Rejected, Keep) is built. Not built: the server as master of the list. Plan: [redesign/STEP5_SERVER_MASTER_PLAN.md](redesign/STEP5_SERVER_MASTER_PLAN.md). The list itself (server-side filter, sort and paging; the browser keeps only shown and worked ads), in progress on branch `jobs-list-server`: [redesign/JOBS_LIST_SERVER_PLAN.md](redesign/JOBS_LIST_SERVER_PLAN.md) (phases P0-P5, status, open items; updated at the end of every prompt of that work). `offList` rows migrate as orphans.
 
 ### 4. Owner actions
 

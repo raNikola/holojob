@@ -3,13 +3,13 @@ import { Bookmark, CircleDot, ExternalLink, SquareCheckBig, X } from 'lucide-rea
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { JOB_PAGE_SIZE, everySelected, blockedLast, closedLast, defaultOrder, neutralOrder, notReadFirst, pageLimit, selectedNotShown, showMore } from '../../modules/jobs/jobTableModel'
+import { DEFAULT_SORT, JOB_PAGE_SIZE, SORT_COLUMNS, everySelected, orderRows, pageLimit, selectedNotShown, showMore } from '../../modules/jobs/jobTableModel'
 import { SERVER_ONLY_NOTE, classBadges, rowKind, selectableIds } from '../../modules/jobs/jobListView'
 import KeepAdButton from './KeepAdButton'
 import { JOB_STATUSES } from '../../modules/jobs/jobStorage'
 import { getJobProvider } from '../../modules/jobs/jobFilters'
 import { hasMatchScores } from '../../modules/jobs/matchScore'
-import { groupHeading, tierIndexOf } from '../../modules/jobs/fitTier'
+import { groupHeading } from '../../modules/jobs/fitTier'
 import { displayLocation } from '../../modules/jobs/locationDisplay'
 import { historyBadges } from '../../modules/jobs/jobHistory'
 import { APPROXIMATE_SALARY_NOTE, approximateMonthlyEur, salaryBadges, statedSalary } from '../../modules/jobs/jobSalary'
@@ -19,23 +19,9 @@ import AuthorizationBadge from './AuthorizationBadge'
 import RoleClassBadge from './RoleClassBadge'
 import JobTailorActions from './JobTailorActions'
 import SortableTh, { useTableSort } from '../ui/SortableTh'
-import { sortRows } from '../../modules/tableSort'
-import { dayOf, deadlineSortValue, deadlineStatus } from '../../modules/jobs/jobDeadline'
+import { dayOf, deadlineStatus } from '../../modules/jobs/jobDeadline'
 import { jobStatusLabel } from '../../modules/jobs/manualJob'
 
-const COLUMNS = {
-  // Strong fit 3, Possible 2, Weak 1 (descending = best first); a row in no tier (blocked, no score) sorts last either way. Ties keep the neutral order.
-  tier: { type: 'number', value: (j) => { const i = tierIndexOf(j); return i === null ? null : 3 - i } },
-  title: { type: 'text', value: (j) => j.title },
-  company: { type: 'text', value: (j) => j.company },
-  location: { type: 'text', value: (j) => j.location },
-  salary: { type: 'number', value: (j) => j.salaryMonthlyEur?.max },
-  deadline: { type: 'number', firstDir: 'asc', value: () => null }, // needs the date: filled in by columnsOn
-  provider: { type: 'text', value: (j) => getJobProvider(j) },
-  status: { type: 'text', value: (j) => j.status || 'new' },
-}
-const columnsOn = (today) => ({ ...COLUMNS, deadline: { ...COLUMNS.deadline, value: (j) => deadlineSortValue(j, today) } })
-const DEFAULT_SORT = { key: 'tier', dir: 'desc' }
 const NO_SELECTION = new Set()
 const DESKTOP = '(min-width: 768px)' // Tailwind's md, the width the two layouts always switched at
 
@@ -254,7 +240,7 @@ export default function JobTable({
   onAddFromRow,
   reference,
 }) {
-  const [sort, onSort] = useTableSort(DEFAULT_SORT, COLUMNS)
+  const [sort, onSort] = useTableSort(DEFAULT_SORT, SORT_COLUMNS)
   const [openedAt] = useState(() => Date.now())
   const today = dayOf(reference ?? openedAt)
   const [paging, setPaging] = useState(null)
@@ -262,8 +248,7 @@ export default function JobTable({
   const isDesktop = useMediaQuery(DESKTOP, true)
   // The whole list is sorted first; only then is a batch taken from it. The list's other uses read the whole list too.
   const jobs = useMemo(() => {
-    if (sort === DEFAULT_SORT) return notReadFirst(closedLast(blockedLast(defaultOrder(unsortedJobs)))) // by identity: any click replaces it, even back to the same column
-    return sortRows(sort.key === 'tier' ? neutralOrder(unsortedJobs) : unsortedJobs, sort, columnsOn(today))
+    return orderRows(unsortedJobs, sort, today) // the default sort is told by identity: any click replaces it, even back to the same column
   }, [unsortedJobs, sort, today])
   const pageKey = `${filterKey}|${sort.key}|${sort.dir}`
   const limit = pageLimit(paging, pageKey)

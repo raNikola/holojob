@@ -7,6 +7,9 @@ import { isClosedAd } from './jobHistory.js'
 import { isNotRead } from './matchScore.js'
 import { tierIndexOf } from './fitTier.js'
 import { isRemoteFeasible } from './workAuthorization.js'
+import { getJobProvider } from './jobFilters.js'
+import { deadlineSortValue } from './jobDeadline.js'
+import { sortRows } from '../tableSort.js'
 
 export const JOB_PAGE_SIZE = 100
 const NOTHING = new Set()
@@ -27,7 +30,7 @@ export function postedTimeOf(row) {
  * (`isRemoteFeasible`, eligibility, owner decision 2026-11-18), then newest first (`datePosted`, else `firstSeen`; no readable date after
  * dated ones), then jobId. The Fit Score takes no part in it: no ordering inside a tier is proven (experiment B, docs/DECISIONS.md).
  */
-const neutralCompare = (a, b) => {
+export const neutralCompare = (a, b) => {
   const desc = (x, y) => (x === y ? 0 : x === null ? 1 : y === null ? -1 : y - x)
   return Number(isRemoteFeasible(b)) - Number(isRemoteFeasible(a)) || desc(postedTimeOf(a), postedTimeOf(b)) || byId(a, b)
 }
@@ -48,6 +51,66 @@ export function defaultOrder(rows) {
     if (ta !== tb) return ta === null ? 1 : tb === null ? -1 : ta - tb
     return neutralCompare(a, b)
   })
+}
+
+/**
+ * The default order as ONE sort key (owner decision 2026-11-21 plus the three group rules of the table): not-read ads first, then open before closed,
+ * then unblocked before blocked, then the tier (a row in no tier last), then the neutral order (remote-feasible first, newest first, jobId). It is
+ * exactly `notReadFirst(closedLast(blockedLast(defaultOrder(rows))))` as one comparison, so a server can sort and page by it. The key, in order:
+ * `[notRead, closed, blocked, tierIndex, notRemoteFeasible, postedTime, jobId]`, each 0/1 flag with 0 first, `tierIndex` null last (3), and
+ * `postedTime` null last. Pure; the Jobs screen and the server both use it.
+ */
+export function defaultSortKey(row) {
+  const tier = tierIndexOf(row)
+  return [
+    isNotRead(row) ? 0 : 1,
+    isClosedAd(row) ? 1 : 0,
+    (row?.blockedBy || []).length > 0 ? 1 : 0,
+    tier === null ? 3 : tier,
+    isRemoteFeasible(row) ? 0 : 1,
+    postedTimeOf(row),
+    row?.jobId,
+  ]
+}
+
+/** The order of two rows under `defaultSortKey`. Zero only for the same jobId. */
+export function compareDefault(a, b) {
+  const ka = defaultSortKey(a)
+  const kb = defaultSortKey(b)
+  for (let i = 0; i < 4; i += 1) if (ka[i] !== kb[i]) return ka[i] - kb[i]
+  if (ka[4] !== kb[4]) return ka[4] - kb[4]
+  if (ka[5] !== kb[5]) return ka[5] === null ? 1 : kb[5] === null ? -1 : kb[5] - ka[5] // newest first, no date after dated ones
+  return ka[6] === kb[6] ? 0 : String(ka[6]) < String(kb[6]) ? -1 : 1
+}
+
+/** Rows in the default order. */
+export const orderDefault = (rows) => [...rows].sort(compareDefault)
+
+/** The columns a picked sort can use (the table's headers). `deadline` needs the day: see `orderRows`. */
+export const SORT_COLUMNS = {
+  // Strong fit 3, Possible 2, Weak 1 (descending = best first); a row in no tier (blocked, no score) sorts last either way. Ties keep the neutral order.
+  tier: { type: 'number', value: (j) => { const i = tierIndexOf(j); return i === null ? null : 3 - i } },
+  title: { type: 'text', value: (j) => j.title },
+  company: { type: 'text', value: (j) => j.company },
+  location: { type: 'text', value: (j) => j.location },
+  salary: { type: 'number', value: (j) => j.salaryMonthlyEur?.max },
+  deadline: { type: 'number', firstDir: 'asc', value: () => null }, // needs the date: filled in by `orderRows`
+  provider: { type: 'text', value: (j) => getJobProvider(j) },
+  status: { type: 'text', value: (j) => j.status || 'new' },
+}
+
+/** The sort the table starts in. The table tells it by identity (any click replaces it, even back to the same column). */
+export const DEFAULT_SORT = { key: 'tier', dir: 'desc' }
+
+/**
+ * `rows` in the order a table sort gives: `sort` null or `DEFAULT_SORT` is the default order; a picked column sorts the rows in the neutral order,
+ * so rows with an equal value always come in the same order (owner-visible change 2026-11-24: before, ties followed the arrival order of the list,
+ * which differs between a browser and a server). `today` is the day string the deadline column reads.
+ */
+export function orderRows(rows, sort, today) {
+  if (!sort || sort === DEFAULT_SORT) return orderDefault(rows)
+  const columns = { ...SORT_COLUMNS, deadline: { ...SORT_COLUMNS.deadline, value: (j) => deadlineSortValue(j, today) } }
+  return sortRows(neutralOrder(rows), sort, columns)
 }
 
 /** Open ads before closed ones, each group in the order given. Only for the default sort: a sort the owner picked is left as it is. */

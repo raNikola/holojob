@@ -1,4 +1,4 @@
-import { TERMINAL_STAGES, normalizeApplicationTracking } from './applicationTracking'
+import { TERMINAL_STAGES, normalizeApplicationTracking } from './applicationTracking.js'
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)

@@ -1,7 +1,7 @@
 import { fitScoreOf } from './matchScore.js'
-import { isFollowUpDue } from './followUps'
-import { TERMINAL_STAGES } from './applicationTracking'
-import { isActionable } from './jobHistory'
+import { isFollowUpDue } from './followUps.js'
+import { TERMINAL_STAGES } from './applicationTracking.js'
+import { isActionable } from './jobHistory.js'
 import { onListJobs } from './jobFilters.js'
 import { tierOf } from './fitTier.js'
 

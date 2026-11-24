@@ -2,7 +2,7 @@ import { fitScoreOf } from './matchScore.js'
 import { isBlockedByVisa } from './workAuthorization.js'
 import { describeRange, matchesSalary, salaryRangeOf } from './salaryFilter.js'
 import { roleClassOf, roleClassLabel } from './roleClass.js'
-import geography from '../../data/geography.json'
+import geography from '../../data/geography.json' with { type: 'json' }
 
 export function getJobProvider(job) {
   return job.provider || job.site || ''
