@@ -30,8 +30,23 @@ export function buildListBody({ stored, mode, offset = 0, filters = {}, classes 
     ...(today === null ? {} : { today }),
     ...(revision ? { revision } : {}),
     ...(ids ? { ids: true } : {}),
-    extraRows: selectExtraRows(stored),
+    // The ad's text is most of a row's bytes and only a text search reads it: it goes only while a search is on.
+    extraRows: selectExtraRows(stored, { withText: Boolean(String(filters?.searchText ?? '').trim()) }),
   }
+}
+
+/**
+ * The words for a list request the server refused as too large (a 413): how many rows of what kind, the cap the server named, what is not done, what to do.
+ * Never an empty or shorter list: the screen shows this instead.
+ */
+export function tooLargeMessage(extraRows, limitBytes) {
+  const rows = extraRows ?? []
+  const manual = rows.filter((row) => row.manualEntry === true).length
+  const offList = rows.filter((row) => row.offList === true).length
+  const flags = rows.length - manual - offList
+  const cap = Number.isFinite(limitBytes) ? ` of ${Math.round(limitBytes / 1024)} KB` : ''
+  return `The list could not be loaded: this browser holds ${rows.length} ads the server's list does not (${manual} hand-entered, ${offList} that left the list, ${flags} with your work on a server ad), and sending them with the list request is over its size limit${cap}. `
+    + 'Nothing was cut and no list was made. To fix it, delete hand-entered jobs you no longer need (Job Details, Delete): that is the only removal there is today.'
 }
 
 /**
@@ -43,7 +58,8 @@ export async function fetchListPage(body, fetchFn = globalThis.fetch) {
     const res = await fetchFn(LIST_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     const json = await res.json().catch(() => null)
     if (res.ok && json?.ok === true) return json.changed ? { ok: true, changed: true, revision: json.revision } : { ok: true, page: json }
-    return { ok: false, status: res.status, tooLarge: res.status === 413, message: json?.error || `The list could not be loaded (${res.status}).` }
+    if (res.status === 413) return { ok: false, status: 413, tooLarge: true, rowCount: (body.extraRows ?? []).length, message: tooLargeMessage(body.extraRows, json?.limitBytes) }
+    return { ok: false, status: res.status, message: json?.error || `The list could not be loaded (${res.status}).` }
   } catch (error) {
     return { ok: false, status: 0, message: `The list could not be loaded: ${error.message}` }
   }

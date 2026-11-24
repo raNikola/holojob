@@ -248,6 +248,7 @@ async function readBody(req, res) {
       limit: MAX_JSON_BODY_BYTES,
       tooLarge: {
         ok: false,
+        limitBytes: MAX_JSON_BODY_BYTES,
         error: `The browser's own ads are too many to send with one list request (the limit is ${MAX_JSON_BODY_BYTES} bytes). Nothing was cut: no list was made.`,
       },
     })

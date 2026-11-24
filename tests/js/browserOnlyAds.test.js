@@ -61,12 +61,26 @@ describe('a browser-only ad in the paged list', () => {
     expect(answer.page.extra).toEqual({ sent: 3, notOnServer: 2 })
   })
 
-  it('too many of them is an error the owner is shown, not a shorter list', async () => {
-    const many = Array.from({ length: 700 }, (_, i) => ({ jobId: `big${i}`, title: `Big ${i}`, offList: true, description: 'x'.repeat(2000), status: 'saved' }))
-    const answer = await fetchListPage(buildListBody({ stored: [...storedNow(), ...many], mode: 'all' }), fetchFn)
+  const manyRows = (count, bytes) => Array.from({ length: count }, (_, i) => ({ jobId: `big${i}`, title: `Big ${i}`, offList: true, description: 'x'.repeat(bytes), status: 'saved' }))
+
+  it('600 ads with long texts are one ordinary request: the cap is hard to reach', async () => {
+    const answer = await fetchListPage(buildListBody({ stored: [...storedNow(), ...manyRows(600, 9500)], mode: 'all' }), fetchFn)
+    expect(answer.ok).toBe(true)
+    expect(answer.page.extra.sent).toBe(603)
+  })
+
+  it('past the cap it is an error the owner is shown, with the row count and what to do, never a shorter list', async () => {
+    const stored = [...storedNow(), ...manyRows(600, 9500)]
+    // a text search sends the ads' text too, and 600 of them are over the cap
+    const answer = await fetchListPage(buildListBody({ stored, mode: 'all', filters: { searchText: 'engineer' } }), fetchFn)
     expect(answer.ok).toBe(false)
     expect(answer.tooLarge).toBe(true)
-    expect(answer.message).toMatch(/Nothing was cut/)
+    expect(answer.rowCount).toBe(603)
+    expect(answer.message).toContain('603 ads')
+    expect(answer.message).toContain('1 hand-entered, 601 that left the list, 1 with your work on a server ad')
+    expect(answer.message).toMatch(/Nothing was cut and no list was made/)
+    expect(answer.message).toMatch(/delete hand-entered jobs/i)
+    expect(answer.message).toMatch(/1024 KB/)
     expect(answer).not.toHaveProperty('page')
   })
 })

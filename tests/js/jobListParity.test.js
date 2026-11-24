@@ -184,12 +184,14 @@ describe('the default sort key is the table\'s default order, as one comparison'
  * The screen's pipeline on `input` against the server's query on `frozen`, for 120 seeded random queries: the same ads in the same order on every page, and
  * the same counts. `frozen` is what the server holds (JSON, deep-frozen); `input` is what the browser holds.
  */
-function checkParity(input, frozen, seed, rounds = 120) {
+function checkParity(input, frozenOrFor, seed, rounds = 120) {
+  const serverFor = typeof frozenOrFor === 'function' ? frozenOrFor : () => frozenOrFor
   const rand = rng(seed * 7919)
   const p = picker(rand)
   let nonEmpty = 0
   for (let n = 0; n < rounds; n += 1) {
     const query = randomQuery(p)
+    const frozen = serverFor(query)
     const ref = screenFiltered(input, query)
     const today = dayOf(NOW)
     const full = []
@@ -341,10 +343,16 @@ function browserRowsFixture(seed) {
   }))
   const server = [...base.server, ...routeExtra]
   const serverStored = [...base.stored, ...synced] // what the server holds from its scored file: the scored rows and the hand-entered jobs it was given
-  const extraRows = JSON.parse(JSON.stringify(selectExtraRows(local)))
+  // what the browser sends: slim rows, and the ad's text only while a text search is on (it is 88% of a row's bytes and only a search reads it)
+  const rowsFor = (withText) => JSON.parse(JSON.stringify(selectExtraRows(local, { withText })))
+  const extraRows = rowsFor(false)
+  const inputWith = (rows) => ({ stored: applyExtraRows(serverStored, rows), server, jobStateDoc: base.jobStateDoc, applications: base.applications })
+  const slim = serverCopy(inputWith(extraRows))
+  const withText = serverCopy(inputWith(rowsFor(true)))
   return {
     browser: { stored: local, server, jobStateDoc: base.jobStateDoc, applications: base.applications },
-    serverInput: { stored: applyExtraRows(serverStored, extraRows), server, jobStateDoc: base.jobStateDoc, applications: base.applications },
+    serverFor: (query) => (String(query.filters.searchText ?? '').trim() ? withText : slim),
+    serverInput: inputWith(extraRows),
     serverWithout: { stored: serverStored, server, jobStateDoc: base.jobStateDoc, applications: base.applications },
     extraRows,
   }
@@ -352,14 +360,27 @@ function browserRowsFixture(seed) {
 
 describe('the browser\'s own rows reach the server through the allowlist, and the list is the same', () => {
   it.each([101, 202, 303, 404])('seed %i: ids, order, every page and every count agree with the screen working from its full rows', (seed) => {
-    const { browser, serverInput, extraRows } = browserRowsFixture(seed)
+    const { browser, serverFor, extraRows } = browserRowsFixture(seed)
     expect(extraRows.length).toBeGreaterThan(10)
-    checkParity(browser, serverCopy(serverInput), seed, 100)
+    checkParity(browser, serverFor, seed, 100)
   })
 
   it('the harness can tell: without the extra rows the same check fails', () => {
     const { browser, serverWithout } = browserRowsFixture(101)
     expect(() => checkParity(browser, serverCopy(serverWithout), 101, 100)).toThrow()
+  })
+
+  it('the ad\'s text goes only with a text search, and a search without it would not find the same ads', () => {
+    const { browser, extraRows } = browserRowsFixture(303)
+    expect(extraRows.some((row) => 'description' in row)).toBe(false)
+    const withText = selectExtraRows(browser.stored, { withText: true })
+    expect(withText.filter((row) => row.offList || row.manualEntry).every((row) => typeof row.description === 'string' || row.description === undefined)).toBe(true)
+    expect(withText.some((row) => typeof row.description === 'string' && row.description.length > 0)).toBe(true)
+    // the same search over the slim rows finds fewer of the browser's own ads: that is why the text is sent while a search is on
+    const search = { mode: 'all', filters: { searchText: 'private-browser-ad' }, offset: 0, limit: 1000, reference: NOW }
+    const stored = (rows) => applyExtraRows(importJobsFromFile({ jobs: [] }, null).jobs, rows)
+    const found = (rows) => queryJobList({ stored: stored(rows), server: null, applications: browser.applications, jobStateDoc: browser.jobStateDoc, ...search }).total
+    expect(found(withText)).toBeGreaterThan(found(extraRows))
   })
 
   it('sends only the browser-only rows in full, the others as owner state, and nothing for a row the owner has not worked on', () => {

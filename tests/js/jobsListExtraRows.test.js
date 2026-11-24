@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SCORED, startListServer, treeOf } from './setup/jobsListServer.js'
 import { selectExtraRows } from '../../src/modules/jobs/extraRows.js'
+import { MAX_JSON_BODY_BYTES } from '../../scripts/read-body.js'
 
 let server
 beforeEach(async () => { server = await startListServer({ pageSize: 50 }) })
@@ -96,6 +97,7 @@ describe('the request body', () => {
     expect(json.ok).toBe(false)
     expect(json.error).toMatch(/too many to send/)
     expect(json.error).toMatch(/Nothing was cut/)
+    expect(json.limitBytes).toBe(MAX_JSON_BODY_BYTES) // the client puts it in the words it shows
     expect(json).not.toHaveProperty('rows')
     expect((await get('mode=all')).status).toBe(200)
   })

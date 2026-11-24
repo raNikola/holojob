@@ -1,6 +1,7 @@
 // The browser's own rows sent with a list request (src/modules/jobs/extraRows.js; docs/redesign/JOBS_LIST_SERVER_PLAN.md, P2b, a bridge removed in P5).
 // What matters: an ALLOWLIST (private fields never pass, and the server refuses them if a client sends them), and a merge that changes only what it should.
 import { describe, expect, it } from 'vitest'
+import { MAX_JSON_BODY_BYTES } from '../../scripts/read-body.js'
 import { EXTRA_ROW_FIELDS, EXTRA_TRACKING_FIELDS, ExtraRowsError, applyExtraRows, checkExtraRows, selectExtraRows } from '../../src/modules/jobs/extraRows.js'
 
 const SECRET = 'PRIVATE-VALUE-7731'
@@ -52,8 +53,23 @@ describe('what leaves the browser is an allowlist', () => {
     ])
     expect(sent.map((row) => row.jobId)).toEqual(['off1', 'man1', 'held1'])
     expect(sent[0]).toMatchObject({ title: 'Gone Ad', offList: true, status: 'saved', ownerWork: true })
-    expect(sent[1]).toMatchObject({ title: 'Mine', description: 'text' })
+    expect(sent[1]).toMatchObject({ title: 'Mine' })
     expect(sent[2]).toEqual({ jobId: 'held1', status: 'saved', keptByUser: true, ownerWork: true }) // no title, company or text: the server's stand
+  })
+})
+
+describe('rows are slim, so the request cap is hard to reach', () => {
+  const long = 'x'.repeat(9500) // the ad text of a typical row: 9.5 KB on the real scored rows
+  const rows = Array.from({ length: 600 }, (_, i) => offList({ jobId: `off${i}`, description: long, jobUrl: `https://x.example/${i}` }))
+
+  it('the ad\'s text is not sent unless a text search is on', () => {
+    expect(selectExtraRows([offList({ description: long })]).every((row) => !('description' in row))).toBe(true)
+    expect(selectExtraRows([offList({ description: long })], { withText: true })[0].description).toBe(long)
+  })
+
+  it('600 browser-only rows with long ads fit one request by a wide margin; with a search on they do not, and that is an error to show', () => {
+    expect(JSON.stringify({ extraRows: selectExtraRows(rows) }).length).toBeLessThan(MAX_JSON_BODY_BYTES / 2)
+    expect(JSON.stringify({ extraRows: selectExtraRows(rows, { withText: true }) }).length).toBeGreaterThan(MAX_JSON_BODY_BYTES)
   })
 })
 

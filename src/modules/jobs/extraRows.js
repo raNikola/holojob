@@ -47,14 +47,18 @@ function pick(job, fields) {
 /**
  * The rows of the browser's list to send: a row only this browser has (`offList`, or hand-entered) in full, and a row the server may hold that the owner has
  * worked on here as its owner state only. Every other row is left out: the server has it.
+ *
+ * Slim on purpose (owner decision 2026-11-24: the request cap stays, and is made hard to reach): the ad's text is 88% of a row's bytes, and only a text search
+ * reads it, so `description` is sent only with `withText` (the caller sets it while a search is on). Without it a row is about 1.3 KB (1.8 KB at most, measured
+ * on the real scored rows), so a 1 MB request holds roughly 780 rows, not 95; an owner-work flag entry is a few hundred bytes.
  */
-export function selectExtraRows(storedJobs) {
+export function selectExtraRows(storedJobs, { withText = false } = {}) {
   const rows = []
   for (const job of storedJobs ?? []) {
     if (!job || typeof job.jobId !== 'string') continue
     const worked = hasUserData(job)
     if (job.offList === true || job.manualEntry === true) {
-      rows.push({ ...pick(job, EXTRA_ROW_FIELDS.filter((f) => f !== 'ownerWork')), ...(worked ? { ownerWork: true } : {}) })
+      rows.push({ ...pick(job, EXTRA_ROW_FIELDS.filter((f) => f !== 'ownerWork' && (withText || f !== 'description'))), ...(worked ? { ownerWork: true } : {}) })
     } else if (worked) {
       rows.push({ jobId: job.jobId, ...pick(job, OWNER_STATE_FIELDS.filter((f) => f !== 'ownerWork')), ownerWork: true })
     }
