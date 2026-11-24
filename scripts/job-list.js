@@ -10,6 +10,11 @@
  *       -> the same answers, plus `extra: { sent, notOnServer }`. `extraRows` is the browser's own rows the server's list does not hold, sent as an
  *          ALLOWLIST (src/modules/jobs/extraRows.js): added to the stored rows for this request only, never stored, never logged. A BRIDGE to be removed in P5.
  *          A field outside the allowlist, a bad id or a repeated id is a 400 that names the place; a body over the limit is a 413 that says so.
+ *   POST /api/jobs/list { ..., countsOnly: true }        -> { ok, revision, mode, total, counts }: the numbers with no rows (the Dashboard's cards, the AI context's totals)
+ *   POST /api/jobs/list/rows { jobIds: [...] }          -> { ok, revision, rows[], missing[] }: the scored rows of these ads, slim, and the ids the scored list does not hold
+ *       (the browser brings the rows it HOLDS up to date with the last scoring without loading the whole list)
+ *   POST /api/jobs/list/context {}                      -> { ok, revision, topJobs[], skillGap[] }: what the AI context reads of the whole list (the ten best-scored open
+ *       ads in full, and the missing skills of the hundred best-scored), worked out where the whole list is
  *   GET /api/jobs/list/ad?jobId=ID
  *       -> { ok, revision, row }                            the full row (description, facts) of one scored ad, opened from the list
  *
@@ -42,11 +47,17 @@ import { ExtraRowsError, applyExtraRows, checkExtraRows } from '../src/modules/j
 import { LIST_MODES, queryJobList } from '../src/modules/jobs/jobListQuery.js'
 import { FILTER_TYPES, filterValueOk } from '../src/modules/jobs/listFilters.js'
 import { importJobsFromFile, slimJob } from '../src/modules/jobs/jobStorage.js'
+import { isActionable } from '../src/modules/jobs/jobHistory.js'
+import { onListJobs } from '../src/modules/jobs/jobFilters.js'
 import { SORT_COLUMNS } from '../src/modules/jobs/jobTableModel.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const LIST_ROUTE = '/api/jobs/list'
 export const AD_ROUTE = '/api/jobs/list/ad'
+export const ROWS_ROUTE = '/api/jobs/list/rows'
+export const CONTEXT_ROUTE = '/api/jobs/list/context'
+const CONTEXT_TOP_JOBS = 10 // the AI context's own sizes (aiContextBuilder.js), not a list's page size
+const CONTEXT_SKILL_GAP_JOBS = 100
 const JOB_ID = /^[A-Za-z0-9_-]{1,64}$/
 const MAX_FILTERS_CHARS = 4000
 const MAX_CLASSES = 40
@@ -138,7 +149,7 @@ export function parseListBody(body) {
   const sort = body.sort === undefined || body.sort === null ? null : checkSort(body.sort)
   const today = body.today === undefined || body.today === null ? null : whole(body.today, 'today')
   if (sort?.key === 'deadline' && today === null) throw new HttpError(400, 'today is required to sort by deadline: it is the browser\'s day, not the server\'s')
-  for (const name of ['recent', 'ids']) if (body[name] !== undefined && typeof body[name] !== 'boolean') throw new HttpError(400, `${name} must be true or false`)
+  for (const name of ['recent', 'ids', 'countsOnly']) if (body[name] !== undefined && typeof body[name] !== 'boolean') throw new HttpError(400, `${name} must be true or false`)
   if (body.revision !== undefined && body.revision !== null && typeof body.revision !== 'string') throw new HttpError(400, 'revision must be a string')
   let extraRows
   try { extraRows = checkExtraRows(body.extraRows) } catch (error) {
@@ -148,7 +159,7 @@ export function parseListBody(body) {
   return {
     mode: body.mode, classes, sort, today, offset: body.offset === undefined ? 0 : whole(body.offset, 'offset'),
     filters: body.filters === undefined || body.filters === null ? {} : checkFilters(body.filters),
-    recent: body.recent === true, ids: body.ids === true, revision: body.revision ?? null, extraRows,
+    recent: body.recent === true, ids: body.ids === true, countsOnly: body.countsOnly === true, revision: body.revision ?? null, extraRows,
   }
 }
 
@@ -257,10 +268,11 @@ export async function listAnswer(index, request, limit, now) {
   const result = queryJobList({
     stored: applyExtraRows(index.stored, request.extraRows), server: index.server, applications: index.applications, jobStateDoc: index.jobStateDoc,
     reference: now, mode: request.mode, filters: request.filters, classes: request.classes, recent: request.recent, sort: request.sort,
-    offset: request.ids ? 0 : request.offset, limit: request.ids ? 1 : limit, today: request.today ?? undefined, withIds: request.ids,
-    withCounts: request.ids || request.offset === 0, // a "Show more" page (offset above 0) is rows only: the first page's counts stand
+    offset: request.ids || request.countsOnly ? 0 : request.offset, limit: request.ids || request.countsOnly ? 1 : limit, today: request.today ?? undefined, withIds: request.ids,
+    withCounts: request.ids || request.countsOnly || request.offset === 0, // a "Show more" page (offset above 0) is rows only: the first page's counts stand
   })
   const extra = request.extraRows.length ? { extra: { sent: request.extraRows.length, notOnServer: request.extraRows.filter((row) => !held.has(row.jobId)).length } } : {}
+  if (request.countsOnly) return { ok: true, revision: index.revision, mode: request.mode, total: result.total, counts: result.counts, ...extra }
   if (request.ids) return { ok: true, revision: index.revision, mode: request.mode, total: result.total, ids: result.ids, selectableIds: result.selectableIds, ...extra }
   const next = request.offset + result.rows.length
   return {
@@ -281,12 +293,35 @@ function adAnswer(index, jobId) {
  * @returns {Promise<boolean>} true when the request was for these routes. `python`, `spawnFn`, `ensureView`, `readPageSize`, `now` and `demoMode` are
  * for the tests and the server wiring.
  */
+/** The scored rows of the named ads, slim, and the ids the scored list does not hold. */
+function rowsAnswer(index, jobIds) {
+  if (!Array.isArray(jobIds) || jobIds.some((id) => typeof id !== 'string' || !JOB_ID.test(id))) throw new HttpError(400, 'jobIds must be a list of ad ids')
+  if (new Set(jobIds).size !== jobIds.length) throw new HttpError(400, 'jobIds repeats an id')
+  const byId = new Map(index.stored.map((row) => [row.jobId, row]))
+  return {
+    ok: true, revision: index.revision,
+    rows: jobIds.filter((id) => byId.has(id)).map((id) => slimJob(byId.get(id))),
+    missing: jobIds.filter((id) => !byId.has(id)),
+  }
+}
+
+/** What the AI context reads of the whole list (aiContextBuilder.js): the best-scored open ads in full, and the best-scored ads' missing skills. */
+function contextAnswer(index) {
+  const scored = onListJobs(index.stored).filter((job) => typeof job.matchScore === 'number')
+  const best = [...scored].sort((a, b) => b.matchScore - a.matchScore)
+  return {
+    ok: true, revision: index.revision,
+    topJobs: best.filter((job) => isActionable(job)).slice(0, CONTEXT_TOP_JOBS),
+    skillGap: best.slice(0, CONTEXT_SKILL_GAP_JOBS).map((job) => ({ jobId: job.jobId, matchScore: job.matchScore, missingSkills: job.missingSkills ?? [] })),
+  }
+}
+
 export async function handleJobsListRequest(req, res, url, {
   root = ROOT, python = path.join(root, '.venv/bin/python'), spawnFn = spawn, ensureView = ensureViewCurrent, readPageSize = settingsPageSize,
   now = Date.now, demoMode = () => false,
 } = {}) {
-  if (url !== LIST_ROUTE && url !== AD_ROUTE) return false
-  const allowed = url === LIST_ROUTE ? ['GET', 'POST'] : ['GET']
+  if (![LIST_ROUTE, AD_ROUTE, ROWS_ROUTE, CONTEXT_ROUTE].includes(url)) return false
+  const allowed = url === LIST_ROUTE ? ['GET', 'POST'] : url === ROWS_ROUTE || url === CONTEXT_ROUTE ? ['POST'] : ['GET']
   if (!allowed.includes(req.method)) {
     res.setHeader('Allow', allowed.join(', '))
     send(res, 405, { error: 'Method not allowed' })
@@ -294,6 +329,13 @@ export async function handleJobsListRequest(req, res, url, {
   }
   try {
     if (demoMode()) throw new HttpError(404, 'The server list is not available in demo mode.')
+    if (url === ROWS_ROUTE || url === CONTEXT_ROUTE) {
+      const body = await readBody(req, res)
+      if (body === null) return true // over the limit: already answered with a 413 in words
+      const index = await indexFor({ root, python, spawnFn, ensureView })
+      send(res, 200, url === ROWS_ROUTE ? rowsAnswer(index, body?.jobIds) : contextAnswer(index))
+      return true
+    }
     const params = new URL(req.url, 'http://local').searchParams
     if (url === AD_ROUTE) {
       send(res, 200, adAnswer(await indexFor({ root, python, spawnFn, ensureView }), params.get('jobId')))
@@ -307,7 +349,7 @@ export async function handleJobsListRequest(req, res, url, {
     } else {
       request = { ...parseListRequest(params), extraRows: [] }
     }
-    const limit = request.ids ? null : await readPageSize()
+    const limit = request.ids || request.countsOnly ? null : await readPageSize()
     const index = await indexFor({ root, python, spawnFn, ensureView })
     if (request.revision !== null && request.revision !== index.revision) {
       send(res, 200, { ok: true, changed: true, revision: index.revision })

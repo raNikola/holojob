@@ -112,7 +112,7 @@ The server-mode list is built beside the local pipeline and stays off until ever
 | S1 | The loader: pages in memory, a new list for a new query, an in-place reload for the owner's own changes, `changed` restarts, refusals shown, late answers ignored (`serverList.js`, `useServerList.js`) | done |
 | S2 | `JobTable` shows the server's order (controlled sort, Show more from the server, select-all by ids); `JobFilters` takes the server's facets | done |
 | S3 | The Jobs screen in server mode: stats and notices from the server's counts, status on a server-only ad via job-state, the harness answers `/api/jobs/list` | done (the switch is still off) |
-| S4 | Server: counts-only and rows-by-ids answers for the other screens | todo |
+| S4 | Server: counts-only and rows-by-ids answers for the other screens | done |
 | S5 | Other screens (Dashboard, Outreach, Resume library, Application home, AI context, Job Details) off the full list | todo |
 | S6 | The import stops loading the whole file; `JOB_PAGE_SIZE` and the lean/minimal storage tiers go; the switch is turned on; full tier | todo |
 
@@ -129,6 +129,8 @@ The server-mode list is built beside the local pipeline and stays off until ever
 - A new import (Re-scrape, Re-score, auto-refresh, a URL import) reads the list again (`refreshList`).
 - **Tests.** The whole of `jobsScreen.dom.test.js` and `keepAd.dom.test.js` now run on BOTH lists (`describe.each` over local and server; the stand-in server in the harness answers `/api/jobs/list` with the route's own `listAnswer` over the browser's stored rows, the job state and the applications), so the server list is held to what the local one does at screen level: 62 + 64 tests, three of which differ on purpose and say so (read-only status on a server row, the browser's own application store). Five tests run on the server list only (Show more at the server's page size, select-all across pages, a moved list, an over-cap request, a browser-only row and an action on it).
 - Until S6 the stored list still holds every scored ad (the whole-file import is still on), so with the switch on, nothing is `serverOnly` except ledger-only rows: the screen is the same as today. S6 changes what is stored.
+
+**S4 (what the other screens need of the whole list, from the server).** Three answers, all read-only, in `scripts/job-list.js`: `POST /api/jobs/list` with `countsOnly: true` (the list's counts and total with no rows and no page size: the Dashboard's cards, the AI context's totals); `POST /api/jobs/list/rows { jobIds }` (the scored rows of the named ads, slim, and the ids the scored list does not hold: the browser brings the rows it holds up to date with the last scoring without loading the whole list); `POST /api/jobs/list/context` (the ten best-scored open ads in full and the missing skills of the hundred best-scored, which is what `aiContextBuilder.js` reads of the whole list: the AI context's own sizes, not a page size). 11 tests (`tests/js/jobsListOthers.test.js`).
 
 ## Open items
 
