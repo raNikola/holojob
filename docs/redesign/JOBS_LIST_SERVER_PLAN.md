@@ -103,6 +103,21 @@ The 1 MB request limit of `POST /api/jobs/list` stays in code: a technical safet
 - The parity test sends the text exactly when a search is on, and a test shows a search over slim rows finds fewer of the browser's own ads, which is why.
 - **Mark Applied on an ad that exists only in the browser (direct test, `tests/js/markAppliedBrowserOnly.test.js`):** the ad opens from local data (no request), `markApplied` posts it, the application is **kept in the server's file** with the ad's own fields (`capturedFrom: 'browser'`) and **none of the owner's notes, links or source address**, a fresh read of the store puts a card for it in the Board's Applied column, and a second Mark Applied is the same application (`panelMode` says tracked, one record). Marking it writes nothing to the browser's list (`setItem` is never called). The paged list then reports the ad as Applied and the Applied filter finds it (`crmApplied` counts it). Both kinds are covered: an off-list ad and a hand-entered job. The tracker's own handler, the real client and the real list route run over one temp data dir.
 
+## P3 and P4: sub-steps (done together; nothing is deployed before P4 is done)
+
+The server-mode list is built beside the local pipeline and stays off until every dependent screen works without the full stored list (requirement 8, and P4). Demo mode and "no API" keep the local pipeline (they have no server list), so it is not deleted. One commit per sub-step; status here, updated after each.
+
+| Sub-step | What | Status |
+|---|---|---|
+| S1 | The loader: pages in memory, a new list for a new query, an in-place reload for the owner's own changes, `changed` restarts, refusals shown, late answers ignored (`serverList.js`, `useServerList.js`) | done |
+| S2 | `JobTable` shows the server's order (controlled sort, Show more from the server, select-all by ids); `JobFilters` takes the server's facets | todo |
+| S3 | The Jobs screen in server mode: stats and notices from the server's counts, status on a server-only ad via job-state, the harness answers `/api/jobs/list` | todo |
+| S4 | Server: counts-only and rows-by-ids answers for the other screens | todo |
+| S5 | Other screens (Dashboard, Outreach, Resume library, Application home, AI context, Job Details) off the full list | todo |
+| S6 | The import stops loading the whole file; `JOB_PAGE_SIZE` and the lean/minimal storage tiers go; the switch is turned on; full tier | todo |
+
+**S1 (loader).** `createServerListLoader` holds `status`, `rows`, `total`, `nextOffset`, `revision`, `counts`, `error`, `notice`. `setRequest` starts a new list when the query changes (old rows dropped at once), reloads in place when only the browser's own rows changed (rows stay on screen, the same number is loaded again), and does nothing when neither changed. `more()` asks for the next page with the revision; a `changed` answer loads the list again from the first page and says so in `notice`. A read of several pages that moves in the middle starts again from page one. A refused request (a too-large body) keeps any rows already shown, and with none it is `status: 'error'` with the row count and the words; a late answer to an old request is ignored. `useServerList` is the thin hook. 16 tests against the real route over HTTP.
+
 ## Open items
 
 - **Binding requirement 8 (browser-only worked ads) stays open until done.** The mechanism is built and tested (P2b: allowlist, POST route, parity test with the browser's rows, the opening rule), but no screen calls it yet. It is done when P3/P4 use `buildListBody`, `shownRows` and `openAd` and the screen shows an `offList` row and an unsynced hand-entered job after the switch; it must not be activated before that.
