@@ -61,3 +61,8 @@ No blocker. Two import breaks found and fixed; the numbers say the index can be 
 ## Log
 
 (one entry per prompt: status, commit hash, what changed, what is next)
+
+**Prompt 1, 2026-11-24: P0 and P1 done, commit `fd082ea` (branch `jobs-list-server`, from `main` `b4bc763`; not pushed, no build deployed).**
+- Changed: progress file, ROADMAP link, DECISIONS entry (supersedes "No pagination in this step" for the list); P0 spike and its two import fixes (see P0 result); `defaultSortKey` / `compareDefault` / `orderDefault` / `SORT_COLUMNS` / `DEFAULT_SORT` / `orderRows` in `jobTableModel.js`, with `JobTable` calling `orderRows`; `jobListQuery.js` (`queryJobList`); Settings field `jobsPageSize` (gate settings, form, panel).
+- Tests added: `tests/js/jobListParity.test.js` (seeded property test: ids, order, every page, counts; mutation-checked), `tests/js/sharedModulesNode.test.js`, `tests/python/test_jobs_page_size_setting.py`, a form round-trip in `tests/js/aiSettingsHandler.test.js`. Full tier green (lint, Vitest, pytest incl. slow, build).
+- Next: P2 (index in Node, `GET /api/jobs/list`, revision check, slim rows, ids mode), after the owner has seen the open items above (the tie-order change and the page-size bounds). `keep-search-ads` (`eacec8b`) stays unmerged until P3.
