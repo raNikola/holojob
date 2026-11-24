@@ -14,9 +14,10 @@ import { applyAllControls, classOptions, filterComposed } from '../../src/module
 import { countByValue, getCompanyOptions, getUniqueProviders, getUniqueSites, hiddenAsNotOnBoard } from '../../src/modules/jobs/jobFilters.js'
 import { computeJobStats } from '../../src/modules/jobs/jobStats.js'
 import { tierCounts, tierIndexOf } from '../../src/modules/jobs/fitTier.js'
-import { DEFAULT_SORT, SORT_COLUMNS, blockedLast, closedLast, defaultOrder, neutralCompare, neutralOrder, notReadFirst, orderDefault } from '../../src/modules/jobs/jobTableModel.js'
+import { DEFAULT_SORT, SORT_COLUMNS, blockedLast, closedLast, defaultOrder, neutralCompare, neutralOrder, notReadFirst, orderDefault, orderRows } from '../../src/modules/jobs/jobTableModel.js'
 import { withServerState } from '../../src/modules/jobs/jobStateClient.js'
-import { JOB_STATUSES, importJobsFromFile, jobMatchKey } from '../../src/modules/jobs/jobStorage.js'
+import { JOB_STATUSES, hasUserData, importJobsFromFile, jobMatchKey } from '../../src/modules/jobs/jobStorage.js'
+import { applyExtraRows, selectExtraRows } from '../../src/modules/jobs/extraRows.js'
 import { PRIORITIES, hasMatchScores } from '../../src/modules/jobs/matchScore.js'
 import { dayOf, deadlineSortValue } from '../../src/modules/jobs/jobDeadline.js'
 import { overlayTracking, trackerStats } from '../../src/modules/applications/trackingView.js'
@@ -73,6 +74,7 @@ function fixture(seed, size = 70) {
       isClosed: p.chance(0.1), isAbsent: p.chance(0.08),
       salaryMonthlyEur: p.chance(0.4) ? { min: p.int(1, 40) * 100, max: p.int(41, 90) * 100 } : undefined,
       engineCoverage: p.chance(0.5) ? { status: p.one(['not_evaluated', 'answered']) } : undefined,
+      roleClass: p.one(['target', 'adjacent', 'other']), applyDeadline: p.chance(0.4) ? new Date(NOW + p.int(-5, 20) * DAY).toISOString().slice(0, 10) : undefined,
     })
   }
   const file = { meta: { generatedAt: iso(0) }, jobs: scored }
@@ -156,6 +158,8 @@ function randomQuery(p) {
   if (p.chance(0.15)) filters.priority = p.some(['P1', 'P2', 'P3'], 0.5)
   if (p.chance(0.15)) filters.minScore = p.one([40, 55, 70])
   if (p.chance(0.1)) filters.matchLabel = 'Good'
+  if (p.chance(0.15)) filters.roleClass = p.one(['target', 'adjacent', 'other'])
+  if (p.chance(0.2)) Object.assign(filters, { salaryMode: 'set', salaryFrom: String(p.int(1, 4) * 1000), salaryTo: String(p.int(5, 9) * 1000), salaryIncludeUnknown: p.chance(0.5) })
   const mode = p.one(['active', 'all'])
   const sort = p.one([null, DEFAULT_SORT, { key: 'tier', dir: 'asc' }, ...Object.keys(SORT_COLUMNS).flatMap((key) => [{ key, dir: 'asc' }, { key, dir: 'desc' }])])
   return {
@@ -176,76 +180,84 @@ describe('the default sort key is the table\'s default order, as one comparison'
   })
 })
 
+/**
+ * The screen's pipeline on `input` against the server's query on `frozen`, for 120 seeded random queries: the same ads in the same order on every page, and
+ * the same counts. `frozen` is what the server holds (JSON, deep-frozen); `input` is what the browser holds.
+ */
+function checkParity(input, frozen, seed, rounds = 120) {
+  const rand = rng(seed * 7919)
+  const p = picker(rand)
+  let nonEmpty = 0
+  for (let n = 0; n < rounds; n += 1) {
+    const query = randomQuery(p)
+    const ref = screenFiltered(input, query)
+    const today = dayOf(NOW)
+    const full = []
+    let offset = 0
+    let first = null
+    for (;;) {
+      const page = queryJobList({ ...frozen, reference: NOW, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset, limit: query.limit, today })
+      first ??= page
+      expect(page.total).toBe(ref.filtered.length)
+      expect(page.rows.length).toBeLessThanOrEqual(query.limit)
+      full.push(...page.rows)
+      offset += query.limit
+      if (offset >= page.total) break
+    }
+    const ids = full.map((r) => r.jobId)
+    expect(new Set(ids).size).toBe(ids.length) // no ad on two pages
+    expect([...ids].sort()).toEqual(ref.filtered.map((r) => r.jobId).sort()) // every ad on some page
+    if (ids.length) nonEmpty += 1
+
+    // select-all across pages: the ids of every matching ad, in the same order; and a rows-only page is the same rows with no counts
+    const everyId = queryJobList({ ...frozen, reference: NOW, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: 1, today, withIds: true })
+    expect(everyId.ids).toEqual(ids)
+    expect(everyId.selectableIds).toEqual(full.filter((row) => !row.serverOnly).map((row) => row.jobId))
+    const rowsOnly = queryJobList({ ...frozen, reference: NOW, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: query.limit, today, withCounts: false })
+    expect(rowsOnly.counts).toBeNull()
+    expect(rowsOnly.rows.map((r) => r.jobId)).toEqual(first.rows.map((r) => r.jobId))
+
+    if (!query.sort || query.sort === DEFAULT_SORT) {
+      expect(ids).toEqual(refDefaultOrder(ref.filtered).map((r) => r.jobId))
+    } else {
+      // a picked column: the same ads in the same order as the browser's full rows give, and sorted by its value (empty last, either direction), ties in the neutral order
+      expect(ids).toEqual(orderRows(ref.filtered, query.sort, today).map((r) => r.jobId))
+      const column = SORT_COLUMNS[query.sort.key]
+      const value = query.sort.key === 'deadline' ? (r) => deadlineSortValue(r, today) : column.value
+      const sign = query.sort.dir === 'desc' ? -1 : 1
+      const empty = (v) => v === null || v === undefined || v === '' || (typeof v === 'number' && Number.isNaN(v))
+      for (let i = 1; i < full.length; i += 1) {
+        const a = value(full[i - 1])
+        const b = value(full[i])
+        if (empty(a) && !empty(b)) throw new Error(`an empty value before a value at ${i} (${query.sort.key})`)
+        if (empty(a) || empty(b)) continue
+        const order = column.type === 'number' ? a - b : collator.compare(String(a).trim(), String(b).trim())
+        expect(sign * order).toBeLessThanOrEqual(0)
+        if (order === 0) expect(neutralCompare(full[i - 1], full[i])).toBeLessThan(0)
+      }
+    }
+
+    // counts: the screen's, from the same rows
+    const viewJobs = overlayTracking(withServerState(input.stored, input.jobStateDoc), ref.store, ref.settings)
+    const counts = first.counts
+    expect(counts.stats).toEqual({ ...computeJobStats(viewJobs), ...trackerStats(ref.store, ref.settings) })
+    expect(counts.tiers).toEqual(tierCounts(ref.filtered))
+    expect(counts.classOptions).toEqual(query.mode === 'all' ? classOptions(ref.rows) : [])
+    expect(counts.notOnBoardHidden).toBe(query.mode === 'active' ? ref.shown.filter((job) => hiddenAsNotOnBoard(job, ref.effective)).length : 0)
+    expect(counts.copies).toEqual(ref.composed.copies)
+    expect(counts.hasServerOnly).toBe(ref.rows.some((row) => row.serverOnly))
+    expect(counts.facets).toEqual({
+      hasScores: hasMatchScores(ref.rows), sites: getUniqueSites(ref.rows), providers: getUniqueProviders(ref.rows), companyOptions: getCompanyOptions(ref.rows),
+      priorityCounts: countByValue(ref.rows, 'priority', PRIORITIES.filter((x) => x !== 'Reject')), statusOptions: statusFilterOptions(JOB_STATUSES, ref.rows, ref.store),
+    })
+  }
+  expect(nonEmpty).toBeGreaterThan(40) // the draw is not all empty answers
+}
+
 describe('the server\'s query gives what the screen works out, on every page', () => {
   it.each([11, 22, 33, 44])('seed %i: ids, order, pages and counts agree for 120 random queries', (seed) => {
-    const rand = rng(seed * 7919)
-    const p = picker(rand)
     const input = fixture(seed)
-    const frozen = serverCopy(input)
-    let nonEmpty = 0
-    for (let n = 0; n < 120; n += 1) {
-      const query = randomQuery(p)
-      const ref = screenFiltered(input, query)
-      const today = dayOf(NOW)
-      const full = []
-      let offset = 0
-      let first = null
-      for (;;) {
-        const page = queryJobList({ ...frozen, reference: NOW, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset, limit: query.limit, today })
-        first ??= page
-        expect(page.total).toBe(ref.filtered.length)
-        expect(page.rows.length).toBeLessThanOrEqual(query.limit)
-        full.push(...page.rows)
-        offset += query.limit
-        if (offset >= page.total) break
-      }
-      const ids = full.map((r) => r.jobId)
-      expect(new Set(ids).size).toBe(ids.length) // no ad on two pages
-      expect([...ids].sort()).toEqual(ref.filtered.map((r) => r.jobId).sort()) // every ad on some page
-      if (ids.length) nonEmpty += 1
-
-      // select-all across pages: the ids of every matching ad, in the same order; and a rows-only page is the same rows with no counts
-      const everyId = queryJobList({ ...frozen, reference: NOW, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: 1, today, withIds: true })
-      expect(everyId.ids).toEqual(ids)
-      expect(everyId.selectableIds).toEqual(full.filter((row) => !row.serverOnly).map((row) => row.jobId))
-      const rowsOnly = queryJobList({ ...frozen, reference: NOW, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: query.limit, today, withCounts: false })
-      expect(rowsOnly.counts).toBeNull()
-      expect(rowsOnly.rows.map((r) => r.jobId)).toEqual(first.rows.map((r) => r.jobId))
-
-      if (!query.sort || query.sort === DEFAULT_SORT) {
-        expect(ids).toEqual(refDefaultOrder(ref.filtered).map((r) => r.jobId))
-      } else {
-        // a picked column: sorted by its value (empty last, either direction), ties in the neutral order
-        const column = SORT_COLUMNS[query.sort.key]
-        const value = query.sort.key === 'deadline' ? (r) => deadlineSortValue(r, today) : column.value
-        const sign = query.sort.dir === 'desc' ? -1 : 1
-        const empty = (v) => v === null || v === undefined || v === '' || (typeof v === 'number' && Number.isNaN(v))
-        for (let i = 1; i < full.length; i += 1) {
-          const a = value(full[i - 1])
-          const b = value(full[i])
-          if (empty(a) && !empty(b)) throw new Error(`an empty value before a value at ${i} (${query.sort.key})`)
-          if (empty(a) || empty(b)) continue
-          const order = column.type === 'number' ? a - b : collator.compare(String(a).trim(), String(b).trim())
-          expect(sign * order).toBeLessThanOrEqual(0)
-          if (order === 0) expect(neutralCompare(full[i - 1], full[i])).toBeLessThan(0)
-        }
-      }
-
-      // counts: the screen's, from the same rows
-      const viewJobs = overlayTracking(withServerState(input.stored, input.jobStateDoc), ref.store, ref.settings)
-      const counts = first.counts
-      expect(counts.stats).toEqual({ ...computeJobStats(viewJobs), ...trackerStats(ref.store, ref.settings) })
-      expect(counts.tiers).toEqual(tierCounts(ref.filtered))
-      expect(counts.classOptions).toEqual(query.mode === 'all' ? classOptions(ref.rows) : [])
-      expect(counts.notOnBoardHidden).toBe(query.mode === 'active' ? ref.shown.filter((job) => hiddenAsNotOnBoard(job, ref.effective)).length : 0)
-      expect(counts.copies).toEqual(ref.composed.copies)
-      expect(counts.hasServerOnly).toBe(ref.rows.some((row) => row.serverOnly))
-      expect(counts.facets).toEqual({
-        hasScores: hasMatchScores(ref.rows), sites: getUniqueSites(ref.rows), providers: getUniqueProviders(ref.rows), companyOptions: getCompanyOptions(ref.rows),
-        priorityCounts: countByValue(ref.rows, 'priority', PRIORITIES.filter((x) => x !== 'Reject')), statusOptions: statusFilterOptions(JOB_STATUSES, ref.rows, ref.store),
-      })
-    }
-    expect(nonEmpty).toBeGreaterThan(40) // the draw is not all empty answers
+    checkParity(input, serverCopy(input), seed)
   })
 
   it('the default order of a page never depends on the order the rows arrive in', () => {
@@ -284,5 +296,81 @@ describe('a picked column only changes the order of equal values, so the same ad
       if (index(tier[i - 1]) === index(tier[i]) && index(tier[i]) !== null) expect(neutralCompare(tier[i - 1], tier[i])).toBeLessThan(0)
     }
     expect(neutralOrder(tier).length).toBe(tier.length)
+  })
+})
+
+// --- the browser's own rows (P2b): rows only the browser has, and owner work the server cannot see ---------------------------------------------------
+//
+// The browser holds `offList` rows, hand-entered jobs the server was never given, and owner work (outreach, assets, insights, legacy tracking, a status or
+// Keep not yet on the server) on rows the server does hold. The server is told about them only through `selectExtraRows` (an allowlist) and
+// `applyExtraRows`; the same ids, order, pages and counts must come out as when the screen works from its own full rows.
+const OWNER_WORK = [
+  () => ({ outreach: { status: 'sent', contacts: [{ name: 'Ann Recruiter', email: 'ann@recruiter.example' }] } }),
+  () => ({ tailoredAssets: { resumeMd: '# private tailored cv' } }),
+  () => ({ aiInsights: { summary: 'private insight' } }),
+  () => ({ applicationTracking: { applied: true, interviewStage: 'Interview', followUpDate: '2026-10-01', recruiterEmail: 'r@recruiter.example', notes: 'private tracking note' } }),
+  () => ({ applicationTracking: { applied: false, interviewStage: 'Rejected', followUpDate: '', notes: 'private' } }),
+  () => ({ status: 'saved' }),
+  () => ({ status: 'rejected' }),
+  () => ({ keptByUser: true }),
+]
+
+function browserRowsFixture(seed) {
+  const base = fixture(seed)
+  const rand = rng(seed * 31 + 7)
+  const p = picker(rand)
+  const scoreFields = (row) => ({ matchScore: p.chance(0.8) ? p.int(20, 95) : null, matchLabel: 'Good', dataStatus: 'ok', priority: p.one(['P1', 'P2', 'P3']), applyRecommendation: p.one(['Apply', 'Maybe', 'Skip']), blockedBy: [], ...row })
+  const rowOf = (jobId, extra) => scoreFields({
+    jobId, title: p.one(TITLES), company: p.one(COMPANIES), location: p.one(LOCATIONS), site: p.one(SITES), provider: p.one(PROVIDERS), jobUrl: `https://z.example/${jobId}`,
+    description: `${p.one(WORDS)} private-browser-ad ${jobId}`, isRemote: p.chance(0.5), datePosted: p.chance(0.6) ? iso(p.int(0, 30) * DAY) : null, firstSeen: iso(p.int(1, 50) * DAY),
+    salaryMonthlyEur: p.chance(0.5) ? { min: p.int(1, 40) * 100, max: p.int(41, 90) * 100 } : undefined, eligibility: p.chance(0.5) ? { state: p.one(['authorized', 'needs_sponsorship', 'unknown']) } : undefined,
+    roleClass: p.one(['target', 'adjacent', 'other']), applyDeadline: p.chance(0.4) ? new Date(NOW + p.int(-5, 20) * DAY).toISOString().slice(0, 10) : undefined, engineCoverage: p.chance(0.5) ? { status: 'not_evaluated' } : undefined, ...extra,
+  })
+  const synced = ['man-synced-1', 'man-synced-2'].map((id) => rowOf(id, { manualEntry: true, provider: 'manual', site: 'manual', createdAt: iso(3 * DAY), status: 'new' }))
+  const unsynced = ['man-local-1', 'man-local-2', 'man-local-3'].map((id, i) => rowOf(id, {
+    manualEntry: true, provider: 'manual', site: 'manual', createdAt: iso(2 * DAY), status: 'new', notes: `PRIVATE-NOTE-${id}`, extraLinks: [`https://private.example/${id}`], sourceUrl: `https://private.example/source/${id}`,
+    ...(i === 0 ? { description: '', matchScore: null, matchLabel: 'Not read', dataStatus: 'not_read' } : {}),
+  }))
+  const offList = Array.from({ length: 6 }, (_, i) => rowOf(`off${i}`, { offList: true, ...p.one(OWNER_WORK)(), isClosed: p.chance(0.2) }))
+  const withWork = base.stored.map((row) => (p.chance(0.3) ? { ...row, ...p.one(OWNER_WORK)(), ...(p.chance(0.3) ? p.one(OWNER_WORK)() : {}) } : row))
+  const local = [...withWork, ...synced.map((row) => ({ ...row, ...(p.chance(0.5) ? p.one(OWNER_WORK)() : {}) })), ...unsynced, ...offList]
+  const routeExtra = [...offList.slice(0, 3), ...unsynced.slice(1, 2), ...synced].map((row, i) => ({
+    jobId: row.jobId, title: row.title, company: row.company, location: row.location, jobUrl: row.jobUrl, provider: row.provider, site: row.site, isRemote: row.isRemote,
+    datePosted: row.datePosted, salary: null, expiresAt: null, firstSeen: row.firstSeen, lastSeen: iso(p.int(0, 30) * DAY), closedAt: null, absentSince: null, class: p.one(CLASSES), reason: `why ${i}`,
+    reasonCode: null, from: 'ledger', copyGroup: null, matchScore: null,
+  }))
+  const server = [...base.server, ...routeExtra]
+  const serverStored = [...base.stored, ...synced] // what the server holds from its scored file: the scored rows and the hand-entered jobs it was given
+  const extraRows = JSON.parse(JSON.stringify(selectExtraRows(local)))
+  return {
+    browser: { stored: local, server, jobStateDoc: base.jobStateDoc, applications: base.applications },
+    serverInput: { stored: applyExtraRows(serverStored, extraRows), server, jobStateDoc: base.jobStateDoc, applications: base.applications },
+    serverWithout: { stored: serverStored, server, jobStateDoc: base.jobStateDoc, applications: base.applications },
+    extraRows,
+  }
+}
+
+describe('the browser\'s own rows reach the server through the allowlist, and the list is the same', () => {
+  it.each([101, 202, 303, 404])('seed %i: ids, order, every page and every count agree with the screen working from its full rows', (seed) => {
+    const { browser, serverInput, extraRows } = browserRowsFixture(seed)
+    expect(extraRows.length).toBeGreaterThan(10)
+    checkParity(browser, serverCopy(serverInput), seed, 100)
+  })
+
+  it('the harness can tell: without the extra rows the same check fails', () => {
+    const { browser, serverWithout } = browserRowsFixture(101)
+    expect(() => checkParity(browser, serverCopy(serverWithout), 101, 100)).toThrow()
+  })
+
+  it('sends only the browser-only rows in full, the others as owner state, and nothing for a row the owner has not worked on', () => {
+    const { browser, extraRows } = browserRowsFixture(202)
+    const byId = new Map(extraRows.map((row) => [row.jobId, row]))
+    const worked = (row) => hasUserData(row)
+    for (const row of browser.stored) {
+      const sent = byId.get(row.jobId)
+      if (row.offList || row.manualEntry) expect(sent?.title).toBe(row.title)
+      else if (worked(row)) expect(Object.keys(sent)).not.toContain('title') // owner state only: the server's own ad fields stand
+      else expect(sent).toBeUndefined()
+    }
   })
 })

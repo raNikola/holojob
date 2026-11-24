@@ -6,6 +6,10 @@
  *          `counts` is null from the second page on (offset above 0): the first page's counts stand
  *       -> { ok, changed: true, revision }                  when `revision` is given and the data moved since: the client says "list changed, refresh"
  *       -> { ok, revision, total, ids[], selectableIds[] }  with ids=1: every matching ad, for select-all across pages
+ *   POST /api/jobs/list   { mode, offset, filters, classes, recent, sort, today, revision, ids, extraRows }
+ *       -> the same answers, plus `extra: { sent, notOnServer }`. `extraRows` is the browser's own rows the server's list does not hold, sent as an
+ *          ALLOWLIST (src/modules/jobs/extraRows.js): added to the stored rows for this request only, never stored, never logged. A BRIDGE to be removed in P5.
+ *          A field outside the allowlist, a bad id or a repeated id is a 400 that names the place; a body over the limit is a 413 that says so.
  *   GET /api/jobs/list/ad?jobId=ID
  *       -> { ok, revision, row }                            the full row (description, facts) of one scored ad, opened from the list
  *
@@ -30,9 +34,11 @@ import { readAiUsage } from './ai-gate.js'
 import { loadSettings as loadApplicationSettings, loadStore, storePaths } from './application-store.js'
 import { readAll } from './job-all-read.js'
 import { loadState, statePaths } from './job-state-store.js'
+import { BodyTooLargeError, MAX_JSON_BODY_BYTES, readJsonBody } from './read-body.js'
 import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
 import { overlayTracking } from '../src/modules/applications/trackingView.js'
 import { withServerState } from '../src/modules/jobs/jobStateClient.js'
+import { ExtraRowsError, applyExtraRows, checkExtraRows } from '../src/modules/jobs/extraRows.js'
 import { LIST_MODES, queryJobList } from '../src/modules/jobs/jobListQuery.js'
 import { DEFAULT_FILTERS, importJobsFromFile, slimJob } from '../src/modules/jobs/jobStorage.js'
 import { SORT_COLUMNS } from '../src/modules/jobs/jobTableModel.js'
@@ -72,6 +78,10 @@ function filtersFrom(text) {
   if (text.length > MAX_FILTERS_CHARS) throw new HttpError(400, 'filters is too long')
   let filters
   try { filters = JSON.parse(text) } catch { throw new HttpError(400, 'filters is not JSON') }
+  return checkFilters(filters)
+}
+
+function checkFilters(filters) {
   if (!filters || typeof filters !== 'object' || Array.isArray(filters)) throw new HttpError(400, 'filters must be an object')
   for (const [key, value] of Object.entries(filters)) {
     const kind = FILTER_TYPES[key]
@@ -88,6 +98,10 @@ function sortFrom(text) {
   if (text === null) return null
   let sort
   try { sort = JSON.parse(text) } catch { throw new HttpError(400, 'sort is not JSON') }
+  return checkSort(sort)
+}
+
+function checkSort(sort) {
   if (!sort || typeof sort !== 'object' || !Object.hasOwn(SORT_COLUMNS, sort.key) || (sort.dir !== 'asc' && sort.dir !== 'desc')) {
     throw new HttpError(400, 'sort must be { key, dir } with a known column and dir asc or desc')
   }
@@ -117,6 +131,34 @@ export function parseListRequest(params) {
     recent: flag('recent'),
     ids: flag('ids'),
     revision: params.get('revision'),
+  }
+}
+
+/** The checked parameters of a POST body: the same as `parseListRequest`, from JSON values, plus the browser's own rows. */
+export function parseListBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'the request body must be an object')
+  if (Object.hasOwn(body, 'limit')) throw new HttpError(400, 'limit is not a parameter: the page size is the Settings field jobsPageSize')
+  if (!LIST_MODES.includes(body.mode)) throw new HttpError(400, `mode must be one of ${LIST_MODES.join(', ')}`)
+  const whole = (value, name) => {
+    if (!Number.isInteger(value) || value < 0) throw new HttpError(400, `${name} must be a whole number, 0 or more`)
+    return value
+  }
+  const classes = body.classes ?? []
+  if (!Array.isArray(classes) || classes.length > MAX_CLASSES || classes.some((c) => typeof c !== 'string' || c.length > 40)) throw new HttpError(400, 'classes is not valid')
+  const sort = body.sort === undefined || body.sort === null ? null : checkSort(body.sort)
+  const today = body.today === undefined || body.today === null ? null : whole(body.today, 'today')
+  if (sort?.key === 'deadline' && today === null) throw new HttpError(400, 'today is required to sort by deadline: it is the browser\'s day, not the server\'s')
+  for (const name of ['recent', 'ids']) if (body[name] !== undefined && typeof body[name] !== 'boolean') throw new HttpError(400, `${name} must be true or false`)
+  if (body.revision !== undefined && body.revision !== null && typeof body.revision !== 'string') throw new HttpError(400, 'revision must be a string')
+  let extraRows
+  try { extraRows = checkExtraRows(body.extraRows) } catch (error) {
+    if (error instanceof ExtraRowsError) throw new HttpError(400, error.message)
+    throw error
+  }
+  return {
+    mode: body.mode, classes, sort, today, offset: body.offset === undefined ? 0 : whole(body.offset, 'offset'),
+    filters: body.filters === undefined || body.filters === null ? {} : checkFilters(body.filters),
+    recent: body.recent === true, ids: body.ids === true, revision: body.revision ?? null, extraRows,
   }
 }
 
@@ -199,20 +241,39 @@ async function settingsPageSize() {
   return size
 }
 
+/** The body of a POST. Over the limit it answers 413 itself, in words, and returns null: a list that would be cut short is never made. */
+async function readBody(req, res) {
+  try {
+    return await readJsonBody(req, res, {
+      limit: MAX_JSON_BODY_BYTES,
+      tooLarge: {
+        ok: false,
+        error: `The browser's own ads are too many to send with one list request (the limit is ${MAX_JSON_BODY_BYTES} bytes). Nothing was cut: no list was made.`,
+      },
+    })
+  } catch (error) {
+    if (error instanceof BodyTooLargeError) return null
+    if (error instanceof SyntaxError) throw new HttpError(400, 'the request body is not JSON')
+    throw error
+  }
+}
+
 // --- the routes ----------------------------------------------------------------------------------------------------------------------------------
 
 async function listAnswer(index, request, limit, now) {
+  const held = new Set(index.stored.map((row) => row.jobId))
   const result = queryJobList({
-    stored: index.stored, server: index.server, applications: index.applications, jobStateDoc: index.jobStateDoc,
+    stored: applyExtraRows(index.stored, request.extraRows), server: index.server, applications: index.applications, jobStateDoc: index.jobStateDoc,
     reference: now, mode: request.mode, filters: request.filters, classes: request.classes, recent: request.recent, sort: request.sort,
     offset: request.ids ? 0 : request.offset, limit: request.ids ? 1 : limit, today: request.today ?? undefined, withIds: request.ids,
     withCounts: request.ids || request.offset === 0, // a "Show more" page (offset above 0) is rows only: the first page's counts stand
   })
-  if (request.ids) return { ok: true, revision: index.revision, mode: request.mode, total: result.total, ids: result.ids, selectableIds: result.selectableIds }
+  const extra = request.extraRows.length ? { extra: { sent: request.extraRows.length, notOnServer: request.extraRows.filter((row) => !held.has(row.jobId)).length } } : {}
+  if (request.ids) return { ok: true, revision: index.revision, mode: request.mode, total: result.total, ids: result.ids, selectableIds: result.selectableIds, ...extra }
   const next = request.offset + result.rows.length
   return {
     ok: true, revision: index.revision, mode: request.mode, offset: request.offset, limit, total: result.total,
-    rows: result.rows.map(slimJob), nextOffset: next < result.total ? next : null, counts: result.counts, meta: index.meta,
+    rows: result.rows.map(slimJob), nextOffset: next < result.total ? next : null, counts: result.counts, meta: index.meta, ...extra,
   }
 }
 
@@ -233,8 +294,9 @@ export async function handleJobsListRequest(req, res, url, {
   now = Date.now, demoMode = () => false,
 } = {}) {
   if (url !== LIST_ROUTE && url !== AD_ROUTE) return false
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET')
+  const allowed = url === LIST_ROUTE ? ['GET', 'POST'] : ['GET']
+  if (!allowed.includes(req.method)) {
+    res.setHeader('Allow', allowed.join(', '))
     send(res, 405, { error: 'Method not allowed' })
     return true
   }
@@ -245,7 +307,14 @@ export async function handleJobsListRequest(req, res, url, {
       send(res, 200, adAnswer(await indexFor({ root, python, spawnFn, ensureView }), params.get('jobId')))
       return true
     }
-    const request = parseListRequest(params)
+    let request
+    if (req.method === 'POST') {
+      const body = await readBody(req, res)
+      if (body === null) return true // over the limit: already answered with a 413 in words
+      request = parseListBody(body)
+    } else {
+      request = { ...parseListRequest(params), extraRows: [] }
+    }
     const limit = request.ids ? null : await readPageSize()
     const index = await indexFor({ root, python, spawnFn, ensureView })
     if (request.revision !== null && request.revision !== index.revision) {

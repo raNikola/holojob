@@ -192,7 +192,9 @@ function hasContent(value) {
 export function hasUserData(job) {
   if (!job) return false
   const { status: outreachStatus, ...outreach } = job.outreach || {}
-  return job.keptByUser === true
+  // `ownerWork` is the one flag a list request sends in place of the owner's notes, outreach, assets and insights (extraRows.js); a stored row never has it.
+  return job.ownerWork === true
+    || job.keptByUser === true
     || Boolean(job.status && job.status !== 'new')
     || hasContent(job.aiInsights)
     || hasContent(job.tailoredAssets)

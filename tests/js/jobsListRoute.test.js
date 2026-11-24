@@ -202,8 +202,10 @@ describe('what the request may say', () => {
     expect((await call(q({ mode: 'active', filters: JSON.stringify(filters) }))).status).toBe(200)
   })
 
-  it('answers 405 to anything but GET, and leaves other URLs alone', async () => {
-    expect((await call(q({ mode: 'all' }), { method: 'POST' })).status).toBe(405)
+  it('answers 405 to a method the route does not take, and leaves other URLs alone', async () => {
+    expect((await call(q({ mode: 'all' }), { method: 'PUT' })).status).toBe(405)
+    expect((await call(q({ mode: 'all' }), { method: 'DELETE' })).status).toBe(405)
+    expect((await call(q({ jobId: 'j01' }), { method: 'POST', path: '/api/jobs/list/ad' })).status).toBe(405) // POST is for the list only
     expect((await call('', { path: '/api/jobs/all' })).handled).toBe(false)
   })
 

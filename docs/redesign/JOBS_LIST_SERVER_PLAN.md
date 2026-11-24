@@ -17,6 +17,7 @@ The browser holds only the ads currently shown on the Jobs list plus the owner's
 7. This supersedes "No pagination in this step" (STEP5_SERVER_MASTER_PLAN.md section 2.3) for the job list (DECISIONS.md, 2026-11-24).
 8. **Binding requirement for P3/P4:** browser-only worked ads (`offList` rows and unsynced hand-entered jobs) must NOT disappear from the list when the server-paged list goes live. This is solved BEFORE P3/P4 are activated, not left for P5. It stays in Open items until done (mechanism proposed under "Browser-only worked ads", below).
 9. On the P1 items (owner, 2026-11-24): a picked column breaks ties in the neutral order; the page size is 1 to 1000, default 100; the day for the deadline column comes from the browser; the `activeWindowDays` merge conflict is resolved when `keep-search-ads` is merged.
+10. **Mechanism C is accepted as a BRIDGE, removed in P5** (owner, 2026-11-24): the browser sends its worked rows that the server does not hold as `extraRows` with each list request. Conditions: (1) a field ALLOWLIST (never `notes`, `extraLinks`, `sourceUrl` or any field not listed), with a test that private fields do not pass; (2) an oversized request body is a visible error, never silent truncation; (3) the P1 parity test is extended with those rows (order, totals, counts, every page). P2b also covers opening a browser-only ad (see "The rule for opening an ad").
 
 ## Phases
 
@@ -25,10 +26,10 @@ The browser holds only the ads currently shown on the Jobs list plus the owner's
 | P0 | Spike on a read-only copy: does Node 20 load the shared modules, slim row size, index build time and memory | S | done (see P0 result; commit in the Log) |
 | P1 | Shared default sort-key function, parity harness, Settings page-size field. No route | M | done (commit in the Log); full tier green |
 | P2 | Index in Node, `GET /api/jobs/list` (filters, search, sort, offset/limit, revision, counts, ids mode), full ad on open | L | done (commit in the Log); route not used by any screen yet |
-| P2b | Browser-only worked ads in the paged list (binding requirement 8): `extraRows` mechanism, route and parity test | M | todo, must be done before P3/P4 are activated |
+| P2b | Browser-only worked ads in the paged list (binding requirement 8): `extraRows` bridge (removed in P5), allowlist, POST route, parity test, opening a browser-only ad | M | done (commit in the Log); the screen does not call it until P3 |
 | P3 | The Jobs screen reads pages; the import stops loading the whole file; `JOB_PAGE_SIZE` and the lean/minimal storage tiers go | L | todo (needs P2b) |
 | P4 | Other screens (Board, Statistics, Outreach, Resume library, Dashboard, AI context) stop depending on the full list; server stats route | M-L | todo (needs P2b) |
-| P5 | Step 5's owner overlay for notes, outreach, tailored assets and AI insights | L | todo, can wait |
+| P5 | Step 5's owner overlay for notes, outreach, tailored assets and AI insights. **Removes the `extraRows` bridge** (`extraRows.js`, the POST body field, `selectExtraRows` / `mergeLocalRow` and their tests) | L | todo, can wait |
 
 P3 and P4 ship together. Nothing is deployed before P4.
 
@@ -57,7 +58,7 @@ No blocker. Two import breaks found and fixed; the numbers say the index can be 
 - **Real data, read-only (symlinks to the data files, the Python step run for real):** All holds 7,146 rows (the ledger 4,427 plus filtered ads). First request 0.9 s (index build with `all_ads.py`), later requests 0.1 to 0.4 s, 183 MB RSS. The first All page is 464 KB (the counts and facet lists are most of it: 7,146 company options), the second Active page 70 KB. A page is the rows only; the cost left is composing and sorting the whole list per request (about 0.4 s for All), which a later step can memoize per revision and day.
 - **Tests:** `tests/js/jobsListRoute.test.js` (35 tests: pages equal the query's, slim rows, filters/classes/sort reach the query, ids mode, revision refusal, index kept and rebuilt, one build for two requests, 12 request refusals before any file is read, page size from the gate and never guessed, 503/500/404/405, the full ad); the parity test now also covers ids and rows-only pages.
 
-## Browser-only worked ads (binding requirement 8): proposed mechanism
+## Browser-only worked ads (binding requirement 8): the mechanism, accepted as a bridge
 
 **The risk:** the server list does not hold an `offList` row (a row the owner worked on that the last scored file no longer has) or a hand-entered job that was never synced (saved without a description, or while the server was away). Once the Jobs screen reads server pages, those rows would vanish, and a count or an order that mixes server rows with local ones would no longer match what the server says.
 
@@ -73,15 +74,37 @@ No blocker. Two import breaks found and fixed; the numbers say the index can be 
 4. The parity harness gains the browser-only rows (the P1 fixture left them out on purpose): the browser input holds `offList` and unsynced manual rows, the server input gets them as `extraRows`, and the same ids, order, pages and counts must come out. That is the test that lets P3/P4 be activated.
 5. For the client (P3): a selector that names the browser-only worked rows (stored rows with `offList`, or `manualEntry` not yet on the server), and the rule that a row the server holds is shown from the server's answer.
 
-**Open question for the owner:** C or a different mechanism? Recommendation: C (own proposal; it reuses the P1 parity harness and needs no data-model change, so it does not wait for P5). A can still shrink the set later.
+**Decision (owner, 2026-11-24): C, as a bridge removed in P5.** Its conditions are decision 10 above. A, B and C as considered are kept here as the record.
+
+## P2b result (2026-11-24)
+
+**What was built**
+- `src/modules/jobs/extraRows.js`, one file for the browser and the server: `EXTRA_ROW_FIELDS` (the allowlist), `selectExtraRows(stored)` (what the browser sends), `checkExtraRows(rows)` (what the server accepts), `applyExtraRows(stored, rows)` (the merge for one request), `mergeLocalRow` (a browser-only row is shown from the browser's copy).
+- **What is sent:** a browser-only row (`offList`, or hand-entered) in full, as the allowlist lets it out; a row the server may hold that the owner has worked on here, as its owner state only (`status`, `keptByUser`, one `ownerWork` flag, and the three values of a legacy tracking object that the counts read: `applied`, `interviewStage`, `followUpDate`); nothing for any other row. **Why the second kind:** whether a row is "worked" (`hasUserData`) decides what Active shows and which crm counts there are, and it reads notes, outreach, assets and insights, which must not be sent. They go as the one flag `ownerWork`, which `hasUserData` now also honours (a stored row never carries it).
+- **Never sent, by construction:** `notes`, `extraLinks`, `sourceUrl`, `sourceChoice`, outreach, tailored assets, AI insights, `llmFacts`, `engineShadow`, and a tracking object's notes, contacts and addresses. The allowlist names what may go; nothing names what may not.
+- **The server refuses, it does not clean:** a field outside the allowlist, a tracking field outside the three, a bad or repeated `jobId`, `ownerWork` other than `true` is a 400 that names the row and the field and never quotes a value. A server row keeps its ad fields; an extra row can only add owner state to it (a hand-entered job with the address of a server row under another id replaces that row, as an import does).
+- **Route:** `POST /api/jobs/list` with the GET's parameters in a JSON body plus `extraRows`; the answer adds `extra: { sent, notOnServer }` so the browser sees what was taken. The rows are added to the stored rows for that request only: nothing is stored, nothing is written (a test compares the data dir before and after), the revision is the server's. An ids-mode request takes them too, so select-all reaches a browser-only ad.
+- **Oversize:** a body over the JSON limit (`MAX_JSON_BODY_BYTES`, 1 MB, about 300 browser-only rows) is a **413 in words** ("The browser's own ads are too many to send with one list request ... Nothing was cut: no list was made."), and the client (`fetchListPage`) returns it as `{ ok: false, tooLarge: true, message }` to be shown, never a shorter list. Past that size, syncing the hand-entered jobs (option A) shrinks the set.
+- **Client:** `src/modules/jobs/jobListClient.js` (`buildListBody`, `fetchListPage`, `shownRows`, `openAd`). It has no write path: it imports no storage setter.
+
+**The rule for opening an ad (owner, 2026-11-24).** `extraRows` are not stored on the server, so `/api/jobs/list/ad` cannot return a browser-only ad (it answers 404, and a test says so). An ad opens from the browser's stored row whenever there is one (`openAd` returns `source: 'local'` with no request, the same first choice `resolveJob` has always made); its actions (status, notes, outreach, Mark Applied, tailoring) are the existing code on the same stored row, unchanged, and persist in `localStorage` as today. An ad with no stored row opens from the server, read-only, until the owner presses Keep (`source: 'server'`, `readOnly: true`); one with no scored row either is left to the ledger fallback in `resolveJob`. **An ad that is only a server row is never written to the browser's list**: listing, paging and opening one writes no storage (a test spies `localStorage.setItem` and compares the stored key).
+
+**Tests**
+- `tests/js/jobListParity.test.js` (extended): a fixture where the browser holds `offList` rows, hand-entered jobs (some synced, some not, with notes, links and a source address), and owner work on rows the server holds; the server input is built only from `selectExtraRows` + `applyExtraRows`; the same ids, order, every page and every count as the screen's pipeline on the full rows, for four seeds. A test shows the check fails when the extra rows are left out. The picked-column sort is now compared with the browser's order too. Mutation-checked: dropping `ownerWork`, `salaryMonthlyEur`, `roleClass`, `eligibility`, `isClosed` or `applyDeadline` from the allowlist fails it.
+- `tests/js/extraRows.test.js` (39): private fields never pass (each of eleven names, on both kinds of row), the server refuses them without quoting a value, the merge rules, no input is changed. Adding `notes` and `sourceUrl` to the allowlist fails 10 tests.
+- `tests/js/jobsListExtraRows.test.js` (real HTTP): the rows are in the list and the counts, stored nowhere, the revision unmoved, ids mode, refusals by field, the 413 and the server carrying on, the GET's rules on the POST.
+- `tests/js/browserOnlyAds.test.js` (jsdom, real server, real browser store): a browser-only row appears in the paged list; opens from local data with no request; an action on it (`patchJob`: status, notes, tailored assets, outreach) persists in the browser and the next page shows it; its private words never leave; server-only rows write no storage.
 
 ## Open items
 
-- **Binding requirement 8 (browser-only worked ads) is open until done:** P2b, then the parity test with the extra rows green, before P3/P4 are activated.
+- **Binding requirement 8 (browser-only worked ads) stays open until done.** The mechanism is built and tested (P2b: allowlist, POST route, parity test with the browser's rows, the opening rule), but no screen calls it yet. It is done when P3/P4 use `buildListBody`, `shownRows` and `openAd` and the screen shows an `offList` row and an unsynced hand-entered job after the switch; it must not be activated before that.
+- **The bridge is removed in P5** (decision 10): `extraRows.js`, the POST `extraRows` field, `selectExtraRows`, `mergeLocalRow` and their tests go when the owner overlay holds those rows on the server.
+- **Size limit of the bridge:** one request carries about 300 browser-only rows (1 MB); past that the owner sees the 413 message. Syncing hand-entered jobs to the server (option A) would shrink the set; not built.
+- **Legacy tracking:** a row's legacy `applicationTracking` reaches the server as three values only; the notes, recruiter and links in it stay in the browser. If the owner's rows carry more that a count or filter reads, the parity test will show it when a field is added.
 - The page size is 1 to 1000, default 100 (owner, 2026-11-24). `JOB_PAGE_SIZE` stays in the screen until P3.
 - `activeWindowDays` exists only on `keep-search-ads` (`eacec8b`). Merging it with this branch needs a small conflict resolution in `python/llm/ai_gate.py`, `src/modules/ai/gateClient.js`, `src/components/ai/AIBudgetPanel.jsx` and `tests/js/aiSettingsHandler.test.js`; the owner has decided this is done when `keep-search-ads` is merged (after P3).
 - **The screen still runs its own pipeline** until P3 (only `JobTable`'s sort calls the shared `orderRows`); the parity test holds the two together meanwhile.
-- **Not yet in the query or route:** the filter panel's distinct location list, `extraRows` (P2b), memoizing the composed list per revision and day.
+- **Not yet in the query or route:** the filter panel's distinct location list, memoizing the composed list per revision and day.
 - **Scale:** the index holds the full stored rows (the text search reads descriptions). With `keep-search-ads` merged and a run that includes JobSpy, about 3,100 scored rows (47 MB file in the simulation) would be held, which fits (the P0 ledger parse already holds 115 MB); the paged answer is what keeps the browser small.
 - Settings home for the page size: the AI-budget settings file for now (same store as the run limits); a dedicated Jobs section is the alternative.
 - The offline case (API down): worked ads only, with a notice (own proposal, P3). Demo mode: the route answers 404; P3 decides what the demo shows.
