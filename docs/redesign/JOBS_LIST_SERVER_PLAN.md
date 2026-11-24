@@ -190,3 +190,10 @@ The server-mode list is built beside the local pipeline and stays off until ever
 - Tests added: the parity test extended with the browser's rows (four seeds, mutation-checked), `extraRows.test.js` (39), `jobsListExtraRows.test.js` (real HTTP), `browserOnlyAds.test.js` (jsdom: a browser-only row appears in the paged list, opens from local data, an action on it persists, server-only rows write no storage), a shared test server in `tests/js/setup/jobsListServer.js`. Full tier green (lint, Vitest, pytest incl. slow, build).
 - Requirement 8 stays open: the mechanism is built and tested, but no screen calls it yet. It is done when P3/P4 use it.
 - Next: P3 and P4 together (the Jobs screen reads pages through `buildListBody` / `fetchListPage` / `shownRows` / `openAd`; the other screens stop depending on the full list; `JOB_PAGE_SIZE` and the lean/minimal storage tiers go). Nothing is deployed before P4. `keep-search-ads` (`eacec8b`) stays unmerged until P3.
+
+**Prompt 4, 2026-11-24: P2b follow-ups, P3 and P4 done (branch `jobs-list-server`; not pushed, no build, no deploy).** Commits, in order:
+- `f5b0103` slim extra rows (the ad text only with a text search: about 1.3 KB a row, about 780 rows under the 1 MB cap instead of 95), the over-cap error with the row count by kind and what to do.
+- `d004e59` Mark Applied on an ad that exists only in the browser (direct test: kept on the server with no private field, shows on the Board).
+- `c7e37ec` S1 the loader; `84212af` S2 the table and the filter panel; `1e33cc7` S3 the Jobs screen on the server's list (the screen and Keep tests run on both lists); `0f67adb` S4 counts-only, rows-by-ids and AI-context answers; `620ca9a` and `bee16b0` S5 the other screens; `61233ef` S6a no whole-file import; `f25271c` S6b the list is ON, `JOB_PAGE_SIZE` gone.
+- Full tier green on `f25271c` (lint, 192 Vitest files, pytest incl. slow, build).
+- **Open for the owner:** the dormant lean/minimal tiers and the test-only local-list switch were not removed (Open items); `keep-search-ads` may be merged now (conflicts listed); the build, deploy and push are the owner's.
