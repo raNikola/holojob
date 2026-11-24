@@ -121,6 +121,45 @@ export function patchState(root, body, { now = () => new Date() } = {}) {
   })
 }
 
+const MAX_BATCH = 5000
+
+/**
+ * The same status write for many ads under one lock and one file write: `items` is `[{ key, jobId }]`, `patch` the one status (batch writes
+ * only a status, never Keep). Every item is checked before anything is written, so a bad one writes nothing. A stale `baseSha256` answers 409.
+ */
+export function patchStateBatch(root, body, { now = () => new Date() } = {}) {
+  return withLock(root, () => {
+    const { items, patch, baseSha256 } = body ?? {}
+    if (!Array.isArray(items) || items.length === 0 || items.length > MAX_BATCH) throw new StateError(400, `items must be 1 to ${MAX_BATCH} ads`)
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).length !== 1 || !('status' in patch)) throw new StateError(400, 'patch may hold only status')
+    if (!STATE_STATUSES.includes(patch.status)) throw new StateError(400, patch.status === 'applied_manually' ? 'Applied is recorded in the application tracker, not as a status' : 'status is not valid')
+    const seen = new Set()
+    for (const item of items) {
+      if (typeof item?.key !== 'string' || !MATCH_KEY.test(item.key)) throw new StateError(400, 'every key must be a job match key')
+      if (typeof item.jobId !== 'string' || !JOB_ID.test(item.jobId)) throw new StateError(400, 'every jobId must be valid')
+      if (seen.has(item.key)) throw new StateError(400, 'items repeats an ad')
+      seen.add(item.key)
+    }
+    const { doc, sha256: current } = loadState(root)
+    if (baseSha256 !== undefined && baseSha256 !== current) {
+      throw new StateError(409, 'job-state.json changed since it was read', { code: 'stale', current: { sha256: current } })
+    }
+    const at = now().toISOString()
+    const jobs = { ...doc.jobs }
+    const entries = {}
+    let changed = 0
+    for (const { key, jobId } of items) {
+      const before = doc.jobs[key]
+      const entry = { jobId, status: before?.status ?? 'new', statusAt: before?.statusAt ?? null, keep: before?.keep ?? false }
+      if (patch.status !== entry.status) { entry.status = patch.status; entry.statusAt = at }
+      if (!before || canonicalJson(before) !== canonicalJson(entry)) { jobs[key] = entry; changed += 1 }
+      entries[key] = entry
+    }
+    if (!changed) return { status: 200, entries, sha256: current, changed: 0 }
+    return { status: 200, entries, sha256: writeState(root, { ...doc, updatedAt: at, jobs }), changed }
+  })
+}
+
 /**
  * Removes every entry of one job. Used only when a hand-entered job is deleted: this is the one place the "entries are only
  * added" rule does not apply, and it touches only entries whose jobId is the deleted job's. A missing file writes nothing.
@@ -286,6 +325,7 @@ async function readBody(req, res) {
 const ROUTES = {
   'GET /api/jobs/state': (_req, _res, { root }) => ({ status: 200, ...loadState(root) }),
   'POST /api/jobs/state': (body, { root, now }) => patchState(root, body, { now }),
+  'POST /api/jobs/state/batch': (body, { root, now }) => patchStateBatch(root, body, { now }),
   'POST /api/jobs/state/browser-export': (body, { root, now }) => exportBrowserState(root, body, { now }),
   'POST /api/jobs/state/import/preview': (body, { root }) => previewImport(root, body),
   'POST /api/jobs/state/import': (body, { root, now }) => applyImport(root, body, { now }),

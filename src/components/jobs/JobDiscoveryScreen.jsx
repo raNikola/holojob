@@ -50,7 +50,8 @@ import { overlayTracking, trackerStats } from '../../modules/applications/tracki
 import { useApplications } from '../../hooks/useApplications'
 import QuickApplyDialog from './QuickApplyDialog'
 import { useJobState } from '../../hooks/useJobState'
-import { PENDING_NOTICE, pendingRows, withServerState, writeJobState } from '../../modules/jobs/jobStateClient'
+import { jobMatchKey } from '../../modules/jobs/jobStorage'
+import { PENDING_NOTICE, pendingRows, withServerState, writeJobState, writeJobStates } from '../../modules/jobs/jobStateClient'
 import { useJobsSync } from '../../hooks/useJobs'
 import { loadJobsTab, persistJobsTab } from '../../modules/appNavigation'
 import {
@@ -493,6 +494,9 @@ export default function JobDiscoveryScreen() {
     setSelection((prev) => toggleSelected(prev, filterKey, jobId))
   }, [filterKey])
 
+  // The match keys select-all got for ads this browser has no row for (`{ jobId: key }`).
+  const serverKeys = useRef({})
+
   const handleToggleSelectAll = useCallback(async () => {
     if (!serverShown) {
       setSelection((prev) => toggleAllSelected(prev, filterKey, selectableIds(filteredJobs)))
@@ -504,10 +508,10 @@ export default function JobDiscoveryScreen() {
       setStatusError(`Select all did not work: ${everyone.error}`)
       return
     }
-    // Only an ad the browser holds can be acted on in bulk.
-    const mine = new Set(state.jobs.map((job) => job.jobId))
-    setSelection((prev) => toggleAllSelected(prev, filterKey, everyone.selectableIds.filter((id) => mine.has(id))))
-  }, [serverShown, serverList.ids, filteredJobs, filterKey, state.jobs]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Every ad of the list, the ones only the server holds too: a status goes to the server's job state. Their match keys are kept for the write.
+    serverKeys.current = { ...serverKeys.current, ...everyone.keys }
+    setSelection((prev) => toggleAllSelected(prev, filterKey, everyone.selectableIds))
+  }, [serverShown, serverList.ids, filteredJobs, filterKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The bulk buttons only open the confirm dialog; `runBulkTailor` runs when its own button is pressed.
   const [tailorAsk, setTailorAsk] = useState(null)
@@ -532,14 +536,31 @@ export default function JobDiscoveryScreen() {
     }
   }, [profile, serverOn])
 
-  const handleBulkStatus = useCallback((status) => {
-    setState((prev) => ({
-      ...prev,
-      jobs: prev.jobs.map((j) => (
-        selectedJobIds.has(j.jobId) ? { ...j, status } : j
-      )),
-    }))
-  }, [selectedJobIds])
+  // Mark saved / rejected on every selected ad, the server-only ones included: one batched request to the server's job state, written first like a single row's.
+  // A failed write changes nothing. Rows stored in the browser follow the server's answer; the rest are read again from the server.
+  const handleBulkStatus = useCallback(async (status) => {
+    const storedIds = new Set(state.jobs.map((job) => job.jobId))
+    const known = new Map([...(serverRows ?? []), ...filteredJobs].map((row) => [row.jobId, row]))
+    const items = []
+    for (const jobId of selectedJobIds) {
+      const row = state.jobs.find((job) => job.jobId === jobId) ?? known.get(jobId)
+      const key = row ? jobMatchKey(row) : serverKeys.current[jobId]
+      if (key) items.push({ jobId, key })
+    }
+    if (!items.length) return
+    setBulkRunning(true)
+    try {
+      await writeJobStates(items, { status })
+      setStatusError(null)
+    } catch (e) {
+      setStatusError(`The status was not saved: ${e.message}`)
+      return
+    } finally {
+      setBulkRunning(false)
+    }
+    setState((prev) => ({ ...prev, jobs: prev.jobs.map((j) => (selectedJobIds.has(j.jobId) ? { ...j, status } : j)) }))
+    if (items.some((item) => !storedIds.has(item.jobId))) refreshList()
+  }, [state.jobs, serverRows, filteredJobs, selectedJobIds, refreshList])
 
   const handleExportJson = () => {
     downloadJobsJson({

@@ -61,7 +61,7 @@ function answerList(server, rawBody, allBody, pageSize, scoredRows, windowDays) 
 
 /** `route(call)` answers /api/jobs/all (and, with `listServer`, the rows under /api/jobs/list); `ledger(jobId)` answers /api/jobs/history; `applications` is the store the server holds. */
 export function stubServer({ route = () => routeAnswer([]), health = true, scored = null, ledger = () => null, applications = {}, listServer = true, pageSize = 100, scoredRows = null, windowDays = 14 } = {}) {
-  const server = { allCalls: 0, posts: [], applications, jobState: { version: 1, updatedAt: null, jobs: {} }, stateWrites: [], listCalls: [], paths: [] }
+  const server = { allCalls: 0, posts: [], applications, jobState: { version: 1, updatedAt: null, jobs: {} }, stateWrites: [], batchWrites: [], listCalls: [], paths: [] }
   vi.stubGlobal('fetch', async (url, options = {}) => {
     const path = String(url).split('?')[0]
     server.paths.push(path)
@@ -108,6 +108,18 @@ export function stubServer({ route = () => routeAnswer([]), health = true, score
       server.stateWrites.push({ key, patch })
       server.jobState = { ...server.jobState, jobs: { ...server.jobState.jobs, [key]: entry } }
       return reply(200, { entry, sha256: `sha${server.stateWrites.length}`, changed: true })
+    }
+    if (path === '/api/jobs/state/batch' && options.method === 'POST') {
+      const { items, patch } = JSON.parse(options.body)
+      server.batchWrites.push({ items, patch })
+      const entries = {}
+      for (const { key, jobId } of items) {
+        const before = server.jobState.jobs[key] ?? { jobId, status: 'new', statusAt: null, keep: false }
+        entries[key] = { ...before, ...patch, statusAt: '2026-11-09T10:00:00.000Z' }
+        server.stateWrites.push({ key, patch })
+      }
+      server.jobState = { ...server.jobState, jobs: { ...server.jobState.jobs, ...entries } }
+      return reply(200, { entries, sha256: `sha${server.stateWrites.length}`, changed: items.length })
     }
     if (path === '/api/jobs/state') return reply(200, { doc: server.jobState, sha256: `sha${server.stateWrites.length}` })
     if (path === '/api/applications' && options.method === 'POST') {

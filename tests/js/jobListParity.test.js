@@ -216,7 +216,8 @@ function checkParity(input, frozenOrFor, seed, rounds = 120) {
     // select-all across pages: the ids of every matching ad, in the same order; and a rows-only page is the same rows with no counts
     const everyId = queryJobList({ ...frozen, reference: NOW, activeWindowDays: query.windowDays, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: 1, today, withIds: true })
     expect(everyId.ids).toEqual(ids)
-    expect(everyId.selectableIds).toEqual(full.filter((row) => !row.serverOnly).map((row) => row.jobId))
+    // a row only the server holds can be selected too (its status goes to the server's job state); a filtered-out ad is a link only
+    expect(everyId.selectableIds).toEqual(full.filter((row) => !row.serverOnly || row.from !== 'filtered').map((row) => row.jobId))
     const rowsOnly = queryJobList({ ...frozen, reference: NOW, activeWindowDays: query.windowDays, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: query.limit, today, withCounts: false })
     expect(rowsOnly.counts).toBeNull()
     expect(rowsOnly.rows.map((r) => r.jobId)).toEqual(first.rows.map((r) => r.jobId))

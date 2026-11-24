@@ -128,12 +128,12 @@ export function createServerListLoader({ fetchFn } = {}) {
       return load()
     },
 
-    /** Every matching ad (for select-all across pages): `{ ids, selectableIds }`, or `{ error }`. */
+    /** Every matching ad (for select-all across pages): `{ ids, selectableIds, keys }` (`keys`: the match key of each selectable ad), or `{ error }`. */
     async ids() {
       if (!request) return { error: 'No list is loaded.' }
       const answer = await fetchListPage(buildListBody({ ...request, ids: true }), fetchFn ?? globalThis.fetch)
       if (!answer.ok) return { error: answer.message }
-      return answer.changed ? { error: 'The list changed. Load it again, then select.' } : { ids: answer.page.ids, selectableIds: answer.page.selectableIds }
+      return answer.changed ? { error: 'The list changed. Load it again, then select.' } : { ids: answer.page.ids, selectableIds: answer.page.selectableIds, keys: answer.page.keys ?? {} }
     },
 
     clearNotice() {

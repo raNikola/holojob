@@ -289,7 +289,7 @@ export async function listAnswer(index, request, limit, now, activeWindowDays) {
   })
   const extra = request.extraRows.length ? { extra: { sent: request.extraRows.length, notOnServer: request.extraRows.filter((row) => !held.has(row.jobId)).length } } : {}
   if (request.countsOnly) return { ok: true, revision: index.revision, mode: request.mode, total: result.total, counts: result.counts, activeWindowDays, ...extra }
-  if (request.ids) return { ok: true, revision: index.revision, mode: request.mode, total: result.total, ids: result.ids, selectableIds: result.selectableIds, activeWindowDays, ...extra }
+  if (request.ids) return { ok: true, revision: index.revision, mode: request.mode, total: result.total, ids: result.ids, selectableIds: result.selectableIds, keys: result.keys, activeWindowDays, ...extra }
   const next = request.offset + result.rows.length
   return {
     ok: true, revision: index.revision, mode: request.mode, offset: request.offset, limit, activeWindowDays, total: result.total,

@@ -492,6 +492,58 @@ describe('the server\'s list on the screen', () => {
     expect(kept.a2).toMatchObject({ offList: true, status: 'saved' }) // worked on, no longer in the scored list
   })
 
+  const wide = () => Array.from({ length: 300 }, (_, i) => storedJob(`wide${String(i).padStart(3, '0')}`, { title: `Wide ${i}`, matchScore: 50 + (i % 40) }))
+
+  it2('select all reaches every ad of every page, the ones only the server holds too, and Mark rejected is one batched server write that stores nothing in the browser for them', async () => {
+    const rows = wide()
+    const server = stubList({ route: () => routeAnswer([]), scoredRows: rows, scored: () => ({ meta: {}, jobs: rows }) })
+    screen = await mountList({ stored: [] })
+    await settle()
+    expect(screen.rows().length).toBeLessThan(300) // a page, not the list
+    await screen.click(screen.container.querySelector('thead input[type=checkbox]'))
+    await settle()
+    expect(screen.text()).toContain('300 selected')
+    await screen.click(screen.button(/^Mark rejected$/))
+    await settle()
+    expect(server.batchWrites).toHaveLength(1) // one request, not 300
+    expect(server.batchWrites[0].patch).toEqual({ status: 'rejected' })
+    expect(new Set(server.batchWrites[0].items.map((item) => item.jobId))).toEqual(new Set(rows.map((r) => r.jobId)))
+    expect(server.stateWrites.filter((w) => w.patch.status === 'rejected')).toHaveLength(300)
+    expect(Object.values(server.jobState.jobs).every((entry) => entry.status === 'rejected')).toBe(true)
+    expect(screen.storedJobs()).toEqual([]) // no browser-list write for a row only the server holds
+  })
+
+  it2('Mark saved on a mix of rows: the stored ones follow, the server-only ones are on the server, one request', async () => {
+    const rows = wide()
+    const server = stubList({ route: () => routeAnswer([]), scoredRows: rows, scored: () => ({ meta: {}, jobs: rows }) })
+    screen = await mountList({ stored: [storedJob('wide007', { title: 'Wide 7', matchScore: 57 })] })
+    await settle()
+    await screen.click(screen.container.querySelector('thead input[type=checkbox]'))
+    await settle()
+    await screen.click(screen.button(/^Mark saved$/))
+    await settle()
+    expect(server.batchWrites).toHaveLength(1)
+    expect(server.batchWrites[0].items).toHaveLength(300)
+    expect(screen.storedJobs().map((j) => [j.jobId, j.status])).toEqual([['wide007', 'saved']]) // still only the row the browser held
+  })
+
+  it2('a bulk status the server refuses changes nothing, here or in the browser, and says so', async () => {
+    const rows = wide()
+    stubList({ route: () => routeAnswer([]), scoredRows: rows, scored: () => ({ meta: {}, jobs: rows }) })
+    const served = globalThis.fetch
+    vi.stubGlobal('fetch', async (url, options = {}) => (String(url) === '/api/jobs/state/batch'
+      ? { ok: false, status: 400, json: async () => ({ error: 'status is not valid' }) }
+      : served(url, options)))
+    screen = await mountList({ stored: [storedJob('wide007', { title: 'Wide 7', matchScore: 57 })] })
+    await settle()
+    await screen.click(screen.container.querySelector('thead input[type=checkbox]'))
+    await settle()
+    await screen.click(screen.button(/^Mark rejected$/))
+    await settle()
+    expect(screen.storedJobs()[0].status).not.toBe('rejected')
+    expect(screen.text()).toContain('The status was not saved: status is not valid')
+  })
+
   it2('a row only this browser has is in the list, and an action on it is saved in the browser', async () => {
     const server = stubList({ route: () => routeAnswer([]) })
     const mine = offList(1)

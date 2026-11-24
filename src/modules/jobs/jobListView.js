@@ -50,8 +50,11 @@ export function rowKind(row) {
   return row.from === 'filtered' ? 'filtered' : 'server'
 }
 
-/** The rows bulk actions can reach: only stored ones. */
-export const selectableIds = (rows) => rows.filter((row) => rowKind(row) === 'stored').map((row) => row.jobId)
+/**
+ * The rows bulk actions can reach: stored ones, and with `serverTriage` (the server's list is on) the rows only the server holds too: their status
+ * is written to the server's job state, as a single row's is. A filtered-out ad is a link only and is never selectable.
+ */
+export const selectableIds = (rows, serverTriage = false) => rows.filter((row) => rowKind(row) === 'stored' || (serverTriage && rowKind(row) === 'server')).map((row) => row.jobId)
 
 /**
  * The badges of a row in a composed list. The class says where it stands; `isClosed` and `isAbsent` on a stored row may be older and
@@ -82,6 +85,6 @@ export function listNotices({ mode, status, error, meta, rows, copies, hasServer
   }
   if (rows && copies?.state === 'waiting') notices.push({ kind: 'info', text: 'Copies of the same ad are shown separately until your applications have loaded.' })
   if (rows && copies?.state === 'failed') notices.push({ kind: 'error', text: 'Your applications could not be loaded: copies of the same ad are shown separately, and a row with an application may be missing from Active.' })
-  if (hasServerOnly) notices.push({ kind: 'info', text: `Rows not saved in this browser are read-only until you press Keep this ad on them. Selecting and bulk actions cover saved rows only.` })
+  if (hasServerOnly) notices.push({ kind: 'info', text: `Rows not saved in this browser can be marked Saved or Rejected, one by one or in bulk. Anything else on them (documents, AI tools, outreach, Export selected) needs Keep this ad first.` })
   return notices
 }

@@ -121,6 +121,22 @@ export async function writeJobState(job, patch) {
   }
 }
 
+/**
+ * The same status for many ads in one request (`jobs` are rows with a title/url, or only `{ jobId, key }`). Resolves after the server's answer
+ * and updates the cache; rejects, changing nothing, on any failure. Writes nothing in the browser.
+ */
+export async function writeJobStates(jobs, patch) {
+  const items = jobs.map((job) => ({ key: job.key ?? jobMatchKey(job), jobId: job.jobId }))
+  try {
+    const result = await request('POST', '/api/jobs/state/batch', { items, patch, ...(state.sha256 ? { baseSha256: state.sha256 } : {}) })
+    publish({ status: 'ready', doc: { ...(state.doc ?? { version: 1, updatedAt: null, jobs: {} }), jobs: { ...(state.doc?.jobs ?? {}), ...result.entries } }, sha256: result.sha256, error: null })
+    return result
+  } catch (e) {
+    if (e.status === 409) await refreshJobState()
+    throw e
+  }
+}
+
 /** Export the browser's statuses and Keep flags to a private file on the server. Writes nothing else. */
 export const exportBrowserState = (jobs) => request('POST', '/api/jobs/state/browser-export', { rows: rowsFromJobs(jobs) })
 export const previewJobStateImport = (jobs) => request('POST', '/api/jobs/state/import/preview', { rows: rowsFromJobs(jobs) })

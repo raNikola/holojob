@@ -13,7 +13,8 @@
 //   6. the page is `offset` and `limit` of that order.
 // The counts come from the same rows, so they cannot disagree with the page.
 import { composeJobList, validWindowDays } from './allAds.js'
-import { applyAllControls, classOptions, filterComposed, selectableIds } from './jobListView.js'
+import { applyAllControls, classOptions, filterComposed, rowKind, selectableIds } from './jobListView.js'
+import { jobMatchKey } from './jobStorage.js'
 import { countByValue, getCompanyOptions, getUniqueProviders, getUniqueSites, hiddenAsNotOnBoard } from './jobFilters.js'
 import { computeJobStats } from './jobStats.js'
 import { tierCounts } from './fitTier.js'
@@ -31,6 +32,13 @@ const SHOWN_PRIORITIES = PRIORITIES.filter((p) => p !== 'Reject')
 /** A row the way the table shows it: the application store's work on it counts, also on a row with no stored copy. */
 function shownRow(row) {
   return row.serverOnly && row.applicationTracking ? { ...row, status: 'applied_manually' } : row
+}
+
+/** The match key of each row a bulk action can reach (`{ jobId: key }`): select-all names ads of pages the browser has not loaded, and a status write needs the key. */
+function selectableKeys(rows) {
+  const keys = {}
+  for (const row of rows) keys[row.jobId] = jobMatchKey(row)
+  return keys
 }
 
 /**
@@ -79,7 +87,7 @@ export function queryJobList({
     offset,
     limit,
     activeWindowDays,
-    ...(withIds ? { ids: ordered.map((row) => row.jobId), selectableIds: selectableIds(ordered) } : {}),
+    ...(withIds ? { ids: ordered.map((row) => row.jobId), selectableIds: selectableIds(ordered, true), keys: selectableKeys(ordered.filter((row) => rowKind(row) !== 'filtered')) } : {}),
     counts: !withCounts ? null : {
       baseTotal: base.length, // the rows of this list before the controls and filters: the "of" in "N of M jobs shown"
       stats: { ...computeJobStats(overlayTracking(withServerState(stored, jobStateDoc), store, settings)), ...trackerStats(store, settings) },

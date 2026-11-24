@@ -203,7 +203,7 @@ describe('select-all across pages', () => {
     await loader.setRequest(request())
     const { ids, selectableIds } = await loader.ids()
     expect(ids).toHaveLength(13)
-    expect(selectableIds).not.toContain('ledger-only-1')
+    expect(selectableIds).toContain('ledger-only-1') // a row only the server holds is selectable: its status is written to the server
     expect(loader.getState().rows).toHaveLength(4) // the page held did not grow
   })
 

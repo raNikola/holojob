@@ -98,6 +98,7 @@ describe('what may be done with a row', () => {
 
   it('only stored rows can be selected', () => {
     expect(selectableIds([stored('s'), serverOnly('a', 'absent'), filtered()])).toEqual(['s'])
+    expect(selectableIds([stored('s'), serverOnly('a', 'absent'), filtered()], true)).toEqual(['s', 'a']) // the server's list on: its status write reaches a row only the server holds
   })
 })
 

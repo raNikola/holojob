@@ -127,7 +127,9 @@ describe('a page', () => {
     const expected = direct({ limit: 1 })
     expect(json.ids).toEqual(expected.rows.length ? direct({ withIds: true }).ids : [])
     expect(json.ids).toHaveLength(13)
-    expect(json.selectableIds).not.toContain('ledger-only-1') // a row only the ledger holds is read-only
+    expect(json.selectableIds).toContain('ledger-only-1') // a row only the server holds can have its status set in bulk
+    expect(json.keys['ledger-only-1']).toMatch(/^(url|tcl):/) // and the browser gets its match key, having no row for it
+    expect(Object.keys(json.keys).every((id) => json.selectableIds.includes(id))).toBe(true)
     expect(json).not.toHaveProperty('rows')
   })
 

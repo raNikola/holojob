@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  applyImport, assertUnionOnly, exportBrowserState, loadState, mergeStateFromBackup, patchState, previewImport,
+  applyImport, assertUnionOnly, exportBrowserState, loadState, mergeStateFromBackup, patchState, patchStateBatch, previewImport,
 } from '../../scripts/job-state-store.js'
 import { exportProtectIds, protectedJobIds } from '../../scripts/export-protect-ids.js'
 
@@ -18,6 +18,35 @@ const SAVED = row(2, { status: 'saved' })
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'jobstate-'))
   tick = 0
+})
+
+describe('batch status write', () => {
+  const items = [1, 2, 3].map((n) => ({ key: row(n).key, jobId: `job${n}` }))
+
+  it('writes many ads in one file write, keeps Keep and earlier entries, and a no-op batch leaves the bytes alone', async () => {
+    await patchState(root, { key: KEPT.key, jobId: 'job1', patch: { keep: true } }, { now })
+    const out = await patchStateBatch(root, { items, patch: { status: 'rejected' } }, { now })
+    expect(out.changed).toBe(3)
+    const { doc } = loadState(root)
+    expect(Object.values(doc.jobs).map((e) => e.status)).toEqual(['rejected', 'rejected', 'rejected'])
+    expect(doc.jobs[KEPT.key].keep).toBe(true)
+    const before = fs.readFileSync(stateFile())
+    expect((await patchStateBatch(root, { items, patch: { status: 'rejected' } }, { now })).changed).toBe(0)
+    expect(fs.readFileSync(stateFile())).toEqual(before)
+  })
+
+  it('a bad item, a repeated ad, a keep patch or applied_manually writes nothing; a stale base answers 409', async () => {
+    for (const body of [
+      { items: [...items, { key: 'nope', jobId: 'job9' }], patch: { status: 'saved' } },
+      { items: [items[0], items[0]], patch: { status: 'saved' } },
+      { items, patch: { keep: true } },
+      { items, patch: { status: 'applied_manually' } },
+      { items: [], patch: { status: 'saved' } },
+    ]) await expect(patchStateBatch(root, body, { now })).rejects.toMatchObject({ status: 400 })
+    expect(fs.existsSync(stateFile())).toBe(false)
+    await patchState(root, { key: KEPT.key, jobId: 'job1', patch: { keep: true } }, { now })
+    await expect(patchStateBatch(root, { items, patch: { status: 'saved' }, baseSha256: 'none' }, { now })).rejects.toMatchObject({ status: 409 })
+  })
 })
 
 describe('single-entry writes', () => {

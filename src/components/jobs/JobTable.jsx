@@ -174,8 +174,8 @@ function JobCard({
           <input
             type="checkbox"
             checked={selected}
-            disabled={kind === 'server'}
-            title={kind === 'server' ? SERVER_ONLY_NOTE : undefined}
+            disabled={kind === 'server' && !triage}
+            title={kind === 'server' && !triage ? SERVER_ONLY_NOTE : undefined}
             onChange={() => onToggleSelect?.(job.jobId)}
             onClick={(e) => e.stopPropagation()}
             className="mt-1 rounded border-stone-300 text-teal-600"
@@ -262,17 +262,17 @@ export default function JobTable({
   const headingAt = (index) => (sort === DEFAULT_SORT ? groupHeading(visibleJobs, index) : null)
   const showScores = server ? server.hasScores : hasMatchScores(jobs)
   const showProvider = server ? server.hasProvider : jobs.some((j) => getJobProvider(j))
-  const selectable = useMemo(() => selectableIds(jobs), [jobs])
+  const selectable = useMemo(() => selectableIds(jobs, triage), [jobs, triage])
   const allSelected = useMemo(() => everySelected(selectedJobIds, selectable), [selectedJobIds, selectable])
   const notShown = useMemo(() => {
     const shown = new Set(jobs.map((job) => job.jobId))
     return [...selectedJobIds].filter((id) => !shown.has(id)).length
   }, [selectedJobIds, jobs])
-  // Only stored rows can be selected: bulk actions act on those.
+  // With the server's list on, every ad can be selected (a status goes to the server's job state); without it only stored rows can.
   const unsaved = jobs.length - selectable.length
   const total = server ? server.total : jobs.length
   const selectAllLabel = server
-    ? `Select all filtered jobs saved in this browser, not only the ${visibleJobs.length} shown`
+    ? `Select all filtered jobs, not only the ${visibleJobs.length} shown`
     : `Select all ${selectable.length} filtered jobs${unsaved ? ' saved in this browser' : ''}, not only the ${visibleJobs.length} shown`
 
   if (!jobs.length) {
@@ -329,8 +329,8 @@ export default function JobTable({
                     <input
                       type="checkbox"
                       checked={selectedJobIds.has(job.jobId)}
-                      disabled={rowKind(job) === 'server'}
-                      title={rowKind(job) === 'server' ? SERVER_ONLY_NOTE : undefined}
+                      disabled={rowKind(job) === 'server' && !triage}
+                      title={rowKind(job) === 'server' && !triage ? SERVER_ONLY_NOTE : undefined}
                       onChange={() => onToggleSelect?.(job.jobId)}
                       className="rounded border-stone-300 text-teal-600"
                     />
