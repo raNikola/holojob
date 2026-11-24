@@ -33,12 +33,14 @@ describe('the numbers with no rows', () => {
 })
 
 describe('the scored rows of named ads', () => {
-  it('are slim, in the order asked, and the ads the scored list does not hold are named', async () => {
+  it('keep the ad\'s text and drop the large facts, come in the order asked, and the ads the scored list does not hold are named', async () => {
     const { status, json } = await post('/api/jobs/list/rows', { jobIds: ['j03', 'ledger-only-1', 'j01', 'gone-9'] })
     expect(status).toBe(200)
     expect(json.rows.map((r) => r.jobId)).toEqual(['j03', 'j01'])
     expect(json.missing).toEqual(['ledger-only-1', 'gone-9'])
-    for (const row of json.rows) for (const field of ['description', 'llmFacts', 'engineShadow']) expect(row).not.toHaveProperty(field)
+    for (const row of json.rows) for (const field of ['llmFacts', 'engineShadow']) expect(row).not.toHaveProperty(field)
+    expect(json.rows.every((row) => typeof row.description === 'string' && row.description.length > 0)).toBe(true)
+    expect(json.meta).toMatchObject({ generatedAt: expect.any(String) })
     expect(json.rows[0]).toMatchObject({ title: SCORED[3].title, matchScore: SCORED[3].matchScore })
     expect(typeof json.revision).toBe('string')
   })

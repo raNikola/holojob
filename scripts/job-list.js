@@ -11,7 +11,7 @@
  *          ALLOWLIST (src/modules/jobs/extraRows.js): added to the stored rows for this request only, never stored, never logged. A BRIDGE to be removed in P5.
  *          A field outside the allowlist, a bad id or a repeated id is a 400 that names the place; a body over the limit is a 413 that says so.
  *   POST /api/jobs/list { ..., countsOnly: true }        -> { ok, revision, mode, total, counts }: the numbers with no rows (the Dashboard's cards, the AI context's totals)
- *   POST /api/jobs/list/rows { jobIds: [...] }          -> { ok, revision, rows[], missing[] }: the scored rows of these ads, slim, and the ids the scored list does not hold
+ *   POST /api/jobs/list/rows { jobIds: [...] }          -> { ok, revision, meta, rows[], missing[] }: the scored rows of these ads (with the text, without the facts), and the ids the scored list does not hold
  *       (the browser brings the rows it HOLDS up to date with the last scoring without loading the whole list)
  *   POST /api/jobs/list/context {}                      -> { ok, revision, topJobs[], skillGap[] }: what the AI context reads of the whole list (the ten best-scored open
  *       ads in full, and the missing skills of the hundred best-scored), worked out where the whole list is
@@ -205,6 +205,7 @@ async function buildIndex({ root, python, spawnFn, revision }) {
     stored: importJobsFromFile({ meta: scored.meta, jobs: scored.jobs }, null).jobs,
     server: answer.rows,
     meta: answer.meta ?? null,
+    scoredMeta: scored.meta ?? null,
     jobStateDoc: loadState(root).doc,
     applications: { status: 'ready', store: loadStore(root), settings: loadApplicationSettings(root) },
   }
@@ -298,9 +299,11 @@ function rowsAnswer(index, jobIds) {
   if (!Array.isArray(jobIds) || jobIds.some((id) => typeof id !== 'string' || !JOB_ID.test(id))) throw new HttpError(400, 'jobIds must be a list of ad ids')
   if (new Set(jobIds).size !== jobIds.length) throw new HttpError(400, 'jobIds repeats an id')
   const byId = new Map(index.stored.map((row) => [row.jobId, row]))
+  // The ad's text stays (a stored row of a kept or off-list ad has no other copy but the ledger's); the facts and the engine's answer, which are large, do not.
+  const forStorage = (row) => { const { llmFacts: _facts, engineShadow: _shadow, ...rest } = row; return rest }
   return {
-    ok: true, revision: index.revision,
-    rows: jobIds.filter((id) => byId.has(id)).map((id) => slimJob(byId.get(id))),
+    ok: true, revision: index.revision, meta: index.scoredMeta ?? null,
+    rows: jobIds.filter((id) => byId.has(id)).map((id) => forStorage(byId.get(id))),
     missing: jobIds.filter((id) => !byId.has(id)),
   }
 }
