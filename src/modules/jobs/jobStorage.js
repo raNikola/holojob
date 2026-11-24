@@ -9,7 +9,7 @@ export const JOBS_STORAGE_KEY = 'job-dashboard-discovered-jobs'
 
 export const JOB_STATUSES = ['new', 'saved', 'rejected', 'applied_manually']
 
-const DEFAULT_FILTERS = {
+export const DEFAULT_FILTERS = {
   searchText: '',
   location: '',
   site: [],

@@ -15,6 +15,8 @@ The browser holds only the ads currently shown on the Jobs list plus the owner's
 5. P3 (the Jobs screen reads pages) and P4 (other screens stop depending on the full list) ship together; deploy only after P4. Branch `keep-search-ads` (`eacec8b`) stays unmerged until P3 is done.
 6. The page size is a Settings field next to `activeWindowDays`, its default written once, no number in code. `JOB_PAGE_SIZE` goes when P3 lands.
 7. This supersedes "No pagination in this step" (STEP5_SERVER_MASTER_PLAN.md section 2.3) for the job list (DECISIONS.md, 2026-11-24).
+8. **Binding requirement for P3/P4:** browser-only worked ads (`offList` rows and unsynced hand-entered jobs) must NOT disappear from the list when the server-paged list goes live. This is solved BEFORE P3/P4 are activated, not left for P5. It stays in Open items until done (mechanism proposed under "Browser-only worked ads", below).
+9. On the P1 items (owner, 2026-11-24): a picked column breaks ties in the neutral order; the page size is 1 to 1000, default 100; the day for the deadline column comes from the browser; the `activeWindowDays` merge conflict is resolved when `keep-search-ads` is merged.
 
 ## Phases
 
@@ -22,9 +24,10 @@ The browser holds only the ads currently shown on the Jobs list plus the owner's
 |---|---|---|---|
 | P0 | Spike on a read-only copy: does Node 20 load the shared modules, slim row size, index build time and memory | S | done (see P0 result; commit in the Log) |
 | P1 | Shared default sort-key function, parity harness, Settings page-size field. No route | M | done (commit in the Log); full tier green |
-| P2 | Index in Node, `GET /api/jobs/list` (filters, search, sort, offset/limit, revision, counts, ids mode), full ad on open | L | todo |
-| P3 | The Jobs screen reads pages; the import stops loading the whole file; `JOB_PAGE_SIZE` and the lean/minimal storage tiers go | L | todo |
-| P4 | Other screens (Board, Statistics, Outreach, Resume library, Dashboard, AI context) stop depending on the full list; server stats route | M-L | todo |
+| P2 | Index in Node, `GET /api/jobs/list` (filters, search, sort, offset/limit, revision, counts, ids mode), full ad on open | L | done (commit in the Log); route not used by any screen yet |
+| P2b | Browser-only worked ads in the paged list (binding requirement 8): `extraRows` mechanism, route and parity test | M | todo, must be done before P3/P4 are activated |
+| P3 | The Jobs screen reads pages; the import stops loading the whole file; `JOB_PAGE_SIZE` and the lean/minimal storage tiers go | L | todo (needs P2b) |
+| P4 | Other screens (Board, Statistics, Outreach, Resume library, Dashboard, AI context) stop depending on the full list; server stats route | M-L | todo (needs P2b) |
 | P5 | Step 5's owner overlay for notes, outreach, tailored assets and AI insights | L | todo, can wait |
 
 P3 and P4 ship together. Nothing is deployed before P4.
@@ -40,18 +43,49 @@ No blocker. Two import breaks found and fixed; the numbers say the index can be 
 - **Query cost:** filter + default sort + counts over 4,427 slim rows: 30 ms mean; over the 91 scored rows: 0.9 ms. An index rebuild on a revision is about 0.5 s (0.34 s Python + 0.2 s Node), so rebuilding on every revision is fine.
 - **Findings for later phases:** the real `scored_jobs.json` has 91 rows while the list has 471: the 390 held JobSpy ads have no scored row (the file predates the carry-over restore). `dayOf` is the local midnight, so the day for the deadline column must come from the client, not the server's time zone (done in the P1 query: `today` is an input).
 
+## P2 result (2026-11-24)
+
+`GET /api/jobs/list` and `GET /api/jobs/list/ad` (`scripts/job-list.js`, registered in `api-handler.js` after `/api/jobs/all`). No screen calls them yet. They write nothing (the one thing that can write is `ensureViewCurrent`, the check every job route makes).
+
+- **Rules:** none in the route. It builds the input from the server's files and calls `queryJobList` (P1), the same module the screen's pipeline is checked against. The stored rows are `importJobsFromFile(scored_jobs.json)`, the route's rows are `all_ads.py` (spawned through the existing `readAll`), the statuses are `job-state.json`, the applications are the application store and its settings.
+- **Request:** `mode` (required), `offset`, `filters` (JSON, every key and type checked against the Jobs screen's own `DEFAULT_FILTERS`), `classes`, `recent`, `sort` (JSON, a known column and asc/desc), `today` (the browser's day; required for the deadline sort), `revision`, `ids=1`. A `limit` is refused with 400: **the page size is the Settings field `jobsPageSize`**, read through the gate on every request; a value that is not a whole number of ads is a 500 naming the field, never a default.
+- **Answer:** `rows` (slim: no `description`, `llmFacts`, `engineShadow`), `total`, `nextOffset` (null on the last page), `limit` (the Settings value used), `revision`, `meta`, and `counts` on the first page only (`offset` 0; `null` after, because "Show more" needs rows only): `stats` (computeJobStats + tracker), `tiers`, `classOptions`, `notOnBoardHidden`, `copies`, `hasServerOnly`, and the filter panel's `facets` (sites, providers, companies, priorities, status options, `hasScores`).
+- **Revision:** a hash of the size and modification time of the seven files the list is made from (scored list, ledger, view, filtered ads, job-state, application store and its settings). It reads no file. A request that carries a `revision` that is no longer current gets `{ ok, changed: true, revision }` and no rows: the client says "list changed, refresh". The index (stored rows, route rows, statuses, applications) is kept in memory per revision and rebuilt when it changes; two requests at once build it once.
+- **ids mode:** every matching ad in order (`ids`) and the ones a bulk action can reach (`selectableIds`), for select-all across pages.
+- **Full ad on open:** `GET /api/jobs/list/ad?jobId=` returns the whole scored row (text, facts) with the owner's status and the application's tracking laid over it. An ad with no scored row (ledger-only) answers 404 and points to `GET /api/jobs/history/<jobId>`, which already serves its text.
+- **Failures:** a list that cannot be made is 503 with the reason (as `/api/jobs/all`); an unreadable `scored_jobs.json` is a 500, not an empty list; demo mode is 404 (the demo bundle has no server list: P3 decides what the screen shows then).
+- **Real data, read-only (symlinks to the data files, the Python step run for real):** All holds 7,146 rows (the ledger 4,427 plus filtered ads). First request 0.9 s (index build with `all_ads.py`), later requests 0.1 to 0.4 s, 183 MB RSS. The first All page is 464 KB (the counts and facet lists are most of it: 7,146 company options), the second Active page 70 KB. A page is the rows only; the cost left is composing and sorting the whole list per request (about 0.4 s for All), which a later step can memoize per revision and day.
+- **Tests:** `tests/js/jobsListRoute.test.js` (35 tests: pages equal the query's, slim rows, filters/classes/sort reach the query, ids mode, revision refusal, index kept and rebuilt, one build for two requests, 12 request refusals before any file is read, page size from the gate and never guessed, 503/500/404/405, the full ad); the parity test now also covers ids and rows-only pages.
+
+## Browser-only worked ads (binding requirement 8): proposed mechanism
+
+**The risk:** the server list does not hold an `offList` row (a row the owner worked on that the last scored file no longer has) or a hand-entered job that was never synced (saved without a description, or while the server was away). Once the Jobs screen reads server pages, those rows would vanish, and a count or an order that mixes server rows with local ones would no longer match what the server says.
+
+**Options considered**
+- **A. Sync them to the server first.** Hand-entered jobs have a server home (`manual_jobs.json`, `/api/jobs/manual/sync`), but a job with no description is not synced by design and is only scored once text is pasted; `offList` rows have no server home until P5 (orphans in the owner overlay). A alone cannot be done before P3/P4 without building P5.
+- **B. Merge the browser's rows into the paged result on the client.** Offsets, totals, counts and the tier order are the server's; local rows spliced in afterwards break all four (a page of 100 becomes 103, "Show more" skips or repeats, counts disagree).
+- **C. (proposed) Send the browser-only worked rows with the request, and let the server rank them with the rest.** The server adds them to `stored` for that one request (never persisted, never logged) and runs the same `queryJobList`, so order, totals, counts and pages are consistent by construction. Rows the server also holds (same `jobId` or `jobMatchKey`) are not added twice: the server's ad fields win, as `importJobsFromFile` decides today.
+
+**What C needs (P2b, size M)**
+1. A `POST /api/jobs/list` variant with the same parameters in the body and `extraRows` (the browser's rows the server does not hold). POST because of the size; it writes nothing. The request guard already accepts JSON POSTs, and a body over the 1 MB default limit answers 413 (about 300 rows at 3 KB; past that, option A for the manual jobs shrinks the set).
+2. A whitelist of the fields an extra row may carry (the filter, sort and display fields and the status/Keep flags, plus the description a text search reads), the same idea as `SCORING_FIELDS`. **`notes`, `extraLinks` and `sourceUrl` are never sent** (manual-jobs rule: owner-only, in no payload).
+3. The revision stays the server's; the set of extra rows is client state, sent with every request, so a changed set restarts the paging on the client.
+4. The parity harness gains the browser-only rows (the P1 fixture left them out on purpose): the browser input holds `offList` and unsynced manual rows, the server input gets them as `extraRows`, and the same ids, order, pages and counts must come out. That is the test that lets P3/P4 be activated.
+5. For the client (P3): a selector that names the browser-only worked rows (stored rows with `offList`, or `manualEntry` not yet on the server), and the rule that a row the server holds is shown from the server's answer.
+
+**Open question for the owner:** C or a different mechanism? Recommendation: C (own proposal; it reuses the P1 parity harness and needs no data-model change, so it does not wait for P5). A can still shrink the set later.
+
 ## Open items
 
-- `activeWindowDays` exists only on `keep-search-ads` (`eacec8b`), not on `main`. The page-size field is added to the same gate-settings store (`python/llm/ai_gate.py`, `gateClient.js`, `AIBudgetPanel.jsx`) on this branch from `main`; merging both branches needs a small conflict resolution in those three files and in `tests/js/aiSettingsHandler.test.js`.
-- **Owner-visible change in P1 (decide or revert):** a picked column sort (title, company, ...) now breaks ties in the neutral order (remote-feasible, newest, jobId) instead of the list's arrival order, which differs between a browser and a server. The default sort and the tier sort are unchanged (a property test shows the new single sort key equals `notReadFirst(closedLast(blockedLast(defaultOrder)))`).
-- **Page size bounds and default are my proposal:** `jobsPageSize`, whole ads 1 to 1000, default 100 (today's `JOB_PAGE_SIZE`, which stays until P3). The owner did not give bounds.
-- **`today` (deadline column) comes from the client.** `queryJobList` takes it as an input; P2's route must pass the browser's day, not the server's.
-- **Known parity gap, by design:** rows only the browser has (an `offList` row, a hand-entered job not yet synced) are not in the server's list; P5 (orphans) covers them. The parity fixture leaves them out.
-- **The screen still runs its own pipeline** until P3 (only `JobTable`'s sort now calls the shared `orderRows`); the parity test holds the two together meanwhile. `JOB_PAGE_SIZE` stays until P3.
-- **Not yet in the query (P2/P3):** slimming the page rows (`slimJob`), an ids-only mode for select-all, the `revision` value, and the filter panel's other derived lists (locations).
-- Select-all across pages needs an ids mode in the route (P2).
-- Settings home for the page size: the AI-budget settings file for now (same store as the run limits and `activeWindowDays`); a dedicated Jobs section is the alternative.
-- The offline case (API down): worked ads only, with a notice (own proposal, P3).
+- **Binding requirement 8 (browser-only worked ads) is open until done:** P2b, then the parity test with the extra rows green, before P3/P4 are activated.
+- The page size is 1 to 1000, default 100 (owner, 2026-11-24). `JOB_PAGE_SIZE` stays in the screen until P3.
+- `activeWindowDays` exists only on `keep-search-ads` (`eacec8b`). Merging it with this branch needs a small conflict resolution in `python/llm/ai_gate.py`, `src/modules/ai/gateClient.js`, `src/components/ai/AIBudgetPanel.jsx` and `tests/js/aiSettingsHandler.test.js`; the owner has decided this is done when `keep-search-ads` is merged (after P3).
+- **The screen still runs its own pipeline** until P3 (only `JobTable`'s sort calls the shared `orderRows`); the parity test holds the two together meanwhile.
+- **Not yet in the query or route:** the filter panel's distinct location list, `extraRows` (P2b), memoizing the composed list per revision and day.
+- **Scale:** the index holds the full stored rows (the text search reads descriptions). With `keep-search-ads` merged and a run that includes JobSpy, about 3,100 scored rows (47 MB file in the simulation) would be held, which fits (the P0 ledger parse already holds 115 MB); the paged answer is what keeps the browser small.
+- Settings home for the page size: the AI-budget settings file for now (same store as the run limits); a dedicated Jobs section is the alternative.
+- The offline case (API down): worked ads only, with a notice (own proposal, P3). Demo mode: the route answers 404; P3 decides what the demo shows.
+- The real-data numbers above come from a one-off, read-only run, not from a test: the tests use a fake Python step, as `/api/jobs/all`'s do.
 
 ## Waiting
 

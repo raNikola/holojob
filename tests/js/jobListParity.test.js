@@ -204,6 +204,14 @@ describe('the server\'s query gives what the screen works out, on every page', (
       expect([...ids].sort()).toEqual(ref.filtered.map((r) => r.jobId).sort()) // every ad on some page
       if (ids.length) nonEmpty += 1
 
+      // select-all across pages: the ids of every matching ad, in the same order; and a rows-only page is the same rows with no counts
+      const everyId = queryJobList({ ...frozen, reference: NOW, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: 1, today, withIds: true })
+      expect(everyId.ids).toEqual(ids)
+      expect(everyId.selectableIds).toEqual(full.filter((row) => !row.serverOnly).map((row) => row.jobId))
+      const rowsOnly = queryJobList({ ...frozen, reference: NOW, mode: query.mode, filters: query.filters, classes: query.classes, recent: query.recent, sort: query.sort, offset: 0, limit: query.limit, today, withCounts: false })
+      expect(rowsOnly.counts).toBeNull()
+      expect(rowsOnly.rows.map((r) => r.jobId)).toEqual(first.rows.map((r) => r.jobId))
+
       if (!query.sort || query.sort === DEFAULT_SORT) {
         expect(ids).toEqual(refDefaultOrder(ref.filtered).map((r) => r.jobId))
       } else {

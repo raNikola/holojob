@@ -13,7 +13,7 @@
 //   6. the page is `offset` and `limit` of that order.
 // The counts come from the same rows, so they cannot disagree with the page.
 import { composeJobList } from './allAds.js'
-import { applyAllControls, classOptions, filterComposed } from './jobListView.js'
+import { applyAllControls, classOptions, filterComposed, selectableIds } from './jobListView.js'
 import { countByValue, getCompanyOptions, getUniqueProviders, getUniqueSites, hiddenAsNotOnBoard } from './jobFilters.js'
 import { computeJobStats } from './jobStats.js'
 import { tierCounts } from './fitTier.js'
@@ -49,10 +49,12 @@ function shownRow(row) {
  * @param {number} input.limit             rows to take (a whole number, 1 or more): from Settings, never a default here
  * @param {number} [input.today]           the day the deadline column and sort read (`dayOf`, the local midnight). The caller passes the CLIENT's day: a server
  *                                         in another time zone would otherwise sort the deadline column differently near midnight. Default: `dayOf(reference)`.
- * @returns {{ rows: object[], total: number, offset: number, limit: number, counts: object }}
+ * @param {boolean} [input.withCounts] default true. False leaves `counts` null and works none out: a "Show more" page needs the rows only, the first page's counts stand
+ * @param {boolean} [input.withIds]        also return `ids` (every matching ad, in order) and `selectableIds` (those a bulk action can reach), for select-all across pages
+ * @returns {{ rows: object[], total: number, offset: number, limit: number, counts: object, ids?: string[], selectableIds?: string[] }}
  */
 export function queryJobList({
-  stored = [], server = null, applications = null, jobStateDoc = null, reference, mode, filters = {}, classes = [], recent = false, sort = null, offset, limit, today,
+  stored = [], server = null, applications = null, jobStateDoc = null, reference, mode, filters = {}, classes = [], recent = false, sort = null, offset, limit, today, withIds = false, withCounts = true,
 }) {
   if (!LIST_MODES.includes(mode)) throw new TypeError(`queryJobList: mode must be one of ${LIST_MODES.join(', ')}`)
   if (!Number.isInteger(offset) || offset < 0) throw new TypeError('queryJobList: offset must be a whole number, 0 or more')
@@ -60,8 +62,6 @@ export function queryJobList({
 
   const store = applications?.status === 'ready' ? applications.store : null
   const settings = applications?.settings
-  const viewJobs = overlayTracking(withServerState(stored, jobStateDoc), store, settings)
-  const stats = { ...computeJobStats(viewJobs), ...trackerStats(store, settings) }
 
   const composed = composeJobList({ stored, server, applications, reference })
   const base = overlayTracking(withServerState(mode === 'all' ? composed.all : composed.active, jobStateDoc), store, settings).map(shownRow)
@@ -75,8 +75,9 @@ export function queryJobList({
     total: ordered.length,
     offset,
     limit,
-    counts: {
-      stats,
+    ...(withIds ? { ids: ordered.map((row) => row.jobId), selectableIds: selectableIds(ordered) } : {}),
+    counts: !withCounts ? null : {
+      stats: { ...computeJobStats(overlayTracking(withServerState(stored, jobStateDoc), store, settings)), ...trackerStats(store, settings) },
       tiers: tierCounts(filtered),
       classOptions: mode === 'all' ? classOptions(base) : [],
       notOnBoardHidden: mode === 'active' ? shown.filter((job) => hiddenAsNotOnBoard(job, effective)).length : 0,

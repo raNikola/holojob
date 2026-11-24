@@ -24,7 +24,7 @@ function send(res, status, body) {
 }
 
 /** The JSON text of the answer. Rejects with ViewUnrecoverable, and the reason Python gave, when there is no list to send. */
-function readAll({ root, python, spawnFn }) {
+export function readAll({ root, python, spawnFn }) {
   return new Promise((resolve, reject) => {
     const failed = (reason) => reject(new ViewUnrecoverable(reason))
     const chunks = []

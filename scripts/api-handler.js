@@ -50,6 +50,7 @@ import { handleJobStateRequest } from './job-state-store.js'
 import { handleCalibrationRequest } from './calibration-review.js'
 import { handleMustRequest } from './calibration-musts.js'
 import { handleJobsAllRequest } from './job-all-read.js'
+import { handleJobsListRequest } from './job-list.js'
 import { ViewUnrecoverable, ensureViewCurrent, viewUnrecoverableAnswer } from './view-guard.js'
 import { getRun, listRuns } from './run-history.js'
 import { RUN_ACTIVE, cancelRescrape, incompleteCommit, isRunBusy, rescrapeStatus, runHttpStatus, startRescrape, withRunLock } from './run-rescrape.js'
@@ -723,6 +724,10 @@ export async function handleApiRequest(req, res) {
   }
 
   if (await handleJobsAllRequest(req, res, url, { root: ROOT })) {
+    return true
+  }
+
+  if (await handleJobsListRequest(req, res, url, { root: ROOT, demoMode: () => getAppConfig().demoMode })) {
     return true
   }
 
