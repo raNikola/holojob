@@ -180,9 +180,10 @@ def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datet
     stored_job = (entry or {}).get("job") or {}
     # An Infostud teaser is ~500 characters, so the length rule alone would let a failed detail fetch overwrite a full text (Wave 5).
     degraded = stored_job.get("descriptionStatus") == "complete" and (job.get("descriptionStatus") or "") in ("teaser", "failed", "source_truncated")
-    if degraded or (
-        len((job.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS
-        and len(stored_description.strip()) >= THIN_DESCRIPTION_CHARS
+    new_length = len((job.get("description") or "").strip())
+    # An empty text never replaces a stored one, of any length; a thin one never replaces a stored full one.
+    if degraded or (new_length == 0 and stored_description.strip()) or (
+        new_length < THIN_DESCRIPTION_CHARS and len(stored_description.strip()) >= THIN_DESCRIPTION_CHARS
     ):
         job = {**job, "description": stored_description}
         if degraded:

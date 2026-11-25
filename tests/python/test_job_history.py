@@ -311,6 +311,13 @@ def test_a_thin_description_does_not_replace_a_fuller_one_so_the_facts_survive()
     assert stats["keptFullerDescription"] == 1 and stats["changed"] == 0
 
 
+def test_an_empty_description_never_replaces_a_stored_short_one():
+    ledger = jh.empty_ledger()
+    run(ledger, [job(description="Short ad text.")])
+    out, stats = run(ledger, [job(description="")], day=1)
+    assert out[0]["description"] == "Short ad text." and stats["keptFullerDescription"] == 1
+
+
 def test_a_complete_infostud_text_survives_a_later_teaser_even_though_the_teaser_is_not_thin():
     ledger = jh.empty_ledger()
     run(ledger, [{**job(description=FULL), "descriptionStatus": "complete", "descriptionSource": "next_data"}])
