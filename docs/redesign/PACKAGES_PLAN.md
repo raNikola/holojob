@@ -148,6 +148,8 @@ scripts/run-packages 2             # package 2 only
 scripts/run-packages --regate 1    # full tier on the branch tip, recorded as package 1's pass
 ```
 
+**Where the runner lives.** Run it from a checkout outside the run worktree (it refuses a copy inside it: sessions can edit every file there, and it installs the node helper from its own directory), for example a detached checkout `.claude/worktrees/package-runner-bin` of the reviewed runner commit.
+
 **One branch, one worktree.** All packages are commits on `list-cleanup`, in the one worktree `.claude/worktrees/list-cleanup` (re-attached if removed; the branch is created from `--base`, default `main`, only if it does not exist). The plan is read from `list-cleanup`. The runner state `.claude/package-runs/state.json` (git-ignored, mode 600) records per package the tip that passed the full tier, its base (the previous package's recorded tip) and the time, plus the last recorded tip and the package in progress with its base.
 
 **Regate.** `--regate N` runs `sh scripts/test-tier.sh full` (the branch's copy) on the branch tip and, when it passes, records the tip for package N with the base above; a red tier records nothing (log `.claude/package-runs/NN-<time>-regate.log`). It refuses a dirty worktree, another package in progress, a package N that is recorded but no longer the last one, and a tip with no commit since the base. Use it after fixing a red gate by hand. With nothing recorded yet, the base is where the branch left `--base`.

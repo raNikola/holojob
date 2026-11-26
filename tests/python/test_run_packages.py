@@ -254,3 +254,11 @@ def test_through_and_single_selection_follow_plan_order():
     assert [r.n for r in rp.select(rows, None, 5)] == [1, 2, 3, 5]
     assert [r.n for r in rp.select(rows, 4, None)] == [4]
     assert [r.n for r in rp.select(rows, None, None)] == [1, 2, 3, 5, 4]
+
+
+def test_runner_refuses_a_copy_inside_the_run_worktree(tmp_path):
+    wt = tmp_path / "list-cleanup"
+    (wt / "scripts").mkdir(parents=True)
+    with pytest.raises(SystemExit):                      # sessions can edit it, and it installs the node helper
+        rp.refuse_inside_worktree(wt / "scripts/run_packages.py", wt)
+    rp.refuse_inside_worktree(tmp_path / "runner/scripts/run_packages.py", wt)

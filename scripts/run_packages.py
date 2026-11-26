@@ -425,7 +425,17 @@ def run_one(row: Row, all_rows: list[Row], base_ref: str) -> str:
     return state_now
 
 
+def refuse_inside_worktree(script: Path = Path(__file__), worktree: Path = WORKTREE) -> None:
+    """The runner installs the node helper from its own directory; a copy inside the run worktree is one a session
+    could have edited, so it never runs."""
+    script, worktree = script.resolve(), worktree.resolve()
+    if worktree in script.parents:
+        raise SystemExit(f"run-packages: refused: this runner is inside the run worktree {worktree}, which sessions can "
+                         f"edit; run it from a separate checkout")
+
+
 def main(argv: list[str] | None = None) -> int:
+    refuse_inside_worktree()
     ap = argparse.ArgumentParser(prog="run-packages", description=__doc__.split("\n\n")[0])
     ap.add_argument("package", nargs="?", type=int)
     ap.add_argument("--through", type=int)
