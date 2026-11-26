@@ -413,7 +413,9 @@ def session_env(ws: Workspace, token: str | None) -> dict:
         "HOME": str(ws.home), "TMPDIR": str(ws.tmp), "LANG": "C.UTF-8", "TERM": "dumb", "USER": os.environ.get("USER", "u"),
         "PATH": ":".join([str(RUN_ROOT / "tools/node/bin"), str(VENV / "bin"), str(GRAPHIFY_BIN), "/usr/bin", "/bin"]),
         "CLAUDE_CONFIG_DIR": str(ws.claude_home),
-        "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        # The scrub would force permission mode `default` (v2.1.331, even with --allowedTools). The token is kept out of
+        # Bash by sandbox.credentials (deny) instead; probes env-names, proc-environ and ppid-environ prove it.
+        "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "0", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
         "DISABLE_AUTOUPDATER": "1", "DISABLE_TELEMETRY": "1", "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
         "NPM_CONFIG_UPDATE_NOTIFIER": "false", "HOLOJOB_PKG_SESSION": "1",
     }
