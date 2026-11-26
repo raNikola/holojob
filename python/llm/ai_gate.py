@@ -107,6 +107,20 @@ DEFAULT_SETTINGS = {
     # The Jobs screen's Active list shows an ad the latest search did not return only while it was seen within this many days (whole days, 1..365;
     # owner decision 2026-11-24). A visibility rule, never proof an ad is closed; All keeps every ad. The one place the default is written.
     "activeWindowDays": 14,
+    # Discovery's title filter vocabulary (package 3, owner plan 2026-11-25: it moved here from role_filter.py, the defaults unchanged). Phrases
+    # match on word boundaries, lower case with the Serbian diacritics folded. `exclude` is the hard drop, `include` makes a title Target,
+    # `near` makes it Near (scoring judges it), `positionWhitelist` is a board's own hand-assigned position that counts as Target. Not a spend
+    # loosening, so saving it needs no confirm. The one place the defaults are written; `role_filter_vocabulary` reads it.
+    "roleFilter": {
+        "positionWhitelist": ["product manager", "product owner"],
+        "include": ["product manager", "product owner", "product lead", "head of product", "group product manager", "platform product",
+                    "technical product"],
+        "near": ["project manager", "delivery manager", "program manager", "programme manager", "product operations", "product ops",
+                 "product management", "tpm", "projekt menadzer", "projektni menadzer", "menadzer projekata",
+                 "menadzer za upravljanje projektima", "rukovodilac projekta"],
+        "exclude": ["account manager", "sales manager", "area sales", "brand manager", "category manager", "product technologist", "junior",
+                    "intern", "praktikant", "pripravnik"],
+    },
     # Reserved per call for the answer before its size is known.
     "estimatedOutputTokens": 1000,
     # Day and month boundaries of the limits (IANA name).
@@ -174,10 +188,15 @@ def load_settings() -> dict:
     except (OSError, ValueError) as exc:
         return {**settings, "error": f"{path.name} unreadable: {exc}"}
     automation = {**settings["automation"], **(stored.get("automation") or {})}
+    # A partial roleFilter keeps the default of every list it does not name; a value that is not an object is kept as it is, and
+    # role_filter_vocabulary then falls back to the defaults and says so.
+    raw_filter = stored.get("roleFilter")
+    role_filter = ({**settings["roleFilter"], **raw_filter} if isinstance(raw_filter, dict)
+                   else (raw_filter if raw_filter is not None else settings["roleFilter"]))
     raw = stored.get("claudeCodeSubscription")
     # A hand-edited value that is not an object is kept as it is: subscription_settings reads it as off.
     subscription = {**settings["claudeCodeSubscription"], **raw} if isinstance(raw, dict) else (raw if raw is not None else settings["claudeCodeSubscription"])
-    return {**settings, **stored, "automation": automation, "claudeCodeSubscription": subscription}
+    return {**settings, **stored, "automation": automation, "claudeCodeSubscription": subscription, "roleFilter": role_filter}
 
 
 def _limit(value) -> float:
@@ -781,6 +800,49 @@ MAX_AMOUNT = 1_000_000
 MAX_COUNT = 10_000_000
 
 
+ROLE_FILTER_LISTS = ("positionWhitelist", "include", "near", "exclude")
+MAX_FILTER_PHRASES = 200
+MAX_FILTER_PHRASE_CHARS = 80
+
+
+def _role_filter_errors(value) -> list[str]:
+    """What is wrong with a roleFilter object (partial allowed). An empty `include` is refused: it would turn every title into a drop."""
+    if not isinstance(value, dict):
+        return ["roleFilter must be an object"]
+    errors = [f"unknown setting: roleFilter.{key}" for key in value if key not in ROLE_FILTER_LISTS]
+    for key in ROLE_FILTER_LISTS:
+        if key not in value:
+            continue
+        phrases = value[key]
+        if not (isinstance(phrases, list) and len(phrases) <= MAX_FILTER_PHRASES and all(
+                isinstance(p, str) and p.strip() and len(p.strip()) <= MAX_FILTER_PHRASE_CHARS for p in phrases)):
+            errors.append(f"roleFilter.{key} must be a list of at most {MAX_FILTER_PHRASES} phrases, each 1 to {MAX_FILTER_PHRASE_CHARS} characters")
+        elif key == "include" and not phrases:
+            errors.append("roleFilter.include must name at least one phrase: with none, every title would be dropped")
+    return errors
+
+
+def role_filter_vocabulary(settings: dict | None = None) -> tuple[dict, str | None]:
+    """(the four phrase lists, a warning or None). Unusable stored lists never become empty lists: each one that fails validation is the
+    default, and the warning says which, so a bad hand edit can never silently drop or keep every ad."""
+    settings = load_settings() if settings is None else settings
+    stored = settings.get("roleFilter")
+    defaults = DEFAULT_SETTINGS["roleFilter"]
+    if not isinstance(stored, dict):
+        return {k: list(v) for k, v in defaults.items()}, "roleFilter is not an object: the default vocabulary is used"
+    out, bad = {}, []
+    for key in ROLE_FILTER_LISTS:
+        value = stored.get(key, defaults[key])
+        if _role_filter_errors({key: value}):
+            out[key], bad = list(defaults[key]), bad + [key]
+        else:
+            out[key] = [" ".join(p.split()) for p in value]
+    warning = None
+    if bad:
+        warning = "unusable, the default list is used: " + ", ".join(f"roleFilter.{key}" for key in bad)
+    return out, warning
+
+
 def public_settings(settings: dict) -> dict:
     """Only the known keys (a hand-edited file may carry others) plus `error` when the file is unusable."""
     out = {k: settings.get(k, DEFAULT_SETTINGS[k]) for k in SETTINGS_KEYS}
@@ -792,6 +854,7 @@ def public_settings(settings: dict) -> dict:
         "maxCallsDaily": cap if enabled else (stored.get("maxCallsDaily") if _integer(stored.get("maxCallsDaily")) else 5),
         "features": features if enabled else [f for f in (stored.get("features") or []) if isinstance(f, str)] or ["jobAnalysis"],
     }
+    out["roleFilter"] = role_filter_vocabulary(settings)[0]
     if settings.get("error"):
         out["error"] = settings["error"]
     return out
@@ -851,6 +914,8 @@ def validate_settings(candidate) -> tuple[dict, list[str]]:
             else:
                 errors.extend(f"unknown feature: claudeCodeSubscription.features.{n}"
                               for n in names if n not in SUBSCRIPTION_FEATURES)
+    if "roleFilter" in candidate:
+        errors.extend(_role_filter_errors(candidate["roleFilter"]))
     for key in ("dailyLimit", "monthlyLimit"):
         if key in candidate and not (_number(candidate[key]) and 0 <= candidate[key] <= MAX_AMOUNT):
             errors.append(f"{key} must be a number from 0 to {MAX_AMOUNT}")
@@ -944,8 +1009,9 @@ def save_settings(patch, confirm: bool = False) -> dict:
     with _locked():
         current = public_settings(load_settings())
         current.pop("error", None)
-        merged = {**current, **{k: v for k, v in patch.items() if k not in ("automation", "claudeCodeSubscription")},
+        merged = {**current, **{k: v for k, v in patch.items() if k not in ("automation", "claudeCodeSubscription", "roleFilter")},
                   "automation": {**current["automation"], **(patch.get("automation") or {})},
+                  "roleFilter": {**current["roleFilter"], **(patch.get("roleFilter") or {})},
                   "claudeCodeSubscription": {**current["claudeCodeSubscription"], **(patch.get("claudeCodeSubscription") or {})}}
         increases = _loosening(public_settings(load_settings()), merged)
         if increases and not confirm:

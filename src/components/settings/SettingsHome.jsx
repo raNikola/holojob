@@ -7,6 +7,7 @@ import JobBoardsPanel from './JobBoardsPanel'
 import CompleteProfilePanel from './CompleteProfilePanel'
 import ResetProfilePanel from './ResetProfilePanel'
 import ScoringWeightsPanel from './ScoringWeightsPanel'
+import TitleFilterPanel from './TitleFilterPanel'
 import ApplicationMigrationPanel from './ApplicationMigrationPanel'
 import JobStatePanel from './JobStatePanel'
 import AboutPanel from './AboutPanel'
@@ -243,6 +244,7 @@ export default function SettingsHome() {
 // tests/js/settingsRegistry.test.js fails when an id has no entry here or an entry has no id.
 const RENDERERS = {
   'scoring-weights': () => <ScoringWeightsPanel />,
+  'title-filter': () => <TitleFilterPanel />,
   'job-boards': () => <JobBoardsPanel />,
   'application-tracking': () => <ApplicationSettingsPanel />,
   'application-notifications': () => (

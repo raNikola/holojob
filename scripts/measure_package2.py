@@ -164,13 +164,13 @@ def cmd_negative(_args) -> int:
     keep_ids, note = _must_keep_ids()
     n_ledger = sum(1 for t in titles if t[2] == "ledger")
     print(f"titles replayed: {len(titles)} (ledger {n_ledger}, filtered-only {len(titles) - n_ledger}); must-keep ids {len(keep_ids)}; {note}")
-    stats = {t: {"hits": 0, "unique": 0, "uniqueOnlyReason": 0, "inLedgerNow": 0, "mustKeep": 0, "examples": []} for t in rf.TITLE_EXCLUDE}
+    stats = {t: {"hits": 0, "unique": 0, "uniqueOnlyReason": 0, "inLedgerNow": 0, "mustKeep": 0, "examples": []} for t in rf.vocabulary().exclude}
     drops = Counter()
     for jid, title, where in titles:
         folded = rf._fold(title)
-        hit = [t for t in rf.TITLE_EXCLUDE if rf._has_phrase(folded, t)]
+        hit = [t for t in rf.vocabulary().exclude if rf._has_phrase(folded, t)]
         # What the filter would do with the exclude list removed: the include and near lists alone.
-        would_pass = any(rf._has_phrase(folded, t) for t in (*rf.TITLE_INCLUDE, *rf.TITLE_NEAR, *(rf._fold(x) for x in terms if x)))
+        would_pass = any(rf._has_phrase(folded, t) for t in (*rf.vocabulary().include, *rf.vocabulary().near, *(rf._fold(x) for x in terms if x)))
         _tier, reason = rf.role_tier(title, "", terms)
         drops[(reason or "kept").split(":")[0]] += 1
         for t in hit:

@@ -1,62 +1,75 @@
 """Shared role matching for job-board clients.
 
 Boards rank free-text search loosely, so every client pulls a wide set and
-filters locally. Keeping the term lists here stops them drifting apart as
-sources are added.
+filters locally. One filter for every source stops them drifting apart; its
+phrase lists are in Settings (`roleFilter`), not here.
 """
 
 from __future__ import annotations
 
+import logging
 import re
+import sys
+from dataclasses import dataclass
+from pathlib import Path
 
-# Some boards assign a normalized position by hand. That beats any title
-# heuristic, so a match here short-circuits the title check.
-POSITION_WHITELIST = {"product manager", "product owner"}
+_LLM_DIR = Path(__file__).resolve().parents[2] / "llm"
+if str(_LLM_DIR) not in sys.path:
+    sys.path.insert(0, str(_LLM_DIR))
 
-TITLE_INCLUDE = (
-    "product manager",
-    "product owner",
-    "product lead",
-    "head of product",
-    "group product manager",
-    "platform product",
-    "technical product",
-)
+import ai_gate  # noqa: E402
 
-# Excluded: a seniority the candidate is past, or a clearly different function. Checked first, and it beats a board's own
-# position. "project manager" and "delivery manager" are NOT here any more: scoring caps them (role_tier.title_tier), so
-# discovery keeps them as Near instead of deciding by name alone.
-TITLE_EXCLUDE = (
-    "account manager",
-    "sales manager",
-    "area sales",
-    "brand manager",
-    "category manager",
-    "product technologist",
-    "junior",
-    "intern",
-    "praktikant",
-    "pripravnik",
-)
+logger = logging.getLogger(__name__)
 
-# Near: neighbouring roles scoring can judge. Kept in step with src/data/roleFamilies.json `titleRules`
-# (nearTitlePatterns, productResponsibilityTitlePatterns); tests/python/test_role_filter_tiers.py checks it.
-TITLE_NEAR = (
-    "project manager",
-    "delivery manager",
-    "program manager",
-    "programme manager",
-    "product operations",
-    "product ops",
-    "product management",
-    "tpm",
-    # Serbian boards (diacritics folded, see _fold)
-    "projekt menadzer",
-    "projektni menadzer",
-    "menadzer projekata",
-    "menadzer za upravljanje projektima",
-    "rukovodilac projekta",
-)
+# The vocabulary lives in Settings (`roleFilter` in data/ai/settings.json, defaults in ai_gate.DEFAULT_SETTINGS; package 3, owner plan
+# 2026-11-25). What each list does:
+# - positionWhitelist: a board's own hand-assigned position; it beats any title heuristic, so a match short-circuits the title check.
+# - include: Target.
+# - near: neighbouring roles scoring can judge, kept in step with src/data/roleFamilies.json `titleRules` (nearTitlePatterns,
+#   productResponsibilityTitlePatterns; tests/python/test_role_filter_tiers.py checks the defaults). "project manager" and "delivery
+#   manager" are here, not in exclude: scoring caps them (role_tier.title_tier), discovery keeps them.
+# - exclude: the hard drop, checked first, beats a board's own position.
+# The module-level tuples are the DEFAULTS, for readers that need them without Settings (tests, audits); the filter itself reads
+# `vocabulary()`.
+_DEFAULTS = ai_gate.DEFAULT_SETTINGS["roleFilter"]
+POSITION_WHITELIST = frozenset(_DEFAULTS["positionWhitelist"])
+TITLE_INCLUDE = tuple(_DEFAULTS["include"])
+TITLE_NEAR = tuple(_DEFAULTS["near"])
+TITLE_EXCLUDE = tuple(_DEFAULTS["exclude"])
+
+
+@dataclass(frozen=True)
+class Vocabulary:
+    position_whitelist: frozenset
+    include: tuple
+    near: tuple
+    exclude: tuple
+
+
+def _folded(phrases) -> tuple:
+    return tuple(dict.fromkeys(_fold(p) for p in phrases if _fold(p).strip()))
+
+
+_cache: dict = {}
+
+
+def vocabulary() -> Vocabulary:
+    """The Settings vocabulary, folded. Read once per settings file state (path and mtime), not once per title; a list that cannot be used
+    is its default and logged (ai_gate.role_filter_vocabulary), never an empty list."""
+    path = ai_gate.settings_path()
+    try:
+        stamp = (str(path), path.stat().st_mtime_ns)
+    except OSError:
+        stamp = (str(path), None)
+    if _cache.get("stamp") != stamp:
+        lists, warning = ai_gate.role_filter_vocabulary()
+        if warning:
+            logger.warning("role filter: %s", warning)
+        _cache.update(stamp=stamp, vocab=Vocabulary(
+            position_whitelist=frozenset(_folded(lists["positionWhitelist"])), include=_folded(lists["include"]),
+            near=_folded(lists["near"]), exclude=_folded(lists["exclude"])))
+    return _cache["vocab"]
+
 
 TARGET = "target"
 NEAR = "near"
@@ -90,17 +103,18 @@ def role_tier(
     (`extra_terms`): a search term alone never makes a title Target, scoring decides relevance from there.
     Target and Near both go on to scoring; only Excluded is dropped.
     """
+    vocab = vocabulary()
     title_lower = _fold(title)
     position_lower = _fold(position)
 
-    for term in TITLE_EXCLUDE:
+    for term in vocab.exclude:
         if _has_phrase(title_lower, term):
             return EXCLUDED, f"title_excluded:{term}"
-    if position_lower in POSITION_WHITELIST:
+    if position_lower in vocab.position_whitelist:
         return TARGET, None
-    if any(_has_phrase(title_lower, term) for term in TITLE_INCLUDE):
+    if any(_has_phrase(title_lower, term) for term in vocab.include):
         return TARGET, None
-    if any(_has_phrase(title_lower, term) for term in TITLE_NEAR) or any(_has_phrase(position_lower, term) for term in TITLE_NEAR):
+    if any(_has_phrase(title_lower, term) for term in vocab.near) or any(_has_phrase(position_lower, term) for term in vocab.near):
         return NEAR, None
     if any(_has_phrase(title_lower, _fold(t)) for t in extra_terms if t):
         return NEAR, None
