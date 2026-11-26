@@ -33,7 +33,8 @@ trap 'rm -rf "$work"' EXIT
 trap 'exit 130' HUP INT TERM
 tree="$work/tree"
 mkdir "$tree"
-git -C "$top" archive -o "$work/tree.tar" "$sha" && tar -xf "$work/tree.tar" -C "$tree" || die "cannot export $sha"
+# Committed modes whatever the caller's umask (the package runner's gate runs under the owner's umask 077).
+sh "$top/scripts/export-tree.sh" "$top" "$sha" "$tree" || die "cannot export $sha"
 # Git-ignored and generated from the profile; without it the scoring snapshot tests skip.
 if [ -f "$top/data/engine-snapshot.json" ]; then
   mkdir -p "$tree/data"
