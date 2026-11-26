@@ -385,9 +385,20 @@ def bwrap_argv(ws: Workspace, net: bool, extra_rw: tuple[Path, ...] = ()) -> lis
          "--dir", "/var/tmp"]
     if not net:
         a.append("--unshare-net")
-    for p in (VENV, BENCHMARKS, UV_SHARE, RUN_ROOT / "tools/node"):
-        if p.exists():
-            a += ["--ro-bind", str(p), str(p)]
+    roots = [p for p in (VENV, BENCHMARKS, UV_SHARE, RUN_ROOT / "tools/node") if p.exists()]
+    for p in roots:
+        a += ["--ro-bind", str(p), str(p)]
+    # The venv interpreter is a chain of symlinks (venv -> ~/.local/bin -> uv's python): recreate each hop that lies
+    # outside the mounted roots as a symlink, so nothing else of ~/.local is mounted.
+    link = VENV / "bin/python3.12"
+    for _ in range(8):
+        if not link.is_symlink():
+            break
+        target = Path(os.readlink(link))
+        target = target if target.is_absolute() else link.parent / target
+        if not any(link == r or r in link.parents for r in roots):
+            a += ["--symlink", str(target), str(link)]
+        link = target
     for p in (ws.repo, ws.tmp, ws.home, ws.claude_home, *extra_rw):
         a += ["--bind", str(p), str(p)]
     return a + ["--chdir", str(ws.repo), "--"]
