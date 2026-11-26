@@ -107,14 +107,16 @@ def test_data_split_copies_only_allowlisted_ad_data(tmp_path):
     files = ["jobs/discovered_jobs.json", "jobs/job_history.json", "jobs/manual_jobs.json", "jobs/staging/a.json",
              "jobs/staging/session.json", "profile/profile.json", "applications/x.json", "calibration/l.json",
              "secrets/k.json", "config/sources.json", "config/api_key.json", "cache/engine.json", "cache/fit3.json",
-             "intelligence/candidate-intelligence.json", "engine-snapshot.json", "new-folder/unknown.json"]
+             "intelligence/candidate-intelligence.json", "engine-snapshot.json", "new-folder/unknown.json",
+             "profile/.gitkeep", "examples/x.example.json"]
     for f in files:
         (data / f).parent.mkdir(parents=True, exist_ok=True)
         (data / f).write_text("{}")
-    split = rp.classify(data)
+    split = rp.classify(data, {"profile/.gitkeep", "examples/x.example.json"})
+    assert set(split.tracked) == {"profile/.gitkeep", "examples/x.example.json"}
     assert set(split.copy) == {"jobs/discovered_jobs.json", "jobs/job_history.json", "jobs/staging/a.json",
                                "config/sources.json", "cache/engine.json"}
-    assert set(split.copy) | set(split.private) == set(files)
+    assert set(split.copy) | set(split.private) | set(split.tracked) == set(files)
     for root in ("profile", "applications", "calibration", "secrets", "intelligence", "new-folder",
                  "jobs/manual_jobs.json", "cache/fit3.json", "config/api_key.json"):
         assert root in split.private_roots

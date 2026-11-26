@@ -43,6 +43,10 @@ As of 2026-11-23. The deployed image is built from `4a64657` (tag `release-20261
 
 The job list still lives in the browser (`localStorage`) and the screens save the whole list; `job-state.json` v1 (Saved, Rejected, Keep) is built. Not built: the server as master of the list. Plan: [redesign/STEP5_SERVER_MASTER_PLAN.md](redesign/STEP5_SERVER_MASTER_PLAN.md). The list itself (server-side filter, sort and paging; the browser keeps only shown and worked ads), in progress on branch `jobs-list-server`: [redesign/JOBS_LIST_SERVER_PLAN.md](redesign/JOBS_LIST_SERVER_PLAN.md) (phases P0-P5, status, open items; updated at the end of every prompt of that work). `offList` rows migrate as orphans.
 
+### 3b. Packages 1-7 (archive, measurements, filters, cost, descriptions, reposts)
+
+Plan and status: [redesign/PACKAGES_PLAN.md](redesign/PACKAGES_PLAN.md) (the package table there is the only status record; the runner writes it). Built (branch `package-runner`, not merged): the runner `scripts/run-package` (one package per fresh headless session, sandboxed, status from its own checks) and its probes; result: [redesign/reports/00-package-runner.md](redesign/reports/00-package-runner.md). No package has run.
+
 ### 4. Owner actions
 
 - Review the 11 of 17 CV documents that carry stale unverified-degree findings before they are used for applications.

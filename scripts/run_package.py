@@ -123,16 +123,20 @@ class Split:
     copy: list[str] = field(default_factory=list)        # files (relative to data/) copied into the clone
     private: list[str] = field(default_factory=list)     # files never copied
     private_roots: list[str] = field(default_factory=list)  # smallest set of paths covering every private file
+    tracked: list[str] = field(default_factory=list)     # tracked in git (examples, .gitkeep): public, come with the clone
 
 
-def classify(data_root: Path) -> Split:
-    """Split data/ into the ad-data copy and the private rest. Never reads file contents."""
+def classify(data_root: Path, tracked: set[str] | frozenset[str] = frozenset()) -> Split:
+    """Split data/ into the ad-data copy and the private rest. Never reads file contents. `tracked` are paths
+    (relative to data/) that git tracks: public repository content, present in every clone, neither copied nor private."""
     split = Split()
     for path in sorted(data_root.rglob("*")):
         if path.is_dir() or path.is_symlink() and not path.is_file():
             continue
         rel = path.relative_to(data_root).as_posix()
-        if _allowed(rel) and not is_secret_path(f"data/{rel}") and not path.is_symlink():
+        if rel in tracked:
+            split.tracked.append(rel)
+        elif _allowed(rel) and not is_secret_path(f"data/{rel}") and not path.is_symlink():
             split.copy.append(rel)
         else:
             split.private.append(rel)
@@ -537,7 +541,8 @@ def prepare_workspace(name: str, base: str, branch: str) -> tuple[Workspace, Spl
     git(ws.repo, "config", "user.name", nm)
     git(ws.repo, "config", "user.email", em)
     git(ws.repo, "config", "commit.gpgsign", "false")
-    split = classify(SOURCE_REPO / "data")
+    tracked = {f.removeprefix("data/") for f in git(ws.repo, "ls-files", "data").splitlines()}
+    split = classify(SOURCE_REPO / "data", tracked)
     copy_data(SOURCE_REPO / "data", ws.repo / "data", split)
     labelled = build_labelled(RATINGS_MD, ws.repo / "data/jobs/job_history.json", ws.repo / LABELLED_REL)
     nm_src = SOURCE_REPO / "node_modules"
