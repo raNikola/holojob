@@ -297,8 +297,13 @@ MAX_BOARDS_KEPT = 60
 
 
 def _record_stale_evidence(ledger: dict, run: staging.RunStage, moment: str, key: str, proven_searches: list, evidence: dict) -> list[str]:
-    """The ledger's record for `stale_rule.py`: this run's proven sources and boards, and when a filter-dropped ad the ledger holds was last
-    listed. Additive: `lastSeen` and the rest of an entry's history do not change. Returns what was counted, for the report."""
+    """The ledger's record for `stale_rule.py`: this run's proven sources and boards. Additive: `lastSeen` and the rest of an entry's history do
+    not change. Returns what was counted, for the report.
+
+    A filter-dropped sighting of an ad the ledger holds is NOT recorded here any more (package 3, owner plan 2026-11-25): it no longer moves
+    `lastListedAt`, so an ad the filters drop goes Stale and is archived like one the source stopped returning. A `lastListedAt` already on an
+    entry stays as written (nothing is deleted) and still counts in `stale_rule` until it ages out. The sighting itself is kept in
+    `filtered_ads.json` (`lastSeen` of the record)."""
     counted = []
     if key:
         for name in proven_searches:
@@ -309,10 +314,6 @@ def _record_stale_evidence(ledger: dict, run: staging.RunStage, moment: str, key
             if one["complete"]:
                 stale_rule.record_run(ledger, name, stale_rule.board_bucket(board), run.run_id, moment)
                 counted.append(f"{name}/{board}")
-    for record in (run.discards.records if run.discards else []):
-        entry = ledger["jobs"].get(record.get("jobId"))
-        if entry is not None and moment > (entry.get("lastListedAt") or ""):
-            entry["lastListedAt"] = moment
     return counted
 
 

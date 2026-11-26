@@ -90,7 +90,7 @@ def test_the_file_has_the_agreed_shape_and_never_a_description(tmp_path, monkeyp
     assert store["ads"] == {job["jobId"]: {
         "source": "greenhouse", "title": "Chef", "company": "Acme", "location": "Remote", "url": job["jobUrl"],
         "externalId": f"ext-{job['jobId']}", "reason": "title_not_matched", "firstSeen": T[0], "lastSeen": T[0], "lastRunId": "a",
-        "timesSeen": 1, "searchKey": "key-a", "inLedger": False,
+        "timesSeen": 1, "searchKey": "key-a", "inLedger": False, "companyKey": "acme",
     }}
     assert "Own the roadmap" not in json.dumps(store) and "description" not in json.dumps(store)
 
@@ -98,7 +98,7 @@ def test_the_file_has_the_agreed_shape_and_never_a_description(tmp_path, monkeyp
 def test_only_the_named_fields_are_copied_from_a_discard_line():
     store = filtered_ads.empty()
     filtered_ads.apply_run(store, "a", T[0], "k", [discard_line(ad(1), salary="9000 EUR", description="should never get here")])
-    assert set(next(iter(store["ads"].values()))) == set(filtered_ads._SHOWN) | {"firstSeen", "lastSeen", "lastRunId", "timesSeen", "searchKey", "inLedger"}
+    assert set(next(iter(store["ads"].values()))) == set(filtered_ads._SHOWN) | {"companyKey", "firstSeen", "lastSeen", "lastRunId", "timesSeen", "searchKey", "inLedger"}
 
 
 def test_one_ad_under_several_searches_is_one_sighting_with_the_first_reason():

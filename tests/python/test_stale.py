@@ -352,14 +352,30 @@ def test_a_stale_ad_seen_again_loses_the_flag_and_returns_to_the_actionable_buck
     assert ledger_at(tmp_path)["jobs"][JOB["jobId"]]["firstSeen"] == day(0), "seen again is not a new ad"
 
 
-def test_a_filter_dropped_listing_keeps_it_from_going_stale_and_changes_no_history(tmp_path, monkeypatch):
+def test_a_filter_dropped_listing_does_not_refresh_last_listed_and_changes_no_history(tmp_path, monkeypatch):
+    """Package 3 (owner plan 2026-11-25): a filtered sighting is not a sighting for Stale. The ad the filters drop ages out like any other."""
     good_run(tmp_path, monkeypatch, "start", day(0), ads=(JOB, OTHER))
     for n, at in enumerate((day(10), day(20))):
         imported(tmp_path, staged(tmp_path, monkeypatch, f"r{n}", at, {"jobspy": ([OTHER], GOOD, [])}))
     listed = dropped_ad({**ad(1), "jobId": JOB["jobId"], "jobUrl": JOB["jobUrl"]}, "title_not_matched", "e")
     imported(tmp_path, staged(tmp_path, monkeypatch, "r2", day(30), {"jobspy": ([OTHER], GOOD, [listed])}))
     one = ledger_at(tmp_path)["jobs"][JOB["jobId"]]
-    assert one["lastListedAt"] == day(30) and one["lastSeen"] == day(0)
+    assert "lastListedAt" not in one and one["lastSeen"] == day(0)
+    assert classes(tmp_path)[JOB["jobId"]] == "stale"
+    assert json.loads((tmp_path / "data/jobs/filtered_ads.json").read_text())["ads"][JOB["jobId"]]["lastSeen"] == day(30), \
+        "the sighting is still kept, in the filtered store"
+
+
+def test_a_last_listed_already_on_an_entry_is_kept_and_still_counts(tmp_path, monkeypatch):
+    """Nothing is deleted: an older `lastListedAt` stays on disk and stale_rule still reads it."""
+    good_run(tmp_path, monkeypatch, "start", day(0), ads=(JOB, OTHER))
+    path = tmp_path / "data/jobs/job_history.json"
+    ledger = json.loads(path.read_text())
+    ledger["jobs"][JOB["jobId"]]["lastListedAt"] = day(25)
+    path.write_text(json.dumps(ledger))
+    for n, at in enumerate((day(10), day(20), day(30))):
+        imported(tmp_path, staged(tmp_path, monkeypatch, f"r{n}", at, {"jobspy": ([OTHER], GOOD, [])}))
+    assert ledger_at(tmp_path)["jobs"][JOB["jobId"]]["lastListedAt"] == day(25)
     assert classes(tmp_path)[JOB["jobId"]] == "absent"
 
 

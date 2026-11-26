@@ -17,11 +17,18 @@ older than what a record has seen can only move `firstSeen` back, never `lastSee
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 import staging
+
+_company_spec = importlib.util.spec_from_file_location(
+    "_filtered_company_key", Path(__file__).resolve().parents[1] / "job_scoring" / "company_key.py")
+_company_module = importlib.util.module_from_spec(_company_spec)
+_company_spec.loader.exec_module(_company_module)
+company_key = _company_module.company_key
 
 VERSION = 1
 FILE_NAME = "filtered_ads.json"
@@ -82,7 +89,8 @@ def _when(value) -> datetime | None:
 
 
 def _shown(record: dict) -> dict:
-    return {name: record.get(name) for name in _SHOWN}
+    """The fields a record keeps, plus its `companyKey` (package 3; a record written before it has none: readers use `company_key.key_of`)."""
+    return {**{name: record.get(name) for name in _SHOWN}, "companyKey": company_key(record.get("company"))}
 
 
 PARTIAL_KEPT = 200

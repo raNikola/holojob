@@ -36,6 +36,11 @@ _atomic_module = importlib.util.module_from_spec(_atomic_spec)
 _atomic_spec.loader.exec_module(_atomic_module)
 write_text_atomic = _atomic_module.write_text_atomic
 
+_company_spec = importlib.util.spec_from_file_location("_ledger_company_key", Path(__file__).with_name("company_key.py"))
+_company_module = importlib.util.module_from_spec(_company_spec)
+_company_spec.loader.exec_module(_company_module)
+company_key = _company_module.company_key
+
 LEDGER_FILE = "job_history.json"
 
 # Providers whose API returns every open posting of a board, so a job that is
@@ -218,7 +223,7 @@ def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datet
             stats["changed"] += 1  # the ad changed, so its old facts no longer apply
         entry["llmFacts"] = None
 
-    entry.update(provider=job.get("provider"), roleKey=role_key(job), seenUnder=key, job=_snapshot(job))
+    entry.update(provider=job.get("provider"), roleKey=role_key(job), companyKey=company_key(job.get("company")), seenUnder=key, job=_snapshot(job))
     if run_id is not None:
         entry.update(lastRunId=run_id, lastRunPos=position)
     record = _annotate(job, entry, now=moment, closed=False)
