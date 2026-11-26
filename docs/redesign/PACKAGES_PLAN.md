@@ -1,6 +1,6 @@
 # Packages plan: archive, measurements, filters, cost, descriptions, reposts
 
-Owner plan of 2026-11-25. The owner runs each package in a normal interactive Claude Code session, one package per session: see "How to run a package" below. Reports: `docs/redesign/reports/NN-slug.md` from `reports/TEMPLATE.md`.
+Owner plan of 2026-11-25. The owner runs each package in a normal interactive Claude Code session, one package per session: see "How to run a package" below. Reports are temporary and never committed: `/srv/holojob/.claude/package-runs/reports/NN-slug.md` (git-ignored), from `scripts/package-report-template.md`. The permanent description of each feature goes into the repo's own docs in the package commit.
 
 ## Closed decisions (owner)
 
@@ -60,7 +60,7 @@ A package stops as blocked on any of these:
 
   In an interactive session, run the export into a temp file. In a headless run, the runner writes it before the session and passes the path in `HOLOJOB_APPLICATION_JOB_IDS`.
 
-Blocked means: write the reason in the report, put `Status: blocked` on its first line, commit, and stop.
+Blocked means: write the reason in the report, put `Status: blocked` on its first line, commit the work so far, and stop.
 
 ## Packages
 
@@ -123,8 +123,17 @@ What the session does:
 1. **Start.** It reads this plan, CLAUDE.md and the rules. It works in a worktree on its own branch `pkg/NN-slug`, stacked on the last done package's branch (owner decision 2026-11-25), or on `main` when none is done.
 2. **Data.** It reads `/srv/holojob/data` directly. The worktree's own `data/` holds only tracked files. It writes nothing under `data/`.
 3. **Work and tests.** It implements only package N and runs the targeted tests while it works, then the full tier.
-4. **Report.** It writes `docs/redesign/reports/NN-slug.md` from the template. The first line is `Status: done | blocked | needs-review`.
-5. **Commit and stop.** It sets the package's row in the table, commits with the owner as the only author, and stops at the commit with a short report. No push, no build, no deploy: the report ends with the owner's commands.
+4. **Permanent docs.** In the package commit, it describes the feature in the repo's own docs: DECISIONS.md, ROADMAP.md and the feature md (for example the area's plan or spec under `docs/redesign/`).
+5. **Report (temporary, never committed).** It writes `/srv/holojob/.claude/package-runs/reports/NN-slug.md` from `scripts/package-report-template.md`. In a headless run it writes to the path in `HOLOJOB_PACKAGE_REPORT` instead, a git-ignored file in the worktree that the runner moves there. The first line is `Status: done | blocked | needs-review`. Three people review it (the owner and two reviewers), so it is detailed:
+   - for each change: what and why, with its source (benchmark file, owner decision or own proposal), the files and functions changed, and the behaviour before and after;
+   - defaults taken, with how to undo each;
+   - deviations from the benchmark;
+   - measurements, counts only;
+   - tests and their results;
+   - risks, and what was not done;
+   - "How the owner tests this": exact fish commands with the expected result of each;
+   - the owner's merge, build, up and rollback commands.
+6. **Commit and stop.** It sets the package's row in the table and commits with the owner as the only author. The commit holds code, tests and permanent docs, never the report. It stops at the commit and points to the report. No push, no build, no deploy.
 
 A stop rule means: `Status: blocked`, the reason in the report, commit, stop. There are no questions for trivial matters: the session takes the benchmark or standard choice and records it under "Defaults taken".
 
@@ -147,12 +156,13 @@ scripts/run-packages 2 --base package-runner            # package 2 only
 **Per package**, the runner:
 1. **Prepares.** It creates the worktree `.claude/worktrees/pkg-NN-slug` on `pkg/NN-slug`, stacked on the last done package. It also writes the application-id export to a temp file (ids only, mode 600, removed after the session) for the must-keep set.
 2. **Runs the session** in that worktree. The session finds its branch ready, works there and reads `/srv/holojob/data` directly.
-3. **Decides from git, never from the exit code.** The package is done only when all of these hold:
-   - there is a commit on the branch after the base;
+3. **Moves the report** from the worktree's git-ignored `logs/package-report-NN-slug.md` to `.claude/package-runs/reports/NN-slug.md`. Claude Code refuses headless writes under `.claude/` as a "sensitive file", even with `--add-dir` and an allow rule (checked 2026-11-26). The staging file is seeded from the template, whose first line `Status: in-progress` never counts as done.
+4. **Decides from files and git, never from the exit code.** The package is done only when all of these hold:
+   - `.claude/package-runs/reports/NN-slug.md` exists and its first line is `Status: done`;
+   - there is a commit on `pkg/NN-slug` after the base;
    - the worktree is clean;
-   - the report in the branch tip starts with `Status: done`;
-   - `sh scripts/test-tier.sh full` passed on that commit, recorded as a local git note in `refs/notes/package-gate`.
-4. **Stops** at the first package that is not done, blocked or needs-review. Packages already done are skipped, after their branch tip is checked.
+   - `sh scripts/test-tier.sh full` passed on the branch tip, recorded with the base sha as a local git note in `refs/notes/package-gate`.
+5. **Stops** at the first package that is not done, blocked or needs-review. Packages already done are skipped, after the same four checks. A report left by an abandoned run is renamed `.old-<time>` and never trusted.
 
 **In headless sessions:**
 - **No approvals.** A call that needs approval is denied, never waited for (Claude Code docs: permission modes, headless).

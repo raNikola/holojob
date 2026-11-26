@@ -14,10 +14,16 @@ Per package the runner:
   2. starts `claude -p "do package N from docs/redesign/PACKAGES_PLAN.md"` there with the owner's normal login, the
      model from the plan table, permission mode acceptEdits (edits in the worktree only), a small Bash allowlist and
      deny rules; in -p a call that would need approval is denied, never waited for (Claude Code docs, permission-modes);
-  3. decides from git, never from the exit code: the package is done only when the tip of pkg/NN-slug is a commit
-     after the base, the worktree is clean, the report docs/redesign/reports/NN-slug.md in that commit starts with
-     `Status: done`, and the full tier (`sh scripts/test-tier.sh full`) passed on that commit. The pass is recorded as
-     a local git note (refs/notes/package-gate) on the commit, so a resumed run can verify it.
+  3. decides from files and git, never from the exit code: the package is done only when the report
+     /srv/holojob/.claude/package-runs/reports/NN-slug.md (git-ignored, never committed) starts with `Status: done`,
+     pkg/NN-slug has a commit after the base, the worktree is clean, and the full tier (`sh scripts/test-tier.sh full`)
+     passed on the branch tip. The pass is recorded as a local git note (refs/notes/package-gate, with the base sha)
+     on the tip, so a resumed run can verify it.
+
+Reports: Claude Code refuses headless writes under .claude/ ("sensitive file", even with --add-dir and an allow rule;
+checked 2026-11-26), so the session writes the report to the git-ignored staging file <worktree>/logs/package-report-
+NN-slug.md (path in HOLOJOB_PACKAGE_REPORT, seeded from scripts/package-report-template.md) and the runner moves it to
+the reports directory after the session.
 
 No sandbox, no token, no probes: see "What this cannot enforce" in the plan.
 """
@@ -35,7 +41,8 @@ from pathlib import Path
 
 REPO = Path(os.environ.get("HOLOJOB_REPO", "/srv/holojob"))
 PLAN = "docs/redesign/PACKAGES_PLAN.md"
-REPORTS = "docs/redesign/reports"
+REPORTS = REPO / ".claude/package-runs/reports"
+TEMPLATE = "scripts/package-report-template.md"
 NOTES_REF = "refs/notes/package-gate"
 NODE_IMAGE = "docker.io/library/node:20-bookworm"
 PROMPT = "do package {n} from docs/redesign/PACKAGES_PLAN.md"
@@ -70,8 +77,12 @@ class Row:
         return f"pkg/{self.n:02d}-{self.slug}"
 
     @property
-    def report(self) -> str:
-        return f"{REPORTS}/{self.n:02d}-{self.slug}.md"
+    def report_name(self) -> str:
+        return f"{self.n:02d}-{self.slug}.md"
+
+    @property
+    def staging(self) -> Path:
+        return self.worktree / "logs" / f"package-report-{self.report_name}"
 
     @property
     def worktree(self) -> Path:
@@ -106,20 +117,27 @@ def report_status(text: str) -> str:
     return m.group(1) if m else ""
 
 
-def package_state(row: Row, repo: Path = REPO) -> tuple[str, str]:
-    """(state, detail) from git alone: done | blocked | needs-review | unfinished | absent."""
+def package_state(row: Row, repo: Path = REPO, reports: Path = REPORTS, worktree: Path | None = None) -> tuple[str, str]:
+    """(state, detail): done | blocked | needs-review | unfinished | absent. Done needs all four: the report file says
+    `Status: done`, a commit after the base on the branch, a clean worktree, a full-tier pass on the branch tip."""
     tip = git("rev-parse", "--verify", "-q", f"refs/heads/{row.branch}^{{commit}}", repo=repo, check=False)
     if not tip:
         return "absent", "no branch"
-    report = git("show", f"{tip}:{row.report}", repo=repo, check=False)
-    if not report:
-        return "unfinished", f"{row.report} not in the branch tip"
-    status = report_status(report)
+    report = reports / row.report_name
+    if not report.is_file():
+        return "unfinished", f"no report {report}"
+    status = report_status(report.read_text(encoding="utf-8", errors="replace"))
     if status != "done":
         return (status or "unfinished"), f"report says {status or 'no valid Status line'}"
+    wt = worktree if worktree is not None else row.worktree
+    if wt.exists() and git("status", "--porcelain", repo=wt, check=False):
+        return "unfinished", f"uncommitted changes in {wt}"
     note = git("notes", f"--ref={NOTES_REF}", "show", tip, repo=repo, check=False)
-    if not note.startswith("full tier pass"):
-        return "unfinished", "report says done, no full-tier pass recorded for the branch tip"
+    m = re.match(r"full tier pass base=([0-9a-f]{40})\b", note)
+    if not m:
+        return "unfinished", "no full-tier pass recorded for the branch tip"
+    if git("rev-list", "--count", f"{m.group(1)}..{tip}", repo=repo, check=False) in ("", "0"):
+        return "unfinished", "no commit after the base"
     return "done", tip[:12]
 
 
@@ -174,14 +192,14 @@ def base_for(rows: list[Row], default: str) -> str:
     return done[-1].branch if done else default
 
 
-def gate(row: Row, sha: str, log: Path) -> bool:
+def gate(row: Row, sha: str, base_sha: str, log: Path) -> bool:
     env = {**os.environ, "HOLOJOB_NODE_MODULES": str(REPO / "node_modules"), "HOLOJOB_PYTHON": str(VENV_PY)}
     with open(log, "w") as fh:
         r = subprocess.run(["sh", "scripts/test-tier.sh", "full", sha], cwd=row.worktree, stdout=fh,
                            stderr=subprocess.STDOUT, env=env)
     if r.returncode == 0:
         git("notes", f"--ref={NOTES_REF}", "add", "-f", "-m",
-            f"full tier pass {dt.datetime.now().isoformat(timespec='seconds')}", sha)
+            f"full tier pass base={base_sha} {dt.datetime.now().isoformat(timespec='seconds')}", sha)
     return r.returncode == 0
 
 
@@ -201,6 +219,13 @@ def run_one(row: Row, all_rows: list[Row], base_default: str) -> str:
     base_sha = git("rev-parse", "--verify", f"{base}^{{commit}}")
     print(f"run-packages: package {row.n} {row.slug} on {row.branch} from {base}, model {row.model}")
     git("worktree", "add", "-q", "-b", row.branch, str(row.worktree), base_sha)
+    REPORTS.mkdir(mode=0o700, parents=True, exist_ok=True)
+    final = REPORTS / row.report_name
+    if final.exists():  # a report left by an earlier, abandoned run of this package: kept aside, never trusted
+        final.rename(final.with_name(f"{final.name}.old-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"))
+    row.staging.parent.mkdir(mode=0o700, exist_ok=True)
+    row.staging.write_text((row.worktree / TEMPLATE).read_text(encoding="utf-8"), encoding="utf-8")
+    row.staging.chmod(0o600)
     logdir = REPO / ".claude/package-runs"
     logdir.mkdir(mode=0o700, parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -211,22 +236,28 @@ def run_one(row: Row, all_rows: list[Row], base_default: str) -> str:
     with tempfile.TemporaryDirectory(prefix="holojob-app-ids-") as tmp, open(log, "w") as fh:
         os.chmod(tmp, 0o700)
         os.chmod(log, 0o600)
-        env = {**os.environ, "HOLOJOB_APPLICATION_JOB_IDS": str(export_application_ids(tmp))}
+        env = {**os.environ, "HOLOJOB_APPLICATION_JOB_IDS": str(export_application_ids(tmp)),
+               "HOLOJOB_PACKAGE_REPORT": str(row.staging)}
         subprocess.run(argv, cwd=row.worktree, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT, env=env)
-    # The verdict comes from git, never from the exit code.
+    # Move the report out of the worktree to its git-ignored home; the verdict never comes from the exit code.
+    final = REPORTS / row.report_name
+    if row.staging.is_file():
+        row.staging.replace(final)
+        final.chmod(0o600)
     tip = git("rev-parse", "HEAD", repo=row.worktree)
     if tip == base_sha:
         return f"no commit on {row.branch} (session log {log})"
     if git("status", "--porcelain", repo=row.worktree):
         return f"uncommitted changes left in {row.worktree} (session log {log})"
-    st, detail = package_state(row)
-    if st in ("blocked", "needs-review"):
-        return f"{st}: see {row.report}"
-    report = git("show", f"{tip}:{row.report}", check=False)
-    if report_status(report) != "done":
-        return f"not done: {detail} (session log {log})"
+    if not final.is_file():
+        return f"no report written (session log {log})"
+    status = report_status(final.read_text(encoding="utf-8", errors="replace"))
+    if status in ("blocked", "needs-review"):
+        return f"{status}: see {final}"
+    if status != "done":
+        return f"not done: report {final} has no Status: done line (session log {log})"
     gate_log = logdir / f"{row.n:02d}-{stamp}-gate.log"
-    if not gate(row, tip, gate_log):
+    if not gate(row, tip, base_sha, gate_log):
         return f"not done: full tier red on {tip[:12]} (log {gate_log})"
     st, detail = package_state(row)
     print(f"run-packages: package {row.n} {row.slug}: {st} ({detail})")

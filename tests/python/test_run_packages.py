@@ -1,5 +1,6 @@
-"""Package runner rules that would hurt if broken: a package counted done without its report, Status line, commit
-and full-tier pass; a run that does not stop at the first package that is not done. Temp git repos only."""
+"""Package runner rules that would hurt if broken: a package counted done without its report file saying
+`Status: done`, a commit after the base, a clean worktree and a full-tier pass on the branch tip; a run that does not
+stop at the first package that is not done. Temp git repos and temp report dirs only."""
 import importlib.util
 import subprocess
 import sys
@@ -20,7 +21,7 @@ def _git(repo, *args):
 
 
 @pytest.fixture
-def repo(tmp_path):
+def env(tmp_path):
     r = tmp_path / "repo"
     r.mkdir()
     _git(r, "init", "-q", "-b", "main")
@@ -29,51 +30,89 @@ def repo(tmp_path):
     (r / "a.txt").write_text("a")
     _git(r, "add", ".")
     _git(r, "commit", "-q", "-m", "base")
-    return r
+    base = _git(r, "rev-parse", "HEAD")
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    return r, base, reports
 
 
-def _commit_report(repo, first_line):
+def _package_commit(repo):
     _git(repo, "switch", "-q", "-c", ROW.branch)
-    report = repo / ROW.report
-    report.parent.mkdir(parents=True, exist_ok=True)
-    report.write_text(first_line + "\n\n# report\n")
+    (repo / "feature.txt").write_text("x")
     _git(repo, "add", ".")
     _git(repo, "commit", "-q", "-m", "package")
     return _git(repo, "rev-parse", "HEAD")
 
 
-def _gate_pass(repo, sha):
-    _git(repo, "notes", f"--ref={rp.NOTES_REF}", "add", "-m", "full tier pass now", sha)
+def _report(reports, first_line):
+    (reports / ROW.report_name).write_text(first_line + "\n\n# report\n")
 
 
-def test_done_needs_report_status_commit_and_gate(repo):
-    assert rp.package_state(ROW, repo)[0] == "absent"
-    sha = _commit_report(repo, "Status: done")
-    assert rp.package_state(ROW, repo)[0] == "unfinished"      # no full-tier pass recorded
-    _gate_pass(repo, sha)
-    assert rp.package_state(ROW, repo)[0] == "done"
+def _gate_pass(repo, sha, base):
+    _git(repo, "notes", f"--ref={rp.NOTES_REF}", "add", "-f", "-m", f"full tier pass base={base} now", sha)
 
 
-def test_gate_pass_on_an_older_commit_does_not_count(repo):
-    sha = _commit_report(repo, "Status: done")
-    _gate_pass(repo, sha)
+def _state(repo, reports):
+    return rp.package_state(ROW, repo, reports, worktree=repo)[0]
+
+
+def test_done_needs_report_commit_clean_tree_and_gate(env):
+    repo, base, reports = env
+    assert _state(repo, reports) == "absent"
+    sha = _package_commit(repo)
+    assert _state(repo, reports) == "unfinished"          # no report file
+    _report(reports, "Status: done")
+    assert _state(repo, reports) == "unfinished"          # no full-tier pass
+    _gate_pass(repo, sha, base)
+    assert _state(repo, reports) == "done"
+    (repo / "stray.txt").write_text("left over")
+    assert _state(repo, reports) == "unfinished"          # worktree not clean
+
+
+def test_no_commit_after_the_base_is_not_done(env):
+    repo, base, reports = env
+    _git(repo, "branch", ROW.branch)
+    _report(reports, "Status: done")
+    _gate_pass(repo, base, base)
+    assert _state(repo, reports) == "unfinished"
+
+
+def test_gate_pass_on_an_older_commit_does_not_count(env):
+    repo, base, reports = env
+    sha = _package_commit(repo)
+    _report(reports, "Status: done")
+    _gate_pass(repo, sha, base)
     (repo / "b.txt").write_text("b")
     _git(repo, "add", ".")
     _git(repo, "commit", "-q", "-m", "later change")
-    assert rp.package_state(ROW, repo)[0] == "unfinished"
+    assert _state(repo, reports) == "unfinished"
+
+
+def test_report_in_git_does_not_count(env):
+    repo, base, reports = env
+    sha = _package_commit(repo)
+    (repo / "docs").mkdir()
+    (repo / "docs" / ROW.report_name).write_text("Status: done\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "report committed")
+    _gate_pass(repo, _git(repo, "rev-parse", "HEAD"), base)
+    assert _state(repo, reports) == "unfinished"          # only the git-ignored report file counts
 
 
 @pytest.mark.parametrize("line,state", [("Status: blocked", "blocked"), ("Status: needs-review", "needs-review"),
-                                        ("# no status", "unfinished"), ("Status: done, mostly", "unfinished")])
-def test_report_status_other_than_done_is_not_done(repo, line, state):
-    sha = _commit_report(repo, line)
-    _gate_pass(repo, sha)
-    assert rp.package_state(ROW, repo)[0] == state
+                                        ("Status: in-progress", "unfinished"), ("# no status", "unfinished"),
+                                        ("Status: done, mostly", "unfinished")])
+def test_report_status_other_than_done_is_not_done(env, line, state):
+    repo, base, reports = env
+    sha = _package_commit(repo)
+    _report(reports, line)
+    _gate_pass(repo, sha, base)
+    assert _state(repo, reports) == state
 
 
-def test_branch_without_report_is_unfinished(repo):
-    _git(repo, "branch", ROW.branch)
-    assert rp.package_state(ROW, repo) == ("unfinished", f"{ROW.report} not in the branch tip")
+def test_template_is_never_done_as_seeded():
+    template = Path(__file__).resolve().parents[2] / rp.TEMPLATE
+    assert rp.report_status(template.read_text()) != "done"
 
 
 def test_run_stops_at_first_not_done_and_skips_done():
