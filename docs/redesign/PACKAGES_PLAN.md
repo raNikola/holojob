@@ -1,6 +1,6 @@
 # Packages plan: archive, measurements, filters, cost, descriptions, reposts
 
-Owner plan of 2026-11-25. Each package runs in its own fresh headless Claude Code session, through `scripts/run-package` (runner: `scripts/run_package.py`). The runner, not the session, decides whether a package is done: see "Runner" below. Reports: `docs/redesign/reports/NN-slug.md` from `reports/TEMPLATE.md`.
+Owner plan of 2026-11-25. The owner runs each package in a normal interactive Claude Code session, one package per session: see "How to run a package" below. Reports: `docs/redesign/reports/NN-slug.md` from `reports/TEMPLATE.md`.
 
 ## Closed decisions (owner)
 
@@ -39,7 +39,7 @@ Owner plan of 2026-11-25. Each package runs in its own fresh headless Claude Cod
 - **Benchmark first.** Open the repo files in `/home/ranikola/holojob-eval/benchmarks/` directly (read-only).
 - **Name the source of each design element:** benchmark file, owner decision, or own proposal. Flag every deviation from the benchmark.
 - **Limits and thresholds the owner decides live in Settings.**
-- **Tests run in a temp dir, never `data/`.** Run the targeted tests per change. The runner's sandboxed full tier must be green before a package is done.
+- **Tests run in a temp dir, never `data/`.** Run the targeted tests per change, and the full tier (CLAUDE.md, "Testing and commit policy") before a package is set to done.
 - **Code and comments in English.**
 - **No hot patches.** Build, up, push and deploy are the owner's.
 - **No questions.** Trivial matters take the benchmark or standard choice, recorded under "Defaults taken" in the report with its source and how to undo it.
@@ -48,7 +48,7 @@ Owner plan of 2026-11-25. Each package runs in its own fresh headless Claude Cod
 
 A package stops as blocked on any of these:
 - a risk of irreversible data loss;
-- any of the 19 labelled ads stops being kept (must-keep set: `data/derived/labelled-ads.json`);
+- any of the 19 labelled ads (the owner's Applied, Saved and Rejected ads) stops being kept (must-keep set: `data/derived/must-keep.json`, see "Data copy");
 - a limit is reached;
 - tests are still red after one fix attempt;
 - a real product decision that this plan leaves undefined and that no benchmark, standard practice or earlier owner decision settles.
@@ -57,7 +57,7 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
 
 ## Packages
 
-1. **Archive and History.** Implement the rule above. Measure the Active list by days since last seen and by status, before and after (counts only). The 19 labelled ads are unaffected.
+1. **Archive and History.** Implement the rule above. Measure the Active list by days since last seen and by status, before and after (counts only). The 19 labelled ads (Applied/Saved/Rejected) are unaffected.
 2. **Free measurements, no changes:**
    - one scoring pass, profiled offline on a copy (cause of the 12x slowdown);
    - prompt section sizes, and whether the first 1,024 tokens are identical across calls;
@@ -67,7 +67,7 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
    - the vocabulary moves out of `role_filter.py` into Settings;
    - a normalized company key, and first/last seen dates, on ledger and filtered rows;
    - filtered sightings do not refresh `lastListedAt`;
-   - a must-keep set of the 19 labelled ads;
+   - a must-keep set of the 19 labelled ads (Applied/Saved/Rejected);
    - the round-1 rule changes are measured on that set.
 4. **Round 2 text rules.** Language, years, on-site only, visa and employment type, as hard/soft/unknown labels.
 5. **Cost and scoring time** (needs 2):
@@ -87,68 +87,85 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
 
 ## Package table
 
-The runner reads this table. `status` is written by the runner only, from its own checks (state file outside the repo + commit + report in that commit + sandboxed gate). A session never edits it. Values: `pending | in-progress | needs-review | blocked | done`. The runner treats a diff that touches this table as needs-review.
+`status` values: `pending | in-progress | needs-review | blocked | done`. The session sets its package's row in the package's own commit, from the report's first line, and only after the full tier is green.
 
 <!-- packages:start -->
-| N | slug | model | needs | order | maxTurns | status | commit |
-|---|---|---|---|---|---|---|---|
-| 1 | archive-history | claude-sonnet-5-5 | - | 1 | 400 | pending | - |
-| 2 | free-measurements | claude-sonnet-5-5 | - | 2 | 400 | pending | - |
-| 3 | filter-foundation | claude-opus-5-5 | - | 3 | 400 | pending | - |
-| 5 | cost-scoring-time | claude-opus-5-5 | 2 | 4 | 400 | pending | - |
-| 4 | text-rules-round2 | claude-sonnet-5-5 | 3 | 5 | 400 | pending | - |
-| 6 | missing-descriptions | claude-sonnet-5-5 | 2 | 6 | 400 | pending | - |
-| 7 | reposts | claude-sonnet-5-5 | 3 | 7 | 400 | pending | - |
+| N | slug | model | needs | order | status | commit |
+|---|---|---|---|---|---|---|
+| 1 | archive-history | claude-sonnet-5-5 | - | 1 | pending | - |
+| 2 | free-measurements | claude-sonnet-5-5 | - | 2 | pending | - |
+| 3 | filter-foundation | claude-opus-5-5 | - | 3 | pending | - |
+| 5 | cost-scoring-time | claude-opus-5-5 | 2 | 4 | pending | - |
+| 4 | text-rules-round2 | claude-sonnet-5-5 | 3 | 5 | pending | - |
+| 6 | missing-descriptions | claude-sonnet-5-5 | 2 | 6 | pending | - |
+| 7 | reposts | claude-sonnet-5-5 | 3 | 7 | pending | - |
 <!-- packages:end -->
 
-Needs 5→2 and 7→3 are from the plan. 4→3 and 6→2 are inferred from the order (own proposal; undo by editing `needs`). `maxTurns` 400 is an own proposal: a session that reaches it is blocked ("limit reached").
+Needs 5→2 and 7→3 are from the plan. 4→3 and 6→2 are inferred from the order (own proposal; undo by editing `needs`). `model` is the owner's choice per session (`/model`).
 
-## Runner
+## How to run a package
 
-### Commands
+The owner runs each package by hand:
 
-Usage, in fish from a checkout that has the runner:
+1. Start a new Claude Code session in `/srv/holojob` and type `/clear`.
+2. Set the model from the table (`/model`).
+3. Type: `do package N from the plan`.
+
+What the session does:
+
+1. **Start.** It reads this plan, CLAUDE.md and the rules. It works in a worktree on its own branch `pkg/NN-slug`, stacked on the last done package's branch (owner decision 2026-11-25), or on `main` when none is done.
+2. **Data copy.** It makes the package's copy (below) and works only on that copy, never on `/srv/holojob/data`.
+3. **Work and tests.** It implements only package N and runs the targeted tests while it works, then the full tier.
+4. **Report.** It writes `docs/redesign/reports/NN-slug.md` from the template. The first line is `Status: done | blocked | needs-review`.
+5. **Commit and stop.** It sets the package's row in the table, commits with the owner as the only author, and stops at the commit with a short report. No push, no build, no deploy: the report ends with the owner's commands.
+
+A stop rule means: `Status: blocked`, the reason in the report, commit, stop. There are no questions for trivial matters: the session takes the benchmark or standard choice and records it under "Defaults taken".
+
+## Data copy
+
+Owner decision 2026-11-26: ad data and settings are copied, private files are not copied at all. Make the copy into the package's worktree:
 
 ```fish
-scripts/run-package --probe                    # enforcement probes, PASS/FAIL table
-scripts/run-package 1 --base package-runner    # one package; --base only while this branch is not merged
-scripts/run-package --through 3                # next pending packages in order, up to package 3
-scripts/run-package --status                   # verified status of every package
+# Owner or session, once per worktree. The application ids come from the node export (TRACKER_PLAN 6a: Python does not read the application store).
+podman run --rm --security-opt label=disable -v /srv/holojob:/work:ro -v /tmp:/out -w /work docker.io/library/node:20-bookworm node scripts/export-application-job-ids.js /out/holojob-app-ids.txt
+/srv/holojob/.venv/bin/python scripts/package_data_copy.py --dest WORKTREE --application-job-ids /tmp/holojob-app-ids.txt
+rm /tmp/holojob-app-ids.txt
 ```
 
-### What one run does
+`scripts/package_data_copy.py` behaves as follows:
+- **Destination.** It refuses `/srv/holojob` itself, and any `data/` that already holds more than the tracked files.
+- **Contents.** Files are written with mode 600 and directories with mode 700. It prints counts only.
 
-1. **Preflight. The run refuses if any of these holds:**
-   - bubblewrap, socat or the token file (`~/.config/holojob-runner/oauth-token`, mode 600) is missing;
-   - `/srv/holojob` has a dirty tree;
-   - a `pkg/*` branch exists whose package is not verified done;
-   - the package is not pending;
-   - a needed package is not done;
-   - the last probe run is missing or failed.
-2. **Branch.** Created at once at the base, so a crash leaves an unfinished branch. The base is the newest done package branch (stacked, owner decision 2026-11-25), or `--base` when none is done.
-3. **Clone.** `git clone --no-hardlinks` into `~/holojob-packages/NN/repo`, with the remote removed.
-4. **Data split** (owner decision 2026-11-26):
-   - ad data and settings are copied by allowlist;
-   - private files are not copied at all;
-   - the derived `data/derived/labelled-ads.json` (ad ids and verdicts only) replaces the labels.
+**Copied (allowlist `AD_DATA_ALLOW`):**
+- `jobs/`: `discovered_jobs.json`, `job_history.json`, `filtered_ads.json`, `normalized_jobs.json`, `raw_jobs.csv`, `scored_jobs.json`, `rescored_kept.json`, `pipeline_last_run.json`, `job-state.json` and `staging/`.
+- `ai/settings.json` and `ai/usage-ledger.jsonl`.
+- `config/sources.json` and `config/ai-settings.json`.
+- `analytics/runs/`.
+- `cache/engine.json` and `cache/requirement-frames.json`.
 
-   The split is listed in `reports/00-package-runner.md`.
-5. **Session.** A fresh `claude -p` with the package's model, inside an outer bubblewrap. Inside it, Claude Code's own sandbox runs every Bash command with no network and no token. Settings are injected with `--settings`: the clone's own `.claude/settings*.json` and hooks never load.
-6. **Verification.** The runner sets the status from its own checks:
-   - the report's `Status:` line;
-   - a clean tree;
-   - at least one commit;
-   - the report is in the HEAD commit;
-   - the owner is the only author, with no attribution lines;
-   - no protected path is touched;
-   - no test is deleted or skipped;
-   - the full tier, run in a sandbox (podman `--network none` for node, bubblewrap without network for pytest).
-7. **Record.** The status row is committed on the package branch, the branch is fetched into `/srv/holojob`, and `~/holojob-packages/state/NN.json` is written.
+Any path that looks like a secret (the `scripts/secret-paths.js` rules) is never copied.
 
-### Enforcement and limits
+**Not copied:** everything else. That includes:
+- **Candidate data:** profile (and its `.bak`), applications, resumes, intelligence, interviews, outreach, chat.
+- **Labels and calibration.**
+- **Keys and backups:** secrets, backups.
+- **Profile-derived:** audits, AI findings, `analytics/skill_gap.json`, `engine-snapshot.json`, `profile-enrichment.json`, `requirement-remap.json`, `competency-*`.
+- **Fit and CV caches:** `cache/llm_fit.json`, `cache/fit3.json`, `cache/cv_analysis.json`, `cache/competency-evidence.json`, `cache/engine-calibration.json`, `cache/engine-stability.json`, `cache/repos`.
+- **Owner-only:** `jobs/manual_jobs.json` (notes, links, source URL).
+- **Not needed:** `.bak` copies and lock files.
 
-The enforcement layers and their probes are in `reports/00-package-runner.md`.
+To move a file to private, delete its line in `AD_DATA_ALLOW`.
 
-**Not enforced technically:**
-- The session reads the ad-data copy it needs. "Counts only, no private ad content in reports" stays a written rule.
-- The `claude` process itself talks to the Anthropic API.
+**For owner review:**
+- `jobs/scored_jobs.json`: its match reasons are derived from the profile.
+- `jobs/job-state.json`: your Saved/Rejected statuses.
+
+Package 1 needs both.
+
+**Must-keep set** (`data/derived/must-keep.json`): ad ids and statuses only.
+- A status is `applied`, `saved` or `rejected`; `applied` wins when an ad has two.
+- Saved and Rejected come from `data/jobs/job-state.json`.
+- Applied comes from the application-id export.
+- The file records `expected: 19` and the count found. The helper warns when they differ.
+
+**Open (owner):** on 2026-11-26 the server knows **16** of the 19: 5 Saved, 2 Rejected, 12 applications, with an overlap of 3. The other 3 are probably statuses held only in the browser. `export-protect-ids.js` notes that those reach the server only through Settings > import browser state. Until they do, the stop rule covers the 16.

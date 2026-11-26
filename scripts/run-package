@@ -1,7 +1,0 @@
-#!/bin/sh
-# Package runner entry point (fish-friendly): scripts/run-package --probe | N [--base REF] | --through M | --status
-# Logic and enforcement: scripts/run_package.py. Runs on the host venv; the runner itself makes no provider call.
-set -eu
-here=$(cd "$(dirname "$0")" && pwd)
-python=${HOLOJOB_PYTHON:-/srv/holojob/.venv/bin/python}
-exec "$python" -I "$here/run_package.py" "$@"

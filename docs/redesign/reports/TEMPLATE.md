@@ -1,5 +1,5 @@
 Status: done
-<!-- First line is parsed by scripts/run_package.py. One of: done | blocked | needs-review. The runner overrides it when its own checks fail. -->
+<!-- First line: one of done | blocked | needs-review. The package's row in PACKAGES_PLAN.md takes this value at the commit. done only after the full tier is green. -->
 
 # NN slug: one-line title
 
