@@ -467,9 +467,13 @@ def session_settings(ws: Workspace, private_roots: list[str], bash_denies: bool 
 
 
 def claude_argv(model: str, max_turns: int, settings: dict) -> list[str]:
+    # With CLAUDE_CODE_SUBPROCESS_ENV_SCRUB set, Claude Code forces the permission mode to default unless the allowed
+    # tools are declared on the command line (observed 2026-11-26, v2.1.331). Bash stays inside the sandbox
+    # (allowUnsandboxedCommands false); file tools only where the settings allow them.
+    allowed = ["Bash", "Glob", "Grep", "TodoWrite", *settings["permissions"]["allow"]]
     return ["claude", "-p", "--model", model, "--permission-mode", "dontAsk", "--setting-sources", "user",
             "--settings", json.dumps(settings), "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-            "--tools", ",".join(SESSION_TOOLS), "--disallowedTools", *DISALLOWED_TOOLS,
+            "--tools", ",".join(SESSION_TOOLS), "--allowedTools", *allowed, "--disallowedTools", *DISALLOWED_TOOLS,
             "--no-session-persistence", "--output-format", "stream-json", "--verbose", "--max-turns", str(max_turns)]
 
 
@@ -509,7 +513,10 @@ def session_limit_reason(outcome: dict) -> str:
     text = json.dumps(res)[:2000].lower()
     if "max_turns" in sub:
         return f"limit reached: max turns ({res.get('num_turns', '?')} used)"
-    if "budget" in sub or "rate limit" in text or "usage limit" in text or "rate_limit" in text:
+    if str(res.get("api_error_status")) == "401":
+        return "session could not authenticate (401): the runner token is invalid; renew it with `claude setup-token`"
+    if ("budget" in sub or str(res.get("api_error_status")) == "429" or "rate limit" in text or "usage limit" in text
+            or "rate_limit" in text):
         return f"limit reached: {sub or 'usage/rate limit'}"
     if not res:
         return f"session ended without a result event (exit {outcome['exit']})"
@@ -1009,6 +1016,9 @@ def run_probes(model: str) -> int:
         log = state_dir() / f"probe-{pid}.jsonl"
         outcome = run_session(ws, model, len(specs) * 2 + 20, session_settings(ws, split.private_roots, bash_denies=False),
                               PROBE_PROMPT.format(lines="\n".join(lines)), log)
+        why = session_limit_reason(outcome)
+        if why:
+            print(f"run-package: probe session: {why}")
         session_rows = [init_check(outcome["init"], model)] + judge(specs, outcome["events"])
     rows += session_rows
     rows.append(leftover_check(pid))
