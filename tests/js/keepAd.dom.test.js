@@ -199,13 +199,11 @@ describe('a kept row lasts', () => {
     expect(absentRow()).toBeTruthy()
   })
 
-  it('past the 14 days it is Archived like any ad that is not Saved or applied (owner 2026-11-26), and still kept', async () => {
+  it('past the 14 days and under a class Active leaves out', async () => {
     stubList({ route: good, ledger: ledgerRow(), scored })
     await keepThenReload(() => stubList({ route: () => routeAnswer([routeRow('s1'), routeRow('abs', 'stale', { title: 'The absent ad', lastSeen: ago(90) })]), scored }))
-    expect(absentRow()).toBeUndefined()
-    expect(kept().keptByUser).toBe(true)
-    await screen.click(screen.button(/^History$/))
-    expect(absentRow()?.textContent).toContain('Archived')
+    expect(absentRow()).toBeTruthy()
+    expect(screen.text()).toContain('Stale')
   })
 
   it('in today\'s list too, when the route fails', async () => {

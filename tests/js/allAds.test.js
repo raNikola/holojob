@@ -509,20 +509,34 @@ describe('History: Archived and Expired are separate reasons (package 1)', () =>
     expect(state).toEqual({ old: 'archived', recent: null, stale: 'archived', olderKey: 'archived', closed: 'expired', dead: 'expired', f: null })
   })
 
-  it('archives a Rejected or kept ad by the same period, and takes it out of Active', () => {
-    const stored = [local('rejected', { status: 'rejected' }), local('kept', { keptByUser: true })]
-    const result = compose({ stored, server: [route('rejected', 'absent', old()), route('kept', 'absent', old())] })
-    expect(historyOf([route('rejected', 'absent', old()), route('kept', 'absent', old())], stored)).toEqual({ rejected: 'archived', kept: 'archived' })
+  it('archives a Rejected ad by the same period, and takes it out of Active', () => {
+    const stored = [local('rejected', { status: 'rejected' })]
+    const result = compose({ stored, server: [route('rejected', 'absent', old())] })
+    expect(historyOf([route('rejected', 'absent', old())], stored)).toEqual({ rejected: 'archived' })
     expect(ids(result.active)).toEqual([])
   })
 
-  it('never archives a Saved ad or an ad with an application, from the browser or the server, and keeps them in Active', () => {
-    const rows = [route('saved', 'absent', old()), route('hand', 'absent', old()), route('app', 'absent', old()), route('serverSaved', 'stale', old())]
-    const stored = [local('saved', { status: 'saved' }), local('hand', { status: 'applied_manually' })]
-    const jobStateDoc = { jobs: { 'url:https://x.example/serversaved': { jobId: 'serverSaved', status: 'saved', keep: false }, 'url:https://x.example/hand': { jobId: 'hand', status: 'new', keep: false } } }
+  it('never archives a Saved, applied or kept ad, from the browser or the server, and keeps them in Active', () => {
+    const rows = [route('saved', 'absent', old()), route('hand', 'absent', old()), route('app', 'absent', old()), route('serverSaved', 'stale', old()), route('kept', 'stale', old()), route('serverKept', 'absent', old())]
+    const stored = [local('saved', { status: 'saved' }), local('hand', { status: 'applied_manually' }), local('kept', { keptByUser: true })]
+    const jobStateDoc = { jobs: {
+      'url:https://x.example/serversaved': { jobId: 'serverSaved', status: 'saved', keep: false },
+      'url:https://x.example/hand': { jobId: 'hand', status: 'new', keep: false },
+      'url:https://x.example/serverkept': { jobId: 'serverKept', status: 'new', keep: true },
+    } }
     const result = compose({ stored, server: rows, applications: withApplications('app'), jobStateDoc })
-    expect(Object.fromEntries(result.all.map((row) => [row.jobId, row.historyState ?? null]))).toEqual({ saved: null, hand: null, app: null, serverSaved: null })
-    expect(ids(result.active).sort()).toEqual(['app', 'hand', 'saved', 'serverSaved'])
+    expect(Object.fromEntries(result.all.map((row) => [row.jobId, row.historyState ?? null]))).toEqual({ saved: null, hand: null, app: null, serverSaved: null, kept: null, serverKept: null })
+    expect(ids(result.active).sort()).toEqual(['app', 'hand', 'kept', 'saved', 'serverKept', 'serverSaved'])
+  })
+
+  it('an ad past its deadline leaves Active unless protected; a protected one stays with its Expired badge', () => {
+    const dead = { expiresAt: ago(DAY) }
+    const stored = [local('saved', { status: 'saved' }), local('rejected', { status: 'rejected' }), local('kept', { keptByUser: true })]
+    const rows = [route('plain', 'found', dead), route('saved', 'found', dead), route('rejected', 'found', dead), route('kept', 'found', dead), route('app', 'found', dead)]
+    const result = compose({ stored, server: rows, applications: withApplications('app') })
+    expect(ids(result.active).sort()).toEqual(['app', 'kept', 'saved'])
+    for (const row of result.active) expect(allAds.classLabel(row)).toBe('Expired')
+    expect(Object.fromEntries(result.all.map((row) => [row.jobId, row.historyState]))).toEqual({ plain: 'expired', saved: 'expired', rejected: 'expired', kept: 'expired', app: 'expired' })
   })
 
   it('a Saved ad that is closed is still Expired: protection is from archiving only', () => {

@@ -5,7 +5,7 @@ Owner plan of 2026-11-25. The owner runs each package in a normal interactive Cl
 ## Closed decisions (owner)
 
 - Archive N = the existing `activeWindowDays` (14, Settings).
-- Saved ads are never archived. Applications are never archived.
+- Saved ads are never archived. Applications are never archived. Kept ads are never archived (owner 2026-11-26).
 - Archived (unseen for N days) and Expired (deadline passed, or confirmed closed) are two separate reasons.
 - An archived ad that reappears and passes the current filters returns to Jobs, unless the user rejected it.
 - History replaces All ads as a second view of the same data. It is searchable by company, title and reason.
@@ -64,7 +64,7 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
 
 ## Packages
 
-1. **Archive and History.** Implement the rule above. Measure the Active list by days since last seen and by status, before and after (counts only). The must-keep set (Applied/Saved/Rejected) is unaffected.
+1. **Archive and History.** Implement the rule above. Measure the Active list by days since last seen and by status, before and after (counts only). Saved, applied and kept ads are never archived; Rejected ads are archived after N days like any other (owner decisions 2026-11-26). An ad past its deadline leaves Active unless it is Saved, applied or kept; those stay with the Expired badge.
 2. **Free measurements, no changes:**
    - one scoring pass, profiled offline on a copy (cause of the 12x slowdown);
    - prompt section sizes, and whether the first 1,024 tokens are identical across calls;
