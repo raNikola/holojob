@@ -99,7 +99,7 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
 <!-- packages:start -->
 | N | slug | model | needs | order | status | commit |
 |---|---|---|---|---|---|---|
-| 1 | archive-history | claude-sonnet-5-5 | - | 1 | done | pkg/01-archive-history |
+| 1 | archive-history | claude-sonnet-5-5 | - | 1 | done | list-cleanup |
 | 2 | free-measurements | claude-sonnet-5-5 | - | 2 | pending | - |
 | 3 | filter-foundation | claude-opus-5-5 | - | 3 | pending | - |
 | 5 | cost-scoring-time | claude-opus-5-5 | 2 | 4 | pending | - |
@@ -120,7 +120,7 @@ The owner runs each package by hand:
 
 What the session does:
 
-1. **Start.** It reads this plan, CLAUDE.md and the rules. It works in a worktree on its own branch `pkg/NN-slug`, stacked on the last done package's branch (owner decision 2026-11-25), or on `main` when none is done.
+1. **Start.** It reads this plan, CLAUDE.md and the rules. Every package works on the one feature branch `list-cleanup` (owner decision 2026-11-26; it replaces the per-package branches stacked on each other of 2026-11-25): its work is one or more commits on that branch, after the previous package's commits.
 2. **Data.** It reads `/srv/holojob/data` directly. The worktree's own `data/` holds only tracked files. It writes nothing under `data/`.
 3. **Work and tests.** It implements only package N and runs the targeted tests while it works, then the full tier.
 4. **Permanent docs.** In the package commit, it describes the feature in the repo's own docs: DECISIONS.md, ROADMAP.md and the feature md (for example the area's plan or spec under `docs/redesign/`).
@@ -142,33 +142,38 @@ A stop rule means: `Status: blocked`, the reason in the report, commit, stop. Th
 Optional. It runs the pending packages in table order, one fresh `claude -p` session each, on the owner's normal login, with the model from the table. The prompt is `do package N from docs/redesign/PACKAGES_PLAN.md`.
 
 ```fish
-cd /srv/holojob
-scripts/run-packages --base package-runner              # all pending (--base only until this plan is on main)
-scripts/run-packages --through 3 --base package-runner  # pending packages in table order up to package 3
-scripts/run-packages 2 --base package-runner            # package 2 only
+scripts/run-packages               # all pending, in table order (any cwd: /srv/holojob/scripts/run-packages)
+scripts/run-packages --through 3   # pending packages in table order up to package 3
+scripts/run-packages 2             # package 2 only
+scripts/run-packages --regate 1    # full tier on the branch tip, recorded as package 1's pass
 ```
+
+**One branch, one worktree.** All packages are commits on `list-cleanup`, in the one worktree `.claude/worktrees/list-cleanup` (re-attached if removed; the branch is created from `--base`, default `main`, only if it does not exist). The plan is read from `list-cleanup`. The runner state `.claude/package-runs/state.json` (git-ignored, mode 600) records per package the tip that passed the full tier, its base (the previous package's recorded tip) and the time, plus the last recorded tip and the package in progress with its base.
+
+**Regate.** `--regate N` runs `sh scripts/test-tier.sh full` (the branch's copy) on the branch tip and, when it passes, records the tip for package N with the base above; a red tier records nothing (log `.claude/package-runs/NN-<time>-regate.log`). It refuses a dirty worktree, another package in progress, a package N that is recorded but no longer the last one, and a tip with no commit since the base. Use it after fixing a red gate by hand. With nothing recorded yet, the base is where the branch left `--base`.
 
 **Refusals.** It refuses to start when:
 - `/srv/holojob` has a dirty tree;
-- another package's `pkg/*` branch is not done;
+- another package is in progress on the branch;
+- for a new package: the branch has commits since the last recorded tip (they belong to no package), or the worktree has uncommitted changes;
 - the package itself is `blocked` or `needs-review` (the owner decides first);
 - a needed package is not done.
 
-**Resume.** If the package's own branch exists and the package is unfinished (no report, or a report without `Status: done|blocked|needs-review`), the runner resumes it. That covers a stopped session or a missing commit:
-- it reuses `pkg/NN-slug` and its worktree, with the uncommitted changes kept, never discarded or reset (the worktree is re-attached if it was removed);
+**Resume.** If the state names the package as in progress and it is unfinished (no report, a report without `Status: done|blocked|needs-review`, or a red gate), the runner resumes it. That covers a stopped session, a missing commit or a red gate:
+- it reuses the worktree, with the uncommitted changes kept, never discarded or reset;
 - it moves the previous report back into the worktree, so the session continues it;
 - the prompt tells the session it is a resumed run;
-- the base stays where the branch left the stack.
+- the base stays the one recorded when the package started.
 
 **Per package**, the runner:
-1. **Prepares.** For a new package, it creates the worktree `.claude/worktrees/pkg-NN-slug` on `pkg/NN-slug`, stacked on the last done package; on resume, it reuses both. It installs the runner's own copy of `scripts/node-sandbox` at `.claude/package-runs/bin/node-sandbox`. It also writes the application-id export to a temp file (ids only, mode 600, removed after the session) for the must-keep set.
-2. **Runs the session** in that worktree. The prompt is `do package N from docs/redesign/PACKAGES_PLAN.md`, followed by the headless rules below (and the resume note when resuming). The session finds its branch ready, works there and reads `/srv/holojob/data` directly.
+1. **Prepares.** It attaches the worktree and, for a new package, records it as in progress with the last recorded tip as its base. It installs the runner's own copy of `scripts/node-sandbox` at `.claude/package-runs/bin/node-sandbox`. It also writes the application-id export to a temp file (ids only, mode 600, removed after the session) for the must-keep set.
+2. **Runs the session** in that worktree. The prompt is `do package N from docs/redesign/PACKAGES_PLAN.md`, followed by the headless rules below (and the resume note when resuming). The session commits on `list-cleanup`, never creates or switches branches, and reads `/srv/holojob/data` directly.
 3. **Moves the report** from the worktree's git-ignored `logs/package-report-NN-slug.md` to `.claude/package-runs/reports/NN-slug.md`. Claude Code refuses headless writes under `.claude/` as a "sensitive file", even with `--add-dir` and an allow rule (checked 2026-11-26). The staging file is seeded from the template, whose first line `Status: in-progress` never counts as done.
 4. **Decides from files and git, never from the exit code.** The package is done only when all of these hold:
    - `.claude/package-runs/reports/NN-slug.md` exists and its first line is `Status: done`;
-   - there is a commit on `pkg/NN-slug` after the base;
+   - there is at least one commit on `list-cleanup` since the previous package's recorded tip;
    - the worktree is clean;
-   - `sh scripts/test-tier.sh full` passed on the branch tip, recorded with the base sha as a local git note in `refs/notes/package-gate`.
+   - `sh scripts/test-tier.sh full` passed on the tip; the runner then records the tip in the state (done stays done while that tip is on the branch, after later packages too).
 5. **Stops** at the first package that is not done, blocked or needs-review. Packages already done are skipped, after the same four checks. A report left by an abandoned run is renamed `.old-<time>` and never trusted.
 
 **In headless sessions:**
@@ -188,7 +193,7 @@ scripts/run-packages 2 --base package-runner            # package 2 only
   - `/srv/holojob/data` read-only, at its own path, with `data/secrets` masked by an empty tmpfs (`notmpcopyup`, checked: 0 files visible);
   - the shared `node_modules` as a podman overlay: Vitest writes its temp config there, the writes are discarded and the host copy never changes.
 
-  Every file must lie inside the worktree: no absolute path, `..`, symlink out or option-like name, and no other flags. Script arguments are limited to plain characters. It runs only from a `pkg-NN-*` worktree.
+  Every file must lie inside the worktree: no absolute path, `..`, symlink out or option-like name, and no other flags. Script arguments are limited to plain characters. It runs only from the `list-cleanup` worktree.
 - **Tests:** the session runs pytest, plus Vitest and lint through the helper. The runner runs the full tier, the build included, on the branch tip.
 
 **Project deny rules (`.claude/settings.json`, every session):** `git push`, `podman-compose`, `systemctl`; edits and writes under `/srv/holojob/data` (Edit and Write tools); reads of `.env`, `claude-config` and `data/secrets`. Project deny rules apply in `-p` without the trust dialog.
@@ -196,4 +201,4 @@ scripts/run-packages 2 --base package-runner            # package 2 only
 **What this cannot enforce (no sandbox):**
 - **The rules only see the command as typed.** Any allowed command can run something else: the venv python can call `subprocess` and run `git push`, podman or a provider call, write under `data/`, or read a secret. So can a test the session writes, which the runner's full tier then runs with the owner's rights.
 - **Bash rules miss variants.** `Bash(git push *)` does not stop `git -C dir push` (Claude Code docs, permissions). `Read` denies do not stop `cat` through an allowed command, and they apply to Grep and Glob only "best-effort".
-- **The owner's keys stay reachable.** The login, ssh key, gh token and provider keys are readable by any process the session starts. Nothing technical stops a paid call or a push. The plan's rules, the denies and the owner's review of each branch before merging are the only guard.
+- **The owner's keys stay reachable.** The login, ssh key, gh token and provider keys are readable by any process the session starts. Nothing technical stops a paid call or a push. The plan's rules, the denies and the owner's review of the branch before merging are the only guard.

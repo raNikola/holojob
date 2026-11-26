@@ -7,7 +7,7 @@ the package commit. Counts, ids and public ad titles only: no private content. -
 
 # Package NN slug: one-line title
 
-Branch `pkg/NN-slug`, base `<ref>` (`<sha>`), package commit(s) `<sha>`.
+Branch `list-cleanup`, base `<sha>` (the previous package's recorded tip), package commit(s) `<sha>`.
 
 ## Result
 
@@ -79,7 +79,7 @@ Fish, DS9: merge, build, up and rollback, exactly as typed.
 
 ```fish
 cd /srv/holojob
-# git merge --ff-only pkg/NN-slug   (from the branch the owner merges into)
+# git merge --ff-only list-cleanup   (once the whole list is done and reviewed, from the branch the owner merges into)
 podman-compose build
 podman-compose up -d --force-recreate
 # rollback: git switch <previous>; podman-compose build; podman-compose up -d --force-recreate

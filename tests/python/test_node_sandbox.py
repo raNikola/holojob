@@ -20,7 +20,7 @@ _loader.exec_module(ns)
 @pytest.fixture
 def wt(tmp_path):
     root = tmp_path / "worktrees"
-    w = root / "pkg-01-archive-history"
+    w = root / "list-cleanup"
     for f in ("tests/js/allAds.test.js", "src/modules/jobs/allAds.js", "scripts/measure.mjs", "README.md"):
         (w / f).parent.mkdir(parents=True, exist_ok=True)
         (w / f).write_text("x")
@@ -79,7 +79,7 @@ def test_only_from_a_package_worktree(wt, tmp_path):
     for cwd in (root, tmp_path, root.parent):
         with pytest.raises(ns.Refused):
             ns.package_worktree(cwd, root)
-    other = root / "prune-tests"
+    other = root / "pkg-01-archive-history"  # a per-package worktree no longer counts
     other.mkdir()
     with pytest.raises(ns.Refused):
         ns.package_worktree(other, root)

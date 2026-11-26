@@ -9,7 +9,7 @@ One fixed container: node:20-bookworm, --network none, --security-opt label=disa
 /work, /srv/holojob/data read-only at its own path (scripts read the real data) with data/secrets masked by an
 empty tmpfs (notmpcopyup: podman would otherwise copy the files in), and the shared node_modules as a
 podman overlay (`:O`: Vitest writes its temp config there, the writes are discarded and the host copy never changes;
-the worktree has no node_modules). Runs only from a package worktree (/srv/holojob/.claude/worktrees/pkg-NN-*). Every path must
+the worktree has no node_modules). Runs only from the run worktree (/srv/holojob/.claude/worktrees/list-cleanup). Every path must
 stay inside the worktree: no absolute path, no "..", no symlink out, no option-looking file name.
 
 The runner installs a copy of this file at /srv/holojob/.claude/package-runs/bin/node-sandbox, outside the worktree,
@@ -33,7 +33,7 @@ TEST_FILE = re.compile(r"^tests/js/.+\.(test|spec)\.(js|jsx|mjs|cjs)$")
 LINT_FILE = re.compile(r"^(src|scripts|tests)/.+\.(js|jsx|mjs|cjs)$")
 SCRIPT_FILE = re.compile(r"^.+\.(js|mjs|cjs)$")
 SAFE_ARG = re.compile(r"^[A-Za-z0-9_./=:,@%+-]{1,300}$")
-PKG_WORKTREE = re.compile(r"^pkg-\d{2}-[a-z0-9-]+$")
+RUN_WORKTREE = "list-cleanup"  # the one package-run worktree (scripts/run_packages.py BRANCH)
 
 
 class Refused(Exception):
@@ -47,8 +47,8 @@ def package_worktree(cwd: Path, worktrees: Path = WORKTREES) -> Path:
     if root not in cwd.parents and cwd != root:
         raise Refused(f"not inside a package worktree under {worktrees}")
     rel = cwd.relative_to(root).parts
-    if not rel or not PKG_WORKTREE.match(rel[0]):
-        raise Refused("not inside a package worktree (pkg-NN-slug)")
+    if not rel or rel[0] != RUN_WORKTREE:
+        raise Refused(f"not inside the package-run worktree ({RUN_WORKTREE})")
     return root / rel[0]
 
 
