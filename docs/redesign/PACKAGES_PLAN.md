@@ -39,6 +39,7 @@ Owner plan of 2026-11-25. The owner runs each package in a normal interactive Cl
 - **Benchmark first.** Open the repo files in `/home/ranikola/holojob-eval/benchmarks/` directly (read-only).
 - **Name the source of each design element:** benchmark file, owner decision, or own proposal. Flag every deviation from the benchmark.
 - **Limits and thresholds the owner decides live in Settings.**
+- **Real data, read-only.** Measurements read `/srv/holojob/data` directly. Measurements and tests write only to temp dirs, never under `data/`. Reports carry counts, ids and public ad titles only, never private content.
 - **Tests run in a temp dir, never `data/`.** Run the targeted tests per change, and the full tier (CLAUDE.md, "Testing and commit policy") before a package is set to done.
 - **Code and comments in English.**
 - **No hot patches.** Build, up, push and deploy are the owner's.
@@ -48,16 +49,22 @@ Owner plan of 2026-11-25. The owner runs each package in a normal interactive Cl
 
 A package stops as blocked on any of these:
 - a risk of irreversible data loss;
-- any of the 19 labelled ads (the owner's Applied, Saved and Rejected ads) stops being kept (must-keep set: `data/derived/must-keep.json`, see "Data copy");
+- any ad of the must-keep set (below) stops being kept;
 - a limit is reached;
 - tests are still red after one fix attempt;
 - a real product decision that this plan leaves undefined and that no benchmark, standard practice or earlier owner decision settles.
+
+**Must-keep set.** The owner's Applied, Saved and Rejected ads, with an ad that has two of these counted once. It is computed from the real data when needed and not stored:
+- **Saved and Rejected:** `status` in `/srv/holojob/data/jobs/job-state.json`.
+- **Applied:** the job ids from `scripts/export-application-job-ids.js`, because Python does not read the application store (TRACKER_PLAN 6a).
+
+  In an interactive session, run the export into a temp file. In a headless run, the runner writes it before the session and passes the path in `HOLOJOB_APPLICATION_JOB_IDS`.
 
 Blocked means: write the reason in the report, put `Status: blocked` on its first line, commit, and stop.
 
 ## Packages
 
-1. **Archive and History.** Implement the rule above. Measure the Active list by days since last seen and by status, before and after (counts only). The 19 labelled ads (Applied/Saved/Rejected) are unaffected.
+1. **Archive and History.** Implement the rule above. Measure the Active list by days since last seen and by status, before and after (counts only). The must-keep set (Applied/Saved/Rejected) is unaffected.
 2. **Free measurements, no changes:**
    - one scoring pass, profiled offline on a copy (cause of the 12x slowdown);
    - prompt section sizes, and whether the first 1,024 tokens are identical across calls;
@@ -67,7 +74,7 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
    - the vocabulary moves out of `role_filter.py` into Settings;
    - a normalized company key, and first/last seen dates, on ledger and filtered rows;
    - filtered sightings do not refresh `lastListedAt`;
-   - a must-keep set of the 19 labelled ads (Applied/Saved/Rejected);
+   - the must-keep set (Applied/Saved/Rejected) as a check the round-1 rules are measured on;
    - the round-1 rule changes are measured on that set.
 4. **Round 2 text rules.** Language, years, on-site only, visa and employment type, as hard/soft/unknown labels.
 5. **Cost and scoring time** (needs 2):
@@ -114,7 +121,7 @@ The owner runs each package by hand:
 What the session does:
 
 1. **Start.** It reads this plan, CLAUDE.md and the rules. It works in a worktree on its own branch `pkg/NN-slug`, stacked on the last done package's branch (owner decision 2026-11-25), or on `main` when none is done.
-2. **Data copy.** It makes the package's copy (below) and works only on that copy, never on `/srv/holojob/data`.
+2. **Data.** It reads `/srv/holojob/data` directly. The worktree's own `data/` holds only tracked files. It writes nothing under `data/`.
 3. **Work and tests.** It implements only package N and runs the targeted tests while it works, then the full tier.
 4. **Report.** It writes `docs/redesign/reports/NN-slug.md` from the template. The first line is `Status: done | blocked | needs-review`.
 5. **Commit and stop.** It sets the package's row in the table, commits with the owner as the only author, and stops at the commit with a short report. No push, no build, no deploy: the report ends with the owner's commands.
@@ -138,8 +145,8 @@ scripts/run-packages 2 --base package-runner            # package 2 only
 - a needed package is not done.
 
 **Per package**, the runner:
-1. **Prepares.** It creates the worktree `.claude/worktrees/pkg-NN-slug` on `pkg/NN-slug`, stacked on the last done package, and fills its `data/` with the reduced copy.
-2. **Runs the session** in that worktree. The session finds its branch and data copy ready and works there.
+1. **Prepares.** It creates the worktree `.claude/worktrees/pkg-NN-slug` on `pkg/NN-slug`, stacked on the last done package. It also writes the application-id export to a temp file (ids only, mode 600, removed after the session) for the must-keep set.
+2. **Runs the session** in that worktree. The session finds its branch ready, works there and reads `/srv/holojob/data` directly.
 3. **Decides from git, never from the exit code.** The package is done only when all of these hold:
    - there is a commit on the branch after the base;
    - the worktree is clean;
@@ -154,58 +161,9 @@ scripts/run-packages 2 --base package-runner            # package 2 only
 - **Denied for these sessions only:** podman, `scripts/test-tier.sh`, `git remote`, `AskUserQuestion`, plan mode, worktree switching, web tools. This is owner decision 2026-11-26: interactive sessions keep the node test container.
 - **Tests:** the session runs pytest and its targeted checks. Lint, Vitest and the build run in the runner's full tier, so `Status: done` from a headless session means pytest is green and the full tier is left to the runner.
 
-**Project deny rules (`.claude/settings.json`, every session):** `git push`, `podman-compose`, `systemctl`; edits under `/srv/holojob/data`; reads of `.env`, `claude-config` and the private data files listed under "Data copy". Project deny rules apply in `-p` without the trust dialog.
+**Project deny rules (`.claude/settings.json`, every session):** `git push`, `podman-compose`, `systemctl`; edits and writes under `/srv/holojob/data` (Edit and Write tools); reads of `.env`, `claude-config` and `data/secrets`. Project deny rules apply in `-p` without the trust dialog.
 
 **What this cannot enforce (no sandbox):**
-- **The rules only see the command as typed.** Any allowed command can run something else: the venv python can call `subprocess` and run `git push`, podman, a provider call or a read of private data. So can a test the session writes, which the runner's full tier then runs with the owner's rights.
+- **The rules only see the command as typed.** Any allowed command can run something else: the venv python can call `subprocess` and run `git push`, podman or a provider call, write under `data/`, or read a secret. So can a test the session writes, which the runner's full tier then runs with the owner's rights.
 - **Bash rules miss variants.** `Bash(git push *)` does not stop `git -C dir push` (Claude Code docs, permissions). `Read` denies do not stop `cat` through an allowed command, and they apply to Grep and Glob only "best-effort".
 - **The owner's keys stay reachable.** The login, ssh key, gh token and provider keys are readable by any process the session starts. Nothing technical stops a paid call or a push. The plan's rules, the denies and the owner's review of each branch before merging are the only guard.
-
-## Data copy
-
-Owner decision 2026-11-26: ad data and settings are copied, private files are not copied at all. Make the copy into the package's worktree:
-
-```fish
-# Owner or session, once per worktree. The application ids come from the node export (TRACKER_PLAN 6a: Python does not read the application store).
-podman run --rm --security-opt label=disable -v /srv/holojob:/work:ro -v /tmp:/out -w /work docker.io/library/node:20-bookworm node scripts/export-application-job-ids.js /out/holojob-app-ids.txt
-/srv/holojob/.venv/bin/python scripts/package_data_copy.py --dest WORKTREE --application-job-ids /tmp/holojob-app-ids.txt
-rm /tmp/holojob-app-ids.txt
-```
-
-`scripts/package_data_copy.py` behaves as follows:
-- **Destination.** It refuses `/srv/holojob` itself, and any `data/` that already holds more than the tracked files.
-- **Contents.** Files are written with mode 600 and directories with mode 700. It prints counts only.
-
-**Copied (allowlist `AD_DATA_ALLOW`):**
-- `jobs/`: `discovered_jobs.json`, `job_history.json`, `filtered_ads.json`, `normalized_jobs.json`, `raw_jobs.csv`, `scored_jobs.json`, `rescored_kept.json`, `pipeline_last_run.json`, `job-state.json` and `staging/`.
-- `ai/settings.json` and `ai/usage-ledger.jsonl`.
-- `config/sources.json` and `config/ai-settings.json`.
-- `analytics/runs/`.
-- `cache/engine.json` and `cache/requirement-frames.json`.
-
-Any path that looks like a secret (the `scripts/secret-paths.js` rules) is never copied.
-
-**Not copied:** everything else. That includes:
-- **Candidate data:** profile (and its `.bak`), applications, resumes, intelligence, interviews, outreach, chat.
-- **Labels and calibration.**
-- **Keys and backups:** secrets, backups.
-- **Profile-derived:** audits, AI findings, `analytics/skill_gap.json`, `engine-snapshot.json`, `profile-enrichment.json`, `requirement-remap.json`, `competency-*`.
-- **Fit and CV caches:** `cache/llm_fit.json`, `cache/fit3.json`, `cache/cv_analysis.json`, `cache/competency-evidence.json`, `cache/engine-calibration.json`, `cache/engine-stability.json`, `cache/repos`.
-- **Owner-only:** `jobs/manual_jobs.json` (notes, links, source URL).
-- **Not needed:** `.bak` copies and lock files.
-
-To move a file to private, delete its line in `AD_DATA_ALLOW`.
-
-**For owner review:**
-- `jobs/scored_jobs.json`: its match reasons are derived from the profile.
-- `jobs/job-state.json`: your Saved/Rejected statuses.
-
-Package 1 needs both.
-
-**Must-keep set** (`data/derived/must-keep.json`): ad ids and statuses only.
-- A status is `applied`, `saved` or `rejected`; `applied` wins when an ad has two.
-- Saved and Rejected come from `data/jobs/job-state.json`.
-- Applied comes from the application-id export.
-- The file records `expected: 19` and the count found. The helper warns when they differ.
-
-**Open (owner):** on 2026-11-26 the server knows **16** of the 19: 5 Saved, 2 Rejected, 12 applications, with an overlap of 3. The other 3 are probably statuses held only in the browser. `export-protect-ids.js` notes that those reach the server only through Settings > import browser state. Until they do, the stop rule covers the 16.

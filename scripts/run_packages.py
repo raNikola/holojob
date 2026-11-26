@@ -8,7 +8,9 @@
 
 Per package the runner:
   1. creates the worktree /srv/holojob/.claude/worktrees/pkg-NN-slug on branch pkg/NN-slug, stacked on the last done
-     package's branch (else --base), and fills its data/ with the reduced copy (scripts/package_data_copy.py);
+     package's branch (else --base); the session reads /srv/holojob/data directly. For the must-keep set it writes the
+     application job ids (scripts/export-application-job-ids.js; Python does not read the store) to a temp file, ids
+     only, mode 600, passed as HOLOJOB_APPLICATION_JOB_IDS and removed after the session;
   2. starts `claude -p "do package N from docs/redesign/PACKAGES_PLAN.md"` there with the owner's normal login, the
      model from the plan table, permission mode acceptEdits (edits in the worktree only), a small Bash allowlist and
      deny rules; in -p a call that would need approval is denied, never waited for (Claude Code docs, permission-modes);
@@ -183,15 +185,14 @@ def gate(row: Row, sha: str, log: Path) -> bool:
     return r.returncode == 0
 
 
-def make_worktree(row: Row, base: str) -> None:
-    git("worktree", "add", "-q", "-b", row.branch, str(row.worktree), base)
-    with tempfile.TemporaryDirectory(prefix="holojob-app-ids-") as tmp:
-        os.chmod(tmp, 0o700)
-        subprocess.run(["podman", "run", "--rm", "--security-opt", "label=disable", "-v", f"{REPO}:/work:ro",
-                        "-v", f"{tmp}:/out", "-w", "/work", NODE_IMAGE, "node", "scripts/export-application-job-ids.js",
-                        "/out/ids.txt"], check=True, capture_output=True)
-        subprocess.run([str(VENV_PY), str(row.worktree / "scripts/package_data_copy.py"), "--dest", str(row.worktree),
-                        "--application-job-ids", f"{tmp}/ids.txt", "--source", str(REPO)], check=True)
+def export_application_ids(tmp: str) -> Path:
+    """Application job ids, read-only on the store, ids only (the repo's sanctioned exporter)."""
+    out = Path(tmp) / "application-job-ids.txt"
+    subprocess.run(["podman", "run", "--rm", "--security-opt", "label=disable", "-v", f"{REPO}:/work:ro",
+                    "-v", f"{tmp}:/out", "-w", "/work", NODE_IMAGE, "node", "scripts/export-application-job-ids.js",
+                    f"/out/{out.name}"], check=True, capture_output=True)
+    out.chmod(0o600)
+    return out
 
 
 def run_one(row: Row, all_rows: list[Row], base_default: str) -> str:
@@ -199,7 +200,7 @@ def run_one(row: Row, all_rows: list[Row], base_default: str) -> str:
     base = base_for(all_rows, base_default)
     base_sha = git("rev-parse", "--verify", f"{base}^{{commit}}")
     print(f"run-packages: package {row.n} {row.slug} on {row.branch} from {base}, model {row.model}")
-    make_worktree(row, base_sha)
+    git("worktree", "add", "-q", "-b", row.branch, str(row.worktree), base_sha)
     logdir = REPO / ".claude/package-runs"
     logdir.mkdir(mode=0o700, parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -207,9 +208,11 @@ def run_one(row: Row, all_rows: list[Row], base_default: str) -> str:
     argv = ["claude", "-p", PROMPT.format(n=row.n), "--model", row.model, "--permission-mode", "acceptEdits",
             "--allowedTools", *ALLOWED, "--disallowedTools", *DISALLOWED, "--max-turns", str(MAX_TURNS),
             "--output-format", "json"]
-    with open(log, "w") as fh:
+    with tempfile.TemporaryDirectory(prefix="holojob-app-ids-") as tmp, open(log, "w") as fh:
+        os.chmod(tmp, 0o700)
         os.chmod(log, 0o600)
-        subprocess.run(argv, cwd=row.worktree, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT)
+        env = {**os.environ, "HOLOJOB_APPLICATION_JOB_IDS": str(export_application_ids(tmp))}
+        subprocess.run(argv, cwd=row.worktree, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT, env=env)
     # The verdict comes from git, never from the exit code.
     tip = git("rev-parse", "HEAD", repo=row.worktree)
     if tip == base_sha:
