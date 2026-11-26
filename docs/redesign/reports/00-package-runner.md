@@ -6,7 +6,17 @@ Status: needs-review
 
 The workflow is built: plan (`docs/redesign/PACKAGES_PLAN.md`), report template, and `scripts/run-package`. The runner runs one package per fresh headless session, in a throwaway clone with an allowlisted ad-data copy. Each session runs inside an outer bubblewrap, with Claude Code's Bash sandbox inside that. The runner sets the status from its own checks.
 
-**No package has run.** The runner refuses every package until a probe run passes. The last probe run (2026-11-26) passed every check that needs no model. The session probes did not run: the API rejects the token in `~/.config/holojob-runner/oauth-token` (`401 Invalid bearer token`). A hint, not verified: the file holds 92 characters without an `sk-ant-` prefix, which setup-tokens normally carry.
+**No package has run.** The runner refuses every package until a probe run passes. The last probe run (2026-11-26) passed every check that needs no model. The session probes did not run: the API rejects the token in `~/.config/holojob-runner/oauth-token` (`401 Invalid bearer token`).
+
+**Diagnosis (2026-11-26):** the token itself is invalid.
+- The file is fine: mode 600, 92 bytes, no newline, no whitespace.
+- The same token gets a 401 in three setups:
+  - outside the sandbox with the host environment;
+  - outside the sandbox with the runner's environment;
+  - inside the outer sandbox.
+- The owner's normal login answers the same minimal call.
+- The content is malformed: one `#` (position 48) and no `sk-ant-oat01-` prefix. This looks like a partial paste.
+- The runner now refuses a token file with characters a token cannot contain.
 
 ## Measured
 
