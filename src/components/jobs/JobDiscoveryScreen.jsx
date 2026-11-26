@@ -275,8 +275,8 @@ export default function JobDiscoveryScreen() {
 
   // Display only, recomputed from its inputs and never saved. Until the route has answered, Active is today's list.
   const composed = useMemo(
-    () => (routeEnabled && !serverOn ? composeJobList({ stored: state.jobs, server: allAds.rows, applications, reference, activeWindowDays }) : null),
-    [routeEnabled, serverOn, state.jobs, allAds.rows, applications, reference, activeWindowDays],
+    () => (routeEnabled && !serverOn ? composeJobList({ stored: state.jobs, server: allAds.rows, applications, reference, activeWindowDays, jobStateDoc: jobState.doc }) : null),
+    [routeEnabled, serverOn, state.jobs, allAds.rows, applications, reference, activeWindowDays, jobState.doc],
   )
   const useComposed = serverShown || (!serverOn && routeEnabled && (allAds.rows !== null || listMode === 'all'))
   const composedRows = useMemo(() => {

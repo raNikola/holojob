@@ -132,7 +132,7 @@ function screenFiltered(input, query) {
   const { stored, server, jobStateDoc, applications } = input
   const store = applications.status === 'ready' ? applications.store : null
   const settings = applications.settings
-  const composed = composeJobList({ stored, server, applications, reference: NOW, activeWindowDays: query.windowDays })
+  const composed = composeJobList({ stored, server, applications, reference: NOW, activeWindowDays: query.windowDays, jobStateDoc })
   const rows = overlayTracking(withServerState(query.mode === 'all' ? composed.all : composed.active, jobStateDoc), store, settings)
     .map((row) => (row.serverOnly && row.applicationTracking ? { ...row, status: 'applied_manually' } : row))
   const shown = query.mode === 'all' ? applyAllControls(rows, { classes: new Set(query.classes), recent: query.recent, reference: NOW, windowDays: query.windowDays }) : rows

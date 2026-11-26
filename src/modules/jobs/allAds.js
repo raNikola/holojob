@@ -21,7 +21,7 @@ export const ROUTE_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup
 export const AD_FIELDS = ['title', 'company', 'location', 'jobUrl', 'provider', 'site', 'isRemote', 'datePosted', 'salary', 'expiresAt']
 
 /** On a composed row for display, and never on a stored one. */
-export const DISPLAY_ONLY_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'serverOnly', 'appliedOtherCopy']
+export const DISPLAY_ONLY_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'serverOnly', 'appliedOtherCopy', 'historyState', 'historyReason']
 
 /** A composed row without what must not be stored or sent on. */
 export function stripDisplayFields(row) {
@@ -41,12 +41,14 @@ const CLASS_LABELS = {
   filtered_incomplete: 'Incomplete',
   unclassified: 'Status unknown',
 }
+const HISTORY_LABELS = { archived: 'Archived', expired: 'Expired' }
 const NOT_IN_ROUTE_LABEL = 'Saved in this browser'
 const COPY_RANK = { found: 0, held: 1, absent: 2 }
 
 /** The badge text of a row, or null when it needs none: a found row, a hand-entered one. */
 export function classLabel(row) {
   if (row?.manualEntry) return null
+  if (row?.historyState) return HISTORY_LABELS[row.historyState]
   if (!row?.class) return NOT_IN_ROUTE_LABEL
   return Object.hasOwn(CLASS_LABELS, row.class) ? CLASS_LABELS[row.class] : CLASS_LABELS.unclassified
 }
@@ -78,6 +80,36 @@ export function seenRecently(lastSeen, now, windowDays) {
   const seen = toTime(lastSeen)
   return days !== null && seen !== null && now - seen <= days * DAY_MS
 }
+
+const dayLabel = (days) => `${days} ${days === 1 ? 'day' : 'days'}`
+const FILTERED_CLASSES = new Set(['filtered', 'filtered_incomplete'])
+
+/**
+ * Why a row is in History and not Active, as two separate reasons (owner decisions 2026-11-25, PACKAGES_PLAN "Closed decisions"):
+ * `expired` = the deadline passed or the ad is confirmed closed (class `closed`), nothing else; `archived` = any other row not seen for the
+ * Settings period (`activeWindowDays`), whatever its class (absent, older_key, stale, unclassified). Only a Saved ad and an ad with an
+ * application (one in the store, or marked applied by hand) are never archived (owner decision 2026-11-26); they can still be expired. A
+ * Rejected ad, a kept one and any other work are archived by the same N. A row seen again is `found`, so it is neither and returns to Active
+ * by the same rules as any new ad (a Rejected one stays out by its status). Filtered rows keep their own class. No valid period means no
+ * archiving: code supplies no number. Display only, nothing is deleted.
+ * @returns {{ state: 'archived'|'expired'|null, reason: string|null }}
+ */
+export function historyStateOf(row, { protectedAd, now, windowDays }) {
+  const none = { state: null, reason: null }
+  if (row.manualEntry) return none
+  if (isClosedAd(row)) return { state: 'expired', reason: 'Expired: the ad is confirmed closed' }
+  const deadline = toTime(row.expiresAt)
+  if (deadline !== null && deadline < now) return { state: 'expired', reason: `Expired: the deadline passed on ${new Date(deadline).toISOString().slice(0, 10)}` }
+  const days = validWindowDays(windowDays)
+  if (days === null || protectedAd || !row.class || row.class === 'found' || row.class === 'held' || FILTERED_CLASSES.has(row.class)) return none
+  if (seenRecently(row.lastSeen, now, days)) return none
+  const seen = toTime(row.lastSeen)
+  const text = seen === null ? `never seen in the last ${dayLabel(days)}` : `not seen for ${dayLabel(Math.floor((now - seen) / DAY_MS))}`
+  return { state: 'archived', reason: `Archived: ${text}` }
+}
+
+/** The two statuses that keep an ad out of Archived: Saved, and applied by hand (an application in the store protects on its own). */
+const PROTECTED_STATUSES = new Set(['saved', 'applied_manually'])
 
 function storeState(applications) {
   if (applications?.status === 'ready') return 'ready'
@@ -149,11 +181,13 @@ function copiesToShow(copies) {
  * the date moves, with no new import. `activeWindowDays`: the Settings period an absent row stays in Active (null until Settings has answered: then no absent row is in Active).
  *
  * `all` is every row. `active` is found, held, hand-entered and absent seen within the Settings period, plus any row with the owner's work
- * on it unless the ad is closed (a closed ad stays in All and in the Application Tracker, work or no work), with one row per ad. While the application store is loading, or if it failed, its work is not known, so
+ * on it unless the ad is closed or archived (`historyStateOf`: only Saved and applied ads are never archived; a closed ad stays in History and in
+ * the Application Tracker, work or no work), with one row per ad. `jobStateDoc`: the server's statuses and Keep (data/jobs/job-state.json),
+ * which win over the stored row's, so a Saved ad held only there is protected too. While the application store is loading, or if it failed, its work is not known, so
  * copies are not collapsed (`copies.state` says which). A stored row is in the result whatever the route answers.
  * @returns {{ active: object[], all: object[], copies: { state: 'collapsed'|'waiting'|'failed', hidden: number } }}
  */
-export function composeJobList({ stored = [], server = null, applications = null, reference, activeWindowDays = null }) {
+export function composeJobList({ stored = [], server = null, applications = null, reference, activeWindowDays = null, jobStateDoc = null }) {
   const now = toTime(reference)
   if (now === null) throw new TypeError('composeJobList needs the current time as `reference`')
   const state = storeState(applications)
@@ -161,13 +195,18 @@ export function composeJobList({ stored = [], server = null, applications = null
 
   const entries = pairRows(stored, server).map(({ local, route }) => {
     const entry = { local, row: mergeRow(local, route) }
+    const serverState = jobStateDoc?.jobs?.[jobMatchKey(entry.row)] ?? null
+    const status = serverState?.status ?? local?.status ?? null
     entry.applied = applied.has(entry.row.jobId) || applied.has(route?.jobId)
-    entry.worked = hasUserData(local) || entry.applied
+    entry.worked = hasUserData(local) || entry.applied || serverState?.keep === true || (status !== null && status !== 'new')
     entry.eligible = isEligible(entry, now, activeWindowDays)
+    // The server stores a hand-applied ad as `new` (applied is derived), so the stored row's own mark counts as well.
+    const protectedAd = entry.applied || PROTECTED_STATUSES.has(status) || local?.status === 'applied_manually'
+    entry.history = historyStateOf(entry.row, { protectedAd, now, windowDays: activeWindowDays })
     return entry
   })
 
-  const candidates = entries.filter((entry) => entry.eligible || (entry.worked && !isClosedAd(entry.row)))
+  const candidates = entries.filter((entry) => entry.history.state !== 'archived' && (entry.eligible || (entry.worked && !isClosedAd(entry.row))))
   const appliedGroups = new Set(entries.filter((entry) => entry.applied && entry.row.copyGroup).map((entry) => entry.row.copyGroup))
   const marked = (entry) => (!entry.applied && appliedGroups.has(entry.row.copyGroup) ? { ...entry.row, appliedOtherCopy: true } : entry.row)
   let shown = candidates
@@ -186,7 +225,7 @@ export function composeJobList({ stored = [], server = null, applications = null
   }
   return {
     active: shown.map(marked),
-    all: entries.map((entry) => entry.row),
+    all: entries.map(({ row, history }) => (history.state ? { ...row, historyState: history.state, historyReason: history.reason } : row)),
     copies: { state: state === 'ready' ? 'collapsed' : state === 'failed' ? 'failed' : 'waiting', hidden: candidates.length - shown.length },
   }
 }

@@ -497,6 +497,50 @@ describe('fetchAllAds', () => {
   })
 })
 
+describe('History: Archived and Expired are separate reasons (package 1)', () => {
+  const historyOf = (rows, stored = [], extra = {}) => Object.fromEntries(compose({ stored, server: rows, ...extra }).all.map((row) => [row.jobId, row.historyState ?? null]))
+  const old = () => ({ lastSeen: ago(20 * DAY) })
+
+  it('archives an ad unseen past the period whatever its class; expires only a closed one or one past its deadline', () => {
+    const state = historyOf([
+      route('old', 'absent', old()), route('recent', 'absent'), route('stale', 'stale', old()), route('olderKey', 'older_key', old()),
+      route('closed', 'closed', old()), route('dead', 'found', { expiresAt: ago(DAY) }), route('f', 'filtered', old()),
+    ])
+    expect(state).toEqual({ old: 'archived', recent: null, stale: 'archived', olderKey: 'archived', closed: 'expired', dead: 'expired', f: null })
+  })
+
+  it('archives a Rejected or kept ad by the same period, and takes it out of Active', () => {
+    const stored = [local('rejected', { status: 'rejected' }), local('kept', { keptByUser: true })]
+    const result = compose({ stored, server: [route('rejected', 'absent', old()), route('kept', 'absent', old())] })
+    expect(historyOf([route('rejected', 'absent', old()), route('kept', 'absent', old())], stored)).toEqual({ rejected: 'archived', kept: 'archived' })
+    expect(ids(result.active)).toEqual([])
+  })
+
+  it('never archives a Saved ad or an ad with an application, from the browser or the server, and keeps them in Active', () => {
+    const rows = [route('saved', 'absent', old()), route('hand', 'absent', old()), route('app', 'absent', old()), route('serverSaved', 'stale', old())]
+    const stored = [local('saved', { status: 'saved' }), local('hand', { status: 'applied_manually' })]
+    const jobStateDoc = { jobs: { 'url:https://x.example/serversaved': { jobId: 'serverSaved', status: 'saved', keep: false }, 'url:https://x.example/hand': { jobId: 'hand', status: 'new', keep: false } } }
+    const result = compose({ stored, server: rows, applications: withApplications('app'), jobStateDoc })
+    expect(Object.fromEntries(result.all.map((row) => [row.jobId, row.historyState ?? null]))).toEqual({ saved: null, hand: null, app: null, serverSaved: null })
+    expect(ids(result.active).sort()).toEqual(['app', 'hand', 'saved', 'serverSaved'])
+  })
+
+  it('a Saved ad that is closed is still Expired: protection is from archiving only', () => {
+    expect(historyOf([route('s', 'closed', old())], [local('s', { status: 'saved' })])).toEqual({ s: 'expired' })
+  })
+
+  it('an archived ad seen again is in Active again', () => {
+    expect(ids(compose({ server: [route('x', 'found')] }).active)).toEqual(['x'])
+    expect(historyOf([route('x', 'found')])).toEqual({ x: null })
+  })
+
+  it('makes no archive without a valid period; the reason is searchable text', () => {
+    const rows = allAds.composeJobList({ stored: [], server: [route('o', 'absent', old())], applications: READY, reference: NOW, activeWindowDays: null }).all
+    expect(rows[0].historyState).toBeUndefined()
+    expect(compose({ server: [route('o', 'absent', old())] }).all[0].historyReason).toMatch(/^Archived: not seen for 20 days/)
+  })
+})
+
 describe('createAllAdsLoader: in memory only', () => {
   const good = (rows = [route('a')]) => async () => ({ ok: true, status: 200, json: async () => ({ ok: true, rows, meta: { filteredFile: 'ok' } }) })
   const bad = async () => ({ ok: false, status: 503, json: async () => ({ ok: false, message: 'no list' }) })

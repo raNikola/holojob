@@ -84,7 +84,8 @@ export function listRows(rows, stored) {
   return rows.map((row) => {
     const mine = local.get(row.jobId)
     if (!mine) return row.serverOnly ? row : { ...row, serverOnly: true }
-    if (isBrowserOnly(mine)) return mergeRow(mine, row)
+    // mergeRow takes the route's fields only: the History reason the server worked out for this row comes along as well.
+    if (isBrowserOnly(mine)) return { ...mergeRow(mine, row), ...(row.historyState ? { historyState: row.historyState, historyReason: row.historyReason } : {}) }
     const { serverOnly: _serverOnly, ...held } = row
     return { ...held, ...Object.fromEntries(OWNER_ROW_FIELDS.filter((field) => mine[field] !== undefined).map((field) => [field, mine[field]])) }
   })

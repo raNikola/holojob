@@ -166,7 +166,7 @@ describe('Keep this ad', () => {
   it('a filtered row has no Keep button', async () => {
     stubList({ route: good, ledger: ledgerRow() })
     screen = await mountList({ stored: STORED })
-    await screen.click(screen.button(/^All$/))
+    await screen.click(screen.button(/^History$/))
     expect(screen.button(/Keep this ad/, screen.row('Filtered Chef'))).toBeUndefined()
   })
 })
@@ -199,11 +199,13 @@ describe('a kept row lasts', () => {
     expect(absentRow()).toBeTruthy()
   })
 
-  it('past the 14 days and under a class Active leaves out', async () => {
+  it('past the 14 days it is Archived like any ad that is not Saved or applied (owner 2026-11-26), and still kept', async () => {
     stubList({ route: good, ledger: ledgerRow(), scored })
     await keepThenReload(() => stubList({ route: () => routeAnswer([routeRow('s1'), routeRow('abs', 'stale', { title: 'The absent ad', lastSeen: ago(90) })]), scored }))
-    expect(absentRow()).toBeTruthy()
-    expect(screen.text()).toContain('Stale')
+    expect(absentRow()).toBeUndefined()
+    expect(kept().keptByUser).toBe(true)
+    await screen.click(screen.button(/^History$/))
+    expect(absentRow()?.textContent).toContain('Archived')
   })
 
   it('in today\'s list too, when the route fails', async () => {
@@ -265,7 +267,7 @@ describe('only Keep this ad changes the saved list', () => {
     screen = await mountList({ stored: STORED })
     const raw = screen.raw()
     const writes = countWrites(screen.key)
-    await screen.click(screen.button(/^All$/))
+    await screen.click(screen.button(/^History$/))
     await screen.click(screen.box(/Closed \(0\)/))
     await screen.click(screen.box(/Closed \(0\)/))
     await screen.click(screen.box(/Seen in the last 14 days/))

@@ -74,7 +74,7 @@ export function queryJobList({
   const store = applications?.status === 'ready' ? applications.store : null
   const settings = applications?.settings
 
-  const composed = composeJobList({ stored, server, applications, reference, activeWindowDays })
+  const composed = composeJobList({ stored, server, applications, reference, activeWindowDays, jobStateDoc })
   const base = overlayTracking(withServerState(mode === 'all' ? composed.all : composed.active, jobStateDoc), store, settings).map(shownRow)
   const shown = mode === 'all' ? applyAllControls(base, { classes: new Set(classes), recent, reference, windowDays: activeWindowDays }) : base
   const effective = mode === 'all' ? { ...filters, showNotOnBoard: true } : filters

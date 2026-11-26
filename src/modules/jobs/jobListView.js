@@ -10,7 +10,7 @@ export const SAVED_IN_BROWSER = 'saved_in_browser'
 export const CLASS_FILTERS = ['found', 'held', 'absent', 'closed', 'older_key', 'stale', 'filtered', 'filtered_incomplete', 'unclassified', SAVED_IN_BROWSER]
 export const SERVER_ONLY_NOTE = 'Press Keep this ad first'
 export const KEEP_FIRST_NOTE = 'This ad is not saved in this browser. AI tools, outreach, document generation and status changes need it saved: press Keep this ad first. Mark Applied works without it.'
-export const ALL_SEARCH_NOTE = 'In All, search does not match the ad text of rows not saved in this browser, only their title, company and source.'
+export const ALL_SEARCH_NOTE = 'In History, search matches title, company, source and reason. It does not match the ad text of rows not saved in this browser.'
 export const INCOMPLETE_FILTERED = 'This list is incomplete: filtered ads could not be read'
 export const INCOMPLETE_ROUTE = 'This list is incomplete: the full list could not be loaded, so only rows saved in this browser are shown'
 export const OFF_LIST_NOTE = 'Active and All already include these rows'
@@ -81,7 +81,7 @@ export function listNotices({ mode, status, error, meta, rows, copies, hasServer
     else if (meta?.filteredFile !== 'ok') notices.push({ kind: 'error', text: INCOMPLETE_FILTERED })
   }
   if (mode === 'active' && rows && unlisted > 0) {
-    notices.push({ kind: 'info', text: `${unlisted} ${unlisted === 1 ? 'ad is' : 'ads are'} not on the company's board in the latest complete check and left out of this list. They are in All (filter Not in latest search or Closed).` })
+    notices.push({ kind: 'info', text: `${unlisted} ${unlisted === 1 ? 'ad is' : 'ads are'} not on the company's board in the latest complete check and left out of this list. They are in History (filter Not in latest search; Archived once not seen for the Settings period).` })
   }
   if (rows && copies?.state === 'waiting') notices.push({ kind: 'info', text: 'Copies of the same ad are shown separately until your applications have loaded.' })
   if (rows && copies?.state === 'failed') notices.push({ kind: 'error', text: 'Your applications could not be loaded: copies of the same ad are shown separately, and a row with an application may be missing from Active.' })

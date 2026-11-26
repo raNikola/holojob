@@ -1,5 +1,5 @@
 
-const MODES = [{ id: 'active', label: 'Active' }, { id: 'all', label: 'All' }]
+const MODES = [{ id: 'active', label: 'Active' }, { id: 'all', label: 'History' }]
 
 /** The Active/All toggle, All's own filters. All of it is held by the screen in memory: nothing here is saved. */
 export default function JobListControls({ mode, onMode, options = [], classes, onClasses, recent, onRecent, windowDays = null }) {

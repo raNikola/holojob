@@ -121,7 +121,7 @@ describe('on the screen', () => {
     expect(screen.row('Gone ad 3')).toBeUndefined() // seen 16 days ago: outside the period
     expect(screen.row('Gone ad 4')).toBeUndefined()
     expect(screen.row('Gone ad 0').textContent).toContain('Not in latest search')
-    await screen.click(screen.button(/^All$/))
+    await screen.click(screen.button(/^History$/))
     await settle()
     for (let i = 0; i < 5; i += 1) expect(screen.row(`Gone ad ${i}`)).toBeTruthy()
     expect(writes()).toBe(0) // setItem on the list's key was never called
@@ -144,7 +144,7 @@ describe('on the screen', () => {
   it('the label of the recent filter names the period the server used', async () => {
     stubServer({ route: () => routeAnswer(routeGone), scoredRows: scoredGone, windowDays: 30 })
     screen = await mountScreen({ stored: [], server: true })
-    await screen.click(screen.button(/^All$/))
+    await screen.click(screen.button(/^History$/))
     await settle()
     expect(screen.box(/Seen in the last 30 days/)).toBeTruthy()
     await screen.click(screen.box(/Seen in the last 30 days/))

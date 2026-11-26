@@ -99,7 +99,7 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
 <!-- packages:start -->
 | N | slug | model | needs | order | status | commit |
 |---|---|---|---|---|---|---|
-| 1 | archive-history | claude-sonnet-5-5 | - | 1 | pending | - |
+| 1 | archive-history | claude-sonnet-5-5 | - | 1 | done | pkg/01-archive-history |
 | 2 | free-measurements | claude-sonnet-5-5 | - | 2 | pending | - |
 | 3 | filter-foundation | claude-opus-5-5 | - | 3 | pending | - |
 | 5 | cost-scoring-time | claude-opus-5-5 | 2 | 4 | pending | - |

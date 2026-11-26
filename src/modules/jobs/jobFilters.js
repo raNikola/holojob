@@ -163,6 +163,8 @@ export function filterJobs(jobs, filters = {}, { appliedJobIds = null } = {}) {
         job.source,
         job.description,
         job.searchTerm,
+        job.reason,
+        job.historyReason,
       ].join(' ').toLowerCase()
       if (!haystack.includes(q)) return false
     }
