@@ -6,7 +6,7 @@ Status: needs-review
 
 The workflow is built: plan (`docs/redesign/PACKAGES_PLAN.md`), report template, and `scripts/run-package`. The runner runs one package per fresh headless session, in a throwaway clone with an allowlisted ad-data copy. Each session runs inside an outer bubblewrap, with Claude Code's Bash sandbox inside that. The runner sets the status from its own checks.
 
-**No package has run.** The runner refuses every package until a probe run passes. The last probe run (2026-11-26) passed every check that needs no model. The session probes did not run: the token in `~/.config/holojob-runner/oauth-token` is rejected (`401 Invalid bearer token`). It is 92 characters and lacks the `sk-ant-` prefix that `claude setup-token` prints.
+**No package has run.** The runner refuses every package until a probe run passes. The last probe run (2026-11-26) passed every check that needs no model. The session probes did not run: the API rejects the token in `~/.config/holojob-runner/oauth-token` (`401 Invalid bearer token`). A hint, not verified: the file holds 92 characters without an `sk-ant-` prefix, which setup-tokens normally carry.
 
 ## Measured
 
@@ -29,10 +29,11 @@ The workflow is built: plan (`docs/redesign/PACKAGES_PLAN.md`), report template,
 | Must-keep set is 19 | PASS |
 | Session setup: mode dontAsk, tools Bash/Edit/Glob/Grep/Read/Write only, no MCP server | PASS |
 | No probe file reached the host | PASS |
-| 176 session probes | NOT PROVEN: the session could not authenticate |
+| 178 session probes | NOT PROVEN: the session could not authenticate |
 
-The 176 session probes cover:
+The 178 session probes cover:
 - keys and credential files, through Bash and the Read tool;
+- `/proc`, through the Read, Grep and Glob tools, in forms that return no file content;
 - environment names and `/proc/*/environ`;
 - the ssh-agent, gh, D-Bus and keyring;
 - push (local, ssh, https, raw TCP);
@@ -41,6 +42,7 @@ The 176 session probes cover:
 - outside directories;
 - every private root at its production and clone path;
 - writes to production data, the repo, home, the benchmarks, `.git/config` and `.claude/`;
+- a session that changes the clone's git control files (config, commondir, config.worktree, info/attributes) is blocked, and the runner runs no git command on that clone;
 - 9 controls that must succeed.
 
 **Data split for your review.**
