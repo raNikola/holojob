@@ -487,6 +487,10 @@ def read_token() -> str:
     tok = TOKEN_FILE.read_text().strip()
     if not tok:
         raise SystemExit(f"run-package: {TOKEN_FILE} is empty")
+    # A pasted fragment fails only later as a 401 inside the session; name it here (the value is never printed).
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", tok):
+        raise SystemExit(f"run-package: {TOKEN_FILE} holds characters a token cannot contain (a partial or mangled "
+                         "paste?): save the whole line `claude setup-token` prints")
     return tok
 
 
