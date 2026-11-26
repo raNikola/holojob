@@ -121,6 +121,46 @@ What the session does:
 
 A stop rule means: `Status: blocked`, the reason in the report, commit, stop. There are no questions for trivial matters: the session takes the benchmark or standard choice and records it under "Defaults taken".
 
+### Headless: `scripts/run-packages`
+
+Optional. It runs the pending packages in table order, one fresh `claude -p` session each, on the owner's normal login, with the model from the table. The prompt is `do package N from docs/redesign/PACKAGES_PLAN.md`.
+
+```fish
+cd /srv/holojob
+scripts/run-packages --base package-runner              # all pending (--base only until this plan is on main)
+scripts/run-packages --through 3 --base package-runner  # pending packages in table order up to package 3
+scripts/run-packages 2 --base package-runner            # package 2 only
+```
+
+**Refusals.** It refuses to start when:
+- `/srv/holojob` has a dirty tree;
+- a `pkg/*` branch exists whose package is not done;
+- a needed package is not done.
+
+**Per package**, the runner:
+1. **Prepares.** It creates the worktree `.claude/worktrees/pkg-NN-slug` on `pkg/NN-slug`, stacked on the last done package, and fills its `data/` with the reduced copy.
+2. **Runs the session** in that worktree. The session finds its branch and data copy ready and works there.
+3. **Decides from git, never from the exit code.** The package is done only when all of these hold:
+   - there is a commit on the branch after the base;
+   - the worktree is clean;
+   - the report in the branch tip starts with `Status: done`;
+   - `sh scripts/test-tier.sh full` passed on that commit, recorded as a local git note in `refs/notes/package-gate`.
+4. **Stops** at the first package that is not done, blocked or needs-review. Packages already done are skipped, after their branch tip is checked.
+
+**In headless sessions:**
+- **No approvals.** A call that needs approval is denied, never waited for (Claude Code docs: permission modes, headless).
+- **Permission mode** `acceptEdits`: file edits inside the worktree only.
+- **Allowed Bash:** `git status`, `git diff`, `git log`, `git show`, `git add`, `git commit`, `git rm`, `git mv`, `git ls-files`, `git grep`, `git rev-parse`; the venv python; `graphify`. Everything else is denied.
+- **Denied for these sessions only:** podman, `scripts/test-tier.sh`, `git remote`, `AskUserQuestion`, plan mode, worktree switching, web tools. This is owner decision 2026-11-26: interactive sessions keep the node test container.
+- **Tests:** the session runs pytest and its targeted checks. Lint, Vitest and the build run in the runner's full tier, so `Status: done` from a headless session means pytest is green and the full tier is left to the runner.
+
+**Project deny rules (`.claude/settings.json`, every session):** `git push`, `podman-compose`, `systemctl`; edits under `/srv/holojob/data`; reads of `.env`, `claude-config` and the private data files listed under "Data copy". Project deny rules apply in `-p` without the trust dialog.
+
+**What this cannot enforce (no sandbox):**
+- **The rules only see the command as typed.** Any allowed command can run something else: the venv python can call `subprocess` and run `git push`, podman, a provider call or a read of private data. So can a test the session writes, which the runner's full tier then runs with the owner's rights.
+- **Bash rules miss variants.** `Bash(git push *)` does not stop `git -C dir push` (Claude Code docs, permissions). `Read` denies do not stop `cat` through an allowed command, and they apply to Grep and Glob only "best-effort".
+- **The owner's keys stay reachable.** The login, ssh key, gh token and provider keys are readable by any process the session starts. Nothing technical stops a paid call or a push. The plan's rules, the denies and the owner's review of each branch before merging are the only guard.
+
 ## Data copy
 
 Owner decision 2026-11-26: ad data and settings are copied, private files are not copied at all. Make the copy into the package's worktree:

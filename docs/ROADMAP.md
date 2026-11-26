@@ -45,7 +45,7 @@ The job list still lives in the browser (`localStorage`) and the screens save th
 
 ### 3b. Packages 1-7 (archive, measurements, filters, cost, descriptions, reposts)
 
-Plan and status: [redesign/PACKAGES_PLAN.md](redesign/PACKAGES_PLAN.md) (the package table there is the only status record). The owner runs each package in an interactive session ("do package N from the plan"). Built (branch `package-runner`, not merged): the plan, the report template and `scripts/package_data_copy.py` (reduced data copy and must-keep set). No package has run. Open: the must-keep set has 16 of the 19 ads on the server (see the plan).
+Plan and status: [redesign/PACKAGES_PLAN.md](redesign/PACKAGES_PLAN.md) (the package table there is the only status record). The owner runs each package in an interactive session ("do package N from the plan"). Built (branch `package-runner`, not merged): the plan, the report template, `scripts/package_data_copy.py` (reduced data copy and must-keep set) and the optional headless runner `scripts/run-packages` (no sandbox: what it cannot enforce is in the plan). No package has run. Open: the must-keep set has 16 of the 19 ads on the server (see the plan).
 
 ### 4. Owner actions
 

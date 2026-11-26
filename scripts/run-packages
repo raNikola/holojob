@@ -1,0 +1,6 @@
+#!/bin/sh
+# Minimal package runner (fish-friendly): scripts/run-packages [N | --through M] [--base REF]
+# Logic: scripts/run_packages.py. Uses the owner's normal Claude login; no sandbox (see the plan).
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+exec "${HOLOJOB_PYTHON:-/srv/holojob/.venv/bin/python}" "$here/run_packages.py" "$@"
