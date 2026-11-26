@@ -150,12 +150,19 @@ scripts/run-packages 2 --base package-runner            # package 2 only
 
 **Refusals.** It refuses to start when:
 - `/srv/holojob` has a dirty tree;
-- a `pkg/*` branch exists whose package is not done;
+- another package's `pkg/*` branch is not done;
+- the package itself is `blocked` or `needs-review` (the owner decides first);
 - a needed package is not done.
 
+**Resume.** If the package's own branch exists and the package is unfinished (no report, or a report without `Status: done|blocked|needs-review`), the runner resumes it. That covers a stopped session or a missing commit:
+- it reuses `pkg/NN-slug` and its worktree, with the uncommitted changes kept, never discarded or reset (the worktree is re-attached if it was removed);
+- it moves the previous report back into the worktree, so the session continues it;
+- the prompt tells the session it is a resumed run;
+- the base stays where the branch left the stack.
+
 **Per package**, the runner:
-1. **Prepares.** It creates the worktree `.claude/worktrees/pkg-NN-slug` on `pkg/NN-slug`, stacked on the last done package. It also writes the application-id export to a temp file (ids only, mode 600, removed after the session) for the must-keep set.
-2. **Runs the session** in that worktree. The session finds its branch ready, works there and reads `/srv/holojob/data` directly.
+1. **Prepares.** For a new package, it creates the worktree `.claude/worktrees/pkg-NN-slug` on `pkg/NN-slug`, stacked on the last done package; on resume, it reuses both. It installs the runner's own copy of `scripts/node-sandbox` at `.claude/package-runs/bin/node-sandbox`. It also writes the application-id export to a temp file (ids only, mode 600, removed after the session) for the must-keep set.
+2. **Runs the session** in that worktree. The prompt is `do package N from docs/redesign/PACKAGES_PLAN.md`, followed by the headless rules below (and the resume note when resuming). The session finds its branch ready, works there and reads `/srv/holojob/data` directly.
 3. **Moves the report** from the worktree's git-ignored `logs/package-report-NN-slug.md` to `.claude/package-runs/reports/NN-slug.md`. Claude Code refuses headless writes under `.claude/` as a "sensitive file", even with `--add-dir` and an allow rule (checked 2026-11-26). The staging file is seeded from the template, whose first line `Status: in-progress` never counts as done.
 4. **Decides from files and git, never from the exit code.** The package is done only when all of these hold:
    - `.claude/package-runs/reports/NN-slug.md` exists and its first line is `Status: done`;
@@ -165,11 +172,24 @@ scripts/run-packages 2 --base package-runner            # package 2 only
 5. **Stops** at the first package that is not done, blocked or needs-review. Packages already done are skipped, after the same four checks. A report left by an abandoned run is renamed `.old-<time>` and never trusted.
 
 **In headless sessions:**
+- **No questions, ever.** The session never asks the owner a question and never ends with one. Any blocking case or open decision goes into the report as `Status: blocked`; the session commits the work so far and ends. The prompt says so.
 - **No approvals.** A call that needs approval is denied, never waited for (Claude Code docs: permission modes, headless).
 - **Permission mode** `acceptEdits`: file edits inside the worktree only.
-- **Allowed Bash:** `git status`, `git diff`, `git log`, `git show`, `git add`, `git commit`, `git rm`, `git mv`, `git ls-files`, `git grep`, `git rev-parse`; the venv python; `graphify`. Everything else is denied.
+- **Allowed Bash:** `git status`, `git diff`, `git log`, `git show`, `git add`, `git commit`, `git rm`, `git mv`, `git ls-files`, `git grep`, `git rev-parse`; the venv python; `graphify`; the node helper `/srv/holojob/.claude/package-runs/bin/node-sandbox`. Everything else is denied.
 - **Denied for these sessions only:** podman, `scripts/test-tier.sh`, `git remote`, `AskUserQuestion`, plan mode, worktree switching, web tools. This is owner decision 2026-11-26: interactive sessions keep the node test container.
-- **Tests:** the session runs pytest and its targeted checks. Lint, Vitest and the build run in the runner's full tier, so `Status: done` from a headless session means pytest is green and the full tier is left to the runner.
+- **Node helper** (`scripts/node-sandbox`; only the runner's installed copy is allowed, so a session cannot widen it by editing the worktree's file). The session runs Vitest, ESLint and node measurement scripts through it:
+  - `node-sandbox vitest tests/js/FILE.test.js ... [--reporter=dot|default|verbose]`
+  - `node-sandbox lint [FILE ...]`
+  - `node-sandbox node SCRIPT.js [ARG ...]`
+
+  It runs one fixed container:
+  - `node:20-bookworm`, `--network none`, `--security-opt label=disable`;
+  - the package worktree read-write;
+  - `/srv/holojob/data` read-only, at its own path, with `data/secrets` masked by an empty tmpfs (`notmpcopyup`, checked: 0 files visible);
+  - the shared `node_modules` as a podman overlay: Vitest writes its temp config there, the writes are discarded and the host copy never changes.
+
+  Every file must lie inside the worktree: no absolute path, `..`, symlink out or option-like name, and no other flags. Script arguments are limited to plain characters. It runs only from a `pkg-NN-*` worktree.
+- **Tests:** the session runs pytest, plus Vitest and lint through the helper. The runner runs the full tier, the build included, on the branch tip.
 
 **Project deny rules (`.claude/settings.json`, every session):** `git push`, `podman-compose`, `systemctl`; edits and writes under `/srv/holojob/data` (Edit and Write tools); reads of `.env`, `claude-config` and `data/secrets`. Project deny rules apply in `-p` without the trust dialog.
 

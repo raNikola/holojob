@@ -115,6 +115,72 @@ def test_template_is_never_done_as_seeded():
     assert rp.report_status(template.read_text()) != "done"
 
 
+def _rows():
+    return [ROW, rp.Row(2, "free-measurements", "m", [], 2)]
+
+
+def test_preflight_resumes_own_unfinished_branch_and_refuses_others(env):
+    repo, base, reports = env
+    _git(repo, "branch", ROW.branch)
+    states = {1: ("unfinished", "")}
+    state = lambda r: states.get(r.n, ("absent", ""))  # noqa: E731
+    assert rp.preflight(_rows(), ROW, repo, state) == "resume"
+    with pytest.raises(SystemExit):                      # package 2 must not start while 1 is unfinished
+        rp.preflight(_rows(), _rows()[1], repo, state)
+    states[1] = ("blocked", "")
+    with pytest.raises(SystemExit):                      # blocked: the owner decides, no automatic resume
+        rp.preflight(_rows(), ROW, repo, state)
+    _git(repo, "branch", "-D", ROW.branch)
+    assert rp.preflight(_rows(), ROW, repo, lambda r: ("absent", "")) == "new"
+    (repo / "dirty.txt").write_text("x")
+    with pytest.raises(SystemExit):
+        rp.preflight(_rows(), ROW, repo, lambda r: ("absent", ""))
+
+
+def test_resume_keeps_the_previous_report_and_work(env, tmp_path):
+    repo, base, reports = env
+    wt = tmp_path / "wt"
+    (wt / "scripts").mkdir(parents=True)
+    (wt / rp.TEMPLATE).write_text("Status: in-progress\n# template\n")
+    (wt / "work.txt").write_text("uncommitted work")
+    (reports / ROW.report_name).write_text("Status: in-progress\n# half written by the last session\n")
+    staging = rp.prepare_report(ROW, True, reports, worktree=wt)
+    assert "half written" in staging.read_text()
+    assert not (reports / ROW.report_name).exists()      # moved back, continued, not duplicated
+    assert (wt / "work.txt").read_text() == "uncommitted work"
+    assert rp.prepare_report(ROW, True, reports, worktree=wt).read_text() == staging.read_text()  # interrupted twice
+
+
+def test_new_run_starts_from_template_and_sets_an_old_report_aside(env, tmp_path):
+    repo, base, reports = env
+    wt = tmp_path / "wt"
+    (wt / "scripts").mkdir(parents=True)
+    (wt / rp.TEMPLATE).write_text("Status: in-progress\n# template\n")
+    (reports / ROW.report_name).write_text("Status: done\n# stale\n")
+    staging = rp.prepare_report(ROW, False, reports, worktree=wt)
+    assert staging.read_text().startswith("Status: in-progress")
+    assert not (reports / ROW.report_name).exists()
+    assert len(list(reports.glob(ROW.report_name + ".old-*"))) == 1
+
+
+def test_prompt_forbids_questions_and_names_the_helper():
+    for resume in (False, True):
+        text = rp.prompt_for(ROW, resume)
+        assert text.startswith("do package 1 from docs/redesign/PACKAGES_PLAN.md")
+        assert "Never ask the owner a question" in text and "Status: blocked" in text
+        assert str(rp.HELPER) in text
+        assert ("RESUMED RUN" in text) is resume
+    assert f"Bash({rp.HELPER} *)" in rp.ALLOWED
+    assert "Bash(podman *)" in rp.DISALLOWED
+
+
+def test_installed_helper_is_the_runner_copy(tmp_path):
+    src = tmp_path / "src"
+    src.write_text("trusted")
+    dest = rp.install_helper(src, tmp_path / "bin/node-sandbox")
+    assert dest.read_text() == "trusted" and dest.stat().st_mode & 0o777 == 0o700
+
+
 def test_run_stops_at_first_not_done_and_skips_done():
     rows = [rp.Row(n, f"p{n}", "m", [], o) for n, o in ((1, 1), (2, 2), (3, 3), (5, 4))]
     ran = []

@@ -1,0 +1,124 @@
+#!/srv/holojob/.venv/bin/python
+"""Narrow node runner for headless package sessions (podman itself stays denied there).
+
+    node-sandbox vitest FILE... [--reporter=dot|default|verbose]   Vitest on test files inside the package worktree
+    node-sandbox lint [FILE...]                                      ESLint on files inside the worktree (none: npm run lint)
+    node-sandbox node SCRIPT [ARG...]                                a node script inside the worktree (measurements)
+
+One fixed container: node:20-bookworm, --network none, --security-opt label=disable, the package worktree read-write at
+/work, /srv/holojob/data read-only at its own path (scripts read the real data) with data/secrets masked by an
+empty tmpfs (notmpcopyup: podman would otherwise copy the files in), and the shared node_modules as a
+podman overlay (`:O`: Vitest writes its temp config there, the writes are discarded and the host copy never changes;
+the worktree has no node_modules). Runs only from a package worktree (/srv/holojob/.claude/worktrees/pkg-NN-*). Every path must
+stay inside the worktree: no absolute path, no "..", no symlink out, no option-looking file name.
+
+The runner installs a copy of this file at /srv/holojob/.claude/package-runs/bin/node-sandbox, outside the worktree,
+and only that copy is allowed in headless sessions, so a session cannot widen the helper by editing it.
+"""
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path("/srv/holojob")
+WORKTREES = REPO / ".claude/worktrees"
+DATA = REPO / "data"
+NODE_MODULES = REPO / "node_modules"
+IMAGE = "docker.io/library/node:20-bookworm"
+REPORTERS = ("dot", "default", "verbose")
+TEST_FILE = re.compile(r"^tests/js/.+\.(test|spec)\.(js|jsx|mjs|cjs)$")
+LINT_FILE = re.compile(r"^(src|scripts|tests)/.+\.(js|jsx|mjs|cjs)$")
+SCRIPT_FILE = re.compile(r"^.+\.(js|mjs|cjs)$")
+SAFE_ARG = re.compile(r"^[A-Za-z0-9_./=:,@%+-]{1,300}$")
+PKG_WORKTREE = re.compile(r"^pkg-\d{2}-[a-z0-9-]+$")
+
+
+class Refused(Exception):
+    pass
+
+
+def package_worktree(cwd: Path, worktrees: Path = WORKTREES) -> Path:
+    """The package worktree that contains cwd; refuses anything else (the main checkout included)."""
+    cwd = cwd.resolve()
+    root = worktrees.resolve()
+    if root not in cwd.parents and cwd != root:
+        raise Refused(f"not inside a package worktree under {worktrees}")
+    rel = cwd.relative_to(root).parts
+    if not rel or not PKG_WORKTREE.match(rel[0]):
+        raise Refused("not inside a package worktree (pkg-NN-slug)")
+    return root / rel[0]
+
+
+def inside(worktree: Path, rel: str, pattern: re.Pattern) -> str:
+    """A path relative to the worktree that exists, stays inside after symlinks, and matches the pattern."""
+    if not rel or rel.startswith("-") or rel.startswith("/") or "\0" in rel or "\\" in rel:
+        raise Refused(f"path not allowed: {rel!r}")
+    parts = Path(rel).parts
+    if ".." in parts:
+        raise Refused(f"path not allowed: {rel!r}")
+    norm = Path(*parts).as_posix()
+    if not pattern.match(norm):
+        raise Refused(f"file not allowed for this command: {norm}")
+    full = (worktree / norm).resolve()
+    if worktree.resolve() not in full.parents:
+        raise Refused(f"path leaves the worktree: {norm}")
+    if not full.is_file():
+        raise Refused(f"no such file: {norm}")
+    return norm
+
+
+def build(argv: list[str], worktree: Path) -> list[str]:
+    """The fixed podman command for an allowed invocation; Refused for anything else."""
+    if not argv:
+        raise Refused("usage: node-sandbox vitest FILE... | lint [FILE...] | node SCRIPT [ARG...]")
+    cmd, args = argv[0], argv[1:]
+    if cmd == "vitest":
+        files, reporter = [], []
+        for a in args:
+            if a.startswith("--reporter="):
+                if a.split("=", 1)[1] not in REPORTERS or reporter:
+                    raise Refused(f"option not allowed: {a}")
+                reporter = [a]
+            elif a.startswith("-"):
+                raise Refused(f"option not allowed: {a}")
+            else:
+                files.append(inside(worktree, a, TEST_FILE))
+        if not files:
+            raise Refused("vitest needs at least one test file under tests/js/")
+        inner = ["npx", "vitest", "run", *reporter, *files]
+    elif cmd == "lint":
+        files = [inside(worktree, a, LINT_FILE) for a in args]
+        inner = ["npx", "eslint", "--no-warn-ignored", *files] if files else ["npm", "run", "lint"]
+    elif cmd == "node":
+        if not args:
+            raise Refused("node needs a script path inside the worktree")
+        script = inside(worktree, args[0], SCRIPT_FILE)
+        for a in args[1:]:
+            if not SAFE_ARG.match(a):
+                raise Refused(f"argument not allowed: {a!r}")
+        inner = ["node", script, *args[1:]]
+    else:
+        raise Refused(f"command not allowed: {cmd!r} (vitest, lint or node)")
+    wt = str(worktree.resolve())
+    return ["podman", "run", "--rm", "--network", "none", "--security-opt", "label=disable",
+            "-e", "NPM_CONFIG_UPDATE_NOTIFIER=false", "-e", "CI=1",
+            "-v", f"{wt}:/work", "-v", f"{DATA}:{DATA}:ro", "--mount", f"type=tmpfs,destination={DATA}/secrets,notmpcopyup",
+            "-v", f"{NODE_MODULES}:/work/node_modules:O",
+            "-w", "/work", IMAGE, *inner]
+
+
+def main(argv: list[str]) -> int:
+    try:
+        worktree = package_worktree(Path(os.getcwd()))
+        cmd = build(argv, worktree)
+    except Refused as e:
+        print(f"node-sandbox: refused: {e}", file=sys.stderr)
+        return 2
+    return subprocess.run(cmd, stdin=subprocess.DEVNULL).returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

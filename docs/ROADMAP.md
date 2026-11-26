@@ -45,7 +45,7 @@ The job list still lives in the browser (`localStorage`) and the screens save th
 
 ### 3b. Packages 1-7 (archive, measurements, filters, cost, descriptions, reposts)
 
-Plan and status: [redesign/PACKAGES_PLAN.md](redesign/PACKAGES_PLAN.md) (the package table there is the only status record). The owner runs each package in an interactive session ("do package N from the plan"). Built (branch `package-runner`, not merged): the plan, the report template and the optional headless runner `scripts/run-packages` (no sandbox: what it cannot enforce is in the plan). Package sessions read `/srv/holojob/data` directly and write nothing there. Package reports are temporary and never committed (`.claude/package-runs/reports/`); each feature's permanent description goes into DECISIONS.md, ROADMAP.md and the feature md in its package commit. No package has run.
+Plan and status: [redesign/PACKAGES_PLAN.md](redesign/PACKAGES_PLAN.md) (the package table there is the only status record). The owner runs each package in an interactive session ("do package N from the plan"). Built (branch `package-runner`, not merged): the plan, the report template and the optional headless runner `scripts/run-packages` (no sandbox: what it cannot enforce is in the plan; node only through `scripts/node-sandbox`; resumes an unfinished package). Package sessions read `/srv/holojob/data` directly and write nothing there. Package reports are temporary and never committed (`.claude/package-runs/reports/`); each feature's permanent description goes into DECISIONS.md, ROADMAP.md and the feature md in its package commit. No package has run.
 
 ### 4. Owner actions
 

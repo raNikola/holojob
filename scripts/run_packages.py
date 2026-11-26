@@ -45,16 +45,18 @@ REPORTS = REPO / ".claude/package-runs/reports"
 TEMPLATE = "scripts/package-report-template.md"
 NOTES_REF = "refs/notes/package-gate"
 NODE_IMAGE = "docker.io/library/node:20-bookworm"
-PROMPT = "do package {n} from docs/redesign/PACKAGES_PLAN.md"
 MAX_TURNS = 400
 VENV_PY = REPO / ".venv/bin/python"
+# The trusted copy of scripts/node-sandbox, outside every worktree (headless writes under .claude/ are refused).
+HELPER = REPO / ".claude/package-runs/bin/node-sandbox"
+HELPER_SOURCE = Path(__file__).resolve().parent / "node-sandbox"
 
 # Bash the headless session may run without approval (everything else is denied in -p).
 ALLOWED = (
     "Bash(git status *)", "Bash(git diff *)", "Bash(git log *)", "Bash(git show *)", "Bash(git add *)",
     "Bash(git commit *)", "Bash(git rm *)", "Bash(git mv *)", "Bash(git ls-files *)", "Bash(git grep *)",
     "Bash(git rev-parse *)", "Bash(git branch --show-current)",
-    f"Bash({VENV_PY} *)", "Bash(graphify *)",
+    f"Bash({VENV_PY} *)", "Bash(graphify *)", f"Bash({HELPER} *)",
 )
 # Headless-only denies (owner decision 2026-11-26: podman only here, interactive sessions keep the node test container).
 DISALLOWED = (
@@ -169,22 +171,63 @@ def run_all(rows: list[Row], state, run_one) -> int:
     return 0
 
 
-def preflight(all_rows: list[Row], row: Row) -> None:
+def preflight(all_rows: list[Row], row: Row, repo: Path = REPO, state=None) -> str:
+    """'new' or 'resume' for `row`; refuses a dirty main checkout, another package's unfinished branch, a needed
+    package that is not done, and a blocked or needs-review package (the owner decides those)."""
+    state = state or package_state
     problems = []
-    if git("status", "--porcelain"):
-        problems.append(f"{REPO} has a dirty tree")
+    if git("status", "--porcelain", repo=repo):
+        problems.append(f"{repo} has a dirty tree")
     by_n = {r.n: r for r in all_rows}
-    for ref in git("for-each-ref", "--format=%(refname:short)", "refs/heads/pkg/").split():
+    mode = "new"
+    for ref in git("for-each-ref", "--format=%(refname:short)", "refs/heads/pkg/", repo=repo).split():
         m = re.match(r"pkg/(\d+)-", ref)
         other = by_n.get(int(m.group(1))) if m else None
-        st = package_state(other)[0] if other else "unknown"
-        if st != "done":
+        st = state(other)[0] if other else "unknown"
+        if other == row and st == "unfinished":
+            mode = "resume"  # continue on its branch and worktree, uncommitted work kept
+        elif other == row and st in ("blocked", "needs-review"):
+            problems.append(f"package {row.n} is {st}: the owner decides first (see its report)")
+        elif st != "done":
             problems.append(f"unfinished package branch {ref} ({st})")
     for need in row.needs:
-        if need in by_n and package_state(by_n[need])[0] != "done":
+        if need in by_n and state(by_n[need])[0] != "done":
             problems.append(f"package {row.n} needs {need}, which is not done")
     if problems:
         raise SystemExit("run-packages: refused:\n  - " + "\n  - ".join(problems))
+    return mode
+
+
+def prompt_for(row: Row, resume: bool) -> str:
+    """The package prompt: the owner's one line, then the headless rules the session cannot ask about."""
+    lines = [
+        f"do package {row.n} from docs/redesign/PACKAGES_PLAN.md",
+        "",
+        "This is a headless run (scripts/run-packages): no human is available during the session.",
+        "- Never ask the owner a question and never end the session with one. Any blocking case or open decision: write it",
+        "  in the report, put `Status: blocked` on its first line, commit the work so far, and end the session.",
+        f"- Write the report to {row.staging} (seeded from the template, git-ignored). The runner moves it to",
+        f"  {REPORTS / row.report_name}. Never commit the report.",
+        "- podman is denied. Run Vitest, ESLint and node measurement scripts only through the helper:",
+        f"  `{HELPER} vitest tests/js/FILE.test.js ...`, `{HELPER} lint [FILE ...]`, `{HELPER} node SCRIPT.js [ARG ...]`",
+        "  (no network, this worktree read-write, /srv/holojob/data read-only). Python: "
+        f"`{VENV_PY} ...` (pytest: `{VENV_PY} -m pytest tests/python/... -q`).",
+        "- Read the real data in /srv/holojob/data; write only to temp dirs. The runner runs the full tier after you finish.",
+    ]
+    if resume:
+        lines += ["- RESUMED RUN: this worktree holds the previous session's uncommitted work and its report. Continue",
+                  "  from there: read `git status`, `git diff` and the report first; do not discard or redo finished work."]
+    return "\n".join(lines)
+
+
+def install_helper(source: Path = HELPER_SOURCE, dest: Path = HELPER) -> Path:
+    """Copy the runner's own node-sandbox (not a worktree's) to the trusted path the sessions may call."""
+    dest.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    tmp = dest.with_suffix(".tmp")
+    tmp.write_bytes(source.read_bytes())
+    tmp.chmod(0o700)
+    tmp.replace(dest)
+    return dest
 
 
 def base_for(rows: list[Row], default: str) -> str:
@@ -213,24 +256,47 @@ def export_application_ids(tmp: str) -> Path:
     return out
 
 
+def prepare_report(row: Row, resume: bool, reports: Path = REPORTS, worktree: Path | None = None) -> Path:
+    """Seed the staging report and return its path. On resume the previous report continues (moved back into the
+    worktree); otherwise a fresh copy of the template, and a stray old report is kept aside, never trusted."""
+    wt = worktree if worktree is not None else row.worktree
+    staging = wt / "logs" / f"package-report-{row.report_name}"
+    reports.mkdir(mode=0o700, parents=True, exist_ok=True)
+    final = reports / row.report_name
+    staging.parent.mkdir(mode=0o700, exist_ok=True)
+    if resume and staging.is_file():
+        pass  # left by an interrupted run: newer than anything in reports/
+    elif resume and final.is_file():
+        final.replace(staging)
+    else:
+        if final.exists():
+            final.rename(final.with_name(f"{final.name}.old-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"))
+        staging.write_text((wt / TEMPLATE).read_text(encoding="utf-8"), encoding="utf-8")
+    staging.chmod(0o600)
+    return staging
+
+
 def run_one(row: Row, all_rows: list[Row], base_default: str) -> str:
-    preflight(all_rows, row)
+    mode = preflight(all_rows, row)
     base = base_for(all_rows, base_default)
-    base_sha = git("rev-parse", "--verify", f"{base}^{{commit}}")
-    print(f"run-packages: package {row.n} {row.slug} on {row.branch} from {base}, model {row.model}")
-    git("worktree", "add", "-q", "-b", row.branch, str(row.worktree), base_sha)
-    REPORTS.mkdir(mode=0o700, parents=True, exist_ok=True)
-    final = REPORTS / row.report_name
-    if final.exists():  # a report left by an earlier, abandoned run of this package: kept aside, never trusted
-        final.rename(final.with_name(f"{final.name}.old-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"))
-    row.staging.parent.mkdir(mode=0o700, exist_ok=True)
-    row.staging.write_text((row.worktree / TEMPLATE).read_text(encoding="utf-8"), encoding="utf-8")
-    row.staging.chmod(0o600)
+    if mode == "resume":
+        # The base is where the package branch left the stack, not where the stack is now.
+        base_sha = git("merge-base", f"{base}^{{commit}}", row.branch)
+        if not row.worktree.exists():
+            git("worktree", "add", "-q", str(row.worktree), row.branch)
+        print(f"run-packages: package {row.n} {row.slug}: resuming on {row.branch} (uncommitted work kept), "
+              f"model {row.model}")
+    else:
+        base_sha = git("rev-parse", "--verify", f"{base}^{{commit}}")
+        print(f"run-packages: package {row.n} {row.slug} on {row.branch} from {base}, model {row.model}")
+        git("worktree", "add", "-q", "-b", row.branch, str(row.worktree), base_sha)
+    prepare_report(row, mode == "resume")
+    install_helper()
     logdir = REPO / ".claude/package-runs"
     logdir.mkdir(mode=0o700, parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     log = logdir / f"{row.n:02d}-{stamp}.json"
-    argv = ["claude", "-p", PROMPT.format(n=row.n), "--model", row.model, "--permission-mode", "acceptEdits",
+    argv = ["claude", "-p", prompt_for(row, mode == "resume"), "--model", row.model, "--permission-mode", "acceptEdits",
             "--allowedTools", *ALLOWED, "--disallowedTools", *DISALLOWED, "--max-turns", str(MAX_TURNS),
             "--output-format", "json"]
     with tempfile.TemporaryDirectory(prefix="holojob-app-ids-") as tmp, open(log, "w") as fh:
