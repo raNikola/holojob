@@ -282,6 +282,20 @@ def test_mark_tip_refuses_without_that_package_in_progress(env):
     assert "after" not in rp.load_state(state_path)["current"]
 
 
+def test_plan_table_is_a_valid_chain():
+    """The real plan: unique numbers and orders, every `needs` an existing package that runs earlier, so a package is
+    never started before what it needs; the packages already recorded keep their numbers."""
+    plan = Path(__file__).resolve().parents[2] / rp.PLAN
+    rows = rp.parse_table(plan.read_text(encoding="utf-8"))
+    by_n = {r.n: r for r in rows}
+    assert len(by_n) == len(rows) and len({r.order for r in rows}) == len(rows)
+    assert {1, 2, 3} <= set(by_n) and [by_n[n].order for n in (1, 2, 3)] == [1, 2, 3]
+    for r in rows:
+        for need in r.needs:
+            assert need in by_n and by_n[need].order < r.order, f"package {r.n} needs {need}"
+    assert [r.n for r in rp.select(rows, None, 3)] == [1, 2, 3]
+
+
 def test_installed_helper_is_the_runner_copy(tmp_path):
     src = tmp_path / "src"
     src.write_text("trusted")

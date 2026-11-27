@@ -76,21 +76,30 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
    - filtered sightings do not refresh `lastListedAt`;
    - the must-keep set (Applied/Saved/Rejected) as a check the round-1 rules are measured on;
    - the round-1 rule changes are measured on that set.
+
+   Status 2026-11-27: all five points are committed (`9eb3ccf`, `1c07e0d`, `8f49e74`; 0 of 19 must-keep ads lost). What remains is the benchmark-first check, which the headless sessions could not do because benchmark reads were denied: open the career-ops files the report cites (`company_key.py` sources, `filter-audit.mjs`, `classify-tier.mjs`, `title-keywords.mjs`, `role-matcher.mjs`), confirm or correct the sources and deviations in the docs and the report, and end with a commit of its own (the runner's mark). It is small, so it is not split.
 4. **Round 2 text rules.** Language, years, on-site only, visa and employment type, as hard/soft/unknown labels.
-5. **Cost and scoring time** (needs 2):
-   - stop after 3 consecutive failures in reading and in engine fill;
-   - the p90 setting;
-   - the prompt layout with two versions;
-   - scoring-prepare limited per the findings of package 2.
-6. **Missing descriptions:**
-   - the retry as above, with per-run stats;
-   - a paste box for discovered ads;
-   - refresh from the employer page, shown as a diff with the original kept;
-   - deferred fetch only if package 2 shows a gain;
-   - pin the JobSpy version and test the private `_fetch_details` call.
+
+**Cost and scoring time** (the former package 5, split on 2026-11-27 into one package per point; content unchanged, every part needs 2). Each part has its own commit and report, and its acceptance below:
+
+5. **Failure stop.** Reading and engine fill stop after 3 consecutive failures. Acceptance: tests show that the 3rd consecutive failure stops the step, a success resets the count, and nothing else in the step changes.
+8. **p90 setting.** `estimatedOutputTokens` = p90 from the ledger, in Settings. Acceptance: the value comes from Settings and its default is the measured p90 (count and value in the report); cost accounting is unchanged.
+9. **Scoring pass speed.** This applies the package 2 finding (FREE_MEASUREMENTS §1): fold each ad once in `location_text._restrictions`, and compute `resolve_places` once per row. Acceptance: the output is identical row for row before and after on the real ledger (a copy in a temp dir), and the pass time is reported before and after.
+10. **scoring-prepare limit.** `scoring-prepare` is limited per the findings of package 2: today a Re-scrape runs up to three `scoring-prepare` passes plus the final `scoring` (FREE_MEASUREMENTS §1). Needs 9, so that the limit is measured on the faster pass (own proposal for the order). Acceptance: the number of passes and the time per Re-scrape are reported before and after, and the final scores are unchanged.
+11. **Prompt layout, two versions.** The Fit 3 lists go before the title and the ad (FREE_MEASUREMENTS §2), released as two separate versions: the layout, and the validity of the extracted facts. Acceptance: the Stage A calibration check passes and nothing is re-read by force.
+
+**Missing descriptions** (the former package 6, split on 2026-11-27, own proposal). It was clearly too large for one session: five independent changes, two of them new UI (a paste box, and a diff view). Content unchanged:
+
+6. **Retry of empty descriptions.** The retry as above, with per-run stats.
+12. **Paste box** for discovered ads (needs 6).
+13. **Refresh from the employer page**, shown as a diff with the original kept (needs 6).
+14. **Deferred fetch and the JobSpy pin** (needs 6). Pin the JobSpy version and test the private `_fetch_details` call. Then the deferred fetch: package 2 shows a gain (up to about 75% of LinkedIn detail requests, FREE_MEASUREMENTS §3); whether JobSpy allows a per-ad fetch is open.
+
 7. **Reposts** (needs 3): as above.
 
-**Order:** 1 and 2 first, then 3 and 5 (independent), then 4, 6, 7.
+**Order:** 1 and 2 first. Then 3, then the cost parts 5, 8, 9, 10 and 11. Then 4, the missing-description parts 6, 12, 13 and 14, and 7.
+
+Packages 4 and 7 are each one mechanism with closed rules, so they stay whole.
 
 ## Package table
 
@@ -102,13 +111,20 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
 | 1 | archive-history | claude-sonnet-5-5 | - | 1 | done | list-cleanup |
 | 2 | free-measurements | claude-sonnet-5-5 | - | 2 | done | list-cleanup |
 | 3 | filter-foundation | claude-sonnet-5-5 | - | 3 | done | list-cleanup |
-| 5 | cost-scoring-time | claude-sonnet-5-5 | 2 | 4 | pending | - |
-| 4 | text-rules-round2 | claude-sonnet-5-5 | 3 | 5 | pending | - |
-| 6 | missing-descriptions | claude-sonnet-5-5 | 2 | 6 | pending | - |
-| 7 | reposts | claude-sonnet-5-5 | 3 | 7 | pending | - |
+| 5 | failure-stop | claude-sonnet-5-5 | 2 | 4 | pending | - |
+| 8 | p90-setting | claude-sonnet-5-5 | 2 | 5 | pending | - |
+| 9 | scoring-pass-speed | claude-sonnet-5-5 | 2 | 6 | pending | - |
+| 10 | scoring-prepare-limit | claude-sonnet-5-5 | 2, 9 | 7 | pending | - |
+| 11 | prompt-layout | claude-sonnet-5-5 | 2 | 8 | pending | - |
+| 4 | text-rules-round2 | claude-sonnet-5-5 | 3 | 9 | pending | - |
+| 6 | description-retry | claude-sonnet-5-5 | 2 | 10 | pending | - |
+| 12 | paste-box | claude-sonnet-5-5 | 6 | 11 | pending | - |
+| 13 | employer-refresh | claude-sonnet-5-5 | 6 | 12 | pending | - |
+| 14 | deferred-fetch | claude-sonnet-5-5 | 2, 6 | 13 | pending | - |
+| 7 | reposts | claude-sonnet-5-5 | 3 | 14 | pending | - |
 <!-- packages:end -->
 
-Needs 5→2 and 7→3 are from the plan. 4→3 and 6→2 are inferred from the order (own proposal; undo by editing `needs`). `model` is the owner's choice per session (`/model`).
+Needs 5→2 and 7→3 are from the plan, and so are 8, 9 and 11→2: every former package 5 point inherits the "needs 2". 4→3 and 6→2 are inferred from the order. 10→9, 12→6, 13→6 and 14→6 come from the 2026-11-27 split. These are own proposals; undo one by editing `needs`. Package numbers stay stable (the runner state and the report names use them), so the new parts take numbers 8 to 14 and the `order` column sets the sequence. `model` is the owner's choice per session (`/model`).
 
 ## How to run a package
 
