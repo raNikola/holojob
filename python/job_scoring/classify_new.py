@@ -49,6 +49,7 @@ import enrich_jobs  # noqa: E402
 import job_history  # noqa: E402
 import kept_ads  # noqa: E402
 import manual_jobs  # noqa: E402
+import pasted_descriptions  # noqa: E402
 import pipeline_lock  # noqa: E402
 import role_class  # noqa: E402
 import run_budget  # noqa: E402
@@ -75,7 +76,10 @@ def scoring_rows(jobs_path: Path, manual_path: Path, kept_path: Path) -> list[di
     discovered = json.loads(jobs_path.read_text(encoding="utf-8")) if jobs_path.exists() else {"jobs": []}
     jobs = discovered.get("jobs") if isinstance(discovered, dict) else discovered
     jobs = manual_jobs.with_manual(list(jobs or []), manual_jobs.load(manual_path))
-    return kept_ads.with_kept(jobs, job_history.ledger_path(jobs_path), kept_path)
+    rows = kept_ads.with_kept(jobs, job_history.ledger_path(jobs_path), kept_path)
+    # The owner's pasted / employer text is the ad text (package 12/13), as in run_scoring: the class is asked for and keyed on it.
+    pasted_descriptions.apply(rows, ads=pasted_descriptions.load(pasted_descriptions.path_for(jobs_path)))
+    return rows
 
 
 def read_store(path: Path) -> tuple[dict, dict]:

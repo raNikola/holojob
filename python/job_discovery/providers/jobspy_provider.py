@@ -9,7 +9,7 @@ import pandas as pd
 from jobspy_adapter import fetch_jobs
 from normalize_jobs import _safe_str, normalize_jobs
 from providers.base_provider import JobProvider, dropped_ad, parts_outcome
-from providers.role_filter import role_drop_reason
+from providers.role_filter import description_of, role_drop_reason
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ class JobSpyProvider(JobProvider):
                 found = []
                 for job, ext in zip(normalized, external or [None] * len(normalized)):
                     # A title miss goes to the free-text check on the ad's own text (package 3); an empty text never drops it.
-                    reason = role_drop_reason(job.get("title", ""), "", tuple(search_terms or ()), job.get("description") or "")
+                    reason = role_drop_reason(job.get("title", ""), "", tuple(search_terms or ()), description_of(job))
                     if reason is None:
                         found.append(job)
                     else:

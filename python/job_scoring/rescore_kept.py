@@ -80,9 +80,7 @@ def run(job_id: str, *, intelligence: Path, jobs: Path, manual: Path, scored: Pa
         row = next((r for r in scored_rows if r.get("jobId") == job_id), None)
         if row is None:
             if paste_text is not None:  # nothing was scored with it: put the earlier text back
-                pasted_descriptions.remove(job_id, pasted)
-                if before:
-                    pasted_descriptions.put(job_id, before["text"], pasted, now=before.get("pastedAt"), source=before.get("source"))
+                pasted_descriptions.restore(job_id, before, pasted)  # the exact earlier entry, history included
             return 4, {"ok": False, "error": "not_in_history"}
         role_class.ceiling([row])
         ceilings.stamp_engine_coverage([row], False)

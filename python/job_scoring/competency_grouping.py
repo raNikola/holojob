@@ -30,6 +30,7 @@ if str(ROOT / "python") not in sys.path:
 from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic  # noqa: E402
 import competency_mapping as cm  # noqa: E402
 from match_engine import competencies  # noqa: E402
+import pasted_descriptions  # noqa: E402
 import row_state  # noqa: E402
 
 FEATURE = "competency-grouping"
@@ -252,6 +253,7 @@ def main(argv: list[str] | None = None) -> int:
     os.environ[ai_gate.TRIGGER_ENV] = ai_gate.MANUAL
     jobs = json.loads(args.jobs.read_text(encoding="utf-8"))
     jobs = jobs if isinstance(jobs, list) else jobs.get("jobs", [])
+    pasted_descriptions.apply(jobs, ads=pasted_descriptions.load(pasted_descriptions.path_for(args.jobs)))  # in memory only; package 12/13
 
     def complete(prompt: str):
         with ai_gate.context(feature=FEATURE):

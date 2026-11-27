@@ -24,6 +24,7 @@ from discovery_common import (  # noqa: E402
     load_intelligence,
     resolve_search_config,
 )
+from providers import role_filter  # noqa: E402
 from providers.base_provider import ProviderOutcome  # noqa: E402
 from providers.provider_registry import PROVIDER_GROUPS, get_provider, resolve_providers  # noqa: E402
 import run_log  # noqa: E402
@@ -285,6 +286,8 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
 
     if cancel and cancel.wants_stop(record):
         return cancelled_without_staging(record)
+
+    role_filter.use_overlay(importer._overlay(jobs_file))  # the owner's pasted / employer text is the ad text for the filters (package 12/13)
 
     # What the scrape collects is written to data/jobs/staging/<runId>/ as it comes; the importer reads it from there. The
     # ledger and the discovered file as they are now are kept beside it, because the import replaces both.

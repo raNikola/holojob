@@ -31,6 +31,7 @@ import ai_gate  # noqa: E402
 import competency_mapping  # noqa: E402
 import enrich_jobs as ej  # noqa: E402
 import job_history  # noqa: E402
+import pasted_descriptions  # noqa: E402
 import pipeline_lock  # noqa: E402
 import requirement_frames  # noqa: E402
 import row_state  # noqa: E402
@@ -42,7 +43,7 @@ JOBS_PATH = ej.JOBS_PATH
 BACKUP_DIR = ROOT / "data" / "backups"
 
 
-def pending_of(ledger: dict, ids: set[str]) -> tuple[list[dict], dict]:
+def pending_of(ledger: dict, ids: set[str], overlay: dict | None = None) -> tuple[list[dict], dict]:
     """(rows to read, counts): the ledger's stored ad of each wanted id that has no current facts and is not closed / not found."""
     rows, counts = [], {"wanted": len(ids), "notInLedger": 0, "alreadyRead": 0, "closedOrNotFound": 0}
     for i in sorted(ids):
@@ -50,7 +51,7 @@ def pending_of(ledger: dict, ids: set[str]) -> tuple[list[dict], dict]:
         if not isinstance(entry, dict) or not isinstance(entry.get("job"), dict):
             counts["notInLedger"] += 1
             continue
-        job = {**entry["job"], "jobId": i}
+        job = pasted_descriptions.effective({**entry["job"], "jobId": i}, overlay or {})  # the owner's text is the ad text (package 12/13)
         if (entry.get("llmFacts") or {}).get("_fingerprint") == ej._fingerprint(job):
             counts["alreadyRead"] += 1
         elif job.get("isClosed") or row_state.not_found(job):
@@ -101,7 +102,7 @@ def run(args) -> int:
     ledger_file = job_history.ledger_path(JOBS_PATH)
     view_guard.ensure_or_exit(JOBS_PATH, ledger_file)
     ledger = job_history.load(ledger_file)
-    rows, counts = pending_of(ledger, ej._load_ids(args.ids))
+    rows, counts = pending_of(ledger, ej._load_ids(args.ids), pasted_descriptions.load(pasted_descriptions.path_for(JOBS_PATH)))
 
     mapper = competency_mapping.load_mapper(ej._role_family(ej.INTELLIGENCE_PATH))
     remap = mapper.remap if mapper else competency_mapping.load_remap()

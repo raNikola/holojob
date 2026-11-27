@@ -35,11 +35,11 @@ const failure = (status, data) => {
   return { ok: false, reason, message: data.message || MESSAGES[reason] }
 }
 
-/** @returns {Promise<{ ok: true, diff: object[], identical: boolean, truncated: boolean, finalUrl: string } | { ok: false, reason: string, message: string }>} */
+/** @returns {Promise<{ ok: true, diff: object[], identical: boolean, truncated: boolean, finalUrl: string, against: 'scraped' | 'pasted' | 'employer', replacesText: boolean } | { ok: false, reason: string, message: string }>} */
 export async function fetchEmployerText(jobId, url, { fetchFn = globalThis.fetch } = {}) {
   if (!getStoredJob(jobId)) return { ok: false, reason: 'missing', message: 'The ad is no longer in your list.' }
   const { status, data } = await post('/api/jobs/employer/fetch', { jobId, url }, fetchFn)
-  if (status === 200 && data.ok) return { ok: true, diff: data.diff ?? [], identical: Boolean(data.identical), truncated: Boolean(data.truncated), finalUrl: data.finalUrl ?? '' }
+  if (status === 200 && data.ok) return { ok: true, diff: data.diff ?? [], identical: Boolean(data.identical), truncated: Boolean(data.truncated), finalUrl: data.finalUrl ?? '', against: data.against ?? 'scraped', replacesText: Boolean(data.replacesText) }
   return failure(status, data)
 }
 

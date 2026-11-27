@@ -92,7 +92,12 @@ def propose(job_id: str, url: str, *, jobs: Path = JOBS_PATH, path: Path = PROPO
     entry = (ledger.get("jobs") or {}).get(job_id)
     if not entry or (entry.get("job") or {}).get("manualEntry"):
         return 4, {"ok": False, "error": "not_in_history"}
-    original = str((entry.get("job") or {}).get("description") or "")
+    scraped = str((entry.get("job") or {}).get("description") or "")
+    # The text the ad has NOW is the one the proposal is compared with: an earlier paste or accepted refresh, else the scraped text.
+    # Accepting a different text replaces that paste in the overlay, and the replaced one stays as `previous` (one level).
+    current = pasted_descriptions.load(pasted_descriptions.path_for(jobs)).get(job_id)
+    original = current["text"] if current else scraped
+    against = pasted_descriptions.kind(current.get("source")) if current else "scraped"
     try:
         page = (fetch_page or safe_fetch.fetch_page)(str(url or ""))
     except safe_fetch.FetchRefused as exc:
@@ -109,7 +114,8 @@ def propose(job_id: str, url: str, *, jobs: Path = JOBS_PATH, path: Path = PROPO
     ads[job_id] = {"text": text, "url": page.url, "fetchedAt": now or datetime.now(timezone.utc).isoformat(), "from": "json-ld" if from_posting else "page-text"}
     _save(ads, path)
     diff = diff_lines(original, text)
-    return 0, {"ok": True, "finalUrl": page.url, "from": ads[job_id]["from"], "originalChars": len(original.strip()), "proposedChars": len(text),
+    return 0, {"ok": True, "finalUrl": page.url, "from": ads[job_id]["from"], "against": against, "replacesText": bool(current) and current["text"] != text,
+               "originalChars": len(original.strip()), "proposedChars": len(text),
                "identical": all(d["op"] == "same" for d in diff), "truncated": len(diff) > MAX_DIFF_LINES, "diff": diff[:MAX_DIFF_LINES]}
 
 

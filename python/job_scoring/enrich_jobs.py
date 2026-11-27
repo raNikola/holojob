@@ -45,6 +45,7 @@ from atomic_write import write_private_text  # noqa: E402
 import pipeline_lock  # noqa: E402
 import run_budget  # noqa: E402
 import job_history  # noqa: E402
+import pasted_descriptions  # noqa: E402
 import row_state  # noqa: E402
 import view_guard  # noqa: E402
 from job_fingerprint import (  # noqa: E402,F401
@@ -746,17 +747,21 @@ def enrich(args: argparse.Namespace) -> int:
         print(f"--ids: {len(only)} ids, {len(only & {j.get('jobId') for j in jobs})} found in {args.jobs.name}", flush=True)
     pending: list[tuple[int, dict]] = []
     skipped = from_ledger = outside = not_active = 0
-    for index, job in enumerate(jobs, start=1):
-        if only is not None and job.get("jobId") not in only:
+    # The ad text the owner pasted or accepted from the employer replaces the scraped one for every read below (package 12/13). The
+    # overlay is a copy per row (`effective`): the original row, which is written back, keeps the scraped text.
+    overlay = pasted_descriptions.load(pasted_descriptions.path_for(args.jobs))
+    for index, original in enumerate(jobs, start=1):
+        if only is not None and original.get("jobId") not in only:
             continue
-        cached = job.get("llmFacts") or {}
+        job = pasted_descriptions.effective(original, overlay)
+        cached = original.get("llmFacts") or {}
         if not args.force and cached.get("_fingerprint") == _fingerprint(job):
             skipped += 1
             continue
         # Facts the ledger holds for this exact ad are reused instead of asking again.
         stored = None if args.force else job_history.facts_for(ledger, job)
         if stored:
-            job["llmFacts"] = stored
+            original["llmFacts"] = stored
             skipped += 1
             from_ledger += 1
             continue
@@ -846,7 +851,7 @@ def enrich(args: argparse.Namespace) -> int:
             index, job = futures[future]
             title = (job.get("title") or "?")[:45]
             try:
-                job["llmFacts"] = future.result()
+                job["llmFacts"] = jobs[index - 1]["llmFacts"] = future.result()  # the read copy and the row that is written back
             except _Skipped:
                 if streak["reason"]:
                     left += 1

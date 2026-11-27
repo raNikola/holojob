@@ -37,6 +37,13 @@ _atomic_spec.loader.exec_module(_atomic_module)
 write_text_atomic = _atomic_module.write_text_atomic
 write_private_text = _atomic_module.write_private_text
 
+_overlay_spec = importlib.util.spec_from_file_location(
+    "_ledger_description_overlay", Path(__file__).with_name("description_overlay.py")
+)
+_overlay_module = importlib.util.module_from_spec(_overlay_spec)
+_overlay_spec.loader.exec_module(_overlay_module)
+effective_description = _overlay_module.effective
+
 _company_spec = importlib.util.spec_from_file_location("_ledger_company_key", Path(__file__).with_name("company_key.py"))
 _company_module = importlib.util.module_from_spec(_company_spec)
 _company_spec.loader.exec_module(_company_module)
@@ -203,10 +210,15 @@ def _count_description_retry(entry: dict, existed: bool, stored_thin: bool, fina
 
 
 def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datetime, key: str, role_key, run_id: str | None,
-             previous_facts: dict, seen_before: dict, stats: dict, retry_max: int = DEFAULT_RETRY_MAX_TOTAL) -> tuple[dict, dict]:
+             previous_facts: dict, seen_before: dict, stats: dict, retry_max: int = DEFAULT_RETRY_MAX_TOTAL,
+             pasted: dict | None = None) -> tuple[dict, dict]:
     """The half of a run that sees an ad: add it to the ledger or refresh its entry. Returns (the job as stored, its record for the view).
 
     Shared by `apply_run` (a whole run) and `apply_partial` (a cancelled one), so the two can never disagree about what seeing an ad does.
+
+    `pasted` is the owner's description overlay (`pasted_descriptions.load`, package 12/13). The ledger keeps the scraped text, but the facts
+    fingerprint is taken on the effective text, because that is the text enrichment read: otherwise every scan would find the facts "changed"
+    and a paid re-read would follow. An ad with an overlay is out of the empty-description retry (its text is not thin any more).
     """
     job_id = job["jobId"]
     entry = entries.get(job_id)
@@ -223,7 +235,9 @@ def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datet
         if degraded:
             job.update(descriptionStatus="complete", descriptionSource=stored_job.get("descriptionSource"))
         stats["keptFullerDescription"] += 1
-    fingerprint = job_fingerprint(job)
+    view = effective_description(job, pasted or {})
+    overlaid = view is not job
+    fingerprint = job_fingerprint(view)
 
     existed = entry is not None
     if entry is None:
@@ -253,8 +267,12 @@ def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datet
             stats["changed"] += 1  # the ad changed, so its old facts no longer apply
         entry["llmFacts"] = None
 
-    _count_description_retry(entry, existed, len(stored_description.strip()) < THIN_DESCRIPTION_CHARS,
-                             len((job.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS, retry_max, stats)
+    if overlaid:  # the owner's text stands in: no retry is counted and an earlier count or give-up is cleared
+        entry.pop("descriptionRetries", None)
+        entry.pop("descriptionGaveUp", None)
+    else:
+        _count_description_retry(entry, existed, len(stored_description.strip()) < THIN_DESCRIPTION_CHARS,
+                                 len((job.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS, retry_max, stats)
     entry.update(provider=job.get("provider"), roleKey=role_key(job), companyKey=company_key(job.get("company")), seenUnder=key, job=_snapshot(job))
     if run_id is not None:
         entry.update(lastRunId=run_id, lastRunPos=position)
@@ -265,7 +283,7 @@ def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datet
 
 
 def apply_partial(ledger: dict, jobs: list[dict], *, now: str, key: str, role_key, list_run_id: str,
-                  retry_max: int = DEFAULT_RETRY_MAX_TOTAL) -> dict:
+                  retry_max: int = DEFAULT_RETRY_MAX_TOTAL, pasted: dict | None = None) -> dict:
     """Save the ads a CANCELLED run collected, and nothing else (S6). Returns the counts.
 
     The ledger describes the last complete run's list, so this run may only add to it. Each collected ad is added or refreshed
@@ -284,7 +302,7 @@ def apply_partial(ledger: dict, jobs: list[dict], *, now: str, key: str, role_ke
         else:
             position, next_position = next_position, next_position + 1
         found_ad(entries, job, position, now=now, moment=moment, key=key, role_key=role_key, run_id=list_run_id,
-                 previous_facts={}, seen_before={}, stats=stats, retry_max=retry_max)
+                 previous_facts={}, seen_before={}, stats=stats, retry_max=retry_max, pasted=pasted)
     return stats
 
 
@@ -306,6 +324,7 @@ def apply_run(
     board_evidence: dict[str, dict[str, dict]] | None = None,
     skipped_sources: set[str] | None = None,
     retry_max: int = DEFAULT_RETRY_MAX_TOTAL,
+    pasted: dict | None = None,
 ) -> tuple[list[dict], dict]:
     """Record one discovery run; return the jobs to write and what changed.
 
@@ -377,7 +396,7 @@ def apply_run(
         found_ids.add(job["jobId"])
         job, record = found_ad(
             entries, job, position, now=now, moment=moment, key=key, role_key=role_key, run_id=run_id,
-            previous_facts=previous_facts, seen_before=seen_before, stats=stats, retry_max=retry_max,
+            previous_facts=previous_facts, seen_before=seen_before, stats=stats, retry_max=retry_max, pasted=pasted,
         )
         found_roles.add(role_key(job))
         out.append(record)

@@ -26,7 +26,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-from providers.role_filter import role_drop_reason
+from providers.role_filter import description_of, role_drop_reason
 
 API = "https://jobs.workable.com/api/v1/jobs"
 USER_AGENT = (
@@ -186,7 +186,7 @@ def fetch_jobs(
             if job["jobUrl"] in by_url:
                 continue
             # A title miss goes to the free-text check on the listed description (package 3); an empty one never drops the ad.
-            reason = role_drop_reason(job["title"], "", extra_terms or search_terms, job.get("description") or "")
+            reason = role_drop_reason(job["title"], "", extra_terms or search_terms, description_of(job))
             if reason is None:
                 by_url[job["jobUrl"]] = job
                 added.append(job)

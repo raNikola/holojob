@@ -49,6 +49,10 @@ export default function EmployerRefreshBox({ job, apiAvailable = true }) {
         <Button variant="secondary" disabled={busy || !apiAvailable || !url.trim()} onClick={fetchText}>{busy && !proposal ? 'Fetching…' : 'Fetch and compare'}</Button>
         {proposal && (
           <div className="space-y-2">
+            {proposal.against !== 'scraped' && (
+              <p>The difference is against the text you {proposal.against === 'employer' ? 'accepted from the employer earlier' : 'pasted earlier'}, not the scraped text.</p>
+            )}
+            {proposal.replacesText && <p>Accepting replaces that text. It stays recoverable as the previous text (one level).</p>}
             {proposal.identical ? <p>The employer page has the same text as the saved ad.</p> : (
               <pre className="max-h-96 overflow-auto whitespace-pre-wrap text-sm" aria-label="Difference">
                 {proposal.diff.map((line, index) => <span key={index} className={`block ${TONE[line.op]}`}>{MARK[line.op]}{line.text}</span>)}

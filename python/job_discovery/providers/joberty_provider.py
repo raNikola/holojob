@@ -29,7 +29,7 @@ from providers.base_provider import (
     dropped_ad,
     place_drop_reason,
 )
-from providers.role_filter import UNKNOWN, assess, role_drop_reason
+from providers.role_filter import UNKNOWN, assess, description_of, overlay_ids, role_drop_reason
 from providers.workable_client import _strip_html
 
 logger = logging.getLogger(__name__)
@@ -91,7 +91,7 @@ def known_ids(ledger_path: Path | None = None) -> set[str]:
         entries = job_history.load(path, read_only=True)["jobs"]  # a scrape never renames a ledger it cannot read
     except OSError:
         return set()
-    return {
+    return overlay_ids() | {  # an ad with the owner's text (packages 12/13) needs no detail either
         job_id
         for job_id, entry in entries.items()
         if (entry or {}).get("descriptionGaveUp")  # retries used up (Settings): the detail is not asked for again
@@ -216,7 +216,7 @@ class JobertyProvider(JobProvider):
             detail = joberty_client.fetch_detail(item["id"])
             if detail.get("text"):
                 job = to_canonical(item, detail, country=country)
-                late = role_drop_reason(job["title"], "", terms, job.get("description") or "") if item["id"] in text_check else None
+                late = role_drop_reason(job["title"], "", terms, description_of(job)) if item["id"] in text_check else None
                 if late:
                     self.stage([], part=f"ad {item['id']}", dropped=[dropped_ad(job, late, job["externalId"])])
                     continue

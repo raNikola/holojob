@@ -46,6 +46,7 @@ job_history = _load("_importer_job_history", "job_history.py")
 _atomic = _load("_importer_atomic_write", "atomic_write.py")
 view_guard = _load("_importer_view_guard", "view_guard.py")
 stale_rule = _load("_importer_stale_rule", "stale_rule.py")
+_overlay_mod = _load("_importer_description_overlay", "description_overlay.py")
 ViewError = view_guard.ViewError
 derive_view = view_guard.derive_view  # the view from the ledger alone lives beside the readers that need it
 ROW_WARNING = 5000  # rows in discovered_jobs.json past which the log warns; nothing is ever dropped for it (owner, S4a)
@@ -322,7 +323,8 @@ PARTIAL_RUNS_KEPT = 200
 NO_USABLE_SOURCE = "no_usable_source"  # report["nothingSaved"] of a run that got no usable source (S8b)
 
 
-def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, manifest: dict, deduped: list[dict], moment: str) -> "ImportResult":
+def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, manifest: dict, deduped: list[dict], moment: str,
+                  pasted: dict | None = None) -> "ImportResult":
     """What importing a CANCELLED run does (S6): save the ads it validly collected, change nothing else.
 
     A cancelled run saw only part of the world, so it must not rebuild the list. `plan_import` assumes a complete run in these places,
@@ -357,7 +359,7 @@ def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, m
     for job in deduped:
         if job["jobId"] not in ledger["jobs"]:
             result.new_by_provider[job.get("provider")] = result.new_by_provider.get(job.get("provider"), 0) + 1
-    stats = job_history.apply_partial(ledger, deduped, now=moment, key=key, role_key=_crosspost_key, list_run_id=info["runId"], retry_max=_retry_max())
+    stats = job_history.apply_partial(ledger, deduped, now=moment, key=key, role_key=_crosspost_key, list_run_id=info["runId"], retry_max=_retry_max(), pasted=pasted)
     ledger["partialRuns"] = ((ledger.get("partialRuns") or []) + [run.run_id])[-PARTIAL_RUNS_KEPT:]
     # Wave 4 (n): `lastImport` keeps describing the last COMPLETE import. The latest cancelled run that saved ads is recorded beside it,
     # where no lifecycle code reads it, so Activity can say the newest attempt is later than the list's.
@@ -371,6 +373,11 @@ def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, m
 
 
 HELD_KEYS = ("keptFailedBoard", "keptEmptyBoard", "keptSourceNotRun", "keptUnproven", "keptBoardNotRead", "listedButFiltered")
+
+
+def _overlay(jobs_file: Path) -> dict:
+    """The owner's description overlay beside the job list (package 12/13): the facts fingerprint is taken on it."""
+    return _overlay_mod.load(_overlay_mod.path_for(jobs_file))
 
 
 def _retry_max() -> int:
@@ -413,7 +420,7 @@ def evidence_block(report: dict, stats: dict) -> dict:
 
 def plan_import(
     run: staging.RunStage, ledger: dict, previous=None, *, now: str | None = None, force: bool = False,
-    allow_older: bool = False, require_usable: bool = False,
+    allow_older: bool = False, require_usable: bool = False, pasted: dict | None = None,
 ) -> ImportResult:
     """What importing this staged run would do. `ledger` is the ledger as it stands, `previous` the discovered file the run
     replaced (None: there was none, or it is not known; then `report["replayExact"]` says so). Nothing is written or mutated.
@@ -558,7 +565,7 @@ def plan_import(
     report["crosspostsMerged"] = len(after_exact) - len(deduped)
 
     if run.cancelled is not None:
-        return _plan_partial(result, report, run, manifest, deduped, moment)
+        return _plan_partial(result, report, run, manifest, deduped, moment, pasted)
 
     # Usable (Wave 1): the source ran to its end (state complete), or it is partial but gave something proven: a board read whole,
     # or ads from a search that did not fail. Its ads must be whole (not held as not run). Failed, skipped, unfinished, and a partial
@@ -589,7 +596,7 @@ def plan_import(
         result.ledger, deduped, now=moment, providers_returned=provider_counts, key=manifest.get("searchKey") or "",
         role_key=_crosspost_key, previous_facts=previous_facts, seen_before=seen_before, failed_boards=failed_boards,
         empty_boards=empty_boards, sources_not_run=not_run, run_id=run.run_id, prune=False, board_evidence=evidence,
-        skipped_sources={p for p in manifest.get("skippedProviders") or [] if isinstance(p, str)}, retry_max=_retry_max(),
+        skipped_sources={p for p in manifest.get("skippedProviders") or [] if isinstance(p, str)}, retry_max=_retry_max(), pasted=pasted,
     )
     result.stats = stats
     report["provenRuns"] = _record_stale_evidence(result.ledger, run, moment, manifest.get("searchKey") or "", proven_searches, evidence)
@@ -820,7 +827,7 @@ def dry_run(root: Path, run_id: str) -> DryRun:
     now = (_infer_commit_time(committed_ledger) if out.comparable else None) or import_time(run)
     out.time_used = now
 
-    result = out.result = plan_import(run, ledger_before, previous, now=now)
+    result = out.result = plan_import(run, ledger_before, previous, now=now, pasted=_overlay(jobs_dir / "discovered_jobs.json"))
     if not result.ok:
         out.errors += result.refused
         return out
@@ -899,7 +906,8 @@ def import_staged_run(root: Path, run_id: str, *, allow_older: bool = False, req
     previous = None
     if manifest.get("discoveredBefore"):
         previous = _load_json(run.discovered_before)
-    result = out.result = plan_import(run, ledger, previous, allow_older=allow_older, require_usable=require_usable)
+    result = out.result = plan_import(run, ledger, previous, allow_older=allow_older, require_usable=require_usable,
+                                      pasted=_overlay(jobs_file))
     if not result.ok:
         out.refused += result.refused
         return out

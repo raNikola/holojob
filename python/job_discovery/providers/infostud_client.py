@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from providers import infostud_description
-from providers.role_filter import is_relevant_role, role_drop_reason
+from providers.role_filter import description_of, is_relevant_role, role_drop_reason
 
 BASE = "https://poslovi.infostud.com/oglasi-za-posao"
 PAGE_SIZE = 30
@@ -263,7 +263,7 @@ def fetch_jobs(
     dropped = []
     for job in jobs:
         # A title miss goes to the free-text check on the listing's teaser (package 3); an empty teaser never drops the ad.
-        reason = role_drop_reason(job.get("title", ""), job.get("standardizedPosition") or "", extra_terms, job.get("description") or "")
+        reason = role_drop_reason(job.get("title", ""), job.get("standardizedPosition") or "", extra_terms, description_of(job))
         if reason is None:
             matches.append(job)
         else:
