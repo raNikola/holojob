@@ -75,6 +75,12 @@ function SourceRow({ source }) {
       <td className="py-2 pr-3">
         <span className="tabular-nums">{show(source.filteredOut)}</span>
         {reasons && <div className={`text-xs ${muted}`}>{reasons}</div>}
+        {source.textCheck && source.textCheck.examined > 0 && (
+          <div className={`text-xs ${muted}`}>
+            Text check: {source.textCheck.examined} title misses examined, {source.textCheck.kept} kept
+            {source.textCheck.kept > 0 ? ` (${source.textCheck.byText} by a phrase in the text, ${source.textCheck.noText} with no text)` : ''}
+          </div>
+        )}
       </td>
       <td className="py-2 pr-3 tabular-nums">{show(source.collected)}</td>
       <td className="py-2 pr-3 tabular-nums">{show(source.new)}</td>

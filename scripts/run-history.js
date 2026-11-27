@@ -230,6 +230,16 @@ function projectCompleteRead(entry) {
 // Wave 1: how the read went (status and counts only). Only a complete read of a board can support closing.
 const READ_CLASSES = ['ok', 'confirmed_empty', 'incomplete', 'failed', 'skipped']
 
+/** The text check's tally (package 3): title misses examined, and the ones kept that the title filter alone would have dropped. Counts only; null when the run did not record it. */
+function projectTextCheck(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const examined = count(raw.examined)
+  const byText = count(raw.keptByText)
+  const noText = count(raw.keptNoText)
+  if (examined === null || byText === null || noText === null) return null
+  return { examined, kept: byText + noText, byText, noText }
+}
+
 function projectSource(source, imported) {
   const entry = (imported?.sources ?? []).find((one) => one && one.name === source.name)
   const returned = count(source.read)
@@ -246,6 +256,7 @@ function projectSource(source, imported) {
     error: errorSummary(source.error),
     skipReason: source.skipReason === null || source.skipReason === undefined ? null : message(source.skipReason),
     readClass: pick(source.readClass, READ_CLASSES, 'unknown'),
+    textCheck: projectTextCheck(source.textCheck),
     boardsFailed: (Array.isArray(source.boardsFailed) ? source.boardsFailed : []).slice(0, 20).map((b) => (typeof b === 'string' && BOARD.test(b) ? b : '[board]')),
     startedAt: started,
     finishedAt: finished,

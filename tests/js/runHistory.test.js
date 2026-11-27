@@ -108,6 +108,15 @@ describe('what a run shows', () => {
     expect(run.sources.map((s) => [s.returned, s.collected, s.filteredOut])).toEqual([[100, 40, 60], [50, 10, 40]])
   })
 
+  it('shows the text check tally per source as counts only, and null when the run did not record it', () => {
+    plant(1, { sources: [
+      { name: 'jobspy', status: 'ok', read: 100, kept: 40, new: 3, error: null, boardsFailed: [], skipReason: null, textCheck: { examined: 30, keptByText: 5, keptNoText: 2, extra: 'CANARY-EXTRA-FIELD' } },
+      { name: 'infostud', status: 'ok', read: 50, kept: 10, new: 0, error: null, boardsFailed: [], skipReason: null },
+    ] })
+    const [run] = list().body.runs
+    expect(run.sources.map((s) => s.textCheck)).toEqual([{ examined: 30, kept: 7, byText: 5, noText: 2 }, null])
+  })
+
   it('shows a Re-scrape\'s paid steps through an allow-list: counts, spend, a fixed stop code, nothing else', () => {
     plant(1, {
       status: 'waiting',
@@ -335,7 +344,7 @@ describe('the allow-list', () => {
     const [run] = list().body.runs
     expect(Object.keys(run).sort()).toEqual(['canCancel', 'cancel', 'cancelRequested', 'classification', 'counts', 'durationSeconds', 'finishedAt', 'import', 'incompleteCommit', 'inferred', 'issues', 'issuesCount', 'paid',
       'recorded', 'runId', 'sources', 'staging', 'startedAt', 'status', 'steps', 'trigger'])
-    expect(Object.keys(run.sources[0]).sort()).toEqual(['boardsFailed', 'collected', 'completeRead', 'durationSeconds', 'error', 'filterReasons', 'filteredOut', 'finishedAt', 'name', 'new', 'proof', 'readClass', 'returned', 'skipReason', 'startedAt', 'status'])
+    expect(Object.keys(run.sources[0]).sort()).toEqual(['boardsFailed', 'collected', 'completeRead', 'durationSeconds', 'error', 'filterReasons', 'filteredOut', 'finishedAt', 'name', 'new', 'proof', 'readClass', 'returned', 'skipReason', 'startedAt', 'status', 'textCheck'])
     expect(Object.keys(run.issues[0]).sort()).toEqual(['level', 'message', 'source'])
     expect(Object.keys(run.steps[0]).sort()).toEqual(['exitCode', 'name', 'status'])
     expect(Object.keys(run.sources[0].proof).sort()).toEqual(['boards', 'codes', 'state'])

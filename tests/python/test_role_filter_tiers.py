@@ -102,3 +102,23 @@ def test_a_project_title_is_still_capped_by_scoring_without_product_evidence():
     assert title_tier("Project Manager", 30, "product", {}) == "unrelated"
     facts = {"roleTrack": "product_ownership", "roleTrackEvidence": "owns the roadmap"}
     assert title_tier("Project Manager", 30, "product", facts) == "near"
+
+
+def test_the_text_check_tally_counts_per_source_and_never_changes_a_decision():
+    """The run summary's counter (2026-11-27): examined title misses, and the ones the text check kept that the title alone would drop."""
+    cases = [
+        ("Implementation Lead", "You will act as the Product Owner of our platform."),  # kept by a phrase in the text
+        ("Implementation Lead", "You will onboard customers and run rollouts."),         # examined, dropped
+        ("Implementation Lead", ""),                                                     # kept with no text
+        ("Product Owner", "anything"),                                                   # a title match: never reaches the text check
+        ("Account Manager", "Product Owner"),                                            # hard title drop: never reaches it either
+        ("Chef", None),                                                                  # no text check at all: the title decides
+    ]
+    plain = [role_filter.role_drop_reason(title, "", (), text) for title, text in cases]
+    role_filter.begin_text_check("a")
+    counted = [role_filter.role_drop_reason(title, "", (), text) for title, text in cases]
+    role_filter.begin_text_check(None)
+    role_filter.role_drop_reason("Implementation Lead", "", (), "")  # no source: counts nothing
+    assert counted == plain
+    assert role_filter.text_check_counts("a") == {"examined": 3, "keptByText": 1, "keptNoText": 1}
+    assert role_filter.text_check_counts("b") == {"examined": 0, "keptByText": 0, "keptNoText": 0}

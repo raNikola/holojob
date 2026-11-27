@@ -223,6 +223,40 @@ def role_tier(
     return decision.tier, decision.reason
 
 
+# The text check's tally for the run summary (package 3 follow-up, 2026-11-27): per source, the title misses that reached the text check
+# (`examined`) and the ones it let in that the title filter alone would have dropped (`keptByText`: an include phrase in the text;
+# `keptNoText`: an empty text). Counting only: it never changes a decision. `begin_text_check(source)` starts a source, `text_check_counts`
+# reads it. Counted in `role_drop_reason` only: Joberty's first pass (listing, no text yet) uses `assess` and is not counted, its second
+# look, with the ad's text, is.
+_TEXT_CHECK: dict[str, dict[str, int]] = {}
+_text_check_source: str | None = None
+
+
+def begin_text_check(source: str | None) -> None:
+    """Counts the text checks that follow under `source` (None: counts nothing)."""
+    global _text_check_source
+    _text_check_source = source
+    if source is not None:
+        _TEXT_CHECK[source] = {"examined": 0, "keptByText": 0, "keptNoText": 0}
+
+
+def text_check_counts(source: str) -> dict[str, int]:
+    return dict(_TEXT_CHECK.get(source) or {"examined": 0, "keptByText": 0, "keptNoText": 0})
+
+
+def _count_text_check(decision: Decision, description: str | None) -> None:
+    counts = _TEXT_CHECK.get(_text_check_source) if _text_check_source is not None else None
+    if counts is None or description is None:  # `description=None` is a caller with no text check at all
+        return
+    text_match = "title_not_matched:text_match" in decision.labels
+    no_text = "title_not_matched:no_text" in decision.labels
+    if not (text_match or no_text or decision.reason == "title_not_matched"):
+        return  # a title match, a hard title drop, or a caller with no text check: the text check was not reached
+    counts["examined"] += 1
+    if decision.tier != EXCLUDED:
+        counts["keptByText" if text_match else "keptNoText"] += 1
+
+
 def role_drop_reason(
     title: str,
     position: str = "",
@@ -230,7 +264,9 @@ def role_drop_reason(
     description: str | None = None,
 ) -> str | None:
     """Why the role filter drops this ad, or None when it keeps it (Target or Near)."""
-    return role_tier(title, position, extra_terms, description)[1]
+    decision = assess(title, position, extra_terms, description)
+    _count_text_check(decision, description)
+    return decision.reason
 
 
 def is_relevant_role(

@@ -316,10 +316,13 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
             provider = get_provider(name)
             run_log.event(record, "source_start", source=name)
             source_started = run_log.now_iso()
+            role_filter.begin_text_check(name)
             jobs, outcome = fetch_source(
                 provider, name, search_terms, locations, remote_filters, country, stage=stage_run.open_source(name)
             )
             run_log.add_source(record, name, outcome)
+            record["sources"][-1]["textCheck"] = role_filter.text_check_counts(name)
+            role_filter.begin_text_check(None)
             record["sources"][-1].update(startedAt=source_started, finishedAt=run_log.now_iso())
             run_log.save(record)
             run_log.event(record, "source_end", source=name, status=outcome.status, read=outcome.read, kept=outcome.kept,
@@ -426,6 +429,10 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
     print("")
     for name in provider_names:
         print(f"  {name}: {provider_counts.get(name, 0)} jobs")
+        checked = role_filter.text_check_counts(name)
+        if checked["examined"]:
+            print(f"    text check: {checked['examined']} title misses examined, {checked['keptByText'] + checked['keptNoText']} kept "
+                  f"({checked['keptByText']} by a phrase in the text, {checked['keptNoText']} with no text)")
     print("")
     print(f"Raw Jobs: {raw_count}")
     print(f"Deduped Jobs: {found_count}")
