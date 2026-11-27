@@ -181,8 +181,8 @@ function copiesToShow(copies) {
  * the date moves, with no new import. `activeWindowDays`: the Settings period an absent row stays in Active (null until Settings has answered: then no absent row is in Active).
  *
  * `all` is every row. `active` is found, held, hand-entered and absent seen within the Settings period, plus any row with the owner's work
- * on it unless the ad is closed or archived (`historyStateOf`: only Saved, applied and kept ads are never archived; a closed ad stays in History and in
- * the Application Tracker, work or no work), and no unprotected ad past its deadline, with one row per ad. A protected ad past its deadline
+ * on it unless the ad is closed or archived (`historyStateOf`: only Saved, applied and kept ads are never archived; an unprotected closed ad stays in History and in
+ * the Application Tracker, work or no work), and no unprotected ad past its deadline, with one row per ad. A protected ad (Saved, applied, Keep) that is closed or past its deadline
  * stays in Active and carries `historyState: 'expired'` there too, so its Expired badge shows. `jobStateDoc`: the server's statuses and Keep (data/jobs/job-state.json),
  * which win over the stored row's, so a Saved ad held only there is protected too. While the application store is loading, or if it failed, its work is not known, so
  * copies are not collapsed (`copies.state` says which). A stored row is in the result whatever the route answers.
@@ -209,9 +209,10 @@ export function composeJobList({ stored = [], server = null, applications = null
     return entry
   })
 
-  // Out of Active: an archived row, and an expired one unless protected (a protected ad past its deadline stays, with its Expired badge).
+  // Out of Active: an archived row, and an expired one unless protected (a protected ad that is closed or past its deadline stays, with its Expired badge).
+  // Worked-on rows are candidates unless closed; a protected closed ad is a candidate too (owner decision 2026-11-27), any other closed ad is History only.
   const leavesActive = (entry) => entry.history.state === 'archived' || (entry.history.state === 'expired' && !entry.protectedAd)
-  const candidates = entries.filter((entry) => !leavesActive(entry) && (entry.eligible || (entry.worked && !isClosedAd(entry.row))))
+  const candidates = entries.filter((entry) => !leavesActive(entry) && (entry.eligible || (entry.worked && (entry.protectedAd || !isClosedAd(entry.row)))))
   const appliedGroups = new Set(entries.filter((entry) => entry.applied && entry.row.copyGroup).map((entry) => entry.row.copyGroup))
   const marked = (entry) => (!entry.applied && appliedGroups.has(entry.row.copyGroup) ? { ...entry.shownRow, appliedOtherCopy: true } : entry.shownRow)
   let shown = candidates
