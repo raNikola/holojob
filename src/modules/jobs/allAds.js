@@ -205,7 +205,10 @@ export function composeJobList({ stored = [], server = null, applications = null
     // stored row's own mark counts as well.
     entry.protectedAd = entry.applied || PROTECTED_STATUSES.has(status) || local?.status === 'applied_manually' || local?.keptByUser === true || serverState?.keep === true
     entry.history = historyStateOf(entry.row, { protectedAd: entry.protectedAd, now, windowDays: activeWindowDays })
-    entry.shownRow = entry.history.state ? { ...entry.row, historyState: entry.history.state, historyReason: entry.history.reason } : entry.row
+    // `protectedAd` goes on the rows that carry a history state, so the default "not on the board" filter does not hide a protected ad (Saved, application, Keep) it is not told about.
+    entry.shownRow = entry.history.state
+      ? { ...entry.row, historyState: entry.history.state, historyReason: entry.history.reason, ...(entry.protectedAd ? { protectedAd: true } : {}) }
+      : entry.row
     return entry
   })
 

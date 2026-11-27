@@ -76,7 +76,7 @@ export function isNoLongerListed(job) {
 export function isNotOnBoard(job) {
   const gone = job?.class ? job.class === 'closed' || (job.class === 'absent' && Boolean(job.absentSince)) : job?.isClosed === true || job?.isAbsent === true
   if (!gone) return false
-  const worked = job?.status === 'saved' || job?.status === 'applied_manually' || Boolean(job?.applicationTracking)
+  const worked = job?.status === 'saved' || job?.status === 'applied_manually' || Boolean(job?.applicationTracking) || job?.protectedAd === true || job?.keptByUser === true
   return !worked
 }
 

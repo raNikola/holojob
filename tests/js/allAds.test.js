@@ -5,6 +5,7 @@ import { renderToString } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as allAds from '../../src/modules/jobs/allAds.js'
 import { AD_FIELDS, ROUTE_FIELDS, classLabel, mergeRow, seenRecently, validWindowDays } from '../../src/modules/jobs/allAds.js'
+import { filterComposed } from '../../src/modules/jobs/jobListView.js'
 import { createAllAdsLoader, fetchAllAds, useAllAds } from '../../src/modules/jobs/useAllAds.js'
 
 const NOW = Date.parse('2026-11-20T12:00:00.000Z')
@@ -169,6 +170,15 @@ describe('Active: each class', () => {
     expect(ids(active)).toEqual(['c'])
     expect(active[0].historyState).toBe('expired')
     expect(ids(all)).toEqual(['c'])
+  })
+
+  it('the default filters keep a protected closed ad in the shown list (applied from the store, Keep, Saved) and drop an unprotected one', () => {
+    const stored = [local('kept', { keptByUser: true }), local('saved', { status: 'saved' }), local('plain')]
+    const server = ['kept', 'saved', 'plain', 'app'].map((id) => route(id, 'closed'))
+    const { active } = compose({ stored, server, applications: withApplications('app') })
+    expect(ids(active).sort()).toEqual(['app', 'kept', 'saved'])
+    expect(ids(filterComposed(active, {})).sort()).toEqual(['app', 'kept', 'saved'])
+    expect(ids(filterComposed(compose({ stored, server, applications: withApplications('app') }).all, {})).sort()).toEqual(['app', 'kept', 'saved'])
   })
 
   it('a protected ad past its deadline stays in Active, an unprotected one leaves', () => {
