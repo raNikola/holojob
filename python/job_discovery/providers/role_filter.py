@@ -31,11 +31,14 @@ logger = logging.getLogger(__name__)
 # The owner's description overlay (packages 12 and 13): `{jobId: text}`, set once per run by run_discovery and empty otherwise, so a
 # test never reads the real data folder. An ad the owner pasted or refreshed is filtered, and its text rules read, on that text.
 _OVERLAY: dict[str, str] = {}
+_URLS: dict[str, str] = {}  # jobUrl -> jobId of the overlaid ads, for a row that has no id yet (Workable sets it after the filter)
 
 
-def use_overlay(ads: dict | None) -> None:
-    """`ads` is `description_overlay.load`'s map; None or {} clears it."""
+def use_overlay(ads: dict | None, urls: dict[str, str] | None = None) -> None:
+    """`ads` is `description_overlay.load`'s map; None or {} clears it. `urls` maps an overlaid ad's job address to its id."""
     _OVERLAY.clear()
+    _URLS.clear()
+    _URLS.update(urls or {})
     for job_id, entry in (ads or {}).items():
         if isinstance(entry, dict) and isinstance(entry.get("text"), str) and entry["text"].strip():
             _OVERLAY[job_id] = entry["text"]
@@ -47,7 +50,8 @@ def overlay_ids() -> set[str]:
 
 def description_of(job: dict) -> str:
     """The ad text a filter reads for this scraped row: the owner's text when the id has one, else the scraped description."""
-    return _OVERLAY.get(job.get("jobId")) or job.get("description") or ""
+    job_id = job.get("jobId") or _URLS.get(job.get("jobUrl") or "")
+    return _OVERLAY.get(job_id) or job.get("description") or ""
 
 # The vocabulary lives in Settings (`roleFilter` in data/ai/settings.json, defaults in ai_gate.DEFAULT_SETTINGS; package 3, owner plan
 # 2026-11-25). What each list does:

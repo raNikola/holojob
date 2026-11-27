@@ -209,3 +209,54 @@ def test_the_employer_diff_runs_against_the_text_the_ad_has_now(tmp_path):
     _, second = er.propose("j1", "https://employer.example/1", jobs=jobs, path=proposals, fetch_page=fetch)
     assert second["against"] == "pasted" and second["replacesText"] is True and not second["identical"]
     assert second["originalChars"] == len(PASTED)
+
+
+def test_the_infostud_repair_leaves_an_ad_with_the_owner_text_alone():
+    import infostud_repair
+    from providers import infostud_description
+
+    entry = {"job": {"source": "infostud", "jobUrl": "https://i/1", "descriptionStatus": next(iter(infostud_description.REPAIRABLE)), "description": "x"}}
+    ledger = {"jobs": {"i1": entry, "i2": entry}}
+    assert infostud_repair.plan(ledger, 5)["ids"] == ["i1", "i2"]
+    assert infostud_repair.plan(ledger, 5, {"i2": {"text": PASTED}})["ids"] == ["i1"], "a repair would reset facts that fit the owner's text"
+
+
+# --- the providers' own filter call sites (not just the helper) -------------------------------------------------------------------------------------
+
+def test_jobspy_keeps_a_title_miss_whose_owner_text_names_a_product_role(monkeypatch):
+    import pandas as pd
+
+    from providers import jobspy_provider
+
+    def fetch(text):
+        frame = pd.DataFrame([{"title": "Implementation Lead", "company": "Acme", "location": "Berlin, Germany", "job_url": "https://x/1",
+                               "description": text, "site": "linkedin"}])
+        monkeypatch.setattr(jobspy_provider, "fetch_jobs", lambda *a, **k: frame)
+        return jobspy_provider.JobSpyProvider().fetch_jobs(["Product Lead"], ["Berlin"], [], "germany")
+
+    [seen] = fetch("You will act as the Product Owner of our platform.")  # the id this row gets
+    thin = "Onboard customers and run software rollouts."
+    assert fetch(thin) == [], "the scraped text alone is a title miss"
+    try:
+        role_filter.use_overlay({seen["jobId"]: {"text": PASTED}})
+        assert [j["jobId"] for j in fetch(thin)] == [seen["jobId"]], "the owner's text decides, in the provider's own filter"
+    finally:
+        role_filter.use_overlay(None)
+
+
+def test_workable_finds_the_owner_text_by_address_because_its_id_comes_after_the_filter(monkeypatch):
+    from providers import workable_client, workable_provider
+
+    row = {"title": "Implementation Lead", "company": "B", "url": "https://k/2", "workplace": "remote", "description": "Onboard customers."}
+    monkeypatch.setattr(workable_client, "search", lambda term, location: [row])
+    monkeypatch.setattr(workable_client.time, "sleep", lambda s: None)
+
+    def fetch():
+        return workable_provider.WorkableProvider().fetch_jobs(["product manager"], ["Remote"], ["remote"], "Serbia")
+
+    assert fetch() == []
+    try:
+        role_filter.use_overlay({"w1": {"text": PASTED}}, {"https://k/2": "w1"})
+        assert len(fetch()) == 1
+    finally:
+        role_filter.use_overlay(None)

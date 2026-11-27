@@ -43,6 +43,8 @@ _overlay_spec = importlib.util.spec_from_file_location(
 _overlay_module = importlib.util.module_from_spec(_overlay_spec)
 _overlay_spec.loader.exec_module(_overlay_module)
 effective_description = _overlay_module.effective
+load_description_overlay = _overlay_module.load
+description_overlay_path = _overlay_module.path_for
 
 _company_spec = importlib.util.spec_from_file_location("_ledger_company_key", Path(__file__).with_name("company_key.py"))
 _company_module = importlib.util.module_from_spec(_company_spec)

@@ -625,6 +625,17 @@ The questionnaire is optional. A skipped question has no entry (an emptied answe
 
 Since package 12 the file also holds the ids the owner's data registers: `POST /api/jobs/kept/sync` (`kept_ads.register_owner_ads`) adds every id the browser holds as kept and every id with an application that the ledger still holds, then prunes. Registered ads are scored in every run.
 
+## Pasted / employer description overlay (packages 12 and 13)
+
+- **Path:** `data/jobs/pasted_descriptions.json` (600), beside the job list. Written by `pasted_descriptions.py` only; no discovery code writes it. Read by every step through `description_overlay.effective`.
+
+```json
+{ "version": 1, "ads": { "<jobId>": { "text": "...", "pastedAt": "<iso>", "source": "employer",
+    "previous": { "text": "...", "pastedAt": "<iso>", "source": "pasted" } } } }
+```
+
+- `source` is absent for a paste and `"employer"` for text accepted from the employer's page. `previous` is the entry this one replaced, one level (its own `previous` is dropped); the same text and source again changes nothing. The scraped text stays in the ledger and the job list: an overlaid row is a copy with `descriptionStatus: complete` and `descriptionSource: pasted|employer`.
+
 ## Scored jobs
 
 - **Path:** `data/jobs/scored_jobs.json`

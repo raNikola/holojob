@@ -1,8 +1,9 @@
 """Ad text the owner pasted for a discovered ad whose description was empty or thin (package 12 of PACKAGES_PLAN).
 
 Discovery rewrites the ledger and the job list, so the pasted text lives in its own owner file, `data/jobs/pasted_descriptions.json`
-(`{"version": 1, "ads": {jobId: {"text", "pastedAt"}}}`, 600), which no discovery code writes. Scoring overlays it onto the row with
-the same id (`apply`): the pasted text replaces the scraped one for scoring, and the scraped text stays untouched in the ledger.
+(`{"version": 1, "ads": {jobId: {"text", "pastedAt", "source"?, "previous"?}}}`, 600), which no discovery code writes. Every step reads the
+ad through `description_overlay.effective` (the one place the overlay is applied): the pasted text replaces the scraped one, and the scraped
+text stays untouched in the ledger. `previous` is the entry this one replaced (one level, never more).
 An overlaid row is `descriptionStatus: complete`, `descriptionSource: pasted`. Nothing here calls a model or the network, and the text
 is never logged or echoed: errors carry a field name only.
 """
@@ -10,7 +11,6 @@ is never logged or echoed: errors carry a field name only.
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 

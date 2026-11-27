@@ -287,7 +287,9 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
     if cancel and cancel.wants_stop(record):
         return cancelled_without_staging(record)
 
-    role_filter.use_overlay(importer._overlay(jobs_file))  # the owner's pasted / employer text is the ad text for the filters (package 12/13)
+    overlay = importer._overlay(jobs_file)  # the owner's pasted / employer text is the ad text for the filters (package 12/13)
+    held = job_history.load(job_history.ledger_path(jobs_file), read_only=True).get("jobs") or {} if overlay else {}
+    role_filter.use_overlay(overlay, {(held[i].get("job") or {}).get("jobUrl"): i for i in overlay if i in held and (held[i].get("job") or {}).get("jobUrl")})
 
     # What the scrape collects is written to data/jobs/staging/<runId>/ as it comes; the importer reads it from there. The
     # ledger and the discovered file as they are now are kept beside it, because the import replaces both.

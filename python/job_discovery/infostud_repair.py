@@ -50,8 +50,9 @@ def _bucket(n: int) -> str:
     return f"{low}+" if low == BUCKETS[-1] else f"{low}-{BUCKETS[BUCKETS.index(low) + 1]}"
 
 
-def plan(ledger: dict, limit: int = DEFAULT_LIMIT) -> dict:
-    ids = [i for i, e in ledger["jobs"].items() if is_candidate(e)]
+def plan(ledger: dict, limit: int = DEFAULT_LIMIT, overlay: dict | None = None) -> dict:
+    """An ad with the owner's text (packages 12/13) is not a candidate: its scraped text is not the one read, and a repair would reset facts that still fit."""
+    ids = [i for i, e in ledger["jobs"].items() if is_candidate(e) and i not in (overlay or {})]
     counts: dict[str, int] = {}
     for i in ids:
         key = _bucket(len((ledger["jobs"][i]["job"].get("description") or "").strip()))
@@ -79,7 +80,7 @@ def repair(root: Path, *, limit: int = DEFAULT_LIMIT, delay: float = DEFAULT_DEL
         raise SystemExit(pipeline_lock.BUSY_MESSAGE.replace("nothing started", "nothing repaired"))
     try:
         ledger = job_history.load(ledger_file, read_only=True)
-        result = plan(ledger, limit)
+        result = plan(ledger, limit, job_history.load_description_overlay(job_history.description_overlay_path(ledger_file)))
         ids = result.pop("ids")
         result["applied"] = False
         if not apply or not ids:
