@@ -94,8 +94,8 @@ def known_ids(ledger_path: Path | None = None) -> set[str]:
     return {
         job_id
         for job_id, entry in entries.items()
-        if len((((entry or {}).get("job") or {}).get("description") or "").strip())
-        >= job_history.THIN_DESCRIPTION_CHARS
+        if (entry or {}).get("descriptionGaveUp")  # retries used up (Settings): the detail is not asked for again
+        or len((((entry or {}).get("job") or {}).get("description") or "").strip()) >= job_history.THIN_DESCRIPTION_CHARS
     }
 
 

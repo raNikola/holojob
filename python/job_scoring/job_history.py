@@ -62,6 +62,13 @@ MISSES_TO_CLOSE = 2  # consecutive complete fetches of the board that do not lis
 # ledger already holds, or a throttled run would swap good facts for worse.
 THIN_DESCRIPTION_CHARS = 200
 
+# Retry of an empty or thin description (package 6): per ledger ad, not per search result. Every scan that finds the ad again
+# is one retry (1 per scan); `maxTotal` of them at most, set in Settings (`source_settings.description_retry`). When they are used up
+# and the text is still thin, the entry is marked `descriptionGaveUp` and no source reads its detail again. A thin text never closes
+# or hides an ad: only `closedAt` closes one, and nothing here touches it.
+DEFAULT_RETRY_MAX_TOTAL = 2
+RETRY_STATS = {"descriptionEmptyNew": 0, "descriptionRetried": 0, "descriptionRecovered": 0, "descriptionGaveUp": 0}
+
 NEW_WINDOW_DAYS = 3  # how long after first being seen a job is flagged new
 CLOSED_KEEP_DAYS = 14  # how long a closed job stays in discovered_jobs.json
 PRUNE_AFTER_DAYS = 90  # how long a closed job stays in the ledger
@@ -173,8 +180,30 @@ def _board_listed(entry: dict, by_provider: dict[str, set[str] | None]) -> bool:
     return boards is None or not board or board in boards
 
 
+def _count_description_retry(entry: dict, existed: bool, stored_thin: bool, final_thin: bool, max_total: int, stats: dict) -> None:
+    """Retry bookkeeping for one ad this run found. The counts go to `stats`, the per-ad state onto the entry."""
+    if not final_thin:
+        if existed and stored_thin:
+            stats["descriptionRecovered"] += 1
+        entry.pop("descriptionRetries", None)
+        entry.pop("descriptionGaveUp", None)
+        return
+    if not existed:
+        stats["descriptionEmptyNew"] += 1
+        entry["descriptionRetries"] = 0
+        return
+    used = int(entry.get("descriptionRetries") or 0)
+    if used < max_total:
+        entry["descriptionRetries"] = used + 1
+        stats["descriptionRetried"] += 1
+    if entry["descriptionRetries"] >= max_total:
+        if not entry.get("descriptionGaveUp"):
+            stats["descriptionGaveUp"] += 1
+        entry["descriptionGaveUp"] = True
+
+
 def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datetime, key: str, role_key, run_id: str | None,
-             previous_facts: dict, seen_before: dict, stats: dict) -> tuple[dict, dict]:
+             previous_facts: dict, seen_before: dict, stats: dict, retry_max: int = DEFAULT_RETRY_MAX_TOTAL) -> tuple[dict, dict]:
     """The half of a run that sees an ad: add it to the ledger or refresh its entry. Returns (the job as stored, its record for the view).
 
     Shared by `apply_run` (a whole run) and `apply_partial` (a cancelled one), so the two can never disagree about what seeing an ad does.
@@ -196,6 +225,7 @@ def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datet
         stats["keptFullerDescription"] += 1
     fingerprint = job_fingerprint(job)
 
+    existed = entry is not None
     if entry is None:
         entry = entries[job_id] = {
             "firstSeen": seen_before.get(job_id, now), "lastSeen": now,
@@ -223,6 +253,8 @@ def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datet
             stats["changed"] += 1  # the ad changed, so its old facts no longer apply
         entry["llmFacts"] = None
 
+    _count_description_retry(entry, existed, len(stored_description.strip()) < THIN_DESCRIPTION_CHARS,
+                             len((job.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS, retry_max, stats)
     entry.update(provider=job.get("provider"), roleKey=role_key(job), companyKey=company_key(job.get("company")), seenUnder=key, job=_snapshot(job))
     if run_id is not None:
         entry.update(lastRunId=run_id, lastRunPos=position)
@@ -232,7 +264,8 @@ def found_ad(entries: dict, job: dict, position: int, *, now: str, moment: datet
     return job, record
 
 
-def apply_partial(ledger: dict, jobs: list[dict], *, now: str, key: str, role_key, list_run_id: str) -> dict:
+def apply_partial(ledger: dict, jobs: list[dict], *, now: str, key: str, role_key, list_run_id: str,
+                  retry_max: int = DEFAULT_RETRY_MAX_TOTAL) -> dict:
     """Save the ads a CANCELLED run collected, and nothing else (S6). Returns the counts.
 
     The ledger describes the last complete run's list, so this run may only add to it. Each collected ad is added or refreshed
@@ -241,7 +274,7 @@ def apply_partial(ledger: dict, jobs: list[dict], *, now: str, key: str, role_ke
     closed or stale, no miss is counted, and `lastImport`, `sourceRuns`, `lastListedAt` and the stamps of other entries stay as they are.
     """
     entries = ledger["jobs"]
-    stats = {"new": 0, "known": 0, "reopened": 0, "changed": 0, "carriedFacts": 0, "keptFullerDescription": 0}
+    stats = {"new": 0, "known": 0, "reopened": 0, "changed": 0, "carriedFacts": 0, "keptFullerDescription": 0, **RETRY_STATS}
     moment = _parse(now) or datetime.now(timezone.utc)
     next_position = 1 + max((e.get("lastRunPos", 0) for e in entries.values() if e.get("lastRunId") == list_run_id), default=-1)
     for job in jobs:
@@ -251,7 +284,7 @@ def apply_partial(ledger: dict, jobs: list[dict], *, now: str, key: str, role_ke
         else:
             position, next_position = next_position, next_position + 1
         found_ad(entries, job, position, now=now, moment=moment, key=key, role_key=role_key, run_id=list_run_id,
-                 previous_facts={}, seen_before={}, stats=stats)
+                 previous_facts={}, seen_before={}, stats=stats, retry_max=retry_max)
     return stats
 
 
@@ -272,6 +305,7 @@ def apply_run(
     prune: bool = True,
     board_evidence: dict[str, dict[str, dict]] | None = None,
     skipped_sources: set[str] | None = None,
+    retry_max: int = DEFAULT_RETRY_MAX_TOTAL,
 ) -> tuple[list[dict], dict]:
     """Record one discovery run; return the jobs to write and what changed.
 
@@ -318,6 +352,7 @@ def apply_run(
         "new": 0, "known": 0, "reopened": 0, "changed": 0, "carriedFacts": 0, "closed": 0,
         "keptFullerDescription": 0, "keptFailedBoard": 0, "keptEmptyBoard": 0, "keptSourceNotRun": 0,
         "absent": 0, "keptUnproven": 0, "keptBoardNotRead": 0, "listedButFiltered": 0,
+        **RETRY_STATS,
     }
     board_evidence = board_evidence or {}
     miss_token = run_id or now
@@ -342,7 +377,7 @@ def apply_run(
         found_ids.add(job["jobId"])
         job, record = found_ad(
             entries, job, position, now=now, moment=moment, key=key, role_key=role_key, run_id=run_id,
-            previous_facts=previous_facts, seen_before=seen_before, stats=stats,
+            previous_facts=previous_facts, seen_before=seen_before, stats=stats, retry_max=retry_max,
         )
         found_roles.add(role_key(job))
         out.append(record)

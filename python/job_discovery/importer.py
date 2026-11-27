@@ -28,6 +28,7 @@ from pathlib import Path
 import filtered_ads
 import import_meta
 import proof_reasons as proof
+import source_settings
 import staging
 from dedupe_jobs import _collapse, _crosspost_key, _exact_key
 
@@ -356,7 +357,7 @@ def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, m
     for job in deduped:
         if job["jobId"] not in ledger["jobs"]:
             result.new_by_provider[job.get("provider")] = result.new_by_provider.get(job.get("provider"), 0) + 1
-    stats = job_history.apply_partial(ledger, deduped, now=moment, key=key, role_key=_crosspost_key, list_run_id=info["runId"])
+    stats = job_history.apply_partial(ledger, deduped, now=moment, key=key, role_key=_crosspost_key, list_run_id=info["runId"], retry_max=_retry_max())
     ledger["partialRuns"] = ((ledger.get("partialRuns") or []) + [run.run_id])[-PARTIAL_RUNS_KEPT:]
     # Wave 4 (n): `lastImport` keeps describing the last COMPLETE import. The latest cancelled run that saved ads is recorded beside it,
     # where no lifecycle code reads it, so Activity can say the newest attempt is later than the list's.
@@ -370,6 +371,14 @@ def _plan_partial(result: "ImportResult", report: dict, run: staging.RunStage, m
 
 
 HELD_KEYS = ("keptFailedBoard", "keptEmptyBoard", "keptSourceNotRun", "keptUnproven", "keptBoardNotRead", "listedButFiltered")
+
+
+def _retry_max() -> int:
+    """How many description retries an ad gets in total (Settings); unreadable settings give the default."""
+    try:
+        return source_settings.description_retry(source_settings.read())
+    except source_settings.SourcesError:
+        return source_settings.DEFAULT_RETRY_MAX_TOTAL
 
 
 def evidence_block(report: dict, stats: dict) -> dict:
@@ -580,7 +589,7 @@ def plan_import(
         result.ledger, deduped, now=moment, providers_returned=provider_counts, key=manifest.get("searchKey") or "",
         role_key=_crosspost_key, previous_facts=previous_facts, seen_before=seen_before, failed_boards=failed_boards,
         empty_boards=empty_boards, sources_not_run=not_run, run_id=run.run_id, prune=False, board_evidence=evidence,
-        skipped_sources={p for p in manifest.get("skippedProviders") or [] if isinstance(p, str)},
+        skipped_sources={p for p in manifest.get("skippedProviders") or [] if isinstance(p, str)}, retry_max=_retry_max(),
     )
     result.stats = stats
     report["provenRuns"] = _record_stale_evidence(result.ledger, run, moment, manifest.get("searchKey") or "", proven_searches, evidence)

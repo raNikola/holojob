@@ -93,6 +93,18 @@ def read() -> dict:
     return merged
 
 
+DEFAULT_RETRY_MAX_TOTAL = 2  # description retries per ledger ad, 1 per scan (owner plan 2026-11-25; job_history.DEFAULT_RETRY_MAX_TOTAL)
+RETRY_MAX_LIMIT = 10
+
+
+def description_retry(data: dict | None) -> int:
+    """Retries of an empty description an ad gets in total (`descriptionRetry.maxTotal`); 0 turns the retry off. A missing or damaged value gives the default."""
+    value = ((data or {}).get("descriptionRetry") or {}).get("maxTotal") if isinstance((data or {}).get("descriptionRetry"), dict) else None
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= RETRY_MAX_LIMIT:
+        return DEFAULT_RETRY_MAX_TOTAL
+    return value
+
+
 def is_enabled(name: str, data: dict) -> bool:
     entry = (data.get("boards") or {}).get(name)
     return isinstance(entry, dict) and entry.get("active") is True and bool(entry.get("consentAcceptedAt"))
@@ -193,7 +205,7 @@ def view(data: dict | None = None, error: str | None = None) -> dict:
                 history=entry.get("history") or [],
             )
         boards.append(row)
-    return {"boards": boards, "updatedAt": data.get("updatedAt"), **({"error": error} if error else {})}
+    return {"boards": boards, "descriptionRetry": {"maxTotal": description_retry(data), "perScan": 1}, "updatedAt": data.get("updatedAt"), **({"error": error} if error else {})}
 
 
 def get() -> dict:
@@ -203,12 +215,24 @@ def get() -> dict:
         return view(None, f"{exc}; every opt-in source counts as off until it is fixed or removed")
 
 
-def save(boards, now: str | None = None) -> dict:
-    """Apply {name: {active, consentAccepted?}} for opt-in sources.
+def save(boards, now: str | None = None, retry=None) -> dict:
+    """Apply {name: {active, consentAccepted?}} for opt-in sources, and/or `retry` ({maxTotal: 0..10}, the description retries per ad).
 
     {ok, ...view} | {ok: False, errors} | {ok: False, needsConsent: [names]}. Nothing is
     written unless every change is valid.
     """
+    if retry is not None and boards in (None, {}):
+        value = retry.get("maxTotal") if isinstance(retry, dict) else None
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= RETRY_MAX_LIMIT:
+            return {"ok": False, "errors": [f"descriptionRetry.maxTotal must be a whole number from 0 to {RETRY_MAX_LIMIT}"]}
+        with _locked():
+            try:
+                data = read()
+            except SourcesError as exc:
+                return {"ok": False, "errors": [f"{exc}; fix or remove the file, it was left as it is"]}
+            data["descriptionRetry"] = {"maxTotal": value}
+            _write(data)
+        return {"ok": True, **view(data)}
     if not isinstance(boards, dict) or not boards:
         return {"ok": False, "errors": ["boards must be an object naming at least one source"]}
     errors = []
@@ -294,7 +318,7 @@ def _cli(argv: list[str]) -> int:
     if command == "get":
         print(json.dumps(get()))
     elif command == "put":
-        print(json.dumps(save(args.get("boards"))))
+        print(json.dumps(save(args.get("boards"), retry=args.get("descriptionRetry"))))
     elif command == "migrate-legacy":
         print(json.dumps(migrate_legacy(args.get("value"))))
     else:

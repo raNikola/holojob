@@ -432,7 +432,9 @@ def discover(args: argparse.Namespace, record: dict, cancel: CancelState | None 
     print(f"  facts carried over {history_stats['carriedFacts']}, "
           f"ads changed since last run {history_stats['changed']}, "
           f"fuller description kept over a throttled one {history_stats['keptFullerDescription']}")
-    print(f"  ads kept open: {history_stats['keptFailedBoard']} of unread boards, {history_stats['keptEmptyBoard']} of empty boards, "
+    print(f"  empty descriptions: {history_stats.get('descriptionEmptyNew', 0)} new, {history_stats.get('descriptionRetried', 0)} retried, "
+          f"{history_stats.get('descriptionRecovered', 0)} recovered, {history_stats.get('descriptionGaveUp', 0)} gave up (retries used up)")
+    print(f"  ads kept open:{history_stats['keptFailedBoard']} of unread boards, {history_stats['keptEmptyBoard']} of empty boards, "
           f"{history_stats['keptSourceNotRun']} of sources that did not run, {history_stats['keptUnproven']} of unproven boards, "
           f"{history_stats['keptBoardNotRead']} of boards not read")
     closed_written = sum(1 for job in to_write if job.get("isClosed"))
