@@ -3,7 +3,7 @@
 
     all_ads.py --root ROOT    prints the answer as JSON; exit 0, or 3 with {"ok": false, "message"} when the ledger cannot be read
 
-It reads job_history.json and filtered_ads.json and writes nothing. Stdlib only and no job module, so the route starts it fast.
+It reads job_history.json and filtered_ads.json and writes nothing. Stdlib only, the small helpers it needs are loaded by file path (`stale_rule.py`, `job_derived.py`), so the route starts it fast.
 It never reads discovered_jobs.json: a class comes only from what the ledger says, so regenerating the view or enrichment rewriting
 it cannot change one. The clock is never read, nor `lastImport.at` or `meta.generatedAt`. The one class that compares times is stale,
 and only `lastSeen` against the ledger's own record of proven runs (job_scoring/stale_rule.py).
@@ -53,6 +53,9 @@ from pathlib import Path
 _spec = importlib.util.spec_from_file_location("_all_ads_stale_rule", Path(__file__).resolve().parents[1] / "job_scoring" / "stale_rule.py")
 stale_rule = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(stale_rule)
+_derived_spec = importlib.util.spec_from_file_location("_all_ads_job_derived", Path(__file__).resolve().parents[1] / "job_scoring" / "job_derived.py")
+job_derived = importlib.util.module_from_spec(_derived_spec)
+_derived_spec.loader.exec_module(job_derived)
 
 CLASSES = ("found", "held", "absent", "closed", "older_key", "stale", "filtered", "filtered_incomplete", "unclassified")
 INCOMPLETE = {"detail_cap", "no_detail_text"}
@@ -186,8 +189,10 @@ def _row(job_id, kind, reason, reason_code, origin, title, company, location, ur
     }
 
 
-def build(ledger: dict | None, store: dict | None, filtered_state: str = "ok") -> dict:
-    """The answer, from a ledger and a filtered store (None: none). A whitelist of fields, so no description can be in it. Pure."""
+def build(ledger: dict | None, store: dict | None, filtered_state: str = "ok", repost_window: int = job_derived.repost_counter.DEFAULT_WINDOW_DAYS) -> dict:
+    """The answer, from a ledger and a filtered store (None: none). A whitelist of fields, so no description can be in it. Pure.
+
+    `repostCount` (package 7, display only, computed here on every read, never stored) is the number of other postings of the ad's repost group; absent when 0."""
     ledger = ledger if ledger is not None else {"jobs": {}}
     run_id = (ledger.get("lastImport") or {}).get("runId") or None
     key = current_key(ledger)
@@ -196,6 +201,7 @@ def build(ledger: dict | None, store: dict | None, filtered_state: str = "ok") -
     counts = {name: 0 for name in CLASSES}
     rows = []
     no_ad = elsewhere = left_out = 0
+    reposts = job_derived.repost_counts(ledger["jobs"], repost_window)
     found_roles = {e.get("roleKey") for e in ledger["jobs"].values() if isinstance(e, dict) and run_id and e.get("lastRunId") == run_id and e.get("roleKey")}
     for job_id, entry in ledger["jobs"].items():
         job = entry.get("job") if isinstance(entry, dict) else None
@@ -212,6 +218,8 @@ def build(ledger: dict | None, store: dict | None, filtered_state: str = "ok") -
                          entry.get("provider") or job.get("provider"), job.get("site"), job.get("isRemote"), job.get("datePosted"),
                          entry.get("firstSeen"), entry.get("lastSeen"), entry.get("closedAt"), entry.get("absentSince"), entry.get("roleKey") or None,
                          job.get("salary") or None, job.get("expiresAt") or None))
+        if reposts.get(job_id):
+            rows[-1]["repostCount"] = reposts[job_id]
     also_in_ledger = not_shown = 0
     for job_id, record in ((store or {}).get("ads") or {}).items():
         if job_id in ledger["jobs"]:
@@ -273,7 +281,7 @@ def main(argv=None) -> int:
         print(json.dumps({"ok": False, "message": str(exc)}))
         return EXIT_UNREADABLE
     store, state = read_filtered(jobs / "filtered_ads.json")
-    print(json.dumps(build(ledger, store, state)))
+    print(json.dumps(build(ledger, store, state, job_derived.repost_window_days(args.root))))
     return 0
 
 

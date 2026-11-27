@@ -12,6 +12,7 @@ import { hasMatchScores } from '../../modules/jobs/matchScore'
 import { groupHeading } from '../../modules/jobs/fitTier'
 import { displayLocation } from '../../modules/jobs/locationDisplay'
 import { historyBadges } from '../../modules/jobs/jobHistory'
+import { repostBadge } from '../../modules/jobs/adDerived'
 import { APPROXIMATE_SALARY_NOTE, approximateMonthlyEur, salaryBadges, statedSalary } from '../../modules/jobs/jobSalary'
 import { isFollowUpDue } from '../../modules/jobs/followUps'
 import FitTier from './FitTier'
@@ -49,7 +50,7 @@ function FollowUpBadge({ job }) {
 }
 
 function HistoryBadges({ job, classView }) {
-  const badges = [...(classView ? classBadges(job) : historyBadges(job)), ...salaryBadges(job)]
+  const badges = [...(classView ? classBadges(job) : historyBadges(job)), ...salaryBadges(job), ...[repostBadge(job)].filter(Boolean)]
   if (!badges.length) return null
   return (
     <>

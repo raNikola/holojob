@@ -499,3 +499,28 @@ def test_a_ledger_row_carries_the_ads_pay_and_expiry_and_a_filtered_row_none():
     rows = {row["jobId"]: row for row in answer["rows"]}
     assert (rows["j1"]["salary"], rows["j1"]["expiresAt"]) == ("1000", "2026-11-20")
     assert all(row["salary"] is None for row in answer["rows"] if row["from"] == "filtered")
+
+
+# --- repost count (list-cleanup 2b): shown, never collapsing, never stored ----------------------------------------------------
+
+
+def repost_pair():
+    first, second = entry(11, lastRunId=RUN), entry(12, lastRunId=RUN)
+    for e, url, day in ((first, "https://x.example/a", "2026-01-01"), (second, "https://x.example/b", "2026-02-01")):
+        e["job"].update(title="Senior Product Manager", company="Acme d.o.o.", jobUrl=url, datePosted=day)
+    return first, second
+
+
+def test_reposts_are_counted_on_each_row_and_no_row_is_merged():
+    first, second = repost_pair()
+    alone = entry(13, lastRunId=RUN)
+    answer = all_ads.build(ledger_of(first, second, alone), None)
+    by_id = {row["jobId"]: row for row in answer["rows"]}
+    assert len(answer["rows"]) == 3
+    assert by_id["j11"]["repostCount"] == 1 and by_id["j12"]["repostCount"] == 1 and "repostCount" not in by_id["j13"]
+
+
+def test_the_repost_window_given_to_the_route_decides_the_count():
+    first, second = repost_pair()
+    narrow = all_ads.build(ledger_of(first, second), None, "ok", 10)
+    assert all("repostCount" not in row for row in narrow["rows"])

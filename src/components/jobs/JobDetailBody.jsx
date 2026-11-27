@@ -22,7 +22,7 @@ import PasteDescriptionBox from './PasteDescriptionBox'
 import EmployerRefreshBox from './EmployerRefreshBox'
 import { jobStatusLabel } from '../../modules/jobs/manualJob'
 import EngineShadowSection, { EngineShadowBadge } from './EngineShadowSection'
-import { LABELS_NOTE, labelChips, useAdDerived } from '../../modules/jobs/adDerived'
+import { LABELS_NOTE, labelChips, repostBadge, useAdDerived } from '../../modules/jobs/adDerived'
 
 const DIMENSION_LABELS = {
   roleMatch: 'Role',
@@ -85,6 +85,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
   const showScores = hasMatchScores([job])
   const derived = useAdDerived(job.jobId, `${job.description?.length ?? 0}:${job.updatedAt ?? ''}`)
   const chips = labelChips(derived?.labels)
+  const repost = repostBadge({ repostCount: derived?.repostCount ?? job.repostCount })
   // A state the owner should see beside the score, not a reason it scored well: a cap, or a check that did not run / could not confirm.
   const isLimit = (r) => isCapReason(r) || r.startsWith('Ceiling not evaluated:') || r.startsWith('Clearance unconfirmed:')
   const limits = (job.reasons || []).filter(isLimit)
@@ -122,6 +123,12 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
               {formatSeen(job.firstSeen)} – {formatSeen(job.lastSeen)}
               {historyBadges(job).map((b) => <Badge key={b.label} variant={b.variant}>{b.label}</Badge>)}
             </dd>
+          </div>
+        )}
+        {repost && (
+          <div>
+            <dt className="text-xs text-stone-500">Reposts</dt>
+            <dd title={repost.reason}><Badge variant={repost.variant}>{repost.label}</Badge></dd>
           </div>
         )}
       </dl>
