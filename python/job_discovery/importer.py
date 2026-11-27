@@ -553,7 +553,7 @@ def plan_import(
         report["unlistedSourceFiles"] = extra  # files the run's manifest does not name: ignored
 
     after_exact = _collapse(all_jobs, _exact_key)
-    deduped = _collapse(after_exact, _crosspost_key)
+    deduped = _collapse(after_exact, _crosspost_key, keep_urls=True)
     report["duplicatesRemoved"] = len(all_jobs) - len(after_exact)
     report["crosspostsMerged"] = len(after_exact) - len(deduped)
 

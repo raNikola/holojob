@@ -62,8 +62,11 @@ def _rank(job: dict) -> tuple:
     )
 
 
-def _collapse(jobs: list[dict], key_fn) -> list[dict]:
+def _collapse(jobs: list[dict], key_fn, keep_urls: bool = False) -> list[dict]:
+    """One job per key, the best ranked. With `keep_urls` the winner lists the other URLs of its key in `alsoListedAt` (package 7:
+    the crosspost loser's URL is kept, nothing else of it)."""
     best: dict[str, dict] = {}
+    losers: dict[str, list[str]] = {}
     unkeyed: list[dict] = []
 
     for job in jobs:
@@ -72,11 +75,23 @@ def _collapse(jobs: list[dict], key_fn) -> list[dict]:
             unkeyed.append(job)
             continue
         current = best.get(key)
-        if current is None or _rank(job) > _rank(current):
+        if current is None:
             best[key] = job
+            continue
+        winner, loser = (job, current) if _rank(job) > _rank(current) else (current, job)
+        best[key] = winner
+        losers.setdefault(key, []).extend([*(loser.get("alsoListedAt") or []), loser.get("jobUrl")])
+
+    if keep_urls:
+        for key, urls in losers.items():
+            job = best[key]
+            known = {job.get("jobUrl"), *(job.get("alsoListedAt") or [])}
+            extra = [u for u in dict.fromkeys(urls) if u and u not in known]
+            if extra:
+                best[key] = {**job, "alsoListedAt": [*(job.get("alsoListedAt") or []), *extra]}
 
     return list(best.values()) + unkeyed
 
 
 def dedupe_jobs(jobs: list[dict]) -> list[dict]:
-    return _collapse(_collapse(jobs, _exact_key), _crosspost_key)
+    return _collapse(_collapse(jobs, _exact_key), _crosspost_key, keep_urls=True)

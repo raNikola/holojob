@@ -105,6 +105,18 @@ def description_retry(data: dict | None) -> int:
     return value
 
 
+DEFAULT_REPOST_WINDOW_DAYS = 90  # repost counter window (owner plan 2026-11-25, package 7)
+REPOST_WINDOW_LIMIT = 365
+
+
+def repost_window(data: dict | None) -> int:
+    """Days within which two ads of one company and title count as a repost (`repostWindowDays`); a missing or damaged value gives the default."""
+    value = (data or {}).get("repostWindowDays")
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= REPOST_WINDOW_LIMIT:
+        return DEFAULT_REPOST_WINDOW_DAYS
+    return value
+
+
 def is_enabled(name: str, data: dict) -> bool:
     entry = (data.get("boards") or {}).get(name)
     return isinstance(entry, dict) and entry.get("active") is True and bool(entry.get("consentAcceptedAt"))
