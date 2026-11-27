@@ -171,6 +171,8 @@ def filtered_reason(kind: str, code) -> str:
     code = str(code or "unknown")
     if code.startswith("title_excluded:"):
         text = f"Excluded title: {code.split(':', 1)[1]}"
+    elif code.startswith("text_rule:"):
+        text = f"Ad text rule: {code.split(':', 1)[1]}"
     else:
         text = FILTER_REASONS.get(code, code)
     return f"Incomplete: {text}" if kind == "filtered_incomplete" else f"Filtered out: {text}"

@@ -7,6 +7,7 @@ phrase lists are in Settings (`roleFilter`), not here.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import re
 import sys
@@ -18,6 +19,12 @@ if str(_LLM_DIR) not in sys.path:
     sys.path.insert(0, str(_LLM_DIR))
 
 import ai_gate  # noqa: E402
+
+_PROVIDERS_DIR = Path(__file__).resolve().parent
+if str(_PROVIDERS_DIR) not in sys.path:
+    sys.path.insert(0, str(_PROVIDERS_DIR))
+
+import text_rules  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +119,7 @@ def _seniority(title_lower: str) -> tuple:
     return tuple(f"seniority:{word}" for word in SENIORITY_LABELS if _has_phrase(title_lower, word))
 
 
-def assess(
+def _title_decision(
     title: str,
     position: str = "",
     extra_terms: tuple[str, ...] = (),
@@ -155,6 +162,29 @@ def assess(
     if any(_has_phrase(text, term) for term in vocab.include):
         return Decision(NEAR, None, SOFT, labels + ("title_not_matched:text_match",))
     return Decision(EXCLUDED, "title_not_matched", HARD, labels)
+
+
+def assess(
+    title: str,
+    position: str = "",
+    extra_terms: tuple[str, ...] = (),
+    description: str | None = None,
+) -> Decision:
+    """The title decision plus the round 2 text rules (package 4, `text_rules.py`): language, years, on-site only, visa and employment
+    type, read from the ad text when the caller has one. Each fired rule adds a label; a rule whose class is HARD drops the ad
+    (`text_rule:<label>`, never pins dedup). Every rule is SOFT today, so the text rules never change a keep or a drop. An empty or
+    missing text is unknown: no label, the decision is the title's."""
+    decision = _title_decision(title, position, extra_terms, description)
+    if not description or decision.tier == EXCLUDED:
+        return decision
+    fired = text_rules.evaluate(_fold(description))
+    if not fired:
+        return decision
+    labels = decision.labels + tuple(label for _, _, label in fired)
+    for _, rule_class, label in fired:
+        if rule_class == HARD:
+            return Decision(EXCLUDED, f"text_rule:{label}", HARD, labels)
+    return dataclasses.replace(decision, labels=labels)
 
 
 def role_tier(
