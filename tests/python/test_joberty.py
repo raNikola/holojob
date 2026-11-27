@@ -184,7 +184,7 @@ def test_an_ad_the_ledger_already_holds_is_not_fetched_again(board, tmp_path):
     ledger = {"version": 1, "jobs": {known: {"job": {"description": "x" * 400}}}}
     (tmp_path / "job_history.json").write_text(json.dumps(ledger))
     [job] = run(board)
-    assert 83188 not in board.calls["details"]  # only the title miss is read, for its text check
+    assert board.calls["details"] == [83311]  # only the title miss is read, for its text check; the known ad is not
     assert job["jobId"] == known and job["description"] == ""  # the ledger restores its own
 
 
@@ -192,7 +192,7 @@ def test_a_known_ad_with_only_a_thin_description_is_read_again(board, tmp_path):
     known = joberty_provider.to_canonical(FIVETRAN)["jobId"]
     (tmp_path / "job_history.json").write_text(json.dumps({"version": 1, "jobs": {known: {"job": {"description": "short"}}}}))
     run(board)
-    assert board.calls["details"][0] == 83188
+    assert board.calls["details"] == [83188, 83311]  # the thin known ad is read again, then the title miss for its text
 
 
 def test_an_ad_whose_detail_cannot_be_read_is_left_for_the_next_run(board, monkeypatch):

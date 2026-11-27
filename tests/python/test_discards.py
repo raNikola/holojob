@@ -107,6 +107,8 @@ def test_the_reason_codes_of_the_role_filter():
     assert drop("Chef") == "title_not_matched"
     assert drop("Growth Lead") == "title_not_matched" and drop("Growth Lead", "", ("growth",)) is None
     assert drop("Developer", "Product Manager") is None, "a board's own position lets an ad in"
+    assert drop("Junior Developer", "Product Manager") is None, "seniority is a label: it no longer beats a board's own position (package 3)"
+    assert drop("Intern Product Manager") is None, "the old intern drop is a label now"
     assert drop("Sales Manager", "Product Manager") == "title_excluded:sales manager", "but an excluded phrase beats it"
     assert drop("Technical Production Manager") == "title_not_matched", "word boundaries, as before"
 
