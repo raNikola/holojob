@@ -77,10 +77,10 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
    - the must-keep set (Applied/Saved/Rejected) as a check the round-1 rules are measured on;
    - the round-1 rule changes are measured on that set.
 
-   Status 2026-11-27: all five points are committed (`9eb3ccf`, `1c07e0d`, `8f49e74`; 0 of 19 must-keep ads lost). What remains is the benchmark-first check, which the headless sessions could not do because benchmark reads were denied: open the career-ops files the report cites (`company_key.py` sources, `filter-audit.mjs`, `classify-tier.mjs`, `title-keywords.mjs`, `role-matcher.mjs`), confirm or correct the sources and deviations in the docs and the report, and end with a commit of its own (the runner's mark). It is small, so it is not split.
+   Status 2026-11-27: all five points are committed (`9eb3ccf`, `1c07e0d`, `8f49e74`; 0 of 16 must-keep ads lost (first written as 19: three comment lines of the ids file were counted)). What remains is the benchmark-first check, which the headless sessions could not do because benchmark reads were denied: open the career-ops files the report cites (`company_key.py` sources, `filter-audit.mjs`, `classify-tier.mjs`, `title-keywords.mjs`, `role-matcher.mjs`), confirm or correct the sources and deviations in the docs and the report, and end with a commit of its own (the runner's mark). It is small, so it is not split.
 4. **Round 2 text rules.** Language, years, on-site only, visa and employment type, as hard/soft/unknown labels. Acceptance, measured like package 3 (`scripts/measure_package3.py` is the pattern; no model call, real data read-only, counts and public titles only):
    - every rule has its class (hard, soft or unknown) and its stated text in Settings or the docs; unknown continues, years, seniority and domain stay labels, and a drop by rule never pins dedup;
-   - **the 19 must-keep ads** (Saved, Rejected and Applied, one count per ad): the report lists, before and after the new rules, how many are kept and their ids. All 19 must be kept after, otherwise the package is `blocked` (stop rule);
+   - **the 16 must-keep ads** (Saved, Rejected and Applied, one count per ad): the report lists, before and after the new rules, how many are kept and their ids. All 16 must be kept after, otherwise the package is `blocked` (stop rule);
    - **the effect on real data**, counts only, per rule and in total: of the ledger rows and the filtered rows, how many ads change decision (kept to dropped, dropped to kept, kept with a new label only), and how many ads each rule touches alone. A rule that changes more than the report can explain by examples (public titles) is reported, not tuned;
    - the measurement script is committed, so the numbers can be repeated.
 
@@ -126,13 +126,13 @@ Packages 4 and 7 are each one mechanism with closed rules, so they stay whole.
 | 9 | scoring-pass-speed | claude-sonnet-5-5 | 2 | 6 | done | list-cleanup |
 | 10 | scoring-prepare-limit | claude-sonnet-5-5 | 2, 9 | 7 | done | list-cleanup |
 | 11 | prompt-layout | claude-sonnet-5-5 | 2 | 8 | done | list-cleanup |
-| 4 | text-rules-round2 | claude-sonnet-5-5 | 3 | 9 | pending | - |
+| 4 | text-rules-round2 | claude-sonnet-5-5 | 3 | 9 | done | list-cleanup |
 | 6 | description-retry | claude-sonnet-5-5 | 2 | 10 | done | list-cleanup |
 | 12 | paste-box | claude-sonnet-5-5 | 6 | 11 | done | list-cleanup |
 | 13 | employer-refresh | claude-sonnet-5-5 | 6 | 12 | done | list-cleanup |
-| 14 | deferred-fetch | claude-sonnet-5-5 | 2, 4, 6 | 13 | pending | - |
-| 7 | reposts | claude-sonnet-5-5 | 3 | 14 | pending | - |
-| 15 | private-mode-writers | claude-sonnet-5-5 | - | 15 | pending | - |
+| 14 | deferred-fetch | claude-sonnet-5-5 | 2, 4, 6 | 13 | done | list-cleanup |
+| 7 | reposts | claude-sonnet-5-5 | 3 | 14 | done | list-cleanup |
+| 15 | private-mode-writers | claude-sonnet-5-5 | - | 15 | done | list-cleanup |
 <!-- packages:end -->
 
 Needs 14→4 comes from the 2026-11-27 re-measure rule (the saving is re-measured after the filter changes). Needs 5→2 and 7→3 are from the plan, and so are 8, 9 and 11→2: every former package 5 point inherits the "needs 2". 4→3 and 6→2 are inferred from the order. 10→9, 12→6, 13→6 and 14→6 come from the 2026-11-27 split. These are own proposals; undo one by editing `needs`. Package numbers stay stable (the runner state and the report names use them), so the new parts take numbers 8 to 14 and the `order` column sets the sequence. `model` is the owner's choice per session (`/model`).

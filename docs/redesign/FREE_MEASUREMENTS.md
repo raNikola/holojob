@@ -15,7 +15,7 @@ Four measurements, no product change, no model call, no network. Tool: `scripts/
 | 11 | caching itself | not measured (no call was made); package 11 must show cached input tokens above zero | 2 |
 | 14 deferred fetch | LinkedIn detail share | about 825-1,000 s of 1,465 s jobspy time (55-68%), about 12-15% of a whole Re-scrape; an estimate, no per-request timings exist | 3 |
 | 14 | possible saving | 1,114 ads read, 1,009 kept, only 270 new to the ledger: up to about 75% of the detail requests | 3 |
-| 3 and 4 filter rules | negative-filter audit | 7,691 titles: kept 5,112, `title_not_matched` 2,531, `title_excluded` 48; `junior` is the only sole reason (2 titles); 3 keywords never matched; 0 of 19 must-keep ads hit an excluded keyword | 4 |
+| 3 and 4 filter rules | negative-filter audit | 7,691 titles: kept 5,112, `title_not_matched` 2,531, `title_excluded` 48; `junior` is the only sole reason (2 titles); 3 keywords never matched; 0 of 16 must-keep ads (first written as 19: three comment lines of the ids file were counted) hit an excluded keyword | 4 |
 
 ## 1. One scoring pass, profiled (cause of the ~12x slowdown)
 
