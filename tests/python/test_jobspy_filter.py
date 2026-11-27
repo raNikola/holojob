@@ -12,7 +12,7 @@ from providers.jobspy_provider import JobSpyProvider
 def _frame(titles):
     return pd.DataFrame([
         {"title": t, "company": "Acme", "location": "Berlin, Germany", "job_url": f"https://x/{i}",
-         "description": "product manager roadmap", "site": "linkedin"}
+         "description": "product manager roadmap" if "Product" in t else "Configure the ERP for our clients.", "site": "linkedin"}
         for i, t in enumerate(titles)
     ])
 

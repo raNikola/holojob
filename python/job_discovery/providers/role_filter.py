@@ -90,49 +90,98 @@ def _has_phrase(haystack: str, phrase: str) -> bool:
     return re.search(rf"\b{re.escape(phrase)}\b", haystack) is not None
 
 
-def role_tier(
+# Seniority words (owner plan 2026-11-25, closed decision: "years, seniority and domain are labels only"). They were in the exclude list
+# until package 3; now a title holding one is labelled, never dropped for it. Scoring judges seniority. Folded, word boundaries.
+SENIORITY_LABELS = ("junior", "intern", "internship", "trainee", "praktikant", "pripravnik", "student")
+
+# Rule classes of a decision (owner plan 2026-11-25): a hard rule drops; a soft rule and an unknown continue, with a label.
+HARD = "hard"
+SOFT = "soft"
+UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class Decision:
+    tier: str               # TARGET, NEAR or EXCLUDED
+    reason: str | None      # set only for EXCLUDED: the drop reason the discard line carries
+    rule: str | None        # HARD for a drop, SOFT or UNKNOWN when a title miss continues, None for a title match
+    labels: tuple = ()      # informational only: nothing scores or filters on them (package 3)
+
+
+def _seniority(title_lower: str) -> tuple:
+    return tuple(f"seniority:{word}" for word in SENIORITY_LABELS if _has_phrase(title_lower, word))
+
+
+def assess(
     title: str,
     position: str = "",
     extra_terms: tuple[str, ...] = (),
-) -> tuple[str, str | None]:
-    """(tier, reason): Target, Near or Excluded; the reason is set only for Excluded.
+    description: str | None = None,
+) -> Decision:
+    """The title filter's decision for one ad.
 
-    Excluded: `title_excluded:<term>` (the first excluded phrase the title holds; it beats a board's own position) or
-    `title_not_matched` (nothing in the title or the position let it in). Target: a target phrase or a board position
-    assigned by hand. Near: a neighbouring role, or a title that only holds one of the caller's search terms
-    (`extra_terms`): a search term alone never makes a title Target, scoring decides relevance from there.
-    Target and Near both go on to scoring; only Excluded is dropped.
+    1. Hard: a title holding an `exclude` phrase is dropped (`title_excluded:<term>`, the first phrase; it beats a board's position).
+    2. Target: a board position assigned by hand, or an `include` phrase in the title. Near: a `near` phrase in the title or position,
+       or a title that holds one of the caller's search terms (`extra_terms`; a search term alone never makes a title Target).
+    3. A title that matches none of these goes to a free-text check (owner plan 2026-11-25, round 1) on the `description` the caller has:
+       - an `include` phrase in the text: soft, the ad continues as Near (label `title_not_matched:text_match`);
+       - no such phrase in a non-empty text: hard, dropped as `title_not_matched` (the drop it always was);
+       - an empty text: unknown, the ad continues as Near (label `title_not_matched:no_text`): an empty description never drops an ad.
+       `description=None` means the caller has no text check at all (title-only replays and audits): the title miss drops as before.
+    A seniority word in the title (`SENIORITY_LABELS`) is a label, never a drop.
     """
     vocab = vocabulary()
     title_lower = _fold(title)
     position_lower = _fold(position)
+    labels = _seniority(title_lower)
 
     for term in vocab.exclude:
         if _has_phrase(title_lower, term):
-            return EXCLUDED, f"title_excluded:{term}"
+            return Decision(EXCLUDED, f"title_excluded:{term}", HARD, labels)
     if position_lower in vocab.position_whitelist:
-        return TARGET, None
+        return Decision(TARGET, None, None, labels)
     if any(_has_phrase(title_lower, term) for term in vocab.include):
-        return TARGET, None
+        return Decision(TARGET, None, None, labels)
     if any(_has_phrase(title_lower, term) for term in vocab.near) or any(_has_phrase(position_lower, term) for term in vocab.near):
-        return NEAR, None
+        return Decision(NEAR, None, None, labels)
     if any(_has_phrase(title_lower, _fold(t)) for t in extra_terms if t):
-        return NEAR, None
-    return EXCLUDED, "title_not_matched"
+        return Decision(NEAR, None, None, labels)
+    if description is None:
+        return Decision(EXCLUDED, "title_not_matched", HARD, labels)
+    text = _fold(description)
+    if not text.strip():
+        return Decision(NEAR, None, UNKNOWN, labels + ("title_not_matched:no_text",))
+    # `include` phrases only: a `near` phrase in body text ("you report to the project manager") is too common to let an ad in.
+    if any(_has_phrase(text, term) for term in vocab.include):
+        return Decision(NEAR, None, SOFT, labels + ("title_not_matched:text_match",))
+    return Decision(EXCLUDED, "title_not_matched", HARD, labels)
+
+
+def role_tier(
+    title: str,
+    position: str = "",
+    extra_terms: tuple[str, ...] = (),
+    description: str | None = None,
+) -> tuple[str, str | None]:
+    """(tier, reason) of `assess`: Target, Near or Excluded; the reason is set only for Excluded. Target and Near go on to scoring."""
+    decision = assess(title, position, extra_terms, description)
+    return decision.tier, decision.reason
 
 
 def role_drop_reason(
     title: str,
     position: str = "",
     extra_terms: tuple[str, ...] = (),
+    description: str | None = None,
 ) -> str | None:
     """Why the role filter drops this ad, or None when it keeps it (Target or Near)."""
-    return role_tier(title, position, extra_terms)[1]
+    return role_tier(title, position, extra_terms, description)[1]
 
 
 def is_relevant_role(
     title: str,
     position: str = "",
     extra_terms: tuple[str, ...] = (),
+    description: str | None = None,
 ) -> bool:
-    return role_drop_reason(title, position, extra_terms) is None
+    return role_drop_reason(title, position, extra_terms, description) is None

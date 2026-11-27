@@ -103,11 +103,11 @@ def test_the_reason_codes_of_the_role_filter():
         title = f"Senior {term.title()} Product Manager"
         assert drop(title) == f"title_excluded:{role_filter.TITLE_EXCLUDE[[t in title.lower() for t in role_filter.TITLE_EXCLUDE].index(True)]}"
     assert drop("Medior Dev Project Manager", "IT Project Manager") is None, "a project manager is Near, not dropped by name"
-    assert drop("Junior Project Manager") == "title_excluded:junior"
+    assert drop("Junior Project Manager") is None, "seniority is a label, never a drop (package 3)"
     assert drop("Chef") == "title_not_matched"
     assert drop("Growth Lead") == "title_not_matched" and drop("Growth Lead", "", ("growth",)) is None
     assert drop("Developer", "Product Manager") is None, "a board's own position lets an ad in"
-    assert drop("Junior Developer", "Product Manager") == "title_excluded:junior", "but an excluded phrase beats it"
+    assert drop("Sales Manager", "Product Manager") == "title_excluded:sales manager", "but an excluded phrase beats it"
     assert drop("Technical Production Manager") == "title_not_matched", "word boundaries, as before"
 
 
@@ -244,12 +244,12 @@ def test_jobspy_drops_and_reasons(run, monkeypatch, tmp_path):
     answers = {
         "Product Manager": frame([jobspy_row("Senior Product Manager", 1), jobspy_row("Project Manager", 2),
                                   jobspy_row("SAP Consultant", 3), jobspy_row("", 4)]),
-        "Product Lead": frame([jobspy_row("Product Lead", 5), jobspy_row("Intern Product Manager", 6)]),
+        "Product Lead": frame([jobspy_row("Product Lead", 5), jobspy_row("Sales Manager", 6)]),
     }
     monkeypatch.setattr(jobspy_provider, "fetch_jobs", lambda term, location, remote=False, country="": answers[term])
     returned, outcome, stage, discards = gather(jobspy_provider.JobSpyProvider(), run, "jobspy", tmp_path, ["Remote"])
     counted, uncounted = accounted(stage, discards, outcome)
-    assert counted == {"title_not_matched", "title_excluded:intern"}
+    assert counted == {"title_not_matched", "title_excluded:sales manager"}
     assert uncounted == {"no_title"}
     assert (outcome.read, outcome.kept, stage.footer["discarded"], stage.footer["discardedUncounted"]) == (5, 3, 2, 1)
     assert stage.external_ids == {j["jobId"]: f"li-{n}" for j, n in zip(returned, (1, 2, 5))}
@@ -376,11 +376,11 @@ def test_infostud_drops_and_reasons(run, monkeypatch, tmp_path):
         assert d["jobId"] == _make_job_id(d["url"], d["title"], d["company"], d["location"]), "the id the ad would have had"
 
 
-def test_infostud_project_manager_with_an_it_position_is_kept_as_near_and_a_junior_one_is_dropped(run, monkeypatch, tmp_path):
+def test_infostud_project_manager_with_an_it_position_is_kept_as_near_and_an_excluded_one_is_dropped(run, monkeypatch, tmp_path):
     """The case that prompted the slice: the board's own position says Project Manager, the title says Project Manager.
-    It is Near now: read in full and sent to scoring, which caps it. A junior one stays dropped, its id recorded."""
+    It is Near now: read in full and sent to scoring, which caps it. One with an excluded phrase stays dropped, its id recorded."""
     rows = [infostud_row(5150, "Medior Dev Project Manager", "Zxqville", position="IT Project Manager"),
-            infostud_row(5151, "Junior Project Manager", "Zxqville", position="IT Project Manager")]
+            infostud_row(5151, "Sales Manager Project Manager", "Zxqville", position="IT Project Manager")]
     monkeypatch.setattr(infostud_client, "fetch_raw", lambda categories=None, **_: (rows, 2))
     read_in_full = []
     monkeypatch.setattr(infostud_client, "enrich", lambda job, delay=1.0: read_in_full.append(job["title"]) or job)
@@ -388,8 +388,8 @@ def test_infostud_project_manager_with_an_it_position_is_kept_as_near_and_a_juni
     assert [j["title"] for j in returned] == ["Medior Dev Project Manager"] == read_in_full
     assert (outcome.read, outcome.kept) == (2, 1)
     [drop] = discards
-    assert drop["reason"] == "title_excluded:junior" and drop["externalId"] == "5151"
-    assert (drop["title"], drop["source"], drop["counted"]) == ("Junior Project Manager", "infostud", True) and "description" not in drop
+    assert drop["reason"] == "title_excluded:sales manager" and drop["externalId"] == "5151"
+    assert (drop["title"], drop["source"], drop["counted"]) == ("Sales Manager Project Manager", "infostud", True) and "description" not in drop
     assert role_filter.role_tier("Medior Dev Project Manager", "IT Project Manager") == (role_filter.NEAR, None)
 
 
@@ -425,18 +425,20 @@ def test_workable_a_place_filter_that_matches_the_city_but_not_the_country(run, 
 
 
 def test_joberty_drops_and_reasons(run, monkeypatch, tmp_path):
-    from test_joberty import CITIES, DETAIL, product_ad
+    from test_joberty import CITIES, DETAIL, off_topic_detail, product_ad
 
+    # A title miss is judged on its detail text (package 3), after the title matches: Chef is read and dropped, Barista hits the cap.
     items = [
         product_ad(1), product_ad(2, title="Account Manager"), product_ad(3, title="Chef"),
-        product_ad(4, city="Zagreb (Croatia)"), product_ad(5), product_ad(6),
+        product_ad(4, city="Zagreb (Croatia)"), product_ad(5), product_ad(6, title="Barista"),
         {"id": "abc", "jobTitle": "Odd row", "companyName": "Odd"},
         product_ad(3, title="Chef"), product_ad(1),  # the same ads again: copies, not second ads
     ]
     monkeypatch.setattr(joberty_client, "fetch_cities", lambda: CITIES)
     monkeypatch.setattr(joberty_client, "fetch_listing", lambda *a, **k: copy.deepcopy(items))
-    monkeypatch.setattr(joberty_client, "fetch_detail", lambda job_id: {} if job_id == 5 else copy.deepcopy(DETAIL))
-    monkeypatch.setattr(joberty_client, "MAX_DETAILS", 2)
+    monkeypatch.setattr(joberty_client, "fetch_detail",
+                        lambda job_id: {} if job_id == 5 else copy.deepcopy(DETAIL) if job_id == 1 else off_topic_detail(job_id))
+    monkeypatch.setattr(joberty_client, "MAX_DETAILS", 3)
     returned, outcome, stage, discards = gather(joberty_provider.JobertyProvider(ledger_path=tmp_path / "none.json"), run, "joberty", tmp_path, SERBIA)
     counted, uncounted = accounted(stage, discards, outcome)
     assert counted == {"title_excluded:account manager", "title_not_matched", "location_not_matched", "no_detail_text", "detail_cap"}

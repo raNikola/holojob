@@ -185,7 +185,8 @@ def fetch_jobs(
                 continue
             if job["jobUrl"] in by_url:
                 continue
-            reason = role_drop_reason(job["title"], "", extra_terms or search_terms)
+            # A title miss goes to the free-text check on the listed description (package 3); an empty one never drops the ad.
+            reason = role_drop_reason(job["title"], "", extra_terms or search_terms, job.get("description") or "")
             if reason is None:
                 by_url[job["jobUrl"]] = job
                 added.append(job)

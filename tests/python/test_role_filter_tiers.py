@@ -22,8 +22,10 @@ T, N, X = role_filter.TARGET, role_filter.NEAR, role_filter.EXCLUDED
     ("Technical Project Manager", "", (), N, None),
     ("Projektni menadžer – rukovodilac projekta", "", (), N, None),     # Serbian, diacritics folded
     ("Developer", "IT Project Manager", (), N, None),                   # the board's position names a near role
-    ("Junior Project Manager", "", (), X, "title_excluded:junior"),     # seniority beats everything
-    ("Intern Product Manager", "Product Manager", (), X, "title_excluded:intern"),
+    # Seniority is a label, never a drop (package 3, owner plan 2026-11-25).
+    ("Junior Project Manager", "", (), N, None),
+    ("Intern Product Manager", "Product Manager", (), T, None),
+    ("Account Manager", "Product Manager", (), X, "title_excluded:account manager"),  # an excluded phrase beats a board's position
     ("Account Manager", "", (), X, "title_excluded:account manager"),
     ("Chef", "", (), X, "title_not_matched"),
     ("Menadžer proizvodnje", "", (), X, "title_not_matched"),
@@ -35,6 +37,31 @@ T, N, X = role_filter.TARGET, role_filter.NEAR, role_filter.EXCLUDED
 ])
 def test_tiers(title, position, extra, tier, reason):
     assert role_filter.role_tier(title, position, extra) == (tier, reason)
+
+
+@pytest.mark.parametrize("text", ["", "   ", "\n"])
+def test_a_title_miss_with_an_empty_text_is_never_dropped(text):
+    """Owner plan 2026-11-25: an empty description does not drop the ad; it continues as unknown."""
+    decision = role_filter.assess("Chef", "", (), text)
+    assert (decision.tier, decision.reason, decision.rule) == (N, None, role_filter.UNKNOWN)
+
+
+def test_the_text_check_of_a_title_miss():
+    soft = role_filter.assess("Implementation Lead", "", (), "You will act as the Product Owner of our platform.")
+    assert (soft.tier, soft.reason, soft.rule) == (N, None, role_filter.SOFT)
+    hard = role_filter.assess("Implementation Lead", "", (), "You will onboard customers and run rollouts.")
+    assert (hard.tier, hard.reason, hard.rule) == (X, "title_not_matched", role_filter.HARD)
+    near_only = role_filter.assess("Backend Engineer", "", (), "You report to the project manager.")
+    assert near_only.reason == "title_not_matched", "a near phrase in body text does not let a title miss in"
+    assert role_filter.assess("Chef", "", (), None).reason == "title_not_matched", "no text check at all: the title decides"
+    excluded = role_filter.assess("Account Manager", "", (), "")
+    assert (excluded.reason, excluded.rule) == ("title_excluded:account manager", role_filter.HARD), "an excluded title never waits for text"
+
+
+def test_seniority_is_a_label_never_a_drop():
+    for word in role_filter.SENIORITY_LABELS:
+        decision = role_filter.assess(f"{word.title()} Product Manager")
+        assert decision.reason is None and f"seniority:{word}" in decision.labels, word
 
 
 def test_an_extra_term_never_yields_target():

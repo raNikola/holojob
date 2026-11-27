@@ -97,7 +97,8 @@ class JobSpyProvider(JobProvider):
                 # the better part of half an hour, and a stop keeps every search that had finished.
                 found = []
                 for job, ext in zip(normalized, external or [None] * len(normalized)):
-                    reason = role_drop_reason(job.get("title", ""), "", tuple(search_terms or ()))
+                    # A title miss goes to the free-text check on the ad's own text (package 3); an empty text never drops it.
+                    reason = role_drop_reason(job.get("title", ""), "", tuple(search_terms or ()), job.get("description") or "")
                     if reason is None:
                         found.append(job)
                     else:

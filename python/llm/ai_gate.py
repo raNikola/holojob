@@ -118,8 +118,9 @@ DEFAULT_SETTINGS = {
         "near": ["project manager", "delivery manager", "program manager", "programme manager", "product operations", "product ops",
                  "product management", "tpm", "projekt menadzer", "projektni menadzer", "menadzer projekata",
                  "menadzer za upravljanje projektima", "rukovodilac projekta"],
-        "exclude": ["account manager", "sales manager", "area sales", "brand manager", "category manager", "product technologist", "junior",
-                    "intern", "praktikant", "pripravnik"],
+        # "junior", "intern", "praktikant" and "pripravnik" left this list in package 3: seniority is a label, never a drop (owner plan
+        # 2026-11-25, role_filter.SENIORITY_LABELS). To undo, add them back in Settings > Job search > Title filter.
+        "exclude": ["account manager", "sales manager", "area sales", "brand manager", "category manager", "product technologist"],
     },
     # Reserved per call for the answer before its size is known.
     "estimatedOutputTokens": 1000,

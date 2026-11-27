@@ -8,8 +8,8 @@ def row(n, title, position=""):
 
 
 def test_counts_tiers_reasons_and_overlap_per_category():
-    it = [row(1, "Product Manager"), row(2, "IT Project Manager"), row(3, "Cashier"), row(4, "Junior Product Manager")]
-    marketing = [row(4, "Junior Product Manager"), row(5, "Sales Agent"), row(6, "Brand Manager")]
+    it = [row(1, "Product Manager"), row(2, "IT Project Manager"), row(3, "Cashier"), row(4, "Account Manager")]
+    marketing = [row(4, "Account Manager"), row(5, "Sales Agent"), row(6, "Brand Manager")]
     out = infostud_probe.summarize({5: (it, 4), 48: (marketing, 3)})
     a, b = out["categories"][5], out["categories"][48]
     assert (a["target"], a["near"], a["excluded"]) == (1, 1, 2) and a["readMatchesReported"] is True

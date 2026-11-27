@@ -32,6 +32,11 @@ def product_ad(job_id, city="Belgrade (Serbia)", title="Product Manager"):
     return {**copy.deepcopy(FIVETRAN), "id": job_id, "jobTitle": title, "cities": [city]}
 
 
+def off_topic_detail(job_id):
+    """A detail whose text names no product or project role: what a title miss that is not a product ad reads like."""
+    return {**copy.deepcopy(DETAIL), "id": job_id, "text": "<p>You will onboard customers and run their software rollouts.</p>"}
+
+
 class FakeResponse(io.BytesIO):
     def __enter__(self):
         return self
@@ -76,7 +81,7 @@ def board(monkeypatch, tmp_path):
 
     def fetch_detail(job_id):
         calls["details"].append(job_id)
-        return copy.deepcopy(DETAIL)
+        return copy.deepcopy(DETAIL) if job_id == DETAIL["id"] else off_topic_detail(job_id)
 
     monkeypatch.setattr(joberty_client, "fetch_cities", lambda: state["cities"])
     monkeypatch.setattr(joberty_client, "fetch_listing", fetch_listing)
@@ -128,9 +133,16 @@ def test_several_cities_are_joined_and_remote_is_flagged_only_when_a_city_says_s
 
 
 def test_only_product_roles_are_kept_whatever_the_domain_tag(board):
-    # The fixture also holds an "Implementation Manager" and a "Junior Product Owner", both tagged Product Management.
+    # The fixture also holds an "Implementation Manager" and a "Key Account Manager", both tagged Product Management.
     assert [j["title"] for j in run(board)] == ["Sr. Staff Technical Product Manager"]
-    assert board.calls["details"] == [83188]
+    # The title miss is read after the title match (package 3 text check): a detail cap spends its requests on title matches first.
+    assert board.calls["details"] == [83188, 83311]
+
+
+def test_a_title_miss_whose_text_names_a_product_role_is_kept_and_an_off_topic_one_is_dropped(board, monkeypatch):
+    board.state["items"] = [product_ad(1, title="Implementation Lead"), product_ad(2, title="Implementation Lead")]
+    monkeypatch.setattr(joberty_client, "fetch_detail", lambda job_id: copy.deepcopy(DETAIL) if job_id == 1 else off_topic_detail(job_id))
+    assert [j["externalId"] for j in run(board)] == ["joberty:1"]
 
 
 def test_an_unknown_city_is_kept_not_dropped(board):
@@ -172,7 +184,7 @@ def test_an_ad_the_ledger_already_holds_is_not_fetched_again(board, tmp_path):
     ledger = {"version": 1, "jobs": {known: {"job": {"description": "x" * 400}}}}
     (tmp_path / "job_history.json").write_text(json.dumps(ledger))
     [job] = run(board)
-    assert board.calls["details"] == []
+    assert 83188 not in board.calls["details"]  # only the title miss is read, for its text check
     assert job["jobId"] == known and job["description"] == ""  # the ledger restores its own
 
 
@@ -180,7 +192,7 @@ def test_a_known_ad_with_only_a_thin_description_is_read_again(board, tmp_path):
     known = joberty_provider.to_canonical(FIVETRAN)["jobId"]
     (tmp_path / "job_history.json").write_text(json.dumps({"version": 1, "jobs": {known: {"job": {"description": "short"}}}}))
     run(board)
-    assert board.calls["details"] == [83188]
+    assert board.calls["details"][0] == 83188
 
 
 def test_an_ad_whose_detail_cannot_be_read_is_left_for_the_next_run(board, monkeypatch):

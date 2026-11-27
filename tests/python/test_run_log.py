@@ -577,7 +577,8 @@ def test_wellfound_says_it_is_not_built():
 
 def test_jobspy_reports_read_before_its_title_filter_and_failed_searches(monkeypatch):
     frame = pd.DataFrame([{"title": "Product Manager", "company": "A", "location": "Remote", "job_url": "https://j/1"},
-                          {"title": "Welder", "company": "B", "location": "Remote", "job_url": "https://j/2"}])
+                          {"title": "Welder", "company": "B", "location": "Remote", "job_url": "https://j/2",
+                           "description": "Weld steel frames."}])  # a title miss with text: dropped by the text check
     monkeypatch.setattr(jobspy_provider, "fetch_jobs", lambda *a, **k: frame)
     provider = jobspy_provider.JobSpyProvider()
     assert len(provider.fetch_jobs(TERMS, ["Remote", "Serbia"], ["remote"], "Serbia")) == 2
@@ -624,7 +625,7 @@ def test_infostud_reports_ads_read_before_the_clients_role_filter(monkeypatch):
 
 def test_workable_reports_different_ads_read_before_the_clients_role_filter(monkeypatch):
     rows = [{"title": "Product Manager", "company": "A", "url": "https://k/1", "workplace": "remote"},
-            {"title": "Welder", "company": "B", "url": "https://k/2", "workplace": "remote"}]
+            {"title": "Welder", "company": "B", "url": "https://k/2", "workplace": "remote", "description": "Weld steel frames."}]
     monkeypatch.setattr(workable_client, "search", lambda term, location: rows)
     monkeypatch.setattr(workable_client.time, "sleep", lambda s: None)
     provider = workable_provider.WorkableProvider()

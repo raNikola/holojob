@@ -29,7 +29,7 @@ from providers.base_provider import (
     dropped_ad,
     place_drop_reason,
 )
-from providers.role_filter import role_drop_reason
+from providers.role_filter import UNKNOWN, assess, role_drop_reason
 from providers.workable_client import _strip_html
 
 logger = logging.getLogger(__name__)
@@ -168,6 +168,7 @@ class JobertyProvider(JobProvider):
         wanted: dict[int, dict] = {}
         read: set[int] = set()
         decided: set[int] = set()  # ids already judged: a repeat of one is a copy, not a second ad
+        text_check: set[int] = set()  # title misses the listing cannot judge (no text there): checked on the detail text
         listing_drops: list[dict] = []
         for item in joberty_client.fetch_listing():
             if not isinstance(item.get("id"), int):
@@ -180,9 +181,12 @@ class JobertyProvider(JobProvider):
             decided.add(item["id"])
             read.add(item["id"])
             job = to_canonical(item, country=country)
-            reason = role_drop_reason(job["title"], "", terms) or place_drop_reason(job, locations, remote_filters, country)
+            decision = assess(job["title"], "", terms, "")
+            reason = decision.reason or place_drop_reason(job, locations, remote_filters, country)
             if reason is None:
                 wanted[item["id"]] = item
+                if decision.rule == UNKNOWN:
+                    text_check.add(item["id"])
             else:
                 listing_drops.append(dropped_ad(job, reason, job["externalId"]))
         logger.info("Joberty: %d relevant ads in the listing", len(wanted))
@@ -194,7 +198,8 @@ class JobertyProvider(JobProvider):
         fetched = 0
         deferred = 0
         deferred_drops: list[dict] = []
-        for item in wanted.values():
+        # Title matches first, then the ads waiting for the text check (a stable sort keeps the listing order inside each group).
+        for item in sorted(wanted.values(), key=lambda one: one["id"] in text_check):
             if to_canonical(item)["jobId"] in known:
                 # No description: the ledger restores the one it holds (job_history.apply_run).
                 job = to_canonical(item, country=country)
@@ -211,6 +216,10 @@ class JobertyProvider(JobProvider):
             detail = joberty_client.fetch_detail(item["id"])
             if detail.get("text"):
                 job = to_canonical(item, detail, country=country)
+                late = role_drop_reason(job["title"], "", terms, job.get("description") or "") if item["id"] in text_check else None
+                if late:
+                    self.stage([], part=f"ad {item['id']}", dropped=[dropped_ad(job, late, job["externalId"])])
+                    continue
                 jobs.append(job)
                 # One request, then one ad staged: the details are the slow part (a pause between requests).
                 self.stage([job], part=f"ad {item['id']}", external_ids={job["jobId"]: job["externalId"]})

@@ -262,7 +262,8 @@ def fetch_jobs(
     matches = []
     dropped = []
     for job in jobs:
-        reason = role_drop_reason(job.get("title", ""), job.get("standardizedPosition") or "", extra_terms)
+        # A title miss goes to the free-text check on the listing's teaser (package 3); an empty teaser never drops the ad.
+        reason = role_drop_reason(job.get("title", ""), job.get("standardizedPosition") or "", extra_terms, job.get("description") or "")
         if reason is None:
             matches.append(job)
         else:

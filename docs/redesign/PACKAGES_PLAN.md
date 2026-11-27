@@ -101,7 +101,7 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
 |---|---|---|---|---|---|---|
 | 1 | archive-history | claude-sonnet-5-5 | - | 1 | done | list-cleanup |
 | 2 | free-measurements | claude-sonnet-5-5 | - | 2 | done | list-cleanup |
-| 3 | filter-foundation | claude-opus-5-5 | - | 3 | pending | - |
+| 3 | filter-foundation | claude-opus-5-5 | - | 3 | done | list-cleanup |
 | 5 | cost-scoring-time | claude-opus-5-5 | 2 | 4 | pending | - |
 | 4 | text-rules-round2 | claude-sonnet-5-5 | 3 | 5 | pending | - |
 | 6 | missing-descriptions | claude-sonnet-5-5 | 2 | 6 | pending | - |
