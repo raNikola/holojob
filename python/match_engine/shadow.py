@@ -37,6 +37,8 @@ from llm_client import GuardrailRefused, complete_json
 import ai_gate  # noqa: E402 (on the path through llm_client)
 
 from .constants import ENGINE_VERSION
+
+CONSECUTIVE_FAILURES_STOP = 3  # same systemic-failure stop as classify_new.py
 from .evidence_select import mode_of
 from .fit import score
 from .fit2 import UnitResolver, fit2
@@ -140,6 +142,7 @@ class ShadowEngine:
                        "closed": 0, "failed": 0, "excluded": 0, "refused": 0, "notActive": 0}
         # The AI budget gate refused a call: the rest of the run makes none (ai_gate.py).
         self.refusal: str | None = None
+        self._consecutive_failures = 0
         self.plan_order: list = []
         # Ads the cheap gates ruled out of the send, by gate (an ad failing two counts in both).
         self.excluded: dict[str, int] = {g: 0 for g in CHEAP_GATES}
@@ -244,10 +247,16 @@ class ShadowEngine:
                 print(f"engine (shadow) failed: {(job.get('title') or '?')[:45]}: {outcome.error}",
                       file=sys.stderr)
                 self._count("failed")
+                with self._lock:
+                    self._consecutive_failures += 1
+                    if self._consecutive_failures >= CONSECUTIVE_FAILURES_STOP and self.refusal is None:
+                        self.refusal = f"stopped: {self._consecutive_failures} calls in a row failed"
+                        print(f"engine (shadow) {self.refusal}", file=sys.stderr, flush=True)
                 return {"engineVersion": ENGINE_VERSION, "error": outcome.error}
             raw = fresh[key]
             with self._lock:
                 self._cache[key] = raw
+                self._consecutive_failures = 0
         output = overlay_answers(raw, self.candidate)
         if self.memory is not None:
             with self._lock:

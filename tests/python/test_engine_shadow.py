@@ -250,3 +250,33 @@ def test_a_confirmed_geographic_restriction_is_excluded_and_unknown_is_not_boost
     assert send == {"unk", "low"} and eng.excluded["location"] == 1
     # No boost: the unknown-location ad is ordered by its own matchScore like any other.
     assert [j["jobId"] for j in sorted(jobs, key=lambda j: -j["matchScore"]) if j["jobId"] in send] == ["unk", "low"]
+
+
+class Scripted(Fake):
+    """Fails on the calls whose 1-based number is in `fail_on`, answers MET otherwise."""
+
+    def __init__(self, fail_on):
+        super().__init__()
+        self.fail_on = set(fail_on)
+
+    def __call__(self, prompt, schema=None, model=None, provider=None):
+        from llm_client import LlmUnavailable
+        self.fail = LlmUnavailable("down") if self.calls + 1 in self.fail_on else None
+        return super().__call__(prompt, schema, model, provider)
+
+
+def test_the_third_failure_in_a_row_stops_the_engine_and_later_ads_are_not_sent(tmp_path):
+    fake = Scripted({1, 2, 3, 4, 5})
+    e = engine(tmp_path, judge=True, fake=fake)
+    e.apply([job(c, 90 - i) for i, c in enumerate("abcde")])
+    assert fake.calls == 3
+    assert e.counts["failed"] == 3 and e.counts["refused"] == 2
+    assert "3 calls in a row failed" in e.refusal
+
+
+def test_a_success_resets_the_failure_count(tmp_path):
+    fake = Scripted({1, 2, 4, 5})
+    e = engine(tmp_path, judge=True, fake=fake)
+    e.apply([job(c, 90 - i) for i, c in enumerate("abcdef")])
+    assert fake.calls == 6 and e.refusal is None
+    assert e.counts["failed"] == 4 and e.counts["matched"] == 2

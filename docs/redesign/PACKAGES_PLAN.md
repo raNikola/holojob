@@ -111,7 +111,7 @@ Packages 4 and 7 are each one mechanism with closed rules, so they stay whole.
 | 1 | archive-history | claude-sonnet-5-5 | - | 1 | done | list-cleanup |
 | 2 | free-measurements | claude-sonnet-5-5 | - | 2 | done | list-cleanup |
 | 3 | filter-foundation | claude-sonnet-5-5 | - | 3 | done | list-cleanup |
-| 5 | failure-stop | claude-sonnet-5-5 | 2 | 4 | pending | - |
+| 5 | failure-stop | claude-sonnet-5-5 | 2 | 4 | needs-review | list-cleanup |
 | 8 | p90-setting | claude-sonnet-5-5 | 2 | 5 | pending | - |
 | 9 | scoring-pass-speed | claude-sonnet-5-5 | 2 | 6 | pending | - |
 | 10 | scoring-prepare-limit | claude-sonnet-5-5 | 2, 9 | 7 | pending | - |

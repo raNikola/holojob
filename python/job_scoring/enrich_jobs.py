@@ -613,6 +613,9 @@ def _load_ids(path: Path) -> set[str]:
     return {i for i in (ids or []) if isinstance(i, str)}
 
 
+CONSECUTIVE_FAILURES_STOP = 3  # same systemic-failure stop as classify_new.py
+
+
 class _Skipped(Exception):
     """A job not sent because the AI gate already refused an earlier one in this run."""
 
@@ -786,6 +789,9 @@ def enrich(args: argparse.Namespace) -> int:
         return _dry_run(args, jobs, pending, skipped, from_ledger, outside, frames, remap, mapper)
     done = failed = refused = 0
     refusal = None
+    streak = {"n": 0, "reason": None}  # consecutive failed calls; reason is set when the run stopped on them
+    streak_lock = threading.Lock()
+    left = 0  # ads not sent because the run stopped on consecutive failures
     if pending:
         # One check before the batch: a run the gate would refuse sends nothing and logs one refusal.
         with ai_gate.context(feature="enrichment"):
@@ -810,10 +816,22 @@ def enrich(args: argparse.Namespace) -> int:
         if stop.is_set():
             raise _Skipped
         try:
-            return extract(job, *rest, **kw)
+            facts = extract(job, *rest, **kw)
         except GuardrailRefused:
             stop.set()
             raise
+        except (LlmUnavailable, LlmRefused):
+            # Counted here, in the worker, so the calls queued behind the third failure are not sent.
+            with streak_lock:
+                streak["n"] += 1
+                if streak["n"] >= CONSECUTIVE_FAILURES_STOP and not stop.is_set():
+                    streak["reason"] = f"stopped: {streak['n']} calls in a row failed"
+                    stop.set()
+                    print(f"enrichment {streak['reason']}", file=sys.stderr, flush=True)
+            raise
+        with streak_lock:
+            streak["n"] = 0
+        return facts
 
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         futures = {
@@ -830,7 +848,10 @@ def enrich(args: argparse.Namespace) -> int:
             try:
                 job["llmFacts"] = future.result()
             except _Skipped:
-                refused += 1
+                if streak["reason"]:
+                    left += 1
+                else:
+                    refused += 1
                 continue
             except GuardrailRefused as exc:
                 # A limit was reached mid-run: stop sending, keep what is done, never retry.
@@ -890,8 +911,8 @@ def enrich(args: argparse.Namespace) -> int:
         print(f"ai gate refused: {refusal}")
     if plan_info:
         candidates, over_limit, limits = plan_info
-        waiting = candidates if limits.stop else over_limit + refused
-        stopped = limits.stop or run_budget.stop_code(refusal) or (run_budget.STOP_RUN_ADS if over_limit else None)
+        waiting = candidates if limits.stop else over_limit + refused + left
+        stopped = limits.stop or run_budget.stop_code(refusal) or run_budget.stop_code(streak["reason"]) or (run_budget.STOP_RUN_ADS if over_limit else None)
         print(run_budget.summary_line("reading", candidates=candidates, read=done, failed=failed, waiting=waiting, stopped=stopped,
                                       spentUsd=round(guard.spent(), 4) if guard else 0.0), flush=True)
     # Every call failing means the provider is down: say so rather than let a

@@ -106,3 +106,34 @@ def test_no_intelligence_file_means_nothing_is_skipped(tmp_path, monkeypatch):
     select_provider(tmp_path, monkeypatch, "claude-code")
     assert enrich_jobs.main() == 0
     assert read == [1]
+
+
+def _failing_run(tmp_path, monkeypatch, outcomes):
+    """One ad per entry of `outcomes` (True = answers, False = provider failure), one worker so the order is fixed."""
+    from llm_client import LlmUnavailable
+    jobs = [job(f"Berlin {i}", jobId=f"j{i}") for i in range(len(outcomes))]
+    jobs_file = tmp_path / "jobs.json"
+    jobs_file.write_text(json.dumps({"jobs": jobs}))
+    calls = []
+
+    def extract(j, model, provider, previous=None, **kw):
+        calls.append(j["jobId"])
+        if not outcomes[len(calls) - 1]:
+            raise LlmUnavailable("down")
+        return FACTS
+
+    monkeypatch.setattr(enrich_jobs, "extract", extract)
+    monkeypatch.setattr(sys, "argv", ["enrich_jobs.py", "--jobs", str(jobs_file), "--intelligence", str(tmp_path / "none.json"), "--workers", "1"])
+    select_provider(tmp_path, monkeypatch, "claude-code")
+    enrich_jobs.main()
+    return calls
+
+
+def test_the_third_read_failure_in_a_row_stops_reading(tmp_path, monkeypatch, capsys):
+    calls = _failing_run(tmp_path, monkeypatch, [False] * 5)
+    assert len(calls) == 3
+    assert "3 calls in a row failed" in capsys.readouterr().err
+
+
+def test_a_successful_read_resets_the_failure_count(tmp_path, monkeypatch):
+    assert len(_failing_run(tmp_path, monkeypatch, [False, False, True, False, False, True])) == 6
