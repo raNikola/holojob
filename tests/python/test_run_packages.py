@@ -3,9 +3,12 @@
 package's recorded tip and a clean worktree; a regate that records a red tier or the wrong base; a run that does not
 stop at the first package that is not done. Temp git repos, temp state and report files only."""
 import importlib.util
+import json
+import os
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -328,3 +331,167 @@ def test_runner_refuses_a_copy_inside_the_run_worktree(tmp_path):
     with pytest.raises(SystemExit):                      # sessions can edit it, and it installs the node helper
         rp.refuse_inside_worktree(wt / "scripts/run_packages.py", wt)
     rp.refuse_inside_worktree(tmp_path / "runner/scripts/run_packages.py", wt)
+
+
+# --- owner decision 2026-11-27: done is the runner's decision; a usage limit pauses; progress is live ------------------
+
+BLOCKED_NONE = "Status: needs-review\n\n# r\n\n## Blocked or needs owner\n\nNone.\n\n## Permanent docs updated\n\nx\n"
+BLOCKED_REASON = "Status: blocked\n\n# r\n\n## Blocked or needs owner\n\nA real decision: keep or drop X?\n\n## Next\n"
+
+
+@pytest.mark.parametrize("text,status", [
+    (BLOCKED_NONE, "done"),                                                   # None: the session's work is complete
+    (BLOCKED_NONE.replace("None.", "**n/a**"), "done"),
+    (BLOCKED_REASON, "blocked"),                                              # a stated reason stops the chain
+    (BLOCKED_NONE.replace("None.", "None. Decide X first."), "needs-review"),  # more than None is a reason
+    ("Status: blocked\n\n# r\n", "blocked"),                                  # no section: the owner looks
+    ("Status: needs-review\n\n## Blocked or needs owner\n\n<!-- hint -->\n", "needs-review"),  # empty is not None
+    ("Status: done\n\n## Blocked or needs owner\n\nSomething.\n", "done"),
+    ("Status: in-progress\n\n## Blocked or needs owner\n\nNone.\n", ""),      # the untouched template never counts
+])
+def test_effective_status(text, status):
+    assert rp.effective_status(text) == status
+
+
+def test_needs_review_with_none_can_be_done_but_a_reason_stops(env):
+    repo, base, reports, _ = env
+    tip = _commit(repo)
+    st = _recorded(tip, base)
+    (reports / ROW.report_name).write_text(BLOCKED_NONE)
+    assert _state(repo, reports, st) == "done"            # with the commit, the clean tree and the recorded pass
+    (reports / ROW.report_name).write_text(BLOCKED_REASON)
+    assert _state(repo, reports, st) == "blocked"
+
+
+def test_verdict_before_gate_follows_the_new_rule(env, tmp_path):
+    repo, base, reports, _ = env
+    final, log = reports / ROW.report_name, tmp_path / "s.json"
+
+    def check():
+        return rp.verdict_before_gate(base, "", _git(repo, "rev-parse", "HEAD"), final, log, repo, repo)[0]
+
+    assert check() == "fail"                                # no commit of its own yet
+    _commit(repo)
+    assert check() == "fail"                                # no report
+    final.write_text(BLOCKED_NONE)
+    assert check() == "ok"                                  # the full tier decides next
+    final.write_text(BLOCKED_REASON)
+    assert check() == "blocked"
+    final.write_text("Status: in-progress\n")
+    assert check() == "fail"
+    final.write_text("Status: done\n")
+    (repo / "dirty.txt").write_text("x")
+    assert check() == "fail"                                # uncommitted work is never done
+
+
+LIMIT = {"type": "result", "subtype": "success", "is_error": True, "api_error_status": 429,
+         "api_error": "usage_limit_reached", "result": "You've hit your 5-hour limit · resets 12:50am (Europe/Belgrade)"}
+
+
+@pytest.mark.parametrize("result,expected", [
+    (LIMIT, "00:50 (Europe/Belgrade)"),
+    ({**LIMIT, "result": "You've hit your 5-hour limit · resets 3pm"}, "15:00"),
+    ({**LIMIT, "result": "You've hit your 5-hour limit · resets 12:05pm"}, "12:05"),
+    ({"is_error": True, "result": "You've hit your weekly limit · resets Dec 1"}, "Dec 1"),   # no api_error code: the text
+    ({**LIMIT, "result": "limit"}, "at an unknown time"),
+    ({**LIMIT, "is_error": False}, None),
+    ({"is_error": True, "api_error_status": 429, "api_error": "rate_limit_error", "result": "Overloaded"}, None),
+    ({"is_error": True, "subtype": "error_during_execution", "result": "boom"}, None),
+    (None, None),
+])
+def test_usage_limit_reset(result, expected):
+    assert rp.usage_limit_reset(result) == expected
+
+
+def test_usage_limit_reset_falls_back_to_the_event_time():
+    assert rp.usage_limit_reset({**LIMIT, "result": "You've hit your limit"}, 1795755000) == \
+        time.strftime("%H:%M", time.localtime(1795755000))
+
+
+def test_a_usage_limit_pauses_the_run_without_failing_it(capsys):
+    rows = [rp.Row(n, f"p{n}", "m", [], n) for n in (1, 2, 3)]
+    ran = []
+
+    def run_one(row):
+        ran.append(row.n)
+        return "paused: usage limit, resets 00:50" if row.n == 2 else "done"
+
+    assert rp.run_all(rows, lambda r: ("absent", ""), run_one) == rp.PAUSED_EXIT == 75
+    assert ran == [1, 2]                                    # it does not wait, and does not go on to package 3
+    out = capsys.readouterr().out
+    assert "paused: usage limit, resets 00:50" in out and "stopped at" not in out and "resumes" in out
+
+
+def _stream(*events):
+    return "".join(json.dumps(e) + "\n" for e in events)
+
+
+def _assistant(mid, *blocks, parent=None):
+    return {"type": "assistant", "parent_tool_use_id": parent, "message": {"id": mid, "content": list(blocks)}}
+
+
+def _tool(name, **inp):
+    return {"type": "tool_use", "id": "t", "name": name, "input": inp}
+
+
+def _progress(tmp_path, lines):
+    return rp.Progress(ROW, 1, 14, path=tmp_path / "progress.log", out=lines.append, worktree=Path("/wt"))
+
+
+def test_progress_writes_one_line_per_tool_call_with_turns_and_last_tool(tmp_path):
+    lines = []
+    pr = _progress(tmp_path, lines)
+    for ev in (
+        {"type": "system", "subtype": "init", "model": "claude-x"},
+        _assistant("m1", {"type": "text", "text": "hi"}, _tool("Edit", file_path="/wt/python/a.py")),   # one turn, two blocks
+        {"type": "user", "message": {"content": [{"type": "tool_result"}]}},
+        _assistant("m2", _tool("Bash", command="git   status  --short")),
+        _assistant("m2b", _tool("Read", file_path="/x/y"), parent="toolu_1"),                          # a subagent: no turn
+        {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed_warning", "resetsAt": 1}},
+        {"type": "result", "subtype": "success", "num_turns": 3, "is_error": False},
+    ):
+        pr.feed(json.dumps(ev))
+    pr.feed("not json")
+    steps = [ln for ln in lines if "turn " in ln and "session ended" not in ln]
+    assert len(steps) == 3 and "package 1 (1 of 14) archive-history" in steps[0]
+    assert steps[0].endswith("turn 1  Edit python/a.py") and steps[1].endswith("turn 2  Bash git status --short")
+    assert steps[2].endswith("turn 2  subagent Read /x/y")
+    assert "session started, model claude-x" in lines[0] and "3 turns" in lines[-1] and "last: subagent Read" in lines[-1]
+    assert not any("usage limit" in ln for ln in lines)     # a warning is not a stop
+    log = tmp_path / "progress.log"
+    assert log.read_text().splitlines() == lines and stat.S_IMODE(log.stat().st_mode) == 0o600
+    assert pr.result["num_turns"] == 3
+
+
+def test_run_session_tees_the_stream_and_keeps_the_result(tmp_path):
+    lines = []
+    pr = _progress(tmp_path, lines)
+    script = tmp_path / "fake_claude.py"
+    script.write_text("import sys\nsys.stdout.write(%r)\nsys.stdout.flush()\nsys.stderr.write('warn')\nsys.exit(1)\n" % _stream(
+        {"type": "rate_limit_event", "rate_limit_info": {"status": "rejected", "resetsAt": 1795755000}},
+        _assistant("m1", _tool("Edit", file_path="/wt/a.py")), LIMIT))
+    stream, err, log = tmp_path / "s.jsonl", tmp_path / "s.stderr", tmp_path / "s.json"
+    code = rp.run_session([sys.executable, str(script)], tmp_path, dict(os.environ), stream, err, pr)
+    rp.write_result_log(log, pr, code)
+    assert code == 1 and err.read_text() == "warn"
+    assert [json.loads(x)["type"] for x in stream.read_text().splitlines()] == ["rate_limit_event", "assistant", "result"]
+    assert json.loads(log.read_text()) == LIMIT             # the final result log stays the result object
+    assert rp.usage_limit_reset(pr.result, pr.limit_event) == "00:50 (Europe/Belgrade)"
+    assert all(stat.S_IMODE(x.stat().st_mode) == 0o600 for x in (stream, err, log))
+    assert any("usage limit reached" in ln for ln in lines) and any("Edit a.py" in ln for ln in lines)
+
+
+def test_a_session_without_a_result_event_is_logged_as_an_error(tmp_path):
+    pr = _progress(tmp_path, [])
+    log = tmp_path / "s.json"
+    rp.write_result_log(log, pr, 7)
+    body = json.loads(log.read_text())
+    assert body["is_error"] is True and "exit code 7" in body["result"]
+    assert rp.usage_limit_reset(body) is None               # a crash is a failure, never a pause
+
+
+def test_session_streams_events_and_the_prompt_states_the_status_rule():
+    argv = rp.session_argv(ROW, "p")
+    assert argv[argv.index("--output-format") + 1] == "stream-json" and "--verbose" in argv   # stream-json needs it
+    text = rp.prompt_for(ROW, False)
+    assert "Status: done" in text and "None there does not stop the chain" in text

@@ -78,32 +78,38 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
    - the round-1 rule changes are measured on that set.
 
    Status 2026-11-27: all five points are committed (`9eb3ccf`, `1c07e0d`, `8f49e74`; 0 of 19 must-keep ads lost). What remains is the benchmark-first check, which the headless sessions could not do because benchmark reads were denied: open the career-ops files the report cites (`company_key.py` sources, `filter-audit.mjs`, `classify-tier.mjs`, `title-keywords.mjs`, `role-matcher.mjs`), confirm or correct the sources and deviations in the docs and the report, and end with a commit of its own (the runner's mark). It is small, so it is not split.
-4. **Round 2 text rules.** Language, years, on-site only, visa and employment type, as hard/soft/unknown labels.
+4. **Round 2 text rules.** Language, years, on-site only, visa and employment type, as hard/soft/unknown labels. Acceptance, measured like package 3 (`scripts/measure_package3.py` is the pattern; no model call, real data read-only, counts and public titles only):
+   - every rule has its class (hard, soft or unknown) and its stated text in Settings or the docs; unknown continues, years, seniority and domain stay labels, and a drop by rule never pins dedup;
+   - **the 19 must-keep ads** (Saved, Rejected and Applied, one count per ad): the report lists, before and after the new rules, how many are kept and their ids. All 19 must be kept after, otherwise the package is `blocked` (stop rule);
+   - **the effect on real data**, counts only, per rule and in total: of the ledger rows and the filtered rows, how many ads change decision (kept to dropped, dropped to kept, kept with a new label only), and how many ads each rule touches alone. A rule that changes more than the report can explain by examples (public titles) is reported, not tuned;
+   - the measurement script is committed, so the numbers can be repeated.
 
 **Cost and scoring time** (the former package 5, split on 2026-11-27 into one package per point; content unchanged, every part needs 2). Each part has its own commit and report, and its acceptance below:
 
 5. **Failure stop.** Reading and engine fill stop after 3 consecutive failures. Acceptance: tests show that the 3rd consecutive failure stops the step, a success resets the count, and nothing else in the step changes.
 8. **p90 setting.** `estimatedOutputTokens` = p90 from the ledger, in Settings. Acceptance: the value comes from Settings and its default is the measured p90 (count and value in the report); cost accounting is unchanged.
 9. **Scoring pass speed.** This applies the package 2 finding (FREE_MEASUREMENTS §1): fold each ad once in `location_text._restrictions`, and compute `resolve_places` once per row. Acceptance: the output is identical row for row before and after on the real ledger (a copy in a temp dir), and the pass time is reported before and after.
-10. **scoring-prepare limit.** `scoring-prepare` is limited per the findings of package 2: today a Re-scrape runs up to three `scoring-prepare` passes plus the final `scoring` (FREE_MEASUREMENTS §1). Needs 9, so that the limit is measured on the faster pass (own proposal for the order). Acceptance: the number of passes and the time per Re-scrape are reported before and after, and the final scores are unchanged.
-11. **Prompt layout, two versions.** The Fit 3 lists go before the title and the ad (FREE_MEASUREMENTS §2), released as two separate versions: the layout, and the validity of the extracted facts. Acceptance: the Stage A calibration check passes and nothing is re-read by force.
+10. **scoring-prepare limit.** `scoring-prepare` is limited per the findings of package 2: today a Re-scrape runs up to three `scoring-prepare` passes plus the final `scoring` (FREE_MEASUREMENTS §1). Needs 9, so that the limit is measured on the faster pass (own proposal for the order). Acceptance: the number of passes and the time per Re-scrape are reported before and after, and the final scores are unchanged. Unchanged also means the same ads are selected for the paid steps (reading, engine fill, Fit 3 classify) before and after: the report compares the selected id sets of each paid step on a copy of the real ledger in a temp dir (equal sets, or every difference listed by id and explained), not only the final scores. A selection that differs without an explanation is a stop rule.
+11. **Prompt layout, two versions.** The Fit 3 lists go before the title and the ad (FREE_MEASUREMENTS §2), released as two separate versions: the layout, and the validity of the extracted facts. Acceptance: two parts.
+    - **Quality:** the Stage A calibration check passes for both versions, and nothing is re-read by force.
+    - **Proof that caching works:** the usage record of a Fit 3 call shows cached input tokens above zero from the second call on (`cache_read_input_tokens` or the gate's own cached-token field, whichever the ledger records; the report names the field). This needs a few paid calls, and only the owner runs paid calls: the package makes none. It writes the exact fish commands for the owner (an estimate first, `--confirm`, `--max-usd`, 3 to 5 calls, with the cost cap), the expected numbers (first call: cached tokens 0 and the prefix about 4.2k tokens written; later calls: cached tokens at or near the shared prefix, from FREE_MEASUREMENTS §2), and what a failure looks like (zeros on every call: the prefix is below the provider's minimum, or it differs between calls). The package is `done` with the commands written; the owner's result is recorded in DECISIONS afterwards.
 
 **Missing descriptions** (the former package 6, split on 2026-11-27, own proposal). It was clearly too large for one session: five independent changes, two of them new UI (a paste box, and a diff view). Content unchanged:
 
 6. **Retry of empty descriptions.** The retry as above, with per-run stats.
 12. **Paste box** for discovered ads (needs 6).
 13. **Refresh from the employer page**, shown as a diff with the original kept (needs 6).
-14. **Deferred fetch and the JobSpy pin** (needs 6). Pin the JobSpy version and test the private `_fetch_details` call. Then the deferred fetch: package 2 shows a gain (up to about 75% of LinkedIn detail requests, FREE_MEASUREMENTS §3); whether JobSpy allows a per-ad fetch is open.
+14. **Deferred fetch and the JobSpy pin** (needs 6). Pin the JobSpy version and test the private `_fetch_details` call. Then the deferred fetch: package 2 shows a gain (up to about 75% of LinkedIn detail requests, FREE_MEASUREMENTS §3); whether JobSpy allows a per-ad fetch is open. **Before building anything, re-measure the estimated saving** on the filter as it will be after packages 3 and 4: the share of kept ads that are new to the ledger and the share of detail requests that the filters and the ledger make unnecessary (counts only, the method of FREE_MEASUREMENTS §3, which was measured before the round-1 and round-2 rules). If the saving after the filter changes is below the cost of the change, the package reports that and builds nothing (`Status: needs-review` with the numbers; the deferred fetch is the owner's decision then). Package 14 needs 4 for this reason.
 
 7. **Reposts** (needs 3): as above.
 
-**Order:** 1 and 2 first. Then 3, then the cost parts 5, 8, 9, 10 and 11. Then 4, the missing-description parts 6, 12, 13 and 14, and 7.
+**Order:** 1 and 2 first. Then 3, then the cost parts 5, 8, 9, 10 and 11. Then 4, the missing-description parts 6, 12, 13 and 14, and 7. Package 14 comes after 4 because its saving is measured on the final filters.
 
 Packages 4 and 7 are each one mechanism with closed rules, so they stay whole.
 
 ## Package table
 
-`status` values: `pending | in-progress | needs-review | blocked | done`. The session sets its package's row in the package's own commit, from the report's first line, and only after the full tier is green.
+`status` values: `pending | in-progress | needs-review | blocked | done`. The session sets its package's row in the package's own commit, from the report's first line (`done` when its own work is complete; the full tier is the runner's job). The table is informational: the runner's state (`.claude/package-runs/state.json`) decides what is done. Package 8 stays `in-progress` until its full tier has passed (`--regate 8`).
 
 <!-- packages:start -->
 | N | slug | model | needs | order | status | commit |
@@ -111,8 +117,8 @@ Packages 4 and 7 are each one mechanism with closed rules, so they stay whole.
 | 1 | archive-history | claude-sonnet-5-5 | - | 1 | done | list-cleanup |
 | 2 | free-measurements | claude-sonnet-5-5 | - | 2 | done | list-cleanup |
 | 3 | filter-foundation | claude-sonnet-5-5 | - | 3 | done | list-cleanup |
-| 5 | failure-stop | claude-sonnet-5-5 | 2 | 4 | needs-review | list-cleanup |
-| 8 | p90-setting | claude-sonnet-5-5 | 2 | 5 | needs-review | list-cleanup |
+| 5 | failure-stop | claude-sonnet-5-5 | 2 | 4 | done | list-cleanup |
+| 8 | p90-setting | claude-sonnet-5-5 | 2 | 5 | in-progress | list-cleanup |
 | 9 | scoring-pass-speed | claude-sonnet-5-5 | 2 | 6 | pending | - |
 | 10 | scoring-prepare-limit | claude-sonnet-5-5 | 2, 9 | 7 | pending | - |
 | 11 | prompt-layout | claude-sonnet-5-5 | 2 | 8 | pending | - |
@@ -120,11 +126,11 @@ Packages 4 and 7 are each one mechanism with closed rules, so they stay whole.
 | 6 | description-retry | claude-sonnet-5-5 | 2 | 10 | pending | - |
 | 12 | paste-box | claude-sonnet-5-5 | 6 | 11 | pending | - |
 | 13 | employer-refresh | claude-sonnet-5-5 | 6 | 12 | pending | - |
-| 14 | deferred-fetch | claude-sonnet-5-5 | 2, 6 | 13 | pending | - |
+| 14 | deferred-fetch | claude-sonnet-5-5 | 2, 4, 6 | 13 | pending | - |
 | 7 | reposts | claude-sonnet-5-5 | 3 | 14 | pending | - |
 <!-- packages:end -->
 
-Needs 5→2 and 7→3 are from the plan, and so are 8, 9 and 11→2: every former package 5 point inherits the "needs 2". 4→3 and 6→2 are inferred from the order. 10→9, 12→6, 13→6 and 14→6 come from the 2026-11-27 split. These are own proposals; undo one by editing `needs`. Package numbers stay stable (the runner state and the report names use them), so the new parts take numbers 8 to 14 and the `order` column sets the sequence. `model` is the owner's choice per session (`/model`).
+Needs 14→4 comes from the 2026-11-27 re-measure rule (the saving is re-measured after the filter changes). Needs 5→2 and 7→3 are from the plan, and so are 8, 9 and 11→2: every former package 5 point inherits the "needs 2". 4→3 and 6→2 are inferred from the order. 10→9, 12→6, 13→6 and 14→6 come from the 2026-11-27 split. These are own proposals; undo one by editing `needs`. Package numbers stay stable (the runner state and the report names use them), so the new parts take numbers 8 to 14 and the `order` column sets the sequence. `model` is the owner's choice per session (`/model`).
 
 ## How to run a package
 
@@ -140,7 +146,7 @@ What the session does:
 2. **Data.** It reads `/srv/holojob/data` directly. The worktree's own `data/` holds only tracked files. It writes nothing under `data/`.
 3. **Work and tests.** It implements only package N and runs the targeted tests while it works, then the full tier.
 4. **Permanent docs.** In the package commit, it describes the feature in the repo's own docs: DECISIONS.md, ROADMAP.md and the feature md (for example the area's plan or spec under `docs/redesign/`).
-5. **Report (temporary, never committed).** It writes `/srv/holojob/.claude/package-runs/reports/NN-slug.md` from `scripts/package-report-template.md`. In a headless run it writes to the path in `HOLOJOB_PACKAGE_REPORT` instead, a git-ignored file in the worktree that the runner moves there. The first line is `Status: done | blocked | needs-review`. Three people review it (the owner and two reviewers), so it is detailed:
+5. **Report (temporary, never committed).** It writes `/srv/holojob/.claude/package-runs/reports/NN-slug.md` from `scripts/package-report-template.md`. In a headless run it writes to the path in `HOLOJOB_PACKAGE_REPORT` instead, a git-ignored file in the worktree that the runner moves there. The first line is `Status: done | blocked | needs-review`: `done` when its own work is complete (the full tier is the runner's job, not a condition), `blocked` or `needs-review` only with the reason stated in "Blocked or needs owner" (a report with None there does not stop the chain). Three people review it (the owner and two reviewers), so it is detailed:
    - for each change: what and why, with its source (benchmark file, owner decision or own proposal), the files and functions changed, and the behaviour before and after;
    - defaults taken, with how to undo each;
    - deviations from the benchmark;
@@ -173,14 +179,20 @@ scripts/run-packages --mark-tip 3  # package 3 (in progress) must add a commit a
 
 **Mark.** When runner or plan commits land on `list-cleanup` while a package is in progress, `--mark-tip N` records the branch head as package N's `after` mark in the state (the base stays). Package N is then done, in the run, in `--regate` and in the done check, only with at least one commit after the mark, so the runner's own commits never count as the package's work; the resume prompt says so. It refuses when N is not the package in progress or the head does not descend from N's base. (2026-11-27: the runner fixes landed during package 3.)
 
+**Live progress.** The session runs with `--output-format stream-json --verbose` (Claude Code docs, "Run Claude Code programmatically", Stream responses: the examples all use both flags; `--include-partial-messages` is not used). Per tool call the runner prints one line and appends it to `.claude/package-runs/progress.log` (mode 600): time, `package N (position of total) slug`, elapsed time, the session's turn count and the last tool or file, for example `01:52:07  package 9 (6 of 14) scoring-pass-speed  +12m03s  turn 41  Edit python/job_scoring/location_text.py`. Start and end lines (session start, ended with N turns, full tier running, paused or done) go to the same file. The event shapes (`assistant` blocks with `tool_use`, `rate_limit_event`, `result`) are not in the CLI docs, so they were probed live on Claude Code 2.1.331 on 2026-11-27 and are covered by tests. The raw stream of each session is kept in `NN-<time>.stream.jsonl`, stderr in `NN-<time>.stderr`, and the final `result` event, the object `--output-format json` printed before, stays in `NN-<time>.json`.
+
+```fish
+tail -f /srv/holojob/.claude/package-runs/progress.log
+```
+
 **Refusals.** It refuses to start when:
 - `/srv/holojob` has a dirty tree;
 - another package is in progress on the branch;
 - for a new package: the branch has commits since the last recorded tip (they belong to no package), or the worktree has uncommitted changes;
-- the package itself is `blocked` or `needs-review` (the owner decides first);
+- the package itself is `blocked` or `needs-review` with a stated reason (the owner decides first);
 - a needed package is not done.
 
-**Resume.** If the state names the package as in progress and it is unfinished (no report, a report without `Status: done|blocked|needs-review`, or a red gate), the runner resumes it. That covers a stopped session, a missing commit or a red gate:
+**Resume.** If the state names the package as in progress and it is unfinished (no report, a report without a valid status, a paused usage limit, or a red gate), the runner resumes it. That covers a stopped session, a missing commit or a red gate:
 - it reuses the worktree, with the uncommitted changes kept, never discarded or reset;
 - it moves the previous report back into the worktree, so the session continues it;
 - the prompt tells the session it is a resumed run;
@@ -190,12 +202,13 @@ scripts/run-packages --mark-tip 3  # package 3 (in progress) must add a commit a
 1. **Prepares.** It attaches the worktree and, for a new package, records it as in progress with the last recorded tip as its base. It installs the runner's own copy of `scripts/node-sandbox` at `.claude/package-runs/bin/node-sandbox`. It also writes the application-id export to a temp file (ids only, mode 600, removed after the session) for the must-keep set.
 2. **Runs the session** in that worktree. The prompt is `do package N from docs/redesign/PACKAGES_PLAN.md`, followed by the headless rules below (and the resume note when resuming). The session commits on `list-cleanup`, never creates or switches branches, and reads `/srv/holojob/data` directly.
 3. **Moves the report** from the worktree's git-ignored `logs/package-report-NN-slug.md` to `.claude/package-runs/reports/NN-slug.md`. Claude Code refuses headless writes under `.claude/` as a "sensitive file", even with `--add-dir` and an allow rule (checked 2026-11-26). The staging file is seeded from the template, whose first line `Status: in-progress` never counts as done.
-4. **Decides from files and git, never from the exit code.** The package is done only when all of these hold:
-   - `.claude/package-runs/reports/NN-slug.md` exists and its first line is `Status: done`;
+4. **Decides from files and git, never from the exit code or the session's word** (owner decision 2026-11-27: done is the runner's decision). The package is done only when all of these hold:
+   - `.claude/package-runs/reports/NN-slug.md` exists with a valid first line. `Status: done` counts. `blocked` and `needs-review` count as done too when "Blocked or needs owner" says None (or n/a, nothing); with a stated reason, or no such section, they stop the chain for the owner. An untouched template (`Status: in-progress`) or a missing Status line is not done;
    - there is at least one commit on `list-cleanup` since the previous package's recorded tip;
    - the worktree is clean;
    - `sh scripts/test-tier.sh full` passed on the tip; the runner then records the tip in the state (done stays done while that tip is on the branch, after later packages too).
-5. **Stops** at the first package that is not done, blocked or needs-review. Packages already done are skipped, after the same four checks. A report left by an abandoned run is renamed `.old-<time>` and never trusted.
+5. **Pauses on a usage limit.** When the session's last event is the account's limit ("You've hit your 5-hour limit · resets 12:50am (Europe/Belgrade)", `is_error` with `api_error: usage_limit_reached`) and the package is not otherwise done, the run prints `paused: usage limit, resets 00:50 (Europe/Belgrade)` and exits with code 75. This is not a failure and not a stop: the package stays in progress and the same command resumes it. The runner never waits for the reset and never changes a limit (standing rule 1).
+6. **Stops** at the first package that is not done, blocked or needs-review. Packages already done are skipped, after the same four checks. A report left by an abandoned run is renamed `.old-<time>` and never trusted.
 
 **In headless sessions:**
 - **No questions, ever.** The session never asks the owner a question and never ends with one. Any blocking case or open decision goes into the report as `Status: blocked`; the session commits the work so far and ends. The prompt says so.

@@ -22,11 +22,22 @@ Per package the runner:
   2. starts `claude -p "do package N from docs/redesign/PACKAGES_PLAN.md"` there with the owner's normal login, the
      model from the plan table, permission mode acceptEdits (edits in the worktree only), a small Bash allowlist and
      deny rules; in -p a call that would need approval is denied, never waited for (Claude Code docs, permission-modes);
-  3. decides from files and git, never from the exit code: the package is done only when the report
-     /srv/holojob/.claude/package-runs/reports/NN-slug.md (git-ignored, never committed) starts with `Status: done`,
-     the branch has at least one commit since the previous package's recorded tip (and since its `after` mark, when
-     --mark-tip set one), the worktree is clean, and the full tier (`sh scripts/test-tier.sh full`) passed on the tip.
-     The tip is then recorded in the state.
+  3. decides from files and git, never from the session's word or the exit code (owner decision 2026-11-27): the package
+     is done when its report /srv/holojob/.claude/package-runs/reports/NN-slug.md (git-ignored, never committed) exists
+     with a valid Status line, the branch has at least one commit since the previous package's recorded tip (and since
+     its `after` mark, when --mark-tip set one), the worktree is clean, and the full tier
+     (`sh scripts/test-tier.sh full`) passed on the tip, which is the runner's job. The session writes `Status: done`
+     when its own work is complete; `blocked` or `needs-review` stop the chain only with a reason stated under "Blocked
+     or needs owner" (a report with None there does not stop it). The tip is then recorded in the state.
+  4. a usage-limit stop ("You've hit your 5-hour limit · resets 12:50am") is not a failure: the run ends with
+     "paused: usage limit, resets 00:50" (exit code 75), the package stays in progress, and the same command resumes it.
+     The runner never waits for the reset.
+
+Live progress: the session runs with `--output-format stream-json --verbose` (Claude Code docs, headless "Stream
+responses"; the event shapes below were probed live on 2.1.331 on 2026-11-27). Per tool call one line (package n of
+total, elapsed time, session turn count, last tool or file) goes to the terminal and to RUNS/progress.log (mode 600),
+which can be followed with `tail -f`. The raw stream is kept in RUNS/NN-stamp.stream.jsonl, and the final `result`
+event, the same object `--output-format json` printed, stays in RUNS/NN-stamp.json.
 
 Benchmarks: /home/ranikola/holojob-eval/benchmarks is an --add-dir with Edit and Write denied there. Claude Code 2.1.331
 has no Grep or Glob tool, so grep, ls and cat run in Bash, auto-allowed only inside working directories. Under
@@ -50,6 +61,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -60,6 +72,8 @@ WORKTREE = REPO / ".claude/worktrees" / BRANCH
 RUNS = REPO / ".claude/package-runs"
 REPORTS = RUNS / "reports"
 STATE = RUNS / "state.json"
+PROGRESS = RUNS / "progress.log"
+PAUSED_EXIT = 75  # EX_TEMPFAIL: not a failure, run the same command again after the reset
 TEMPLATE = "scripts/package-report-template.md"
 NODE_IMAGE = "docker.io/library/node:20-bookworm"
 MAX_TURNS = 400
@@ -201,10 +215,31 @@ def report_status(text: str) -> str:
     return m.group(1) if m else ""
 
 
+def blocker_is_none(text: str) -> bool:
+    """True when the report's "Blocked or needs owner" section exists and says None (or n/a, nothing). A missing or
+    empty section is not None: a blocked report without a stated reason still stops, so the owner looks."""
+    m = re.search(r"^##[ \t]*Blocked or needs owner[ \t]*$(.*?)(?=^##[ \t]|\Z)", text, re.S | re.M | re.I)
+    if not m:
+        return False
+    body = re.sub(r"<!--.*?-->", "", m.group(1), flags=re.S)
+    flat = re.sub(r"[\s*_`>-]+", " ", body).strip(" .").lower()
+    return flat in ("none", "n/a", "nothing", "no")
+
+
+def effective_status(text: str) -> str:
+    """The status the runner acts on: done | blocked | needs-review | '' (no valid Status line). A `blocked` or
+    `needs-review` report whose "Blocked or needs owner" section says None is done: the session's own work is
+    complete, and the runner's checks (commit, clean tree, full tier) decide. Owner decision 2026-11-27."""
+    status = report_status(text)
+    if status in ("blocked", "needs-review") and blocker_is_none(text):
+        return "done"
+    return status
+
+
 def package_state(row: Row, repo: Path = REPO, reports: Path = REPORTS, worktree: Path = WORKTREE,
                   st: dict | None = None) -> tuple[str, str]:
-    """(state, detail): done | blocked | needs-review | unfinished | absent. Done needs all four: the report file says
-    `Status: done`; a full-tier pass recorded for a tip that is on the branch; at least one commit from the previous
+    """(state, detail): done | blocked | needs-review | unfinished | absent. Done needs all four: the report file has a
+    valid Status line that is not a stated blocker (see effective_status); a full-tier pass recorded for a tip that is on the branch; at least one commit from the previous
     package's recorded tip to that tip; a clean worktree while that tip is the branch head."""
     st = st if st is not None else load_state()
     entry = st["packages"].get(str(row.n))
@@ -212,7 +247,7 @@ def package_state(row: Row, repo: Path = REPO, reports: Path = REPORTS, worktree
     report = reports / row.report_name
     if not report.is_file():
         return ("unfinished" if entry or current else "absent"), f"no report {report}"
-    status = report_status(report.read_text(encoding="utf-8", errors="replace"))
+    status = effective_status(report.read_text(encoding="utf-8", errors="replace"))
     if status != "done":
         return (status or "unfinished"), f"report says {status or 'no valid Status line'}"
     if not entry:
@@ -254,6 +289,9 @@ def run_all(rows: list[Row], state, run_one) -> int:
             print(f"run-packages: {row.n} {row.slug}: done ({detail}), skipped")
             continue
         result = run_one(row)
+        if result.startswith("paused"):
+            print(f"run-packages: {result} (package {row.n} {row.slug} stays in progress; the same command resumes it)")
+            return PAUSED_EXIT
         if result != "done":
             print(f"run-packages: stopped at package {row.n} {row.slug}: {result}")
             return 1
@@ -324,7 +362,9 @@ def prompt_for(row: Row, resume: bool, ids_file: Path | str = "", after: str = "
         f"  `{HELPER} vitest tests/js/FILE.test.js ...`, `{HELPER} lint [FILE ...]`, `{HELPER} node SCRIPT.js [ARG ...]`",
         "  (no network, this worktree read-write, /srv/holojob/data read-only). Python: "
         f"`{VENV_PY} ...` (pytest: `{VENV_PY} -m pytest tests/python/... -q`).",
-        "- The runner runs the full tier after you finish.",
+        "- The runner runs the full tier after you finish: it is not your condition. Write `Status: done` as soon as your own",
+        "  work is complete and committed. `needs-review` or `blocked` only with a stated reason under \"Blocked or needs",
+        "  owner\"; a report with None there does not stop the chain, a stated reason does.",
     ]
     if resume:
         lines += ["- RESUMED RUN: this worktree holds the previous session's uncommitted work and its report. Continue",
@@ -342,7 +382,7 @@ def session_argv(row: Row, prompt: str, extra_allowed: tuple[str, ...] = (), max
     """The one `claude -p` command line for a package session (the live permission probe uses it too)."""
     return ["claude", "-p", prompt, "--model", model or row.model, "--permission-mode", "acceptEdits",
             "--add-dir", str(BENCHMARKS), "--allowedTools", *ALLOWED, *extra_allowed, "--disallowedTools", *DISALLOWED, "--max-turns", str(max_turns),
-            "--output-format", "json"]
+            "--output-format", "stream-json", "--verbose"]
 
 
 def install_helper(source: Path = HELPER_SOURCE, dest: Path = HELPER) -> Path:
@@ -440,59 +480,217 @@ def prepare_report(row: Row, resume: bool, reports: Path = REPORTS, worktree: Pa
     return staging
 
 
+def short(text, n: int = 70) -> str:
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def describe_tool(block: dict, worktree: Path = WORKTREE) -> str:
+    """`Edit python/x.py`, `Bash git status`: the tool and what it works on, for one progress line."""
+    name, args = block.get("name") or "tool", block.get("input") or {}
+    for key in ("file_path", "path", "notebook_path"):
+        if isinstance(args.get(key), str) and args[key]:
+            return f"{name} {short(args[key].removeprefix(str(worktree) + '/'))}"
+    for key in ("command", "pattern", "description", "url", "prompt"):
+        if isinstance(args.get(key), str) and args[key].strip():
+            return f"{name} {short(args[key])}"
+    return name
+
+
+def clock_time(hour: int, minute: int, meridiem: str | None) -> str:
+    if meridiem:
+        hour = hour % 12 + (12 if meridiem.lower() == "pm" else 0)
+    return f"{hour:02d}:{minute:02d}"
+
+
+def usage_limit_reset(result: dict | None, event_reset: int | None = None) -> str | None:
+    """None when the session did not stop on the account's usage limit; else when it resets, as `HH:MM` (with the
+    zone Claude Code names, when it does). Read from the result event (seen in the log of package 3, 2026-11-27):
+    is_error, api_error `usage_limit_reached`, result "You've hit your 5-hour limit · resets 12:50am (Europe/Belgrade)".
+    A plain 429 without that code is a transient rate limit, not a pause. `event_reset` is the epoch `resetsAt` of a
+    rejected rate_limit_event, the fallback when the text has no parsable time."""
+    if not result or not result.get("is_error"):
+        return None
+    text = str(result.get("result") or "")
+    if result.get("api_error") != "usage_limit_reached" and not re.search(r"hit your .{0,40}limit", text, re.I):
+        return None
+    m = re.search(r"resets\s+(\d{1,2})(?::(\d{2}))?\s*([ap]m)?(?:\s*\(([^)]+)\))?", text, re.I)
+    if m:
+        out = clock_time(int(m.group(1)), int(m.group(2) or 0), m.group(3))
+        return f"{out} ({m.group(4)})" if m.group(4) else out
+    if event_reset:
+        return time.strftime("%H:%M", time.localtime(event_reset))
+    tail = re.search(r"resets\s+(.{1,40})", text, re.I)
+    return short(tail.group(1)) if tail else "at an unknown time"
+
+
+class Progress:
+    """Turns the stream-json events of one session into one line per tool call, on the terminal and in the progress
+    file (`tail -f`). Events (probed live 2026-11-27, Claude Code 2.1.331): `system`/`init`; `assistant` with
+    message.content blocks (`tool_use` has name and input; the blocks of one message share message.id, so a turn is a
+    distinct id); `user` (tool results); `rate_limit_event` (rate_limit_info.status, resetsAt); `result`."""
+
+    def __init__(self, row: Row, position: int, total: int, path: Path = PROGRESS, out=None,
+                 worktree: Path = WORKTREE, now=time.monotonic):
+        self.label = f"package {row.n} ({position} of {total}) {row.slug}"
+        self.row, self.path, self.worktree, self.now = row, path, worktree, now
+        self.out = out or (lambda line: print(line, flush=True))
+        self.start = now()
+        self.turn_ids: set[str] = set()
+        self.result: dict | None = None
+        self.limit_event: int | None = None
+        self.last = "starting"
+
+    def elapsed(self) -> str:
+        s = int(self.now() - self.start)
+        return f"{s // 3600}h{s % 3600 // 60:02d}m{s % 60:02d}s" if s >= 3600 else f"{s // 60}m{s % 60:02d}s"
+
+    def write(self, text: str) -> None:
+        line = f"{time.strftime('%H:%M:%S')}  {self.label}  +{self.elapsed()}  {text}"
+        self.out(line)
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as fh:
+            os.fchmod(fh.fileno(), 0o600)
+            fh.write(line + "\n")
+
+    def step(self, text: str) -> None:
+        self.last = text
+        self.write(f"turn {len(self.turn_ids)}  {text}")
+
+    def feed(self, raw: str) -> None:
+        try:
+            ev = json.loads(raw)
+        except ValueError:
+            return
+        if not isinstance(ev, dict):
+            return
+        kind = ev.get("type")
+        if kind == "system" and ev.get("subtype") == "init":
+            self.write(f"session started, model {ev.get('model', '?')}")
+        elif kind == "assistant":
+            msg = ev.get("message") or {}
+            sub = ev.get("parent_tool_use_id") is not None
+            if not sub and msg.get("id"):
+                self.turn_ids.add(msg["id"])
+            for block in msg.get("content") or []:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    self.step(("subagent " if sub else "") + describe_tool(block, self.worktree))
+        elif kind == "rate_limit_event":
+            info = ev.get("rate_limit_info") or {}
+            if info.get("status") == "rejected":
+                self.limit_event = info.get("resetsAt")
+                self.write("usage limit reached (rate_limit_event rejected)")
+        elif kind == "result":
+            self.result = ev
+            turns = ev.get("num_turns", len(self.turn_ids))
+            self.write(f"session ended: {ev.get('subtype', '?')}, {turns} turns, last: {self.last}")
+
+
+def run_session(argv: list[str], cwd: Path, env: dict, stream: Path, errlog: Path, progress: Progress) -> int:
+    """Run the session, tee the raw stream into `stream` (mode 600) and feed it to `progress` line by line. Stderr goes
+    to `errlog`. Returns the exit code; the verdict never comes from it."""
+    for path in (stream, errlog):
+        os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600))
+        os.chmod(path, 0o600)
+    with open(stream, "w", encoding="utf-8") as raw, open(errlog, "w", encoding="utf-8") as err:
+        proc = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=err, env=env,
+                                text=True, bufsize=1)
+        try:
+            for line in proc.stdout:
+                raw.write(line)
+                raw.flush()
+                progress.feed(line)
+            return proc.wait()
+        finally:
+            if proc.poll() is None:  # Ctrl-C or an error in the reader: the session must not outlive the runner
+                proc.terminate()
+                proc.wait()
+
+
+def write_result_log(log: Path, progress: Progress, returncode: int) -> None:
+    """The final result log, as before: the `result` event (the object `--output-format json` printed)."""
+    body = progress.result or {"type": "result", "is_error": True, "subtype": "no_result_event",
+                               "result": f"the session ended without a result event (exit code {returncode})"}
+    fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(body, fh)
+        fh.write("\n")
+
+
+def verdict_before_gate(base: str, after: str, tip: str, final: Path, log: Path, repo: Path = REPO,
+                        worktree: Path = WORKTREE) -> tuple[str, str]:
+    """('ok'|'blocked'|'fail', text): the checks that precede the full tier. The report needs a valid Status line;
+    blocked and needs-review count only with a stated reason (effective_status)."""
+    missing = missing_commit(base, after, tip, repo)
+    if missing:
+        return "fail", f"{missing} (session log {log})"
+    if git("status", "--porcelain", repo=worktree):
+        return "fail", f"uncommitted changes left in {worktree} (session log {log})"
+    if not final.is_file():
+        return "fail", f"no report written (session log {log})"
+    status = effective_status(final.read_text(encoding="utf-8", errors="replace"))
+    if status in ("blocked", "needs-review"):
+        return "blocked", f"{status}: see {final}"
+    if status != "done":
+        return "fail", f"not done: report {final} has no valid Status line (session log {log})"
+    return "ok", ""
+
+
 def run_one(row: Row, all_rows: list[Row], base_ref: str) -> str:
     st = load_state()
     mode = preflight(all_rows, row, st)
     ensure_worktree(base_ref)
     after = ""
+    position = next((i for i, r in enumerate(all_rows, 1) if r.n == row.n), row.order)
+    progress = Progress(row, position, len(all_rows))
     if mode == "resume":
         base_sha, after = st["current"]["base"], st["current"].get("after", "")
-        print(f"run-packages: package {row.n} {row.slug}: resuming on {BRANCH} (uncommitted work kept), "
-              f"model {row.model}")
+        progress.write(f"resuming on {BRANCH} (uncommitted work kept), model {row.model}")
     else:
         base_sha = st["last"] or git("rev-parse", "HEAD", repo=WORKTREE)
         st["current"] = {"n": row.n, "base": base_sha}
         save_state(st)
-        print(f"run-packages: package {row.n} {row.slug} on {BRANCH} from {base_sha[:12]}, model {row.model}")
+        progress.write(f"starting on {BRANCH} from {base_sha[:12]}, model {row.model}")
     staging = prepare_report(row, mode == "resume")
     install_helper()
     RUNS.mkdir(mode=0o700, parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     log = RUNS / f"{row.n:02d}-{stamp}.json"
-    with tempfile.TemporaryDirectory(prefix="holojob-app-ids-") as tmp, open(log, "w") as fh:
+    with tempfile.TemporaryDirectory(prefix="holojob-app-ids-") as tmp:
         os.chmod(tmp, 0o700)
-        os.chmod(log, 0o600)
         ids = export_application_ids(tmp)
         # The ids file is outside the working directory: allow reading exactly that file, nothing else in /tmp.
         argv = session_argv(row, prompt_for(row, mode == "resume", ids, after), extra_allowed=(f"Read(/{ids})",))
         env = {**os.environ, "HOLOJOB_APPLICATION_JOB_IDS": str(ids), "HOLOJOB_PACKAGE_REPORT": str(staging)}
-        subprocess.run(argv, cwd=WORKTREE, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT, env=env)
+        code = run_session(argv, WORKTREE, env, RUNS / f"{row.n:02d}-{stamp}.stream.jsonl",
+                           RUNS / f"{row.n:02d}-{stamp}.stderr", progress)
+    write_result_log(log, progress, code)
     # Move the report out of the worktree to its git-ignored home; the verdict never comes from the exit code.
     final = REPORTS / row.report_name
     if staging.is_file():
         staging.replace(final)
         final.chmod(0o600)
+    reset = usage_limit_reset(progress.result, progress.limit_event)
     tip = git("rev-parse", "HEAD", repo=WORKTREE)
-    missing = missing_commit(base_sha, after, tip)
-    if missing:
-        return f"{missing} (session log {log})"
-    if git("status", "--porcelain", repo=WORKTREE):
-        return f"uncommitted changes left in {WORKTREE} (session log {log})"
-    if not final.is_file():
-        return f"no report written (session log {log})"
-    status = report_status(final.read_text(encoding="utf-8", errors="replace"))
-    if status in ("blocked", "needs-review"):
-        return f"{status}: see {final}"
-    if status != "done":
-        return f"not done: report {final} has no Status: done line (session log {log})"
+    kind, text = verdict_before_gate(base_sha, after, tip, final, log)
+    if reset is not None and kind == "fail":
+        progress.write(f"paused: usage limit, resets {reset}")
+        return f"paused: usage limit, resets {reset}"
+    if kind != "ok":
+        progress.write(text)
+        return text
     gate_log = RUNS / f"{row.n:02d}-{stamp}-gate.log"
+    progress.write(f"full tier running on {tip[:12]} (log {gate_log})")
     if not gate(tip, gate_log):
-        return f"not done: full tier red on {tip[:12]} (log {gate_log}; after a fix: scripts/run-packages --regate {row.n})"
+        text = f"not done: full tier red on {tip[:12]} (log {gate_log}; after a fix: scripts/run-packages --regate {row.n})"
+        progress.write(text)
+        return text
     st = load_state()
     record_pass(st, row, tip, base_sha, after)
     save_state(st)
     state_now, detail = package_state(row)
-    print(f"run-packages: package {row.n} {row.slug}: {state_now} ({detail})")
+    progress.write(f"{state_now} ({detail})")
     return state_now
 
 

@@ -45,7 +45,7 @@ The job list still lives in the browser (`localStorage`) and the screens save th
 
 ### 3b. Packages 1-7 (archive, measurements, filters, cost, descriptions, reposts)
 
-Package 2 (free measurements) is done: results in [redesign/FREE_MEASUREMENTS.md](redesign/FREE_MEASUREMENTS.md) (scoring-pass cost, prompt prefixes, LinkedIn detail share, negative-filter audit); it changes no behaviour and feeds packages 3, 5 and 6.
+Package 2 (free measurements) is done: results in [redesign/FREE_MEASUREMENTS.md](redesign/FREE_MEASUREMENTS.md) (scoring-pass cost, prompt prefixes, LinkedIn detail share, negative-filter audit); it changes no behaviour and feeds packages 3, 9, 10, 11 and 14 (the numbers they use are in the table at the top of that file).
 
 Package 3 (filter foundation and round 1) is built on `list-cleanup`: the title filter vocabulary is in Settings (`roleFilter`); ledger and filtered rows carry `companyKey`; filtered sightings no longer refresh `lastListedAt`; seniority is a label, not a drop; a title miss goes to a free-text check on the ad's text and an empty text never drops the ad; measured on the must-keep set with no ad lost (DECISIONS 2026-11-27). Open: labels are not stored yet (package 4).
 

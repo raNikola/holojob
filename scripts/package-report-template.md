@@ -1,6 +1,8 @@
 Status: in-progress
-<!-- First line, exactly one of: Status: done | Status: blocked | Status: needs-review. "done" only after the full tier
-is green (headless: pytest green; the runner runs the full tier). This report is temporary and never committed:
+<!-- First line, exactly one of: Status: done | Status: blocked | Status: needs-review. Write "done" when your own work
+is complete and committed: the full tier is the runner's job, not a condition of your status (owner decision 2026-11-27).
+"blocked" or "needs-review" only with the reason stated under "Blocked or needs owner"; a report with None there does
+not stop the chain. This report is temporary and never committed:
 final path /srv/holojob/.claude/package-runs/reports/NN-slug.md (git-ignored). It is reviewed by the owner and two
 other reviewers. The permanent description of the feature goes into DECISIONS.md, ROADMAP.md and the feature md, in
 the package commit. Counts, ids and public ad titles only: no private content. -->
@@ -58,7 +60,7 @@ Full tier: command and result, or "run by the runner" in a headless run.
 
 ## Blocked or needs owner
 
-The stop rule that was hit, or the decision needed with its options. Write "None" if there is nothing.
+The stop rule that was hit, or the decision needed with its options. Write "None" if there is nothing: with None, the runner does not stop on a `blocked` or `needs-review` status.
 
 ## Permanent docs updated
 
