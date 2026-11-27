@@ -5,6 +5,8 @@
     scripts/run-packages --through M     pending packages in plan order up to package M
     scripts/run-packages N               package N only
     scripts/run-packages --regate N      run the full tier on the branch tip and record it as package N's pass
+    scripts/run-packages --mark-tip N    package N (in progress) must add a commit after the current branch tip: use it
+                                         after landing runner or plan commits on the branch mid-package
     --base REF                           where the branch starts if it does not exist yet (default main)
 
 One feature branch for the whole list (owner decision 2026-11-26): every package is one or more commits on
@@ -22,8 +24,14 @@ Per package the runner:
      deny rules; in -p a call that would need approval is denied, never waited for (Claude Code docs, permission-modes);
   3. decides from files and git, never from the exit code: the package is done only when the report
      /srv/holojob/.claude/package-runs/reports/NN-slug.md (git-ignored, never committed) starts with `Status: done`,
-     the branch has at least one commit since the previous package's recorded tip, the worktree is clean, and the full
-     tier (`sh scripts/test-tier.sh full`) passed on the tip. The tip is then recorded in the state.
+     the branch has at least one commit since the previous package's recorded tip (and since its `after` mark, when
+     --mark-tip set one), the worktree is clean, and the full tier (`sh scripts/test-tier.sh full`) passed on the tip.
+     The tip is then recorded in the state.
+
+Benchmarks: /home/ranikola/holojob-eval/benchmarks is an --add-dir with Edit and Write denied there. Claude Code 2.1.331
+has no Grep or Glob tool, so grep, ls and cat run in Bash, auto-allowed only inside working directories. Under
+acceptEdits the Edit deny also refuses Bash writes there (touch, mkdir, cp, sed -i, a redirect: live probe 2026-11-27).
+git there still needs approval, so it is denied in -p: the clones are untrusted.
 
 Reports: Claude Code refuses headless writes under .claude/ ("sensitive file", even with --add-dir and an allow rule;
 checked 2026-11-26), so the session writes the report to the git-ignored staging file <worktree>/logs/package-report-
@@ -59,19 +67,23 @@ VENV_PY = REPO / ".venv/bin/python"
 # The trusted copy of scripts/node-sandbox, outside every worktree (headless writes under .claude/ are refused).
 HELPER = RUNS / "bin/node-sandbox"
 HELPER_SOURCE = Path(__file__).resolve().parent / "node-sandbox"
+# The benchmark clones (working-rules.md): read-only for the sessions, outside every working directory.
+BENCHMARKS = Path("/home/ranikola/holojob-eval/benchmarks")
+IDS_FILE = "application-job-ids.txt"
 
-# Bash the headless session may run without approval (everything else is denied in -p).
+# Tools the headless session may use without approval (everything else is denied in -p).
 ALLOWED = (
     "Bash(git status *)", "Bash(git diff *)", "Bash(git log *)", "Bash(git show *)", "Bash(git add *)",
     "Bash(git commit *)", "Bash(git rm *)", "Bash(git mv *)", "Bash(git ls-files *)", "Bash(git grep *)",
     "Bash(git rev-parse *)", "Bash(git branch --show-current)",
     f"Bash({VENV_PY} *)", "Bash(graphify *)", f"Bash({HELPER} *)",
+    f"Read(/{BENCHMARKS}/**)",
 )
 # Headless-only denies (owner decision 2026-11-26: podman only here, interactive sessions keep the node test container).
 DISALLOWED = (
     "Bash(podman *)", "Bash(podman-compose *)", "Bash(git push *)", "Bash(git remote *)", "Bash(systemctl *)",
     "Bash(sh scripts/test-tier.sh *)", "AskUserQuestion", "EnterPlanMode", "ExitPlanMode", "EnterWorktree",
-    "ExitWorktree", "WebFetch", "WebSearch",
+    "ExitWorktree", "WebFetch", "WebSearch", f"Edit(/{BENCHMARKS}/**)", f"Write(/{BENCHMARKS}/**)",
 )
 
 
@@ -148,12 +160,39 @@ def save_state(st: dict, path: Path = STATE) -> None:
     tmp.replace(path)
 
 
-def record_pass(st: dict, row: Row, tip: str, base: str) -> None:
-    """Package N passed the full tier on `tip`; its commits are base..tip. The next package starts from `tip`."""
+def record_pass(st: dict, row: Row, tip: str, base: str, after: str = "") -> None:
+    """Package N passed the full tier on `tip`; its commits are base..tip (its own ones after `after`, when a mark was
+    set). The next package starts from `tip`."""
     st["packages"][str(row.n)] = {"tip": tip, "base": base, "gate": "full tier pass",
                                   "at": dt.datetime.now().isoformat(timespec="seconds")}
+    if after:
+        st["packages"][str(row.n)]["after"] = after
     st["last"] = tip
     st["current"] = None
+
+
+def missing_commit(base: str, after: str, tip: str, repo: Path = REPO) -> str:
+    """Why `tip` holds no commit of the package ('' when it does): none since its base, or none since its mark."""
+    if commits_between(base, tip, repo) == 0:
+        return f"no commit on {BRANCH} since {base[:12]}"
+    if after and (not is_ancestor(after, tip, repo) or commits_between(after, tip, repo) == 0):
+        return f"no commit on {BRANCH} since the mark {after[:12]} (runner or plan commits do not count)"
+    return ""
+
+
+def mark_tip(row: Row, repo: Path = REPO, state_path: Path = STATE) -> str:
+    """Runner or plan commits landed on the branch while package N is in progress: record the branch head as N's
+    `after` mark, so N is done only with a commit of its own after it. The base stays (N's range is unchanged)."""
+    st = load_state(state_path)
+    current = st.get("current") or {}
+    if current.get("n") != row.n:
+        return f"refused: package {row.n} is not the package in progress ({current.get('n', 'none')})"
+    head = branch_head(repo)
+    if not head or not is_ancestor(current["base"], head, repo):
+        return f"refused: the {BRANCH} head does not descend from package {row.n}'s base {current['base'][:12]}"
+    current["after"] = head
+    save_state(st, state_path)
+    return f"package {row.n} needs a commit after {head[:12]} (base {current['base'][:12]} kept)"
 
 
 def report_status(text: str) -> str:
@@ -186,6 +225,8 @@ def package_state(row: Row, repo: Path = REPO, reports: Path = REPORTS, worktree
         return "unfinished", f"recorded tip {tip[:12]} is not on {BRANCH}"
     if commits_between(base, tip, repo) == 0:
         return "unfinished", "no commit since the previous package's tip"
+    if missing_commit(base, entry.get("after", ""), tip, repo):
+        return "unfinished", "no commit since the package's mark"
     if tip == head and worktree.exists() and git("status", "--porcelain", repo=worktree, check=False):
         return "unfinished", f"uncommitted changes in {worktree}"
     return "done", tip[:12]
@@ -253,8 +294,10 @@ def preflight(all_rows: list[Row], row: Row, st: dict, repo: Path = REPO, worktr
     return mode
 
 
-def prompt_for(row: Row, resume: bool) -> str:
-    """The package prompt: the owner's one line, then the headless rules the session cannot ask about."""
+def prompt_for(row: Row, resume: bool, ids_file: Path | str = "", after: str = "",
+               worktree: Path = WORKTREE) -> str:
+    """The package prompt: the owner's one line, then the headless rules the session cannot ask about, with the exact
+    paths it may use (a denied call is wasted: 2026-11-27, package 3 tried printenv, .claude/ and /tmp)."""
     lines = [
         f"do package {row.n} from docs/redesign/PACKAGES_PLAN.md",
         "",
@@ -262,18 +305,44 @@ def prompt_for(row: Row, resume: bool) -> str:
         "- Never ask the owner a question and never end the session with one. Any blocking case or open decision: write it",
         "  in the report, put `Status: blocked` on its first line, commit the work so far, and end the session.",
         f"- Commit on the current branch {BRANCH}, in this worktree. Never create or switch branches.",
-        f"- Write the report to {row.staging()} (seeded from the template, git-ignored). The runner moves it to",
-        f"  {REPORTS / row.report_name}. Never commit the report.",
+        "- Paths you may use (do not look them up: printenv, env and ls of other dirs are denied):",
+        f"  - report: {row.staging(worktree)} (also $HOLOJOB_PACKAGE_REPORT; seeded from the template, git-ignored).",
+        f"    The runner moves it to {REPORTS / row.report_name} after the session. Never commit the report.",
+    ]
+    if ids_file:
+        lines.append(f"  - application job ids (must-keep set, ids only): {ids_file} (also $HOLOJOB_APPLICATION_JOB_IDS).")
+    lines += [
+        f"  - scratch files: {worktree / 'logs'}/ (git-ignored). Writes to /tmp or anywhere outside this worktree are",
+        "    denied (tests use pytest tmp_path). Never write under /srv/holojob/data.",
+        "  - real data: /srv/holojob/data, read-only.",
+        f"  - benchmarks: {BENCHMARKS}/, read-only: the Read tool and plain grep, ls, find and cat in Bash work there;",
+        "    git and every write are denied there.",
+        "  - Everything else under .claude/ is denied, the reports of earlier packages and the runner state included.",
+        "- Bash: the cwd is already this worktree. One command per call: no `cd X;` prefix, no `; echo \"exit=$?\"`, no",
+        "  `&&` chains (a compound command is denied as a whole when any part is not allowed).",
         "- podman is denied. Run Vitest, ESLint and node measurement scripts only through the helper:",
         f"  `{HELPER} vitest tests/js/FILE.test.js ...`, `{HELPER} lint [FILE ...]`, `{HELPER} node SCRIPT.js [ARG ...]`",
         "  (no network, this worktree read-write, /srv/holojob/data read-only). Python: "
         f"`{VENV_PY} ...` (pytest: `{VENV_PY} -m pytest tests/python/... -q`).",
-        "- Read the real data in /srv/holojob/data; write only to temp dirs. The runner runs the full tier after you finish.",
+        "- The runner runs the full tier after you finish.",
     ]
     if resume:
         lines += ["- RESUMED RUN: this worktree holds the previous session's uncommitted work and its report. Continue",
                   "  from there: read `git status`, `git diff` and the report first; do not discard or redo finished work."]
+    if after:
+        lines += [f"- Runner and plan commits landed on {BRANCH} during this package (up to {after[:12]}). The package is",
+                  f"  done only with at least one commit of your own after {after[:12]}. Earlier sessions could not read",
+                  "  the benchmarks: do every benchmark comparison the report lists as skipped, denied or not done now,",
+                  "  update the report with the sources, and commit the resulting changes."]
     return "\n".join(lines)
+
+
+def session_argv(row: Row, prompt: str, extra_allowed: tuple[str, ...] = (), max_turns: int = MAX_TURNS,
+                 model: str | None = None) -> list[str]:
+    """The one `claude -p` command line for a package session (the live permission probe uses it too)."""
+    return ["claude", "-p", prompt, "--model", model or row.model, "--permission-mode", "acceptEdits",
+            "--add-dir", str(BENCHMARKS), "--allowedTools", *ALLOWED, *extra_allowed, "--disallowedTools", *DISALLOWED, "--max-turns", str(max_turns),
+            "--output-format", "json"]
 
 
 def install_helper(source: Path = HELPER_SOURCE, dest: Path = HELPER) -> Path:
@@ -326,24 +395,25 @@ def regate(row: Row, base_ref: str, repo: Path = REPO, worktree: Path = WORKTREE
     if entry and st["last"] and entry["tip"] != st["last"]:
         return f"refused: package {row.n} is not the last recorded package (last tip {st['last'][:12]})"
     if current:
-        base = current["base"]
+        base, after = current["base"], current.get("after", "")
     elif entry:
-        base = entry["base"]
+        base, after = entry["base"], entry.get("after", "")
     else:
-        base = st["last"] or git("merge-base", f"{base_ref}^{{commit}}", BRANCH, repo=repo)
-    if commits_between(base, tip, repo) == 0:
-        return f"refused: no commit since {base[:12]} for package {row.n}"
+        base, after = st["last"] or git("merge-base", f"{base_ref}^{{commit}}", BRANCH, repo=repo), ""
+    missing = missing_commit(base, after, tip, repo)
+    if missing:
+        return f"refused: {missing} for package {row.n}"
     log = logdir / f"{row.n:02d}-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}-regate.log"
     if not gate_fn(tip, log, worktree):
         return f"full tier red on {tip[:12]} (log {log}); nothing recorded"
-    record_pass(st, row, tip, base)
+    record_pass(st, row, tip, base, after)
     save_state(st, state_path)
     return f"full tier passed on {tip[:12]}, recorded for package {row.n} (base {base[:12]}, log {log})"
 
 
 def export_application_ids(tmp: str) -> Path:
     """Application job ids, read-only on the store, ids only (the repo's sanctioned exporter)."""
-    out = Path(tmp) / "application-job-ids.txt"
+    out = Path(tmp) / IDS_FILE
     subprocess.run(["podman", "run", "--rm", "--security-opt", "label=disable", "-v", f"{REPO}:/work:ro",
                     "-v", f"{tmp}:/out", "-w", "/work", NODE_IMAGE, "node", "scripts/export-application-job-ids.js",
                     f"/out/{out.name}"], check=True, capture_output=True)
@@ -374,8 +444,9 @@ def run_one(row: Row, all_rows: list[Row], base_ref: str) -> str:
     st = load_state()
     mode = preflight(all_rows, row, st)
     ensure_worktree(base_ref)
+    after = ""
     if mode == "resume":
-        base_sha = st["current"]["base"]
+        base_sha, after = st["current"]["base"], st["current"].get("after", "")
         print(f"run-packages: package {row.n} {row.slug}: resuming on {BRANCH} (uncommitted work kept), "
               f"model {row.model}")
     else:
@@ -388,14 +459,13 @@ def run_one(row: Row, all_rows: list[Row], base_ref: str) -> str:
     RUNS.mkdir(mode=0o700, parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     log = RUNS / f"{row.n:02d}-{stamp}.json"
-    argv = ["claude", "-p", prompt_for(row, mode == "resume"), "--model", row.model, "--permission-mode", "acceptEdits",
-            "--allowedTools", *ALLOWED, "--disallowedTools", *DISALLOWED, "--max-turns", str(MAX_TURNS),
-            "--output-format", "json"]
     with tempfile.TemporaryDirectory(prefix="holojob-app-ids-") as tmp, open(log, "w") as fh:
         os.chmod(tmp, 0o700)
         os.chmod(log, 0o600)
-        env = {**os.environ, "HOLOJOB_APPLICATION_JOB_IDS": str(export_application_ids(tmp)),
-               "HOLOJOB_PACKAGE_REPORT": str(staging)}
+        ids = export_application_ids(tmp)
+        # The ids file is outside the working directory: allow reading exactly that file, nothing else in /tmp.
+        argv = session_argv(row, prompt_for(row, mode == "resume", ids, after), extra_allowed=(f"Read(/{ids})",))
+        env = {**os.environ, "HOLOJOB_APPLICATION_JOB_IDS": str(ids), "HOLOJOB_PACKAGE_REPORT": str(staging)}
         subprocess.run(argv, cwd=WORKTREE, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT, env=env)
     # Move the report out of the worktree to its git-ignored home; the verdict never comes from the exit code.
     final = REPORTS / row.report_name
@@ -403,8 +473,9 @@ def run_one(row: Row, all_rows: list[Row], base_ref: str) -> str:
         staging.replace(final)
         final.chmod(0o600)
     tip = git("rev-parse", "HEAD", repo=WORKTREE)
-    if commits_between(base_sha, tip) == 0:
-        return f"no commit on {BRANCH} since {base_sha[:12]} (session log {log})"
+    missing = missing_commit(base_sha, after, tip)
+    if missing:
+        return f"{missing} (session log {log})"
     if git("status", "--porcelain", repo=WORKTREE):
         return f"uncommitted changes left in {WORKTREE} (session log {log})"
     if not final.is_file():
@@ -418,7 +489,7 @@ def run_one(row: Row, all_rows: list[Row], base_ref: str) -> str:
     if not gate(tip, gate_log):
         return f"not done: full tier red on {tip[:12]} (log {gate_log}; after a fix: scripts/run-packages --regate {row.n})"
     st = load_state()
-    record_pass(st, row, tip, base_sha)
+    record_pass(st, row, tip, base_sha, after)
     save_state(st)
     state_now, detail = package_state(row)
     print(f"run-packages: package {row.n} {row.slug}: {state_now} ({detail})")
@@ -440,10 +511,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("package", nargs="?", type=int)
     ap.add_argument("--through", type=int)
     ap.add_argument("--regate", type=int, metavar="N")
+    ap.add_argument("--mark-tip", type=int, metavar="N")
     ap.add_argument("--base", default="main")
     a = ap.parse_args(argv)
-    if sum(x is not None for x in (a.package, a.through, a.regate)) > 1:
-        raise SystemExit("run-packages: give one of N, --through M, --regate N")
+    if sum(x is not None for x in (a.package, a.through, a.regate, a.mark_tip)) > 1:
+        raise SystemExit("run-packages: give one of N, --through M, --regate N, --mark-tip N")
     ref = BRANCH if branch_head() else a.base
     text = git("show", f"{ref}:{PLAN}", check=False)
     if not text:
@@ -453,6 +525,10 @@ def main(argv: list[str] | None = None) -> int:
         result = regate(select(rows, a.regate, None)[0], a.base)
         print(f"run-packages: --regate {a.regate}: {result}")
         return 0 if result.startswith("full tier passed") else 1
+    if a.mark_tip is not None:
+        result = mark_tip(select(rows, a.mark_tip, None)[0])
+        print(f"run-packages: --mark-tip {a.mark_tip}: {result}")
+        return 1 if result.startswith("refused") else 0
     return run_all(select(rows, a.package, a.through), package_state, lambda r: run_one(r, rows, a.base))
 
 

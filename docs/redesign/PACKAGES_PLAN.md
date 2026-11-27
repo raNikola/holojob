@@ -101,8 +101,8 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
 |---|---|---|---|---|---|---|
 | 1 | archive-history | claude-sonnet-5-5 | - | 1 | done | list-cleanup |
 | 2 | free-measurements | claude-sonnet-5-5 | - | 2 | done | list-cleanup |
-| 3 | filter-foundation | claude-opus-5-5 | - | 3 | done | list-cleanup |
-| 5 | cost-scoring-time | claude-opus-5-5 | 2 | 4 | pending | - |
+| 3 | filter-foundation | claude-sonnet-5-5 | - | 3 | done | list-cleanup |
+| 5 | cost-scoring-time | claude-sonnet-5-5 | 2 | 4 | pending | - |
 | 4 | text-rules-round2 | claude-sonnet-5-5 | 3 | 5 | pending | - |
 | 6 | missing-descriptions | claude-sonnet-5-5 | 2 | 6 | pending | - |
 | 7 | reposts | claude-sonnet-5-5 | 3 | 7 | pending | - |
@@ -146,6 +146,7 @@ scripts/run-packages               # all pending, in table order (any cwd: /srv/
 scripts/run-packages --through 3   # pending packages in table order up to package 3
 scripts/run-packages 2             # package 2 only
 scripts/run-packages --regate 1    # full tier on the branch tip, recorded as package 1's pass
+scripts/run-packages --mark-tip 3  # package 3 (in progress) must add a commit after the current branch tip
 ```
 
 **Where the runner lives.** Run it from a checkout outside the run worktree (it refuses a copy inside it: sessions can edit every file there, and it installs the node helper from its own directory), for example a detached checkout `.claude/worktrees/package-runner-bin` of the reviewed runner commit.
@@ -153,6 +154,8 @@ scripts/run-packages --regate 1    # full tier on the branch tip, recorded as pa
 **One branch, one worktree.** All packages are commits on `list-cleanup`, in the one worktree `.claude/worktrees/list-cleanup` (re-attached if removed; the branch is created from `--base`, default `main`, only if it does not exist). The plan is read from `list-cleanup`. The runner state `.claude/package-runs/state.json` (git-ignored, mode 600) records per package the tip that passed the full tier, its base (the previous package's recorded tip) and the time, plus the last recorded tip and the package in progress with its base.
 
 **Regate.** `--regate N` runs `sh scripts/test-tier.sh full` (the branch's copy) on the branch tip and, when it passes, records the tip for package N with the base above; a red tier records nothing (log `.claude/package-runs/NN-<time>-regate.log`). It refuses a dirty worktree, another package in progress, a package N that is recorded but no longer the last one, and a tip with no commit since the base. Use it after fixing a red gate by hand. With nothing recorded yet, the base is where the branch left `--base`.
+
+**Mark.** When runner or plan commits land on `list-cleanup` while a package is in progress, `--mark-tip N` records the branch head as package N's `after` mark in the state (the base stays). Package N is then done, in the run, in `--regate` and in the done check, only with at least one commit after the mark, so the runner's own commits never count as the package's work; the resume prompt says so. It refuses when N is not the package in progress or the head does not descend from N's base. (2026-11-27: the runner fixes landed during package 3.)
 
 **Refusals.** It refuses to start when:
 - `/srv/holojob` has a dirty tree;
@@ -182,7 +185,18 @@ scripts/run-packages --regate 1    # full tier on the branch tip, recorded as pa
 - **No questions, ever.** The session never asks the owner a question and never ends with one. Any blocking case or open decision goes into the report as `Status: blocked`; the session commits the work so far and ends. The prompt says so.
 - **No approvals.** A call that needs approval is denied, never waited for (Claude Code docs: permission modes, headless).
 - **Permission mode** `acceptEdits`: file edits inside the worktree only.
-- **Allowed Bash:** `git status`, `git diff`, `git log`, `git show`, `git add`, `git commit`, `git rm`, `git mv`, `git ls-files`, `git grep`, `git rev-parse`; the venv python; `graphify`; the node helper `/srv/holojob/.claude/package-runs/bin/node-sandbox`. Everything else is denied.
+- **Allowed Bash:** `git status`, `git diff`, `git log`, `git show`, `git add`, `git commit`, `git rm`, `git mv`, `git ls-files`, `git grep`, `git rev-parse`; the venv python; `graphify`; the node helper `/srv/holojob/.claude/package-runs/bin/node-sandbox`. Read-only commands such as `grep`, `ls` and `cat` work inside the working directories (the worktree and the benchmarks). Everything else is denied.
+- **Benchmarks, read-only.** `/home/ranikola/holojob-eval/benchmarks` is an `--add-dir`, with `Edit` and `Write` denied there. Claude Code 2.1.331 has no Grep or Glob tool, so searching is Bash `grep`, which is auto-allowed only in working directories. A live `-p` probe on 2026-11-27 with the runner's own argv:
+  - Read, `grep` and `ls` there work;
+  - Write, Edit, `touch`, `mkdir`, `cp`, `sed -i` and a redirect there are all denied (under `acceptEdits` the Edit deny also covers Bash writes in an added dir);
+  - `git` there needs approval, so it is denied: the clones are untrusted.
+  The files are also read-only on disk.
+- **Paths in the prompt.** The prompt names the exact paths so that a session does not spend calls looking for them (package 3 tried `printenv`, `ls` of the reports directory and earlier reports):
+  - the staging report (also `$HOLOJOB_PACKAGE_REPORT`);
+  - the application-ids file (also `$HOLOJOB_APPLICATION_JOB_IDS`; a Read allow covers exactly that file);
+  - the scratch dir, the worktree's git-ignored `logs/` (`/tmp` is outside the working directories);
+  - the data and the benchmarks.
+  It also says that everything else under `.claude/` is denied, and that a Bash call is one command: a compound `cd X; …` or `…; echo` is denied as a whole.
 - **Denied for these sessions only:** podman, `scripts/test-tier.sh`, `git remote`, `AskUserQuestion`, plan mode, worktree switching, web tools. This is owner decision 2026-11-26: interactive sessions keep the node test container.
 - **Node helper** (`scripts/node-sandbox`; only the runner's installed copy is allowed, so a session cannot widen it by editing the worktree's file). The session runs Vitest, ESLint and node measurement scripts through it:
   - `node-sandbox vitest tests/js/FILE.test.js ... [--reporter=dot|default|verbose]`

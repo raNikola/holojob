@@ -230,6 +230,58 @@ def test_prompt_forbids_questions_and_names_the_helper():
     assert "Bash(podman *)" in rp.DISALLOWED
 
 
+def test_prompt_names_the_exact_paths_and_the_mark(tmp_path):
+    ids = tmp_path / rp.IDS_FILE
+    text = rp.prompt_for(ROW, True, ids, after="a" * 40, worktree=tmp_path / "wt")
+    assert str(ROW.staging(tmp_path / "wt")) in text and str(ids) in text and str(rp.BENCHMARKS) in text
+    assert "a" * 12 in text                               # the session learns it needs a commit after the mark
+    assert "a" * 12 not in rp.prompt_for(ROW, True)
+
+
+def test_session_reads_benchmarks_but_never_edits_them():
+    argv = rp.session_argv(ROW, "p", extra_allowed=("Read(//tmp/x/ids.txt)",))
+    allowed = argv[argv.index("--allowedTools") + 1:argv.index("--disallowedTools")]
+    denied = argv[argv.index("--disallowedTools") + 1:argv.index("--max-turns")]
+    bench = f"/{rp.BENCHMARKS}/**"
+    assert f"Read({bench})" in allowed and "Read(//tmp/x/ids.txt)" in allowed
+    assert f"Edit({bench})" in denied and f"Write({bench})" in denied
+    assert not any(a.startswith(("Edit(", "Write(")) for a in allowed)
+    # The benchmarks are an added dir (Bash grep/ls there), which acceptEdits covers: only the denies keep it read-only.
+    assert argv[argv.index("--add-dir") + 1] == str(rp.BENCHMARKS)
+
+
+def test_mark_needs_a_commit_of_the_package_after_it(env):
+    repo, base, reports, state_path = env
+    _commit(repo, "package1-part1.txt")
+    st = rp.load_state(state_path)
+    st["current"] = {"n": 1, "base": base}
+    rp.save_state(st, state_path)
+    runner_tip = _commit(repo, "runner-fix.txt")          # runner commits land mid-package
+    assert rp.mark_tip(ROW, repo, state_path).startswith("package 1 needs a commit after")
+    assert rp.load_state(state_path)["current"] == {"n": 1, "base": base, "after": runner_tip}
+    assert "mark" in _regate(repo, state_path) and rp.load_state(state_path)["packages"] == {}
+    tip = _commit(repo, "package1-part2.txt")
+    assert _regate(repo, state_path).startswith("full tier passed")
+    entry = rp.load_state(state_path)["packages"]["1"]
+    assert entry["base"] == base and entry["after"] == runner_tip and entry["tip"] == tip
+    _report(reports, "Status: done")
+    st = rp.load_state(state_path)
+    assert _state(repo, reports, st) == "done"
+    st["packages"]["1"]["tip"] = runner_tip               # a pass on the mark itself is never done
+    assert _state(repo, reports, st) == "unfinished"
+
+
+def test_mark_tip_refuses_without_that_package_in_progress(env):
+    repo, base, reports, state_path = env
+    _commit(repo)
+    assert rp.mark_tip(ROW, repo, state_path).startswith("refused")
+    st = rp.load_state(state_path)
+    st["current"] = {"n": 2, "base": base}
+    rp.save_state(st, state_path)
+    assert rp.mark_tip(ROW, repo, state_path).startswith("refused")
+    assert "after" not in rp.load_state(state_path)["current"]
+
+
 def test_installed_helper_is_the_runner_copy(tmp_path):
     src = tmp_path / "src"
     src.write_text("trusted")
