@@ -90,6 +90,8 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
 8. **p90 setting.** `estimatedOutputTokens` = p90 from the ledger, in Settings. Acceptance: the value comes from Settings and its default is the measured p90 (count and value in the report); cost accounting is unchanged.
 9. **Scoring pass speed.** This applies the package 2 finding (FREE_MEASUREMENTS §1): fold each ad once in `location_text._restrictions`, and compute `resolve_places` once per row. Acceptance: the output is identical row for row before and after on the real ledger (a copy in a temp dir), and the pass time is reported before and after.
 10. **scoring-prepare limit.** `scoring-prepare` is limited per the findings of package 2: today a Re-scrape runs up to three `scoring-prepare` passes plus the final `scoring` (FREE_MEASUREMENTS §1). Needs 9, so that the limit is measured on the faster pass (own proposal for the order). Acceptance: the number of passes and the time per Re-scrape are reported before and after, and the final scores are unchanged. Unchanged also means the same ads are selected for the paid steps (reading, engine fill, Fit 3 classify) before and after: the report compares the selected id sets of each paid step on a copy of the real ledger in a temp dir (equal sets, or every difference listed by id and explained), not only the final scores. A selection that differs without an explanation is a stop rule.
+
+    **Closed 2026-11-27 (owner): accept three scoring-prepare passes.** No limit is built. Reason: both real runs spent about 99.5% of the USD budget, so a skip rule would never fire; package 9 already cut the pass time by 39%. The finding that no cap keeps the selection and the scores is in `docs/DECISIONS.md` ("scoring-prepare limit, package 10"). The acceptance above is void.
 11. **Prompt layout, two versions.** The Fit 3 lists go before the title and the ad (FREE_MEASUREMENTS §2), released as two separate versions: the layout, and the validity of the extracted facts. Acceptance: two parts.
     - **Quality:** the Stage A calibration check passes for both versions, and nothing is re-read by force.
     - **Proof that caching works:** the usage record of a Fit 3 call shows cached input tokens above zero from the second call on (`cache_read_input_tokens` or the gate's own cached-token field, whichever the ledger records; the report names the field). This needs a few paid calls, and only the owner runs paid calls: the package makes none. It writes the exact fish commands for the owner (an estimate first, `--confirm`, `--max-usd`, 3 to 5 calls, with the cost cap), the expected numbers (first call: cached tokens 0 and the prefix about 4.2k tokens written; later calls: cached tokens at or near the shared prefix, from FREE_MEASUREMENTS §2), and what a failure looks like (zeros on every call: the prefix is below the provider's minimum, or it differs between calls). The package is `done` with the commands written; the owner's result is recorded in DECISIONS afterwards.
@@ -103,13 +105,15 @@ Blocked means: write the reason in the report, put `Status: blocked` on its firs
 
 7. **Reposts** (needs 3): as above.
 
-**Order:** 1 and 2 first. Then 3, then the cost parts 5, 8, 9, 10 and 11. Then 4, the missing-description parts 6, 12, 13 and 14, and 7. Package 14 comes after 4 because its saving is measured on the final filters.
+15. **Private file modes for the job and cache writers** (own proposal, 2026-11-27; needs nothing). Route every writer of `data/jobs/*.json`, `data/cache/*.json` and the competency-audit scratch files (`python/match_engine/competency_audit.py` and whatever it writes) through the private-mode helper (`atomic_write`: files 600, directories 700; `.claude/rules/private-file-modes.md`). Behaviour otherwise identical: same content, same paths, same atomicity. Acceptance: a test that a rewritten file in each of those families stays 600 (and its directory 700) after a second write, including when it was 644 before the first write; a one-off fix of the modes already on disk, written as an owner command in the report (a `find ... -exec chmod` for `data/jobs`, `data/cache` and the audit scratch directory, with a dry-run listing first), never run by the package; the full tier unchanged.
+
+**Order:** 1 and 2 first. Then 3, then the cost parts 5, 8, 9, 10 and 11. Then 4, the missing-description parts 6, 12, 13 and 14, and 7. Package 15 is independent and last. Package 14 comes after 4 because its saving is measured on the final filters.
 
 Packages 4 and 7 are each one mechanism with closed rules, so they stay whole.
 
 ## Package table
 
-`status` values: `pending | in-progress | needs-review | blocked | done`. The session sets its package's row in the package's own commit, from the report's first line (`done` when its own work is complete; the full tier is the runner's job). The table is informational: the runner's state (`.claude/package-runs/state.json`) decides what is done. Package 8 stays `in-progress` until its full tier has passed (`--regate 8`).
+`status` values: `pending | in-progress | needs-review | blocked | done`. The session sets its package's row in the package's own commit, from the report's first line (`done` when its own work is complete; the full tier is the runner's job). The table is informational: the runner's state (`.claude/package-runs/state.json`) decides what is done. Status as of 2026-11-27 against `state.json`: 1, 2, 3, 5, 8 and 9 have a recorded full-tier tip. Package 10 is closed by owner decision (below) and has no recorded tip yet: `--regate 10` records it once the branch tip passes the full tier.
 
 <!-- packages:start -->
 | N | slug | model | needs | order | status | commit |
@@ -118,9 +122,9 @@ Packages 4 and 7 are each one mechanism with closed rules, so they stay whole.
 | 2 | free-measurements | claude-sonnet-5-5 | - | 2 | done | list-cleanup |
 | 3 | filter-foundation | claude-sonnet-5-5 | - | 3 | done | list-cleanup |
 | 5 | failure-stop | claude-sonnet-5-5 | 2 | 4 | done | list-cleanup |
-| 8 | p90-setting | claude-sonnet-5-5 | 2 | 5 | in-progress | list-cleanup |
-| 9 | scoring-pass-speed | claude-sonnet-5-5 | 2 | 6 | pending | - |
-| 10 | scoring-prepare-limit | claude-sonnet-5-5 | 2, 9 | 7 | pending | - |
+| 8 | p90-setting | claude-sonnet-5-5 | 2 | 5 | done | list-cleanup |
+| 9 | scoring-pass-speed | claude-sonnet-5-5 | 2 | 6 | done | list-cleanup |
+| 10 | scoring-prepare-limit | claude-sonnet-5-5 | 2, 9 | 7 | done | list-cleanup |
 | 11 | prompt-layout | claude-sonnet-5-5 | 2 | 8 | pending | - |
 | 4 | text-rules-round2 | claude-sonnet-5-5 | 3 | 9 | pending | - |
 | 6 | description-retry | claude-sonnet-5-5 | 2 | 10 | pending | - |
@@ -128,6 +132,7 @@ Packages 4 and 7 are each one mechanism with closed rules, so they stay whole.
 | 13 | employer-refresh | claude-sonnet-5-5 | 6 | 12 | pending | - |
 | 14 | deferred-fetch | claude-sonnet-5-5 | 2, 4, 6 | 13 | pending | - |
 | 7 | reposts | claude-sonnet-5-5 | 3 | 14 | pending | - |
+| 15 | private-mode-writers | claude-sonnet-5-5 | - | 15 | pending | - |
 <!-- packages:end -->
 
 Needs 14→4 comes from the 2026-11-27 re-measure rule (the saving is re-measured after the filter changes). Needs 5→2 and 7→3 are from the plan, and so are 8, 9 and 11→2: every former package 5 point inherits the "needs 2". 4→3 and 6→2 are inferred from the order. 10→9, 12→6, 13→6 and 14→6 come from the 2026-11-27 split. These are own proposals; undo one by editing `needs`. Package numbers stay stable (the runner state and the report names use them), so the new parts take numbers 8 to 14 and the `order` column sets the sequence. `model` is the owner's choice per session (`/model`).
