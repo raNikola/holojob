@@ -297,3 +297,35 @@ def test_a_name_that_is_only_or_of_a_country_is_left_whole():
     assert _crosspost_key(_role("Serbia")).endswith("|serbia")
     assert _crosspost_key(_role("Bank of Serbia")).endswith("|bank of serbia")
     assert _crosspost_key(_role("Fivetran")).endswith("|fivetran")
+
+
+# --- the text check's tally (owner 2026-11-27) --------------------------------
+
+def _counted(board, run_fn):
+    from providers import role_filter
+    role_filter.begin_text_check("joberty")
+    try:
+        jobs = run_fn(board)
+    finally:
+        role_filter.begin_text_check(None)
+    return jobs, role_filter.text_check_counts("joberty")
+
+
+def test_the_tally_counts_the_second_look_only(board, monkeypatch):
+    """The listing pass has no text, so it counts nothing: a title match is never examined, a title miss only when its detail text is read."""
+    board.state["items"] = [product_ad(1), product_ad(2, title="Implementation Lead"), product_ad(3, title="Implementation Lead")]
+    monkeypatch.setattr(joberty_client, "fetch_detail", lambda job_id: copy.deepcopy(DETAIL) if job_id in (1, 2) else off_topic_detail(job_id))
+    jobs, counts = _counted(board, run)
+    assert sorted(j["externalId"] for j in jobs) == ["joberty:1", "joberty:2"]
+    assert counts == {"examined": 2, "keptByText": 1, "keptNoText": 0}  # ad 1 is a title match: not counted; 2 kept by its text; 3 dropped
+
+
+def test_a_title_miss_the_ledger_restores_is_not_examined_and_not_counted(board, tmp_path):
+    """A known ad is restored without a detail read, so its text check does not run again and the tally does not count it. Documented gap: the tally
+    reads this run's second looks only, not the ledger-restored title misses (they stay as an earlier run kept them)."""
+    board.state["items"] = [product_ad(1, title="Implementation Lead")]
+    known = joberty_provider.to_canonical(board.state["items"][0])["jobId"]
+    (tmp_path / "job_history.json").write_text(json.dumps({"version": 1, "jobs": {known: {"job": {"description": "x" * 400}}}}))
+    jobs, counts = _counted(board, run)
+    assert [j["jobId"] for j in jobs] == [known] and board.calls["details"] == []
+    assert counts == {"examined": 0, "keptByText": 0, "keptNoText": 0}

@@ -122,3 +122,24 @@ def test_the_text_check_tally_counts_per_source_and_never_changes_a_decision():
     assert counted == plain
     assert role_filter.text_check_counts("a") == {"examined": 3, "keptByText": 1, "keptNoText": 1}
     assert role_filter.text_check_counts("b") == {"examined": 0, "keptByText": 0, "keptNoText": 0}
+
+
+def test_the_text_check_tally_values_add_up_per_source():
+    """Counter values, not only keys (owner 2026-11-27): examined is every title miss with a text, kept is exactly the examined ones the text check let in,
+    and each source keeps its own tally."""
+    by_source = {
+        "x": [("Implementation Lead", "You will act as the Product Owner of our platform."), ("Implementation Lead", ""), ("Chef", "Kitchen work."),
+              ("Chef", "Kitchen work."), ("Product Owner", "anything"), ("Account Manager", "Product Owner")],
+        "y": [("Implementation Lead", "You will act as the Product Owner of our platform."), ("Product Manager", "")],
+    }
+    expected = {"x": {"examined": 4, "keptByText": 1, "keptNoText": 1}, "y": {"examined": 1, "keptByText": 1, "keptNoText": 0}}
+    dropped_misses = {"x": 2, "y": 0}  # examined and dropped: written down by hand, then checked against the decisions below
+    for source, cases in by_source.items():
+        role_filter.begin_text_check(source)
+        reasons = [role_filter.role_drop_reason(title, "", (), text) for title, text in cases]
+        role_filter.begin_text_check(None)
+        counts = role_filter.text_check_counts(source)
+        assert counts == expected[source]
+        kept = counts["keptByText"] + counts["keptNoText"]
+        assert counts["examined"] >= kept
+        assert counts["examined"] - kept == dropped_misses[source] == sum(1 for r in reasons if r == "title_not_matched")

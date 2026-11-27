@@ -38,7 +38,7 @@ from providers.base_provider import JobProvider, ProviderOutcome
 TERMS = ["product manager"]
 REMOTE = ["Remote"]
 RECORD_KEYS = {"version", "runId", "trigger", "startedAt", "finishedAt", "status", "sources", "issues", "staging", "import"}  # "import": S7a
-SOURCE_KEYS = {"name", "status", "read", "kept", "new", "error", "boardsFailed", "skipReason", "startedAt", "finishedAt", "readClass"}  # the last two: S7a; readClass: Wave 1
+SOURCE_KEYS = {"name", "status", "read", "kept", "new", "error", "boardsFailed", "skipReason", "startedAt", "finishedAt", "readClass", "textCheck"}  # the last two: S7a; readClass: Wave 1; textCheck: package 3 follow-up
 # Decided on purpose: discovery does not know these yet, and a later slice fills them.
 NOT_KNOWN_YET = {"scored", "closed", "missing", "expired"}
 
@@ -130,7 +130,8 @@ def test_a_run_writes_exactly_one_record_with_the_documented_fields(discovery, t
     times = {key: record["sources"][0].pop(key) for key in ("startedAt", "finishedAt")}
     assert datetime.fromisoformat(record["startedAt"]) <= datetime.fromisoformat(times["startedAt"]) <= datetime.fromisoformat(times["finishedAt"])
     assert record["sources"] == [{"name": "greenhouse", "status": "ok", "read": 1, "kept": 1, "new": 1, "error": None,
-                                  "boardsFailed": [], "skipReason": None, "readClass": "ok"}]
+                                  "boardsFailed": [], "skipReason": None, "readClass": "ok",
+                                  "textCheck": {"examined": 0, "keptByText": 0, "keptNoText": 0}}]
     record["sources"][0].update(times)
     assert set(record["sources"][0]) == SOURCE_KEYS and not NOT_KNOWN_YET & set(record["sources"][0])
 
@@ -802,3 +803,21 @@ def test_scoring_records_the_discovery_run_id_and_keeps_its_own(tmp_path, monkey
     scored_meta = json.loads((tmp_path / "scored.json").read_text())["meta"]
     assert scored_meta["discoveryRunId"] == expected
     assert scored_meta["sourceRunId"] and scored_meta["sourceRunId"] != expected
+
+
+def test_the_record_text_check_values_add_up_per_source(discovery, monkeypatch, tmp_path):
+    """The run record's per-source tally holds true values: examined >= kept, kept = keptByText + keptNoText, and it never exceeds what the source read or kept."""
+    item = {"companyName": "A", "companyUrlName": "a", "cities": ["Remote (Serbia)"]}
+    listing = [{**item, "id": 1, "jobTitle": "Product Manager"}, {**item, "id": 2, "jobTitle": "Implementation Lead"}, {**item, "id": 3, "jobTitle": "Implementation Lead"}]
+    monkeypatch.setattr(joberty_client, "fetch_cities", lambda: ["Remote (Serbia)", "Belgrade (Serbia)"])
+    monkeypatch.setattr(joberty_client, "fetch_listing", lambda: listing)
+    monkeypatch.setattr(joberty_client, "fetch_detail", lambda job_id: {"text": "<p>You will act as the Product Owner of our platform.</p>" if job_id != 3 else "<p>You will run rollouts.</p>"})
+    provider = joberty_provider.JobertyProvider(ledger_path=tmp_path / "job_history.json")
+    import source_settings  # the conftest points it at a temp folder; Joberty is opt-in
+    source_settings.save({"joberty": {"active": True, "consentAccepted": True}})
+    assert discovery({"joberty": provider}) == 0
+    [source] = only_record()["sources"]
+    counts = source["textCheck"]
+    assert counts == {"examined": 2, "keptByText": 1, "keptNoText": 0}
+    assert counts["examined"] >= counts["keptByText"] + counts["keptNoText"]
+    assert counts["examined"] <= source["read"] and counts["keptByText"] + counts["keptNoText"] <= source["kept"]

@@ -55,13 +55,17 @@ def reasons_of(row: dict) -> list[str]:
 
 
 def owner_sets(states: list) -> dict[str, set[str]]:
-    sets: dict[str, set[str]] = {"Applied": set(), "Saved": set(), "Rejected": set(), "Keep": set()}
-    for job_id, status, keep, applied in states:
-        if applied or status == "applied_manually":
+    """From the raw files (scripts/list-owner-states.js): one ad can sit in several sets. "Applied" counts every application, voided or not
+    (as the must-keep set of package 3 does); "Applied (not voided)" leaves the ads whose every application is voided out."""
+    sets: dict[str, set[str]] = {"Applied": set(), "Applied (not voided)": set(), "Saved": set(), "Rejected": set(), "Keep": set()}
+    for job_id, applied, voided_only, saved, rejected, keep in states:
+        if applied:
             sets["Applied"].add(job_id)
-        if status == "saved":
+            if not voided_only:
+                sets["Applied (not voided)"].add(job_id)
+        if saved:
             sets["Saved"].add(job_id)
-        if status == "rejected":
+        if rejected:
             sets["Rejected"].add(job_id)
         if keep:
             sets["Keep"].add(job_id)
@@ -79,7 +83,8 @@ def main() -> int:
     owner = owner_sets(node_json("scripts/list-owner-states.js", args.states_json))
     strong_ids = [i for i, g in active if g == "strong"]
     print(f"Active list: {len(active)} ads, Strong group {len(strong_ids)} (the population below), scored file {len(scored)} rows")
-    print("Owner ads (all lists): " + ", ".join(f"{k} {len(v)}" for k, v in owner.items()) + "  <- small samples: read every owner figure as an anecdote")
+    print("Owner ads (raw files, every list): " + ", ".join(f"{k} {len(v)}" for k, v in owner.items()) + "  <- small samples: read every owner figure as an anecdote")
+    print(f"   union of the sets: {len(set().union(*owner.values()))} distinct ads (the package 3 must-keep set: 16)")
 
     # ---- a
     print("\n== a. Strong by engine coverage (Active Strong group)")
@@ -105,7 +110,12 @@ def main() -> int:
           "What an answer would do to them is unknown: the data holds no answer for them. The rate above comes only from ads that got one "
           "(engine fill picks Strong and Possible ads under a budget, so those are not a random sample).")
     not_app = [r for r in rows if (r.get("engineCoverage") or {}).get("status") == "not_applicable"]
-    print(f"   Strong rows where the engine is not applicable (no requirements extracted / not read): {len(not_app)}")
+    # ceilings.stamp_engine_coverage: not_applicable = closed, or no score, or no requirements in llmFacts. Split by what the row holds.
+    closed = [r for r in not_app if r.get("isClosed")]
+    open_rows = [r for r in not_app if not r.get("isClosed")]
+    unread = [r for r in open_rows if not isinstance(r.get("llmFacts"), dict) or r.get("aiEnrichment") == "missing"]
+    read_no_req = [r for r in open_rows if r not in unread]
+    print(f"   Strong rows where the engine is not applicable: {len(not_app)} = ad not read {len(unread)} + read but no requirements extracted {len(read_no_req)} + closed (protected) {len(closed)}")
 
     # rescore history: do the pre-rescore backups hold an earlier score for the same ad?
     backups = sorted((DATA / "backups" / "auto" / "scored_jobs.json").glob("*-pre-rescore.json"))
@@ -125,6 +135,9 @@ def main() -> int:
         "off-track project_delivery (50)": lambda r: any((OFF_TRACK.match(x) or [None, None])[1] == "project_delivery" for x in reasons_of(r) if OFF_TRACK.match(x)),
     }
     active_ids = {i for i, _ in active}
+    either = {i for i, r in scored.items() if any(h(r) for h in rules.values())}
+    print("   owner ads capped by EITHER rule (each ad once; one ad can carry both): " + ", ".join(
+        f"{label} {len(ids & either)} of {len(ids)}" for label, ids in owner.items()))
     for name, hit in rules.items():
         capped = {i: r for i, r in scored.items() if hit(r)}
         print(f"   {name}: caps {len(capped)} rows in the scored file, {sum(1 for i in capped if i in active_ids)} of them in Active")
@@ -136,7 +149,7 @@ def main() -> int:
 
     # ---- c
     print("\n== c. Strong threshold against the owner's statuses")
-    for label in ("Applied", "Saved"):
+    for label in ("Applied", "Saved", "Rejected"):
         scores = sorted(s for i in owner[label] if (s := num((scored.get(i) or {}).get("matchScore"))) is not None)
         missing = len(owner[label]) - len(scores)
         if scores:
@@ -146,7 +159,7 @@ def main() -> int:
             print(f"   {label:7} {len(owner[label])} ads, none with a final score")
     pool = [num((scored.get(i) or {}).get("matchScore")) for i in strong_ids]
     pool = [s for s in pool if s is not None]
-    both = owner["Applied"] | owner["Saved"]
+    both = owner["Applied"] | owner["Saved"]  # Applied, Saved or both, each ad once
     print(f"   {'threshold':>9} | Active Strong group stays | Applied+Saved ({len(both)}) stay Strong | lost | no score")
     for t in THRESHOLDS:
         stays = sum(1 for s in pool if s >= t)
