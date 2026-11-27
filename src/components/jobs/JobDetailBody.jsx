@@ -18,6 +18,7 @@ import { formatSeen, historyBadges } from '../../modules/jobs/jobHistory'
 import { formatMonthlyEur, salaryBadges } from '../../modules/jobs/jobSalary'
 import FitJudgementSection, { isFitReason } from './FitJudgementSection'
 import ManualJobSection from './ManualJobSection'
+import PasteDescriptionBox from './PasteDescriptionBox'
 import { jobStatusLabel } from '../../modules/jobs/manualJob'
 import EngineShadowSection, { EngineShadowBadge } from './EngineShadowSection'
 
@@ -131,6 +132,7 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
       <JobDescription text={job.description} />
 
       <ManualJobSection job={job} onJobUpdated={onJobUpdated} apiAvailable={apiAvailable} />
+      <PasteDescriptionBox job={job} apiAvailable={apiAvailable} />
 
       {showScores && (
         <>

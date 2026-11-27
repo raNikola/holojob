@@ -26,15 +26,24 @@ if str(ROOT / "python") not in sys.path:
 import job_history  # noqa: E402
 import kept_ads  # noqa: E402
 import manual_jobs  # noqa: E402
+import pasted_descriptions  # noqa: E402
 import pipeline_lock  # noqa: E402
 import ceilings  # noqa: E402
 import role_class  # noqa: E402
 from scorer import score_jobs  # noqa: E402
 
 
-def run(job_id: str, *, intelligence: Path, jobs: Path, manual: Path, scored: Path, kept: Path) -> tuple[int, dict]:
+def run(job_id: str, *, intelligence: Path, jobs: Path, manual: Path, scored: Path, kept: Path,
+        pasted: Path = pasted_descriptions.PASTED_PATH, paste_text: str | None = None) -> tuple[int, dict]:
+    """`paste_text` (package 12): the owner's pasted ad text for this ad. It is stored, the ad is scored with it, and the id is
+    NOT registered as kept (a paste is not a Keep). Exit 2 for a text the server will not take."""
     if not kept_ads.JOB_ID.match(job_id or ""):
         return 2, {"ok": False, "error": "invalid", "field": "jobId"}
+    if paste_text is not None:
+        try:
+            pasted_descriptions.clean(paste_text)
+        except pasted_descriptions.InvalidPaste as exc:
+            return 2, {"ok": False, "error": "invalid", "field": exc.field}
     if not intelligence.exists():
         return 4, {"ok": False, "error": "no_intelligence"}
     ledger = job_history.load(job_history.ledger_path(jobs), read_only=True)
@@ -46,11 +55,16 @@ def run(job_id: str, *, intelligence: Path, jobs: Path, manual: Path, scored: Pa
     try:
         import import_job_url  # noqa: PLC0415
 
-        kept_ads.add(job_id, kept)
+        before = pasted_descriptions.load(pasted).get(job_id)
+        if paste_text is not None:
+            pasted_descriptions.put(job_id, paste_text, pasted)
+        else:
+            kept_ads.add(job_id, kept)
         discovered = json.loads(jobs.read_text(encoding="utf-8")) if jobs.exists() else {"jobs": []}
         rows = discovered.get("jobs") if isinstance(discovered, dict) else discovered
         rows = manual_jobs.with_manual(list(rows or []), manual_jobs.load(manual))
         rows = kept_ads.with_kept(rows, job_history.ledger_path(jobs), kept)
+        pasted_descriptions.apply(rows, pasted)
         import run_scoring  # noqa: PLC0415
 
         # The one Re-score path: cached judgements re-applied, a model call raises (run_scoring.local_enhancer).
@@ -58,6 +72,10 @@ def run(job_id: str, *, intelligence: Path, jobs: Path, manual: Path, scored: Pa
         scored_rows = score_jobs(rows, json.loads(intelligence.read_text(encoding="utf-8")), run_scoring.local_enhancer(run_scoring.identity_of(run_scoring._load_profile())))
         row = next((r for r in scored_rows if r.get("jobId") == job_id), None)
         if row is None:
+            if paste_text is not None:  # nothing was scored with it: put the earlier text back
+                pasted_descriptions.remove(job_id, pasted)
+                if before:
+                    pasted_descriptions.put(job_id, before["text"], pasted, now=before.get("pastedAt"))
             return 4, {"ok": False, "error": "not_in_history"}
         role_class.ceiling([row])
         ceilings.stamp_engine_coverage([row], False)
@@ -75,6 +93,9 @@ def main(argv=None) -> int:
     p.add_argument("--manual", type=Path, default=manual_jobs.MANUAL_PATH)
     p.add_argument("--scored", type=Path, default=ROOT / "data/jobs/scored_jobs.json")
     p.add_argument("--kept", type=Path, default=kept_ads.KEPT_PATH)
+    p.add_argument("--pasted", type=Path, default=pasted_descriptions.PASTED_PATH)
+    p.add_argument("--paste-stdin", action="store_true",
+                   help="the pasted ad text for --job-id comes on stdin (never argv); it is stored and the ad re-scored with it, not kept")
     p.add_argument("--prune", metavar="ID,ID", default=None,
                    help="instead of scoring: drop every registered id not in this list (the kept ads and the ads with an application)")
     p.add_argument("--register", action="store_true",
@@ -85,7 +106,8 @@ def main(argv=None) -> int:
         registered = kept_ads.register_owner_ads(keep, job_history.ledger_path(args.jobs), args.kept) if args.register else None
         print(json.dumps({"ok": True, "dropped": kept_ads.prune(keep, args.kept), **({"registered": registered} if registered else {})}))
         return 0
-    code, body = run(args.job_id, intelligence=args.intelligence, jobs=args.jobs, manual=args.manual, scored=args.scored, kept=args.kept)
+    code, body = run(args.job_id, intelligence=args.intelligence, jobs=args.jobs, manual=args.manual, scored=args.scored, kept=args.kept,
+                     pasted=args.pasted, paste_text=sys.stdin.read() if args.paste_stdin else None)
     print(json.dumps(body))
     return code
 

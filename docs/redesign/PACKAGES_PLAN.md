@@ -128,7 +128,7 @@ Packages 4 and 7 are each one mechanism with closed rules, so they stay whole.
 | 11 | prompt-layout | claude-sonnet-5-5 | 2 | 8 | done | list-cleanup |
 | 4 | text-rules-round2 | claude-sonnet-5-5 | 3 | 9 | pending | - |
 | 6 | description-retry | claude-sonnet-5-5 | 2 | 10 | done | list-cleanup |
-| 12 | paste-box | claude-sonnet-5-5 | 6 | 11 | pending | - |
+| 12 | paste-box | claude-sonnet-5-5 | 6 | 11 | done | list-cleanup |
 | 13 | employer-refresh | claude-sonnet-5-5 | 6 | 12 | pending | - |
 | 14 | deferred-fetch | claude-sonnet-5-5 | 2, 4, 6 | 13 | pending | - |
 | 7 | reposts | claude-sonnet-5-5 | 3 | 14 | pending | - |

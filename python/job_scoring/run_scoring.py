@@ -31,6 +31,7 @@ from llm_enhancer import (  # noqa: E402
 )
 import kept_ads  # noqa: E402
 import manual_jobs  # noqa: E402
+import pasted_descriptions  # noqa: E402
 import pipeline_lock  # noqa: E402
 import ceilings  # noqa: E402
 import role_class  # noqa: E402
@@ -194,6 +195,8 @@ def _score(args: argparse.Namespace) -> int:
     jobs = manual_jobs.with_manual(jobs, manual)
     # Kept ads the owner re-scored by hand stay in the scoring set while they are kept (kept_ads.prune drops the rest).
     jobs = kept_ads.with_kept(jobs, ledger_file, args.kept)
+    # Ad text the owner pasted for an ad whose scraped description was empty or thin replaces it for scoring (package 12).
+    pasted_descriptions.apply(jobs)
     replaced_rows = discovered_rows + len(manual) - len(jobs)
     if manual:
         # Counts only: nothing of a job's text is printed.

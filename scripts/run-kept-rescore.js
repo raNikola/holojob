@@ -25,7 +25,7 @@ const REPLY = {
   75: () => ({ status: 409, body: { ok: false, error: 'run_active' } }),
 }
 
-function runPython(args, { spawnFn = spawn, python = VENV_PYTHON } = {}) {
+function runPython(args, { spawnFn = spawn, python = VENV_PYTHON, input } = {}) {
   return new Promise((resolve) => {
     const out = []
     const child = spawnFn(python, [SCRIPT, ...args], { cwd: ROOT, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
@@ -41,7 +41,23 @@ function runPython(args, { spawnFn = spawn, python = VENV_PYTHON } = {}) {
       }
       resolve({ code, result })
     })
+    if (input !== undefined) child.stdin.end(input)
   })
+}
+
+/**
+ * Pasted ad text for a discovered ad (package 12): stored in data/jobs/pasted_descriptions.json and the ad re-scored with it, local, no model.
+ * The text goes to Python on stdin only (never argv, never logged or returned); the id is not registered as kept.
+ * @returns {Promise<{ status: number, body: object }>}
+ */
+export async function runPastedDescription(jobId, text, options = {}) {
+  if (typeof jobId !== 'string' || !JOB_ID.test(jobId)) return { status: 422, body: { ok: false, error: 'invalid', field: 'jobId' } }
+  if (typeof text !== 'string') return { status: 422, body: { ok: false, error: 'invalid', field: 'text' } }
+  if (!options.spawnFn && !fs.existsSync(options.python ?? VENV_PYTHON)) return { status: 503, body: { ok: false, error: 'no_python' } }
+  const { code, result } = await runPython(['--job-id=' + jobId, '--paste-stdin'], { ...options, input: text })
+  if (code === 0 && result.ok) return { status: 200, body: { ok: true, job: result.job } }
+  if (code === 2) return { status: 422, body: { ok: false, error: 'invalid', field: typeof result.field === 'string' ? result.field : 'text' } }
+  return (REPLY[code] ?? (() => ({ status: 500, body: { ok: false, error: 'scoring_failed' } })))(result)
 }
 
 /** @returns {Promise<{ status: number, body: object }>} */
