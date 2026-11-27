@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
-from atomic_write import write_text_atomic
+from atomic_write import write_private_text
 
 ROOT = Path(__file__).resolve().parents[2]
 MANUAL_PATH = ROOT / "data" / "jobs" / "manual_jobs.json"
@@ -166,12 +166,11 @@ def load_deleted(path: Path = MANUAL_PATH) -> set[str]:
 def save(jobs: list[dict], path: Path = MANUAL_PATH, *, deleted: set[str] | None = None) -> None:
     """Write the jobs. The deleted-id list is kept as it is unless `deleted` is given."""
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
     doc = {"jobs": jobs}
     kept = load_deleted(path) if deleted is None else deleted
     if kept:
         doc["deleted"] = sorted(kept)
-    write_text_atomic(path, json.dumps(doc, indent=2))
+    write_private_text(path, json.dumps(doc, indent=2))
 
 
 def upsert(jobs: list[dict], stored: list[dict]) -> list[dict]:

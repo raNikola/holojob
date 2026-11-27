@@ -16,7 +16,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from atomic_write import write_text_atomic
+from atomic_write import write_private_text
 
 ROOT = Path(__file__).resolve().parents[2]
 KEPT_PATH = ROOT / "data" / "jobs" / "rescored_kept.json"
@@ -38,8 +38,7 @@ def load(path: Path = KEPT_PATH) -> dict:
 
 
 def _save(entries: dict, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(path, json.dumps({"version": 1, "ids": entries}, indent=2), FILE_MODE)
+    write_private_text(path, json.dumps({"version": 1, "ids": entries}, indent=2))
 
 
 def add(job_id: str, path: Path = KEPT_PATH) -> None:

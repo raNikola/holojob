@@ -32,13 +32,13 @@ def test_a_failed_export_keeps_the_previous_file_and_leaves_no_temp_file(tmp_pat
 
 
 @pytest.mark.parametrize("export", [_discovered])
-def test_an_export_keeps_its_bytes_and_the_files_mode(tmp_path, export):
+def test_an_export_keeps_its_bytes_and_is_private(tmp_path, export):
     first = export(tmp_path)
-    first.chmod(0o640)
+    first.chmod(0o644)
     assert export(tmp_path) == first
     text = first.read_bytes().decode("utf-8")
     assert text == json.dumps(json.loads(text), indent=2)  # no trailing newline, non-ASCII escaped
-    assert stat.S_IMODE(first.stat().st_mode) == 0o640
+    assert stat.S_IMODE(first.stat().st_mode) == 0o600  # package 15: a widened file is made private again
 
 
 @pytest.fixture

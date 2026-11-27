@@ -26,7 +26,7 @@ for _sub in ("python/job_import", "python/job_scoring"):
 
 import job_history  # noqa: E402
 import pasted_descriptions  # noqa: E402
-from atomic_write import write_text_atomic  # noqa: E402
+from atomic_write import write_private_text  # noqa: E402
 
 PROPOSALS_PATH = ROOT / "data" / "jobs" / "employer_refresh.json"
 JOBS_PATH = ROOT / "data" / "jobs" / "discovered_jobs.json"
@@ -47,8 +47,7 @@ def load(path: Path = PROPOSALS_PATH) -> dict:
 
 
 def _save(ads: dict, path: Path) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(Path(path), json.dumps({"version": 1, "ads": ads}, indent=2), FILE_MODE)
+    write_private_text(Path(path), json.dumps({"version": 1, "ads": ads}, indent=2))
 
 
 def discard(job_id: str, path: Path = PROPOSALS_PATH) -> bool:

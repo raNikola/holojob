@@ -90,14 +90,14 @@ def test_a_failed_last_run_write_keeps_the_previous_record_and_leaves_no_temp_fi
     assert not [p.name for p in rp.LAST_RUN.parent.iterdir() if p.name.endswith(".tmp")]
 
 
-def test_the_last_run_record_keeps_its_bytes_and_mode(env, monkeypatch):
+def test_the_last_run_record_keeps_its_bytes_and_is_private(env, monkeypatch):
     fake_steps(monkeypatch)
     rp.LAST_RUN.write_text("{}", encoding="utf-8")
-    rp.LAST_RUN.chmod(0o640)
+    rp.LAST_RUN.chmod(0o644)
     assert rp.main(["--json"]) == 0
     text = rp.LAST_RUN.read_bytes().decode("utf-8")
     assert text == json.dumps(json.loads(text), indent=2)
-    assert stat.S_IMODE(rp.LAST_RUN.stat().st_mode) == 0o640
+    assert stat.S_IMODE(rp.LAST_RUN.stat().st_mode) == 0o600
 
 
 def test_a_clean_run_runs_every_step_and_summarises(env, monkeypatch, capsys):

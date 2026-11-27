@@ -41,7 +41,7 @@ if str(ROOT / "python") not in sys.path:
 
 from geography import WORLDWIDE, is_known  # noqa: E402
 from work_authorization import outside_allowed_before_enrichment  # noqa: E402
-from atomic_write import write_text_atomic  # noqa: E402
+from atomic_write import write_private_text  # noqa: E402
 import pipeline_lock  # noqa: E402
 import run_budget  # noqa: E402
 import job_history  # noqa: E402
@@ -902,7 +902,7 @@ def enrich(args: argparse.Namespace) -> int:
     else:
         if changed:
             job_history.save(ledger_file, ledger)
-        write_text_atomic(args.jobs, json.dumps(payload, indent=2))
+        write_private_text(args.jobs, json.dumps(payload, indent=2))
     print(f"\nextracted {done}, cached {skipped} ({from_ledger} from the ledger), failed {failed}"
           f", not read {outside} (outside your allowed locations), refused {refused} (AI budget gate)"
           f", not found by this run {not_active} (no call)")

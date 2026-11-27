@@ -14,11 +14,13 @@ _atomic_spec = importlib.util.spec_from_file_location(
 _atomic_module = importlib.util.module_from_spec(_atomic_spec)
 _atomic_spec.loader.exec_module(_atomic_module)
 write_text_atomic = _atomic_module.write_text_atomic
+write_private_text = _atomic_module.write_private_text
+make_private_dirs = _atomic_module.make_private_dirs
 
 
 def _jobs_dir(root: Path) -> Path:
     path = root / "data" / "jobs"
-    path.mkdir(parents=True, exist_ok=True)
+    make_private_dirs(path)
     return path
 
 
@@ -81,5 +83,5 @@ def export_discovered_json(
         deduped_count=deduped_count, history=history,
     )
     out = _jobs_dir(root) / "discovered_jobs.json"
-    write_text_atomic(out, json.dumps(payload, indent=2))
+    write_private_text(out, json.dumps(payload, indent=2))
     return out

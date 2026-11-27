@@ -122,7 +122,7 @@ def backup_before_write(path: Path, new_text: str | bytes, data_root: Path | Non
 
 
 def write_text_with_backup(path: Path, text: str, new_file_mode: int | None = None, data_root: Path | None = None,
-                           event: str | None = None) -> None:
+                           event: str | None = None, force_mode: bool = False) -> None:
     """The write of an owner file: its backup first (BackupError: no write), then `write_text_atomic`."""
     backup_before_write(path, text, data_root=data_root, event=event)
-    write_text_atomic(Path(path), text, new_file_mode=new_file_mode)
+    write_text_atomic(Path(path), text, new_file_mode=new_file_mode, force_mode=force_mode)

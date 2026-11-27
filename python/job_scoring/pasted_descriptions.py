@@ -14,7 +14,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from atomic_write import write_text_atomic
+from atomic_write import write_private_text
 
 ROOT = Path(__file__).resolve().parents[2]
 PASTED_PATH = ROOT / "data" / "jobs" / "pasted_descriptions.json"
@@ -47,8 +47,7 @@ def load(path: Path = PASTED_PATH) -> dict:
 
 
 def _save(ads: dict, path: Path) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(Path(path), json.dumps({"version": 1, "ads": ads}, indent=2), FILE_MODE)
+    write_private_text(Path(path), json.dumps({"version": 1, "ads": ads}, indent=2))
 
 
 def clean(text) -> str:

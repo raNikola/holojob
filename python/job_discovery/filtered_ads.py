@@ -76,7 +76,7 @@ def save(root: Path, store: dict) -> bool:
             return False
     except FileNotFoundError:
         pass
-    staging._atomic.write_text_atomic(path, text)
+    staging._atomic.write_private_text(path, text)
     return True
 
 

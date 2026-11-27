@@ -28,6 +28,7 @@ if str(ROOT / "python") not in sys.path:
 
 from match_engine import competencies  # noqa: E402 (puts job_scoring on the path)
 import requirement_frames  # noqa: E402
+from atomic_write import write_private_text  # noqa: E402
 from requirement_ids import PROVISIONAL_PREFIX  # noqa: E402
 
 NEAR_THRESHOLD = 0.85
@@ -176,8 +177,7 @@ def write_candidates(frames: dict, comps: list[dict], out: Path = CANDIDATES_OUT
     if not comps or problems:
         raise SystemExit("\n  ".join(["competency list is not usable:", *(problems or ["no list"])]))
     path = checked_out_path(out)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(candidates_markdown(candidate_rows(frames, comps, limit)), encoding="utf-8")
+    write_private_text(path, candidates_markdown(candidate_rows(frames, comps, limit)))
     return path
 
 
@@ -188,8 +188,7 @@ def write_review(family: str, out: Path = REVIEW_OUT) -> Path:
     if not comps or problems:
         raise SystemExit("\n  ".join([f"competency list '{family}' is not usable:", *(problems or ["no list"])]))
     path = checked_out_path(out)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(review_markdown(comps, family), encoding="utf-8")
+    write_private_text(path, review_markdown(comps, family))
     return path
 
 
@@ -220,8 +219,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     out = checked_out_path(args.out)
     report = build_report(requirement_frames.load(args.frames), comps, args.min_ads)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, indent=1, ensure_ascii=False), encoding="utf-8")
+    write_private_text(out, json.dumps(report, indent=1, ensure_ascii=False))
 
     b = report["baseline"]
     by_status = Counter(r["status"] for r in report["groups"])

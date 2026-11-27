@@ -533,8 +533,8 @@ def test_a_pre_s4a_ledger_is_enriched_the_old_way_but_ledger_first(tmp_path, mon
     monkeypatch.setattr(sys, "argv", ["enrich_jobs.py", "--jobs", str(jobs), "--intelligence", str(intel)])
     select_provider(tmp_path, monkeypatch, "claude-code")
     order = []
-    real = enrich_jobs.write_text_atomic
-    monkeypatch.setattr(enrich_jobs, "write_text_atomic", lambda path, *a, **k: (order.append(Path(path).name), real(path, *a, **k))[1])
+    real = enrich_jobs.write_private_text
+    monkeypatch.setattr(enrich_jobs, "write_private_text", lambda path, *a, **k: (order.append(Path(path).name), real(path, *a, **k))[1])
     real_save = enrich_jobs.job_history.save
     monkeypatch.setattr(enrich_jobs.job_history, "save", lambda path, doc: (order.append(Path(path).name), real_save(path, doc))[1])
     assert enrich_jobs.main() == 0

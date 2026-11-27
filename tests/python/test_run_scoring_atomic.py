@@ -56,13 +56,13 @@ def test_a_failed_write_keeps_the_previous_file_and_leaves_no_temp_file(run, out
     assert [p.name for p in output.parent.iterdir()] == ["scored_jobs.json"]
 
 
-def test_a_successful_write_replaces_the_file_and_keeps_its_mode_and_encoding(run, output):
+def test_a_successful_write_replaces_the_file_makes_it_private_and_keeps_its_encoding(run, output):
     output.write_text('{"previous": true}', encoding="utf-8")
-    output.chmod(0o640)
+    output.chmod(0o644)
 
     assert run() == 0
 
-    assert stat.S_IMODE(output.stat().st_mode) == 0o640
+    assert stat.S_IMODE(output.stat().st_mode) == 0o600
     assert [p.name for p in output.parent.iterdir()] == ["scored_jobs.json"]
     text = output.read_bytes().decode("utf-8")
     doc = json.loads(text)
@@ -70,10 +70,10 @@ def test_a_successful_write_replaces_the_file_and_keeps_its_mode_and_encoding(ru
     assert text == json.dumps(doc, indent=2)  # same bytes as before: no trailing newline, non-ASCII escaped
 
 
-def test_a_new_file_gets_the_umask_default_as_before(run, output):
-    old = os.umask(0o027)
+def test_a_new_file_is_private_whatever_the_umask(run, output):
+    old = os.umask(0o022)
     try:
         assert run() == 0
     finally:
         os.umask(old)
-    assert stat.S_IMODE(output.stat().st_mode) == 0o640
+    assert stat.S_IMODE(output.stat().st_mode) == 0o600

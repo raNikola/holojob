@@ -19,7 +19,7 @@ if str(SCRIPT_DIR) not in sys.path:
 if str(ROOT / "python") not in sys.path:
     sys.path.append(str(ROOT / "python"))
 
-from atomic_write import write_text_atomic  # noqa: E402
+from atomic_write import PRIVATE_FILE_MODE, make_private_dirs  # noqa: E402
 from auto_backup import write_text_with_backup  # noqa: E402
 from llm_client import LlmUnavailable, active_provider, judge_model, peek_provider  # noqa: E402
 from llm_enhancer import (  # noqa: E402
@@ -361,9 +361,9 @@ def _score(args: argparse.Namespace) -> int:
         "jobs": scored,
     }
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
+    make_private_dirs(args.output.parent)
     # The re-score is the one writer whose old scored_jobs.json is kept first (<stamp>-pre-rescore.json, the last 3); manual jobs come back from manual_jobs.json.
-    write_text_with_backup(args.output, json.dumps(payload, indent=2), event="rescore")
+    write_text_with_backup(args.output, json.dumps(payload, indent=2), new_file_mode=PRIVATE_FILE_MODE, event="rescore", force_mode=True)
 
     shown = args.output.relative_to(ROOT) if args.output.is_relative_to(ROOT) else args.output
     print(f"Scored {len(scored)} jobs -> {shown}")

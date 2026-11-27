@@ -28,6 +28,7 @@ import threading
 from pathlib import Path
 from typing import Protocol
 
+from atomic_write import write_private_text
 from enrich_jobs import MAX_DESCRIPTION_CHARS
 from labels import blocked_from, match_label, verdict
 from llm_client import GuardrailRefused, LlmRefused, LlmUnavailable, complete_json
@@ -407,9 +408,8 @@ class LlmFitEnhancer:
     def save(self) -> None:
         if not self.cache_path or self.cache_only:
             return
-        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
-            self.cache_path.write_text(json.dumps(self._cache, indent=2), encoding="utf-8")
+            write_private_text(self.cache_path, json.dumps(self._cache, indent=2))
 
     def enhance(self, job: dict, base_result: dict, intelligence: dict) -> dict:
         base = base_result["matchScore"]

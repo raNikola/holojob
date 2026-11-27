@@ -35,6 +35,7 @@ _atomic_spec = importlib.util.spec_from_file_location(
 _atomic_module = importlib.util.module_from_spec(_atomic_spec)
 _atomic_spec.loader.exec_module(_atomic_module)
 write_text_atomic = _atomic_module.write_text_atomic
+write_private_text = _atomic_module.write_private_text
 
 _company_spec = importlib.util.spec_from_file_location("_ledger_company_key", Path(__file__).with_name("company_key.py"))
 _company_module = importlib.util.module_from_spec(_company_spec)
@@ -131,8 +132,7 @@ def load(path: Path, *, read_only: bool = False) -> dict:
 
 def save(path: Path, ledger: dict) -> None:
     ledger["updatedAt"] = now_iso()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(path, json.dumps(ledger, indent=2))
+    write_private_text(path, json.dumps(ledger, indent=2))
 
 
 def _snapshot(job: dict) -> dict:

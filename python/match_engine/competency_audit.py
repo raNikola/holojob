@@ -39,6 +39,7 @@ from match_engine import competency_report  # noqa: E402 (puts job_scoring on th
 from match_engine import competencies  # noqa: E402
 from match_engine.calibrate import load_env_file  # noqa: E402
 import competency_mapping  # noqa: E402
+from atomic_write import make_private_dirs, write_private_text  # noqa: E402
 import enrich_jobs  # noqa: E402
 import requirement_frames  # noqa: E402
 from llm_client import LlmRefused, LlmUnavailable  # noqa: E402
@@ -87,12 +88,12 @@ def run_once(
     `fresh`: empty frames (not even a job's own llmFacts), aliases and remap table. Otherwise the
     live files are copied in first.
     """
-    directory.mkdir(parents=True, exist_ok=True)
+    make_private_dirs(directory)
     aliases, remap = directory / "competency-aliases.json", directory / "requirement-remap.json"
     if not fresh:
         for live, copy in ((competency_mapping.ALIASES_PATH, aliases), (competency_mapping.REMAP_PATH, remap)):
             if live.exists():
-                shutil.copyfile(live, copy)
+                write_private_text(copy, live.read_text(encoding="utf-8"))
     mapper = competency_mapping.Mapper(comps, aliases, remap)
     frames = {} if fresh else json.loads(json.dumps(live_frames))
     requirement_frames.apply_remap(frames, mapper.remap)
@@ -116,8 +117,8 @@ def run_once(
     mapper.save()
     requirement_frames.apply_remap(frames, mapper.remap)
     requirement_frames.save(frames, directory / "requirement-frames.json")
-    (directory / "requirements.json").write_text(
-        json.dumps({k: v["requirements"] for k, v in results.items()}, indent=1, ensure_ascii=False), encoding="utf-8")
+    write_private_text(
+        directory / "requirements.json", json.dumps({k: v["requirements"] for k, v in results.items()}, indent=1, ensure_ascii=False))
     return {"ads": results, "mapper": mapper, "failed": failed}
 
 
@@ -301,8 +302,7 @@ def main(argv: list[str] | None = None) -> int:
     if pairs:
         print("picks the kind check refused, by (requirement kind, competency kind), both runs:",
               ", ".join(f"{a}/{b} {n}" for (a, b), n in pairs.most_common(KIND_PAIRS_SHOWN)))
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(audit_markdown(runs[0], comps, args.seed), encoding="utf-8")
+    write_private_text(out, audit_markdown(runs[0], comps, args.seed))
     print(f"audit file: {out}\nscratch: {scratch}")
     return 0
 

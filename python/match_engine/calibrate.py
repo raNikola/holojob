@@ -29,6 +29,7 @@ if str(ROOT / "python") not in sys.path:
     sys.path.insert(0, str(ROOT / "python"))
 
 import match_engine  # noqa: E402,F401  (puts job_scoring on the path)
+from atomic_write import write_private_text  # noqa: E402
 from confirmed_facts import load as load_confirmed_facts  # noqa: E402
 from enrich_jobs import _fingerprint, extract  # noqa: E402
 from evidence_index import build_candidate  # noqa: E402
@@ -97,8 +98,7 @@ def run(args) -> list[dict]:
         rows.append({"fixture": path.name, "title": job.get("title"), "roleTrack": facts.get("roleTrack"),
                      "requirements": output["requirements"], **score(output["requirements"], gates)})
     if args.judge:
-        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_PATH.write_text(json.dumps(cache, indent=1, ensure_ascii=False), encoding="utf-8")
+        write_private_text(CACHE_PATH, json.dumps(cache, indent=1, ensure_ascii=False))
         requirement_frames.save(frames)
     return rows
 

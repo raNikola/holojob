@@ -30,6 +30,7 @@ from fractions import Fraction
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from atomic_write import write_private_text
 from job_fingerprint import job_fingerprint
 from competency_mapping import load_remap
 import row_state
@@ -322,6 +323,5 @@ class ShadowEngine:
             self.memory.save()
         if not self.judge:
             return
-        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
-            self.cache_path.write_text(json.dumps(self._cache, indent=1, ensure_ascii=False), encoding="utf-8")
+            write_private_text(self.cache_path, json.dumps(self._cache, indent=1, ensure_ascii=False))

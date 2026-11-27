@@ -49,6 +49,7 @@ from match_engine.calibrate import (  # noqa: E402
     PROFILE_PATH,
     load_env_file,
 )
+from atomic_write import write_private_text  # noqa: E402
 from confirmed_facts import load as load_confirmed_facts  # noqa: E402
 from enrich_jobs import _fingerprint, extract  # noqa: E402
 from evidence_index import build_candidate  # noqa: E402
@@ -151,8 +152,7 @@ def run(args) -> tuple[dict, dict]:
     lock = threading.Lock()
 
     def save():
-        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_PATH.write_text(json.dumps(store, indent=1, ensure_ascii=False), encoding="utf-8")
+        write_private_text(CACHE_PATH, json.dumps(store, indent=1, ensure_ascii=False))
 
     def one(index: int, name: str):
         job = jobs[name]

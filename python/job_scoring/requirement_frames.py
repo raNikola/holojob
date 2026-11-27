@@ -23,6 +23,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from atomic_write import write_private_text
 from job_fingerprint import MAX_DESCRIPTION_CHARS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,8 +48,7 @@ def load(path: Path | None = None) -> dict:
 
 def save(frames: dict, path: Path | None = None) -> None:
     path = path or FRAMES_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(frames, indent=1, ensure_ascii=False), encoding="utf-8")
+    write_private_text(path, json.dumps(frames, indent=1, ensure_ascii=False))
 
 
 def frame_of(requirements: list[dict]) -> list[dict]:

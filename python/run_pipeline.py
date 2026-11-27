@@ -35,7 +35,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PY = ROOT / "python"
 sys.path.insert(0, str(PY / "job_scoring"))
-from atomic_write import write_text_atomic  # noqa: E402
+from atomic_write import write_private_text  # noqa: E402
 import row_state  # noqa: E402
 import pipeline_lock  # noqa: E402
 import view_guard  # noqa: E402
@@ -370,7 +370,7 @@ def main(argv=None) -> int:
         code = exc.code
     finally:
         record["finishedAt"] = datetime.now(timezone.utc).isoformat()
-        write_text_atomic(LAST_RUN, json.dumps(record, indent=2))
+        write_private_text(LAST_RUN, json.dumps(record, indent=2))
         _held_lock.release()
         _held_lock = None
     return code
