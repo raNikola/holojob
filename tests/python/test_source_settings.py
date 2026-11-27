@@ -194,3 +194,31 @@ def test_discovery_applies_the_switches_before_it_runs_any_provider():
     main = source[source.index("def main()"):]
     assert "provider_names = effective_provider_names(args.providers)" in main
     assert "resolve_providers(args.providers)" not in main
+
+
+# --- the two number settings (list-cleanup 2c): saved, bounded, and read by the code that uses them -------------------------------
+
+
+def test_the_numbers_show_their_defaults_and_limits_before_anything_is_saved():
+    view = source_settings.get()
+    assert view["descriptionRetry"]["maxTotal"] == source_settings.DEFAULT_RETRY_MAX_TOTAL
+    assert view["repostWindowDays"] == source_settings.DEFAULT_REPOST_WINDOW_DAYS
+    assert view["limits"]["retryMax"] == 10 and view["limits"]["repostWindowMax"] == 365
+
+
+def test_saved_numbers_are_what_the_readers_get_and_one_does_not_reset_the_other():
+    assert source_settings.save(None, retry={"maxTotal": 4})["ok"]
+    saved = source_settings.save(None, repost_window_days=30)
+    assert saved["ok"] and saved["descriptionRetry"]["maxTotal"] == 4 and saved["repostWindowDays"] == 30
+    assert source_settings.description_retry(on_disk()) == 4 and source_settings.repost_window(on_disk()) == 30
+
+
+@pytest.mark.parametrize("retry,days", [({"maxTotal": 11}, None), ({"maxTotal": -1}, None), ({"maxTotal": True}, None), (None, 0), (None, 366), (None, "30"), (None, True)])
+def test_a_bad_number_is_refused_and_nothing_is_written(retry, days):
+    result = source_settings.save(None, retry=retry, repost_window_days=days)
+    assert result["ok"] is False and not path().exists()
+
+
+def test_the_cli_carries_both_numbers():
+    answer = cli("put", {"descriptionRetry": {"maxTotal": 0}, "repostWindowDays": 45})
+    assert answer["ok"] and answer["descriptionRetry"]["maxTotal"] == 0 and answer["repostWindowDays"] == 45

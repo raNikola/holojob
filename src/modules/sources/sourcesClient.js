@@ -29,6 +29,15 @@ export function saveSources(boards, fetchImpl = globalThis.fetch) {
   })
 }
 
+/** The two number settings (`{ descriptionRetry: { maxTotal }, repostWindowDays }`, either or both); the server holds the bounds and answers 400 with the reason. */
+export function saveSourceNumbers(numbers, fetchImpl = globalThis.fetch) {
+  return call(fetchImpl, '/api/sources', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(numbers),
+  })
+}
+
 /** The old checkbox value this browser still holds, or null when there is none. */
 export function readLegacyDiscoveryOptions(storage = globalThis.localStorage) {
   try {

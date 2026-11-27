@@ -3,7 +3,8 @@
  * check, the server's consent time, the atomic write to data/config/sources.json); this file only carries JSON to it.
  *
  *   GET  /api/sources                                              -> every source, opt-in switches and consent history
- *   PUT  /api/sources                 { boards: { joberty: { active, consentAccepted? }, jobspy: { active } } }
+ *   PUT  /api/sources                 { boards: { joberty: { active, consentAccepted? }, jobspy: { active } } }, or
+ *                                     { descriptionRetry: { maxTotal: 0..10 } } and / or { repostWindowDays: 1..365 } with no boards
  *   POST /api/sources/migrate-legacy  { value }                    -> the old Jobs-screen checkbox, moved once
  *
  * Any source can be switched off (no consent); only an opt-in source needs consent to be switched on.
@@ -81,9 +82,10 @@ export async function handleSourcesRequest(req, res) {
       send(res, 400, { error: e.message })
       return true
     }
-    // Only the switch and the consent flag are passed on; a consent time always comes from the server.
+    // Only the switch and the consent flag are passed on; a consent time always comes from the server. The two number settings
+    // (description retries per ad, repost window in days) go on as they came: the rules and bounds are source_settings.py's.
     const result = url === '/api/sources'
-      ? await runner('put', { boards: body.boards })
+      ? await runner('put', { boards: body.boards, descriptionRetry: body.descriptionRetry, repostWindowDays: body.repostWindowDays })
       : await runner('migrate-legacy', { value: body.value })
     send(res, result?.ok ? 200 : result?.needsConsent ? 409 : 400, result)
   } catch (e) {

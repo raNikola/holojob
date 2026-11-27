@@ -217,7 +217,10 @@ def view(data: dict | None = None, error: str | None = None) -> dict:
                 history=entry.get("history") or [],
             )
         boards.append(row)
-    return {"boards": boards, "descriptionRetry": {"maxTotal": description_retry(data), "perScan": 1}, "updatedAt": data.get("updatedAt"), **({"error": error} if error else {})}
+    return {"boards": boards, "descriptionRetry": {"maxTotal": description_retry(data), "perScan": 1},
+            "repostWindowDays": repost_window(data),
+            "limits": {"retryMax": RETRY_MAX_LIMIT, "retryDefault": DEFAULT_RETRY_MAX_TOTAL, "repostWindowMax": REPOST_WINDOW_LIMIT, "repostWindowDefault": DEFAULT_REPOST_WINDOW_DAYS},
+            "updatedAt": data.get("updatedAt"), **({"error": error} if error else {})}
 
 
 def get() -> dict:
@@ -227,22 +230,34 @@ def get() -> dict:
         return view(None, f"{exc}; every opt-in source counts as off until it is fixed or removed")
 
 
-def save(boards, now: str | None = None, retry=None) -> dict:
-    """Apply {name: {active, consentAccepted?}} for opt-in sources, and/or `retry` ({maxTotal: 0..10}, the description retries per ad).
+def save(boards, now: str | None = None, retry=None, repost_window_days=None) -> dict:
+    """Apply {name: {active, consentAccepted?}} for opt-in sources, and/or the two number settings read elsewhere: `retry` ({maxTotal: 0..10}, the
+    description retries per ad) and `repost_window_days` (1..365, the repost counter window).
 
     {ok, ...view} | {ok: False, errors} | {ok: False, needsConsent: [names]}. Nothing is
     written unless every change is valid.
     """
-    if retry is not None and boards in (None, {}):
-        value = retry.get("maxTotal") if isinstance(retry, dict) else None
-        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= RETRY_MAX_LIMIT:
-            return {"ok": False, "errors": [f"descriptionRetry.maxTotal must be a whole number from 0 to {RETRY_MAX_LIMIT}"]}
+    if (retry is not None or repost_window_days is not None) and boards in (None, {}):
+        errors = []
+        value = None
+        if retry is not None:
+            value = retry.get("maxTotal") if isinstance(retry, dict) else None
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= RETRY_MAX_LIMIT:
+                errors.append(f"descriptionRetry.maxTotal must be a whole number from 0 to {RETRY_MAX_LIMIT}")
+        if repost_window_days is not None and (isinstance(repost_window_days, bool) or not isinstance(repost_window_days, int)
+                                               or not 1 <= repost_window_days <= REPOST_WINDOW_LIMIT):
+            errors.append(f"repostWindowDays must be a whole number from 1 to {REPOST_WINDOW_LIMIT}")
+        if errors:
+            return {"ok": False, "errors": errors}
         with _locked():
             try:
                 data = read()
             except SourcesError as exc:
                 return {"ok": False, "errors": [f"{exc}; fix or remove the file, it was left as it is"]}
-            data["descriptionRetry"] = {"maxTotal": value}
+            if retry is not None:
+                data["descriptionRetry"] = {"maxTotal": value}
+            if repost_window_days is not None:
+                data["repostWindowDays"] = repost_window_days
             _write(data)
         return {"ok": True, **view(data)}
     if not isinstance(boards, dict) or not boards:
@@ -330,7 +345,7 @@ def _cli(argv: list[str]) -> int:
     if command == "get":
         print(json.dumps(get()))
     elif command == "put":
-        print(json.dumps(save(args.get("boards"), retry=args.get("descriptionRetry"))))
+        print(json.dumps(save(args.get("boards"), retry=args.get("descriptionRetry"), repost_window_days=args.get("repostWindowDays"))))
     elif command == "migrate-legacy":
         print(json.dumps(migrate_legacy(args.get("value"))))
     else:

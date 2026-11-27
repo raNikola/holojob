@@ -23,6 +23,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'scoring-weights', category: 'job-search', title: 'Scoring weights', keywords: ['weights', 'scoring', 'score', 're-score', 'sliders'] },
   { id: 'title-filter', category: 'job-search', title: 'Title filter', keywords: ['title', 'filter', 'exclude', 'include', 'near', 'vocabulary', 'keywords', 'discovery', 'roles'] },
   { id: 'job-boards', category: 'sources', title: 'Job boards', keywords: ['sources', 'boards', 'providers', 'joberty', 'opt-in', 'scrape', 'discovery', 'terms'] },
+  { id: 'source-numbers', category: 'sources', title: 'Retries and reposts', keywords: ['retry', 'retries', 'description', 'empty', 'repost', 'reposts', 'window', 'days', 'sources', 'scan'] },
   { id: 'application-tracking', category: 'applications', title: 'Tracking and board columns', keywords: ['tracking', 'tracker', 'board', 'columns', 'stages', 'applications'] },
   { id: 'application-notifications', category: 'applications', title: 'Notifications', keywords: ['notifications', 'reminders', 'follow-up', 'nudges'], note: 'Follow-up reminders are not configurable yet.' },
   { id: 'application-migration', category: 'applications', title: 'Application tracking migration', keywords: ['migration', 'migrate', 'import', 'tracking', 'old format'] },

@@ -4,6 +4,7 @@ import Card from '../ui/Card'
 import AISettingsPanel from '../ai/AISettingsPanel'
 import SecretsPanel from './SecretsPanel'
 import JobBoardsPanel from './JobBoardsPanel'
+import SourceNumbersPanel from './SourceNumbersPanel'
 import CompleteProfilePanel from './CompleteProfilePanel'
 import ResetProfilePanel from './ResetProfilePanel'
 import ScoringWeightsPanel from './ScoringWeightsPanel'
@@ -246,6 +247,7 @@ const RENDERERS = {
   'scoring-weights': () => <ScoringWeightsPanel />,
   'title-filter': () => <TitleFilterPanel />,
   'job-boards': () => <JobBoardsPanel />,
+  'source-numbers': () => <SourceNumbersPanel />,
   'application-tracking': () => <ApplicationSettingsPanel />,
   'application-notifications': () => (
     <Card title="Notifications">
