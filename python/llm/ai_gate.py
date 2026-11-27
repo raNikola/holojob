@@ -123,7 +123,7 @@ DEFAULT_SETTINGS = {
         "exclude": ["account manager", "sales manager", "area sales", "brand manager", "category manager", "product technologist"],
     },
     # Reserved per call for the answer before its size is known.
-    "estimatedOutputTokens": 1000,
+    "estimatedOutputTokens": 2255,  # p90 of 3743 measured calls (scripts/ledger-output-p90.py, 2026-11-27); editable in Settings
     # Day and month boundaries of the limits (IANA name).
     "timezone": "UTC",
     "automation": {"enabled": False},
