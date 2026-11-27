@@ -108,7 +108,7 @@ NEAR = "near"
 EXCLUDED = "excluded"
 
 
-_FOLD = str.maketrans({"š": "s", "ž": "z", "č": "c", "ć": "c", "đ": "d"})
+_FOLD = text_rules.FOLD
 
 
 def _fold(text: str) -> str:

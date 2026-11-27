@@ -52,6 +52,14 @@ _EMPLOYMENT = (
 )
 
 
+FOLD = str.maketrans({"š": "s", "ž": "z", "č": "c", "ć": "c", "đ": "d"})
+
+
+def fold(text) -> str:
+    """Lower case with the Serbian diacritics folded: the text `evaluate` expects. The one definition (`role_filter._fold` uses it)."""
+    return (text or "").lower().translate(FOLD)
+
+
 def evaluate(folded_text: str) -> list[tuple[str, str, str]]:
     """(rule, class, label) for every text rule that fires on already-folded ad text. An empty list is "unknown": no signal."""
     text = folded_text or ""

@@ -16,12 +16,12 @@ export function validWindowDays(value) {
 }
 
 /** From the route whatever it says, null included. Display only: never stored on a job. */
-export const ROUTE_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'firstSeen', 'lastSeen', 'closedAt', 'absentSince']
+export const ROUTE_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'firstSeen', 'lastSeen', 'closedAt', 'absentSince', 'repostCount']
 /** From the route when it has a value, else the stored one. */
 export const AD_FIELDS = ['title', 'company', 'location', 'jobUrl', 'provider', 'site', 'isRemote', 'datePosted', 'salary', 'expiresAt']
 
 /** On a composed row for display, and never on a stored one. */
-export const DISPLAY_ONLY_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'serverOnly', 'appliedOtherCopy', 'historyState', 'historyReason']
+export const DISPLAY_ONLY_FIELDS = ['class', 'reason', 'reasonCode', 'from', 'copyGroup', 'serverOnly', 'appliedOtherCopy', 'historyState', 'historyReason', 'repostCount']
 
 /** A composed row without what must not be stored or sent on. */
 export function stripDisplayFields(row) {

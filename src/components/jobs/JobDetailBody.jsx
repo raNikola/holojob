@@ -22,6 +22,7 @@ import PasteDescriptionBox from './PasteDescriptionBox'
 import EmployerRefreshBox from './EmployerRefreshBox'
 import { jobStatusLabel } from '../../modules/jobs/manualJob'
 import EngineShadowSection, { EngineShadowBadge } from './EngineShadowSection'
+import { LABELS_NOTE, labelChips, useAdDerived } from '../../modules/jobs/adDerived'
 
 const DIMENSION_LABELS = {
   roleMatch: 'Role',
@@ -82,6 +83,8 @@ export function ConfidenceNote({ job }) {
 
 export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatusChange, includeTracker = true, includeAiTools = true, includeContacts = true, includeTailor = true }) {
   const showScores = hasMatchScores([job])
+  const derived = useAdDerived(job.jobId, `${job.description?.length ?? 0}:${job.updatedAt ?? ''}`)
+  const chips = labelChips(derived?.labels)
   // A state the owner should see beside the score, not a reason it scored well: a cap, or a check that did not run / could not confirm.
   const isLimit = (r) => isCapReason(r) || r.startsWith('Ceiling not evaluated:') || r.startsWith('Clearance unconfirmed:')
   const limits = (job.reasons || []).filter(isLimit)
@@ -130,6 +133,13 @@ export default function JobDetailBody({ job, apiAvailable, onJobUpdated, onStatu
       )}
 
       {job.descriptionIncomplete && <p className="text-sm text-amber-800 dark:text-amber-300">The ad's full text was not available when you kept it, so this copy is incomplete.</p>}
+      {chips.length > 0 && (
+        <div className="space-y-1" data-testid="ad-text-labels">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Ad text labels</h4>
+          <div className="flex flex-wrap gap-1">{chips.map((c) => <Badge key={c.label} variant="derived">{c.text}</Badge>)}</div>
+          <p className="text-xs text-stone-500">{LABELS_NOTE}</p>
+        </div>
+      )}
       <JobDescription text={job.description} />
 
       <ManualJobSection job={job} onJobUpdated={onJobUpdated} apiAvailable={apiAvailable} />
