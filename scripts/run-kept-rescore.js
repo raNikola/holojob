@@ -60,6 +60,20 @@ export async function runPastedDescription(jobId, text, options = {}) {
   return (REPLY[code] ?? (() => ({ status: 500, body: { ok: false, error: 'scoring_failed' } })))(result)
 }
 
+/**
+ * Accept the text fetched from the employer's page (package 13): Python takes the stored proposal for this id (the text never comes from
+ * the browser), makes it the ad's overlay text and re-scores the ad locally. The id is not registered as kept.
+ * @returns {Promise<{ status: number, body: object }>}
+ */
+export async function runEmployerAccept(jobId, options = {}) {
+  if (typeof jobId !== 'string' || !JOB_ID.test(jobId)) return { status: 422, body: { ok: false, error: 'invalid', field: 'jobId' } }
+  if (!options.spawnFn && !fs.existsSync(options.python ?? VENV_PYTHON)) return { status: 503, body: { ok: false, error: 'no_python' } }
+  const { code, result } = await runPython(['--job-id=' + jobId, '--accept-employer'], options)
+  if (code === 0 && result.ok) return { status: 200, body: { ok: true, job: result.job } }
+  if (code === 4 && result.error === 'no_proposal') return { status: 404, body: { ok: false, error: 'no_proposal' } }
+  return (REPLY[code] ?? (() => ({ status: 500, body: { ok: false, error: 'scoring_failed' } })))(result)
+}
+
 /** @returns {Promise<{ status: number, body: object }>} */
 export async function runKeptRescore(jobId, options = {}) {
   if (typeof jobId !== 'string' || !JOB_ID.test(jobId)) return { status: 422, body: { ok: false, error: 'invalid', field: 'jobId' } }

@@ -23,6 +23,7 @@ MAX_TEXT = 200_000
 MIN_TEXT = 40  # a few words is not an ad
 FILE_MODE = 0o600
 SOURCE = "pasted"
+SOURCES = ("pasted", "employer")
 
 
 class InvalidPaste(ValueError):
@@ -61,11 +62,13 @@ def clean(text) -> str:
     return text
 
 
-def put(job_id: str, text, path: Path = PASTED_PATH, *, now: str | None = None) -> None:
+def put(job_id: str, text, path: Path = PASTED_PATH, *, now: str | None = None, source: str | None = None) -> None:
     if not isinstance(job_id, str) or not JOB_ID.match(job_id):
         raise InvalidPaste("jobId")
     ads = load(path)
     ads[job_id] = {"text": clean(text), "pastedAt": now or datetime.now(timezone.utc).isoformat()}
+    if source in SOURCES:  # package 13: "employer" for text the owner accepted from the employer's page
+        ads[job_id]["source"] = source
     _save(ads, path)
 
 
@@ -87,6 +90,6 @@ def apply(rows: list[dict], path: Path = PASTED_PATH) -> int:
         if entry:
             row["description"] = entry["text"]
             row["descriptionStatus"] = "complete"
-            row["descriptionSource"] = SOURCE
+            row["descriptionSource"] = entry.get("source") if entry.get("source") in SOURCES else SOURCE
             changed += 1
     return changed

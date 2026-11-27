@@ -10,7 +10,8 @@ import { buildDiscoveryCommand, getDiscoveryStatus, runDiscovery } from './run-d
 import { runPipeline } from './run-pipeline.js'
 import { runManualJobs } from './run-manual-job.js'
 import { deleteManualJob } from './manual-job-delete.js'
-import { pruneKeptRescored, runKeptRescore, runPastedDescription } from './run-kept-rescore.js'
+import { pruneKeptRescored, runEmployerAccept, runKeptRescore, runPastedDescription } from './run-kept-rescore.js'
+import { discardEmployerText, proposeEmployerText } from './run-employer-refresh.js'
 import { extractAdAi, fetchAd, previewAdAi } from './run-ad-fill.js'
 import { buildScoringCommand, getScoringStatus, previewJudge, runJudgedScoring, runScoring } from './run-scoring.js'
 import { acceptCoverLetter } from './ai-draft-accept.js'
@@ -583,6 +584,24 @@ export async function handleApiRequest(req, res) {
       const body = await readJsonBody(req, res)
       const result = await runPastedDescription(body.jobId, body.text)
       sendJson(res, result.status, result.body)
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'invalid', field: 'json' })
+    }
+    return true
+  }
+
+  // Refresh from the employer's page (package 13): `fetch` stores a proposal and answers the diff, `accept` makes it the ad's text and re-scores locally, `discard` drops it.
+  if (url.startsWith('/api/jobs/employer/') && req.method === 'POST') {
+    try {
+      const body = await readJsonBody(req, res)
+      const action = url.slice('/api/jobs/employer/'.length)
+      const result =
+        action === 'fetch' ? await proposeEmployerText(body.jobId, body.url)
+        : action === 'accept' ? await runEmployerAccept(body.jobId)
+        : action === 'discard' ? await discardEmployerText(body.jobId)
+        : null
+      if (result) sendJson(res, result.status, result.body)
+      else sendJson(res, 404, { ok: false, error: 'not_found' })
     } catch {
       sendJson(res, 400, { ok: false, error: 'invalid', field: 'json' })
     }
