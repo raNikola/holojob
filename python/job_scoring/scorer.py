@@ -193,10 +193,11 @@ def score_job(job: dict, intelligence: dict, enhancer=None, idf=None) -> dict:
         match_score = min(match_score, ceilings.LOCATION_CAP)
 
     # Eligibility and the language gap are facts shown beside the score; neither lowers it (scoringVersion 1.5).
-    authorization = wa.authorization_status(job, prefs)  # location state and the shadow engine's gates; no cap reads it
-    eligible = eligibility.assess(job, prefs)
+    places = wa.resolve_places(job, prefs)  # read once per row; the three readers below share it
+    authorization = wa.authorization_status(job, prefs, places)  # location state and the shadow engine's gates; no cap reads it
+    eligible = eligibility.assess(job, prefs, places)
     language_names = language_gap_names(job, intelligence)
-    location_state = blocking.location_state(job, prefs)
+    location_state = blocking.location_state(job, prefs, places)
     language_state = blocking.language_state(job, intelligence)
     clearance = blocking.clearance_state(job) if "clearance" in fixes else None
     blocked_by = blocking.blockers(eligible, language_state["blocking"], location_state, clearance)

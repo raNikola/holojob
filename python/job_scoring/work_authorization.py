@@ -159,10 +159,12 @@ def resolve_places(job: dict, prefs: dict) -> dict:
     return {"remote": remote, "restricted": restricted, "place": place, "location": location, "allowed": allowed}
 
 
-def authorization_status(job: dict, prefs: dict) -> dict:
-    """{"status", "place", "reason"} for one job against the candidate's rights."""
+def authorization_status(job: dict, prefs: dict, found: dict | None = None) -> dict:
+    """{"status", "place", "reason"} for one job against the candidate's rights.
+
+    `found` is the row's `resolve_places` result when the caller already has it."""
     facts = job.get("llmFacts") or {}
-    found = resolve_places(job, prefs)
+    found = found or resolve_places(job, prefs)
     remote, restricted, place, location, allowed = (found[k] for k in ("remote", "restricted", "place", "location", "allowed"))
 
     def result(status: str, reason: str) -> dict:

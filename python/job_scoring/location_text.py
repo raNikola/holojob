@@ -86,8 +86,9 @@ def _frames() -> tuple[re.Pattern, ...]:
 def _restrictions(text: str) -> list[str]:
     """Country codes the ad ties the hire to, in order of appearance."""
     found: list[str] = []
+    folded = _fold(text)  # once per ad, not once per frame
     for frame in _frames():
-        for m in frame.finditer(_fold(text)):
+        for m in frame.finditer(folded):
             name = m.group("c")
             # "us" is a country only written "US"; the table has no such alias.
             code = _table()[0].get(name) or ("US" if name == "us" and re.search(r"\bUS\b", text) else None)

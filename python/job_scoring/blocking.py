@@ -33,9 +33,11 @@ from geography import REMOTE, covers
 IN, OUTSIDE, UNKNOWN = "in", "outside", "unknown"
 
 
-def location_state(job: dict, prefs: dict) -> dict | None:
-    """{"state": in|outside|unknown, "reason"} against allowedLocations, or None when the profile sets none."""
-    found = wa.resolve_places(job, prefs)
+def location_state(job: dict, prefs: dict, found: dict | None = None) -> dict | None:
+    """{"state": in|outside|unknown, "reason"} against allowedLocations, or None when the profile sets none.
+
+    `found` is the row's `resolve_places` result when the caller already has it."""
+    found = found or wa.resolve_places(job, prefs)
     allowed, restricted, loc, remote = found["allowed"], found["restricted"], found["location"], found["remote"]
     if not allowed:
         return None

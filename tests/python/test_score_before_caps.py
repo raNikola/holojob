@@ -35,7 +35,7 @@ def force(monkeypatch, *, flags=False, title=None, track=False, visa=None, langu
     if track:
         monkeypatch.setattr(scorer, "accepted_tracks", lambda i: ("product", {"some_other_track"}))
     status = {"status": visa or wa.AUTHORIZED, "reason": "r", "location": {}}
-    monkeypatch.setattr(wa, "authorization_status", lambda j, p: status)
+    monkeypatch.setattr(wa, "authorization_status", lambda j, p, found=None: status)
     monkeypatch.setattr(scorer, "language_gap_names", lambda j, i: ["Russian"] if language else [])
 
 

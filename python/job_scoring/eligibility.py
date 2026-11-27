@@ -96,14 +96,14 @@ def _result(state: str, country: str, reason: str, *, quote: str | None = None, 
             "basis": basis, "b2b": b2b}
 
 
-def assess(job: dict, prefs: dict) -> dict | None:
+def assess(job: dict, prefs: dict, found: dict | None = None) -> dict | None:
     """The eligibility of one job for the candidate, or None when the profile lists no authorized country (dormant)."""
     holds = wa._holds(prefs)
     if not holds:
         return None
     facts = job.get("llmFacts") or {}
     basis = wa.AD_READ if facts else wa.NOT_READ
-    found = wa.resolve_places(job, prefs)
+    found = found or wa.resolve_places(job, prefs)
     restricted, place = found["restricted"], found["place"]
     if not restricted:
         return _result(UNKNOWN, place, "the ad does not pin the job to a country, so the right to work was not checked",
