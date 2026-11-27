@@ -19,13 +19,15 @@ import os
 import pstats
 import shutil
 import sys
-import tempfile
 import time
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from measure_tmp import harden, private_tempdir  # noqa: E402
+
 REAL_DATA = Path("/srv/holojob/data")
 # What a scoring pass reads or writes. Secrets, backups, staging, resumes and applications are never copied.
 COPY_FILES = [
@@ -52,11 +54,11 @@ def mirror(tmp: Path) -> None:
     for d in ("config",):
         if (REAL_DATA / d).is_dir():
             shutil.copytree(REAL_DATA / d, tmp / "data" / d, ignore=shutil.ignore_patterns("secrets"))
+    harden(tmp)
 
 
 def cmd_profile(args) -> int:
-    with tempfile.TemporaryDirectory(prefix="holojob-measure2-") as t:
-        tmp = Path(t)
+    with private_tempdir("holojob-measure2-") as tmp:
         t0 = time.time()
         mirror(tmp)
         print(f"copy: {time.time() - t0:.1f}s")

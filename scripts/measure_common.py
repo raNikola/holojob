@@ -16,7 +16,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -29,6 +28,8 @@ if str(ROOT / "python") not in sys.path:
 
 import work_authorization as wa  # noqa: E402
 import view_guard  # noqa: E402
+sys.path.insert(0, str(ROOT / "scripts"))
+from measure_tmp import private_tempdir  # noqa: E402
 from atomic_write import PRIVATE_FILE_MODE, make_private_dirs, write_text_atomic  # noqa: E402
 from scorer import OFF_TRACK_CAP, UNRELATED_TITLE_CAP  # noqa: E402
 
@@ -196,8 +197,7 @@ def rescore(data_dir: Path | None = None, keep_output: Path | None = None, extra
     if not state["consistent"]:
         raise StaleViewError(f"job list and ledger are out of step ({state['reason']}); run a scoring first so the view is rebuilt")
 
-    with tempfile.TemporaryDirectory(prefix="package-b-") as tmp:
-        tmp = Path(tmp)
+    with private_tempdir("package-b-") as tmp:
         output = keep_output or (tmp / "scored_jobs.json")
         kept = data_dir / "jobs" / "rescored_kept.json"
         if extra_ids:
