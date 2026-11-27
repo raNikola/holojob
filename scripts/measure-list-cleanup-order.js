@@ -56,12 +56,14 @@ const index = {
 const keep = mustKeep()
 console.log(`must-keep ids: ${keep.size}; ${note}; activeWindowDays ${windowDays}`)
 
-for (const mode of ['active', 'all']) {
+let allRows = null // id -> row of the 'all' list, filled by the second pass and used for the reasons of the first
+for (const mode of ['all', 'active']) {
   const result = queryJobList({
     stored: index.stored, server: index.server, applications: index.applications, jobStateDoc: index.jobStateDoc,
-    reference: Date.now(), mode, filters: {}, classes: [], recent: false, sort: null, offset: 0, limit: 1, withIds: true,
+    reference: Date.now(), mode, filters: {}, classes: [], recent: false, sort: null, offset: 0, limit: 100000, withIds: true,
     withCounts: false, activeWindowDays: windowDays,
   })
+  if (mode === 'all') allRows = new Map(result.rows.map((row) => [row.jobId, row]))
   const rank = new Map(result.ids.map((id, i) => [id, i + 1]))
   const total = result.total
   const byStatus = {}
@@ -79,5 +81,13 @@ for (const mode of ['active', 'all']) {
     console.log(`  ${status}: n=${list.length}, best rank ${list[0].rank}, worst rank ${list[list.length - 1].rank}, median percentile ${median}`)
     console.log(`    ranks: ${list.map((x) => `${x.rank} (${x.pct}%)`).join(', ')}`)
   }
-  if (missing.length) console.log(`  not in the list: ${missing.join(', ')}`)
+  if (missing.length) {
+    // Why: the row's own class and flags in the 'all' list (no title or text), so "not in the list" has a reason.
+    const why = (entry) => {
+      const id = entry.split(' ')[0]
+      const row = allRows?.get(id)
+      return row ? `${entry}: class ${row.class ?? 'n/a'}, closed ${row.isClosed ?? row.class === 'closed'}, absentSince ${row.absentSince ? 'yes' : 'no'}, lastSeen ${String(row.lastSeen ?? '').slice(0, 10)}` : `${entry}: no row`
+    }
+    console.log(`  not in the list: ${missing.map(why).join(' | ')}`)
+  }
 }
