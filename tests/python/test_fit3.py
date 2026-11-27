@@ -621,3 +621,15 @@ def test_label_reads_a_temp_store_under_i1_and_restores_the_prompt(tmp_path):
     assert [r["roleClass"] for r in rows] == ["target", "not available"] and counts["target"] == 1
     assert fit3.PROMPT_VERSION == 2
     assert role_class.label([dict(job)], tmp_path / "missing.json")["not available"] == 1
+
+
+def test_the_lists_precede_the_title_and_the_ad_so_calls_share_one_prefix_and_stored_answers_stay_valid():
+    roles, comps = fit3.load_roles(), fit3.closed_competencies()
+    a = fit3.build_prompt({"title": "Alpha", "description": "first ad"}, roles, comps)
+    b = fit3.build_prompt({"title": "Beta", "description": "second ad"}, roles, comps)
+    shared = len(__import__("os").path.commonprefix([a, b]))
+    assert shared >= len(" ".join(c["definition"] for c in comps))  # the whole competency list is inside the shared prefix
+    assert a.index("TITLE:") > a.index("COMPETENCIES") and a.index("AD:") > a.index("TITLE:")
+    # the layout is its own version: the classification key (and so every stored answer) is unchanged by it
+    assert fit3.PROMPT_VERSION == 2 and fit3.LAYOUT_VERSION == 2
+    assert ":f3p2:" in fit3.classification_key({"title": "Alpha", "description": "x"}, roles, comps)

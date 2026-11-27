@@ -47,6 +47,8 @@ The job list still lives in the browser (`localStorage`) and the screens save th
 
 Package 2 (free measurements) is done: results in [redesign/FREE_MEASUREMENTS.md](redesign/FREE_MEASUREMENTS.md) (scoring-pass cost, prompt prefixes, LinkedIn detail share, negative-filter audit); it changes no behaviour and feeds packages 3, 9, 10, 11 and 14 (the numbers they use are in the table at the top of that file).
 
+Package 11 (prompt layout) is built: the Fit 3 lists go before the title and the ad (`fit3.LAYOUT_VERSION` 2), separate from `PROMPT_VERSION` (facts validity, unchanged, so no forced re-read). Open, owner-run and paid: the cache proof (`cachedInputTokens` above zero from the second call) and the Stage A calibration check; commands in `docs/DECISIONS.md` "Prompt layout, package 11" and the package report.
+
 Package 3 (filter foundation and round 1) is built on `list-cleanup`: the title filter vocabulary is in Settings (`roleFilter`); ledger and filtered rows carry `companyKey`; filtered sightings no longer refresh `lastListedAt`; seniority is a label, not a drop; a title miss goes to a free-text check on the ad's text and an empty text never drops the ad; measured on the must-keep set with no ad lost (DECISIONS 2026-11-27). Open: labels are not stored yet (package 4).
 
 Package 5 (failure stop) is built on `list-cleanup`: reading and the engine fill stop after 3 consecutive provider failures; a success resets the count (DECISIONS 2026-11-27).

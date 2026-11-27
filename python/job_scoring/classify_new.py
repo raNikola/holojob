@@ -242,6 +242,7 @@ def merge_into_store(path: Path, new_entries: dict) -> int:
             old.unlink(missing_ok=True)
     doc["entries"] = {**entries, **added}
     doc.setdefault("promptVersion", fit3.PROMPT_VERSION)
+    doc["layoutVersion"] = fit3.LAYOUT_VERSION  # informational: not part of the classification key
     write_text_atomic(path, json.dumps(doc, ensure_ascii=False), FILE_MODE)
     return len(added)
 

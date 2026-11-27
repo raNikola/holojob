@@ -35,7 +35,11 @@ from .normalize import normalize, quote_in
 from .verify import NOT_EVIDENCED
 
 SCORING_VERSION = "3.0"
-PROMPT_VERSION = 2
+PROMPT_VERSION = 2  # validity of the extracted facts: part of the classification key; a change makes stored answers stale
+# Layout of the prompt (package 11): the closed lists come first so that every call shares one long prefix (provider prompt caching). It is NOT part of the
+# classification key: moving the lists changes no instruction and no list, so stored answers stay valid and nothing is re-read by force. Bump
+# PROMPT_VERSION (not this) when an instruction or the meaning of an answer changes.
+LAYOUT_VERSION = 2  # 1: TITLE before the lists; 2: ROLES and COMPETENCIES before TITLE and AD
 GENERIC_ROLE = "Other"  # the unclear / no-role answer: it never demotes by title (A1.5)
 ROLES_PATH = Path(__file__).with_name("fit3_roles.json")
 ROLE_CLASSES = ("target", "adjacent", "other")
@@ -67,12 +71,12 @@ PROMPT = """You classify ONE job ad into closed lists. Use only the ad text belo
    "secondary" (mentioned, preferred or minor), quote = one passage copied exactly from the ad that asks for it. Leave out every competency the ad does not ask
    for. Do not invent ids, do not judge any candidate, do not guess what the ad does not say.
 
-TITLE: {title}
-
 ROLES: {roles}
 
 COMPETENCIES (id: definition):
 {competencies}
+
+TITLE: {title}
 
 AD:
 {description}

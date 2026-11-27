@@ -45,6 +45,11 @@ def fit3_prompt_version() -> int:
     return fit3.PROMPT_VERSION
 
 
+def fit3_layout_version() -> int:
+    from match_engine import fit3
+    return fit3.LAYOUT_VERSION
+
+
 def posting_of(job: dict) -> dict:
     return {"id": job.get("jobId") or "", "title": job.get("title") or "", "company": job.get("company") or "",
             "description": job.get("description") or ""}
@@ -192,7 +197,7 @@ def main(argv=None) -> int:
         return 1
     guard = Guard(base.cap, base.price, base.max_output)
     entries, failures = run(jobs, args.provider, args.model, guard, args.workers)
-    mc.write_private(out_path, json.dumps({"version": 1, "promptVersion": fit3_prompt_version(), "entries": entries}, ensure_ascii=False))
+    mc.write_private(out_path, json.dumps({"version": 1, "promptVersion": fit3_prompt_version(), "layoutVersion": fit3_layout_version(), "entries": entries}, ensure_ascii=False))
     changed = mc.fingerprint_changes(before, mc.data_fingerprint(data_dir))
     print(f"classified {len(entries)} of {len(jobs)} ads; failures: {failures or 'none'}; spent ${guard.spent():.4f} of the ${args.max_usd:.2f} cap")
     print(f"real data dir changed by this run: {'NO' if not changed else changed}")

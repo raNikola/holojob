@@ -125,7 +125,7 @@ Packages 4 and 7 are each one mechanism with closed rules, so they stay whole.
 | 8 | p90-setting | claude-sonnet-5-5 | 2 | 5 | done | list-cleanup |
 | 9 | scoring-pass-speed | claude-sonnet-5-5 | 2 | 6 | done | list-cleanup |
 | 10 | scoring-prepare-limit | claude-sonnet-5-5 | 2, 9 | 7 | done | list-cleanup |
-| 11 | prompt-layout | claude-sonnet-5-5 | 2 | 8 | pending | - |
+| 11 | prompt-layout | claude-sonnet-5-5 | 2 | 8 | done | list-cleanup |
 | 4 | text-rules-round2 | claude-sonnet-5-5 | 3 | 9 | pending | - |
 | 6 | description-retry | claude-sonnet-5-5 | 2 | 10 | pending | - |
 | 12 | paste-box | claude-sonnet-5-5 | 6 | 11 | pending | - |
